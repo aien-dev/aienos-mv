@@ -268,4 +268,20 @@ mod tests {
             ]
         );
     }
+
+    #[test]
+    fn test_sha256_streaming_matches_oneshot() {
+        let message = b"the quick brown fox jumps over the lazy dog";
+
+        // One-shot approach
+        let oneshot_result = hash(message);
+
+        // Streaming approach
+        let mut hasher = Sha256::new();
+        hasher.update(&message[..10]); // First part: "the quick "
+        hasher.update(&message[10..]); // Second part: "brown fox jumps over the lazy dog"
+        let streaming_result = hasher.finalize();
+
+        assert_eq!(oneshot_result, streaming_result);
+    }
 }
