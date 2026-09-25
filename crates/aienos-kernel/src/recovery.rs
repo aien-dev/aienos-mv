@@ -268,4 +268,24 @@ mod tests {
         assert_eq!(empty_count, 0);
         assert_eq!(empty_bytes, 0);
     }
+
+    #[test]
+    fn wal_recovery_stops_at_incomplete_trailing_record() {
+        let mut buffer = [0u8; 256];
+
+        // Encode one valid WAL entry
+        let payload = b"valid_entry";
+        let valid_len = WalRecovery::encode_entry(payload, &mut buffer);
+
+        // Append 10 extra bytes (fewer than the 36-byte record header)
+        let extra_bytes = [0u8; 10];
+        buffer[valid_len..valid_len + 10].copy_from_slice(&extra_bytes);
+
+        // Assert WalRecovery::recover_and_truncate returns (1, valid_len)
+        // i.e. the incomplete trailing fragment is ignored and only the one valid record is counted
+        let (valid_records, truncated_bytes) =
+            WalRecovery::recover_and_truncate(&buffer[..valid_len + 10]);
+        assert_eq!(valid_records, 1);
+        assert_eq!(truncated_bytes, valid_len);
+    }
 }
