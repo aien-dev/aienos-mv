@@ -4,7 +4,8 @@ Lane: `feat/p3-store-crash-harness` (test infrastructure and characterization on
 Base: merge-equivalent state of `aienos/main` `3f8ebf3` (#132 NVMe write/flush)
 plus PR #131 `d401662` (System Store v1 engine). Merge tree `a32c2a59`.
 
-**This is host-only. It does not emit `STORE_V1_QEMU: PASS` or
+**Tier: `STORE_V1_HOST_CRASH`. This is host-only. `STORE_V1_QEMU` is reserved
+for actual QEMU Store execution and is not emitted here; neither is
 `P3_STORE_QEMU: PASS`.** No production Store, recovery, ADR 0015, or NVMe code
 was changed.
 
