@@ -422,4 +422,35 @@ mod tests {
         let empty_desc = store.write_extent(b"").expect("Write empty extent");
         assert_eq!(store.read_extent(&empty_desc), Some(&b""[..]));
     }
+
+    #[test]
+    fn system_store_rejects_out_of_bounds_descriptor() {
+        let mut store = SystemStore::<64>::new();
+        let payload = b"small_payload";
+        let desc = store.write_extent(payload).expect("Write extent");
+
+        // Create an out-of-bounds descriptor with same hash but invalid offset+length
+        let oob = ExtentDescriptor {
+            hash: desc.hash,
+            offset: store.allocated_bytes(),
+            length: 1, // This will make offset + length exceed allocated_bytes()
+        };
+
+        assert!(store.read_extent(&oob).is_none());
+    }
+
+    #[test]
+    fn system_store_write_rejects_capacity_overflow() {
+        let mut store = SystemStore::<8>::new();
+        let payload = b"12345678"; // Exactly 8 bytes
+
+        // First write should succeed
+        let _desc1 = store
+            .write_extent(payload)
+            .expect("First write should succeed");
+        assert_eq!(store.allocated_bytes(), 8);
+
+        // Second write should fail due to capacity overflow
+        assert!(store.write_extent(b"extra").is_none());
+    }
 }
