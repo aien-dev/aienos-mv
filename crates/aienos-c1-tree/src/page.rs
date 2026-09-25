@@ -4,6 +4,23 @@ use aienos_kernel::crypto::sha256;
 use core::fmt;
 use serde::{Deserialize, Serialize};
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn verify_checksum_fails_after_token_mutation() {
+        let mut page = PhysicalKvPage::new(PageId(1));
+        page.append(42); // Append one token so checksum is set
+
+        // Mutate the public field `tokens[0]` directly WITHOUT calling recompute_checksum
+        page.tokens[0] = 999;
+
+        // Assert verify_checksum() is false
+        assert!(!page.verify_checksum());
+    }
+}
+
 /// Number of tokens stored per physical KV page frame.
 pub const PAGE_CAPACITY_TOKENS: usize = 64;
 
