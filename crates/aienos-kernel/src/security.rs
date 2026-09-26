@@ -42,6 +42,22 @@ pub enum SecurityError {
     AuthenticationFailed,
     KeySlotIndexOutOfRange,
     PayloadArenaOverflow,
+    Unprovisioned,
+    RollbackDetected(&'static str),
+    StoreError(crate::store::engine::StoreError),
+    ContinuityError(crate::continuity::ContinuityError),
+}
+
+impl From<crate::store::engine::StoreError> for SecurityError {
+    fn from(e: crate::store::engine::StoreError) -> Self {
+        Self::StoreError(e)
+    }
+}
+
+impl From<crate::continuity::ContinuityError> for SecurityError {
+    fn from(e: crate::continuity::ContinuityError) -> Self {
+        Self::ContinuityError(e)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -747,6 +763,571 @@ pub fn evaluate_anti_rollback(
     } else {
         AntiRollbackDecision::InconsistentEpoch("disk epoch jumped ahead of anchor (> anchor + 1)")
     }
+}
+
+// ---------------------------------------------------------------------------
+// 5. Authenticated Application Payload Sealing & Unsealing
+// ---------------------------------------------------------------------------
+
+/// Encapsulate application payload bytes into an M5 chunked authenticated envelope.
+#[allow(clippy::too_many_arguments)]
+pub fn seal_application_payload(
+    subkeys: &DerivedSubkeys,
+    store_uuid: &[u8; 16],
+    kind: u16,
+    version: u16,
+    epoch: u64,
+    envelope_id: &[u8; 16],
+    nonce_prefix: &[u8; 8],
+    plaintext: &[u8],
+) -> Vec<u8> {
+    let key = match kind {
+        crate::continuity::KIND_CORTEX_WAL => &subkeys.k_cortex,
+        _ => &subkeys.k_agent,
+    };
+    crate::crypto::envelope::encrypt_envelope(
+        key,
+        store_uuid,
+        kind,
+        version,
+        envelope_id,
+        nonce_prefix,
+        epoch,
+        plaintext,
+    )
+}
+
+/// Decrypt an M5 authenticated envelope into verified plaintext.
+///
+/// Invariant: Polyval authentication tags are verified in private scratchpads
+/// before releasing decrypted plaintext. Fails closed with `SecurityError::AuthenticationFailed`.
+pub fn unseal_application_payload(
+    subkeys: &DerivedSubkeys,
+    store_uuid: &[u8; 16],
+    kind: u16,
+    version: u16,
+    envelope_bytes: &[u8],
+) -> Result<Vec<u8>, SecurityError> {
+    let key = match kind {
+        crate::continuity::KIND_CORTEX_WAL => &subkeys.k_cortex,
+        _ => &subkeys.k_agent,
+    };
+    crate::crypto::envelope::decrypt_envelope(key, store_uuid, kind, version, envelope_bytes)
+        .map_err(|_| SecurityError::AuthenticationFailed)
+}
+
+// ---------------------------------------------------------------------------
+// 6. M5 Authenticated Continuity Lifecycle (Provision, Resolve, Commit)
+// ---------------------------------------------------------------------------
+
+/// Provision a new sovereign agent under M5 authenticated envelope encryption.
+pub fn provision_authenticated<D: crate::store::engine::StoreDevice>(
+    store: &mut crate::store::engine::Store<D>,
+    agent_id: [u8; 32],
+    source: crate::continuity::ProvisionSource,
+    k_vol: &[u8; 32],
+    slot0_kek: Option<&[u8; 32]>,
+    slot1_kek: &[u8; 32],
+) -> Result<crate::continuity::Continuity, SecurityError> {
+    use crate::continuity::{
+        root_branch_id, AgentRoot, AgentState, Continuity, Manifest, KIND_AGENT_ROOT,
+        KIND_AGENT_STATE, KIND_MANIFEST, STORE_OBJECT_VERSION,
+    };
+    use crate::store::engine::{MountState, ObjectInput};
+
+    if store.mount_state() != MountState::Valid {
+        return Err(SecurityError::FormatError("store is not writable"));
+    }
+
+    for entry in &store.catalog().entries {
+        if entry.kind == KIND_AGENT_ROOT || entry.kind == KIND_SECURITY_MANIFEST {
+            return Err(SecurityError::FormatError("store is already provisioned"));
+        }
+    }
+
+    let store_uuid = store.store_uuid();
+    let subkeys = derive_subkeys(k_vol);
+
+    let mut slots = [KeySlotDescriptor::EMPTY; KEYSLOT_MAX_SLOTS];
+    let mut slot_count = 0;
+
+    if let Some(tpm_kek) = slot0_kek {
+        let mut slot0 = KeySlotDescriptor::EMPTY;
+        slot0.slot_type = KeySlotType::Tpm2PolicyAuthorize;
+        slot0.slot_id = 0;
+        slot0.key_epoch = 1;
+        slot0.wrap_k_vol(tpm_kek, k_vol, &[0x10; 12]);
+        slots[0] = slot0;
+        slot_count += 1;
+    }
+
+    let mut slot1 = KeySlotDescriptor::EMPTY;
+    slot1.slot_type = KeySlotType::RecoveryRawSecret;
+    slot1.slot_id = 1;
+    slot1.key_epoch = 1;
+    slot1.wrap_k_vol(slot1_kek, k_vol, &[0x20; 12]);
+    slots[1] = slot1;
+    slot_count += 1;
+
+    let keyslot_manifest = KeySlotManifest {
+        store_uuid,
+        manifest_sequence: 1,
+        previous_keyslot_manifest_id: ObjectId([0; 32]),
+        active_key_epoch: 1,
+        slot_count: slot_count as u32,
+        slots,
+        payload_arena: alloc::vec![],
+    };
+    let keyslot_bytes = keyslot_manifest.encode()?;
+    let keyslot_manifest_id =
+        ObjectId::calculate(KIND_KEYSLOT_MANIFEST, STORE_OBJECT_VERSION, &keyslot_bytes)
+            .map_err(crate::store::engine::StoreError::Format)?;
+
+    let root = AgentRoot {
+        agent_id,
+        store_uuid,
+        root_branch: root_branch_id(&agent_id),
+        provisioned_generation: store.generation() + 1,
+        source,
+    };
+    let root_plaintext = root.encode();
+    let root_sealed = seal_application_payload(
+        &subkeys,
+        &store_uuid,
+        KIND_AGENT_ROOT,
+        STORE_OBJECT_VERSION,
+        1,
+        &[0x01; 16],
+        &[0x01; 8],
+        &root_plaintext,
+    );
+    let agent_root_id = ObjectId::calculate(KIND_AGENT_ROOT, STORE_OBJECT_VERSION, &root_sealed)
+        .map_err(crate::store::engine::StoreError::Format)?;
+
+    let state = AgentState::genesis(agent_id, 1);
+    let state_plaintext = state.encode().map_err(SecurityError::ContinuityError)?;
+    let state_sealed = seal_application_payload(
+        &subkeys,
+        &store_uuid,
+        KIND_AGENT_STATE,
+        STORE_OBJECT_VERSION,
+        1,
+        &[0x02; 16],
+        &[0x02; 8],
+        &state_plaintext,
+    );
+    let agent_state_id = ObjectId::calculate(KIND_AGENT_STATE, STORE_OBJECT_VERSION, &state_sealed)
+        .map_err(crate::store::engine::StoreError::Format)?;
+
+    let manifest = Manifest {
+        root: agent_root_id,
+        previous: None,
+        sequence: 1,
+        incarnation: 1,
+        agent_state: Some(agent_state_id),
+        cortex_wal: alloc::vec![],
+    };
+    let manifest_plaintext = manifest.encode().map_err(SecurityError::ContinuityError)?;
+    let manifest_sealed = seal_application_payload(
+        &subkeys,
+        &store_uuid,
+        KIND_MANIFEST,
+        STORE_OBJECT_VERSION,
+        1,
+        &[0x03; 16],
+        &[0x03; 8],
+        &manifest_plaintext,
+    );
+    let continuity_manifest_id =
+        ObjectId::calculate(KIND_MANIFEST, STORE_OBJECT_VERSION, &manifest_sealed)
+            .map_err(crate::store::engine::StoreError::Format)?;
+
+    let mut security_manifest = SecurityManifest {
+        format_version: SECURITY_FORMAT_VERSION,
+        flags: 0,
+        reserved: 0,
+        store_uuid,
+        generation: store.generation() + 1,
+        security_sequence: 1,
+        epoch: 1,
+        key_epoch: 1,
+        previous_security_manifest_id: ObjectId([0; 32]),
+        keyslot_manifest_id,
+        agent_root_id,
+        continuity_manifest_id,
+        migration_manifest_id: ObjectId([0; 32]),
+        root_mac: [0; 32],
+    };
+    security_manifest.sign(&subkeys.k_root_auth);
+    let security_bytes = security_manifest.encode();
+
+    let inputs = [
+        ObjectInput {
+            kind: KIND_KEYSLOT_MANIFEST,
+            version: STORE_OBJECT_VERSION,
+            bytes: &keyslot_bytes,
+        },
+        ObjectInput {
+            kind: KIND_AGENT_ROOT,
+            version: STORE_OBJECT_VERSION,
+            bytes: &root_sealed,
+        },
+        ObjectInput {
+            kind: KIND_AGENT_STATE,
+            version: STORE_OBJECT_VERSION,
+            bytes: &state_sealed,
+        },
+        ObjectInput {
+            kind: KIND_MANIFEST,
+            version: STORE_OBJECT_VERSION,
+            bytes: &manifest_sealed,
+        },
+        ObjectInput {
+            kind: KIND_SECURITY_MANIFEST,
+            version: STORE_OBJECT_VERSION,
+            bytes: &security_bytes,
+        },
+    ];
+
+    store.transact(&inputs)?;
+
+    Ok(Continuity {
+        root_id: agent_root_id,
+        root,
+        manifest_id: continuity_manifest_id,
+        manifest,
+        state,
+        cortex: alloc::vec![],
+    })
+}
+
+/// Resolve durable agent continuity from an M5 authenticated store.
+pub fn resolve_authenticated<D: crate::store::engine::StoreDevice>(
+    store: &mut crate::store::engine::Store<D>,
+    k_kek: &[u8; 32],
+    anti_rollback_anchor: Option<&RollbackAnchor>,
+) -> Result<crate::continuity::Continuity, SecurityError> {
+    use crate::continuity::{
+        AgentRoot, AgentState, Continuity, Manifest, WalSegment, KIND_AGENT_ROOT, KIND_AGENT_STATE,
+        KIND_CORTEX_WAL, KIND_MANIFEST,
+    };
+
+    let sec_candidates: alloc::vec::Vec<_> = store
+        .catalog()
+        .entries
+        .iter()
+        .filter(|e| e.kind == KIND_SECURITY_MANIFEST)
+        .copied()
+        .collect();
+    let mut active_sec = None;
+    for entry in sec_candidates {
+        if let Ok(bytes) = store.read_object(entry.object_id) {
+            if let Ok(sec) = SecurityManifest::decode(&bytes) {
+                if sec.generation == store.generation() {
+                    active_sec = Some((entry, sec));
+                    break;
+                }
+            }
+        }
+    }
+    let (sec_entry, sec_manifest) = active_sec.ok_or(SecurityError::FormatError(
+        "missing active security manifest",
+    ))?;
+
+    let keyslot_bytes = store.read_object(sec_manifest.keyslot_manifest_id)?;
+    let keyslot_manifest = KeySlotManifest::decode(&keyslot_bytes)?;
+
+    let mut k_vol_opt = None;
+    for slot in &keyslot_manifest.slots {
+        if slot.slot_type != KeySlotType::Empty {
+            if let Ok(unwrapped) = slot.unwrap_k_vol(k_kek) {
+                k_vol_opt = Some(unwrapped);
+                break;
+            }
+        }
+    }
+    let k_vol = k_vol_opt.ok_or(SecurityError::AuthenticationFailed)?;
+    let subkeys = derive_subkeys(&k_vol);
+
+    if !sec_manifest.verify(&subkeys.k_root_auth) {
+        return Err(SecurityError::AuthenticationFailed);
+    }
+    if sec_manifest.store_uuid != store.store_uuid() {
+        return Err(SecurityError::FormatError("store_uuid mismatch"));
+    }
+
+    if let Some(anchor) = anti_rollback_anchor {
+        match evaluate_anti_rollback(sec_manifest.epoch, &sec_manifest.root_mac, Some(anchor)) {
+            AntiRollbackDecision::ValidResume
+            | AntiRollbackDecision::PreparedEpochAdvance { .. } => {}
+            AntiRollbackDecision::RollbackDetected(msg) => {
+                return Err(SecurityError::RollbackDetected(msg))
+            }
+            AntiRollbackDecision::InconsistentEpoch(msg) => {
+                return Err(SecurityError::RollbackDetected(msg))
+            }
+        }
+    }
+
+    let store_uuid = store.store_uuid();
+    let root_bytes = store.read_object(sec_manifest.agent_root_id)?;
+    let root_plaintext = unseal_application_payload(
+        &subkeys,
+        &store_uuid,
+        KIND_AGENT_ROOT,
+        sec_entry.version,
+        &root_bytes,
+    )?;
+    let root = AgentRoot::decode(&root_plaintext).map_err(SecurityError::ContinuityError)?;
+
+    let manifest_bytes = store.read_object(sec_manifest.continuity_manifest_id)?;
+    let manifest_plaintext = unseal_application_payload(
+        &subkeys,
+        &store_uuid,
+        KIND_MANIFEST,
+        sec_entry.version,
+        &manifest_bytes,
+    )?;
+    let manifest = Manifest::decode(&manifest_plaintext).map_err(SecurityError::ContinuityError)?;
+
+    let state_id = manifest
+        .agent_state
+        .ok_or(SecurityError::FormatError("manifest missing agent state"))?;
+    let state_bytes = store.read_object(state_id)?;
+    let state_plaintext = unseal_application_payload(
+        &subkeys,
+        &store_uuid,
+        KIND_AGENT_STATE,
+        sec_entry.version,
+        &state_bytes,
+    )?;
+    let state = AgentState::decode(&state_plaintext).map_err(SecurityError::ContinuityError)?;
+
+    let mut cortex = alloc::vec::Vec::new();
+    for wal_id in &manifest.cortex_wal {
+        let wal_bytes = store.read_object(*wal_id)?;
+        let wal_plaintext = unseal_application_payload(
+            &subkeys,
+            &store_uuid,
+            KIND_CORTEX_WAL,
+            sec_entry.version,
+            &wal_bytes,
+        )?;
+        let seg = WalSegment::decode(&wal_plaintext).map_err(SecurityError::ContinuityError)?;
+        cortex.extend(seg.records);
+    }
+
+    Ok(Continuity {
+        root_id: sec_manifest.agent_root_id,
+        root,
+        manifest_id: sec_manifest.continuity_manifest_id,
+        manifest,
+        state,
+        cortex,
+    })
+}
+
+/// Commit an authenticated update (Class A state or Cortex records) over an M5 Store.
+pub fn commit_authenticated<D: crate::store::engine::StoreDevice>(
+    store: &mut crate::store::engine::Store<D>,
+    k_vol: &[u8; 32],
+    update: crate::continuity::Update,
+    incarnation: u64,
+    advance_epoch: bool,
+) -> Result<crate::continuity::Continuity, SecurityError> {
+    use crate::continuity::{
+        AgentRoot, Continuity, Manifest, WalSegment, KIND_AGENT_ROOT, KIND_AGENT_STATE,
+        KIND_CORTEX_WAL, KIND_MANIFEST, STORE_OBJECT_VERSION,
+    };
+    use crate::store::engine::{MountState, ObjectInput};
+
+    if store.mount_state() != MountState::Valid {
+        return Err(SecurityError::FormatError("store is not writable"));
+    }
+
+    let subkeys = derive_subkeys(k_vol);
+    let store_uuid = store.store_uuid();
+
+    let sec_entry = store
+        .catalog()
+        .entries
+        .iter()
+        .find(|e| e.kind == KIND_SECURITY_MANIFEST)
+        .copied()
+        .ok_or(SecurityError::FormatError("missing security manifest"))?;
+    let sec_bytes = store.read_object(sec_entry.object_id)?;
+    let prev_sec = SecurityManifest::decode(&sec_bytes)?;
+
+    let prev_mani_bytes = store.read_object(prev_sec.continuity_manifest_id)?;
+    let prev_mani_pt = unseal_application_payload(
+        &subkeys,
+        &store_uuid,
+        KIND_MANIFEST,
+        sec_entry.version,
+        &prev_mani_bytes,
+    )?;
+    let prev_manifest = Manifest::decode(&prev_mani_pt).map_err(SecurityError::ContinuityError)?;
+
+    let mut append_inputs = alloc::vec::Vec::new();
+    let new_seq = prev_manifest.sequence + 1;
+    let new_epoch = if advance_epoch {
+        prev_sec.epoch + 1
+    } else {
+        prev_sec.epoch
+    };
+
+    let (state, state_id) = if let Some(new_state) = update.state {
+        let pt = new_state.encode().map_err(SecurityError::ContinuityError)?;
+        let sealed = seal_application_payload(
+            &subkeys,
+            &store_uuid,
+            KIND_AGENT_STATE,
+            STORE_OBJECT_VERSION,
+            new_epoch,
+            &[0x12; 16],
+            &[0x12; 8],
+            &pt,
+        );
+        let id = ObjectId::calculate(KIND_AGENT_STATE, STORE_OBJECT_VERSION, &sealed)
+            .map_err(crate::store::engine::StoreError::Format)?;
+        append_inputs.push((KIND_AGENT_STATE, sealed));
+        (new_state, id)
+    } else {
+        let prev_state_id = prev_manifest
+            .agent_state
+            .ok_or(SecurityError::FormatError("missing state"))?;
+        let state_bytes = store.read_object(prev_state_id)?;
+        let state_pt = unseal_application_payload(
+            &subkeys,
+            &store_uuid,
+            KIND_AGENT_STATE,
+            STORE_OBJECT_VERSION,
+            &state_bytes,
+        )?;
+        let st = crate::continuity::AgentState::decode(&state_pt)
+            .map_err(SecurityError::ContinuityError)?;
+        (st, prev_state_id)
+    };
+
+    let mut cortex_wal = prev_manifest.cortex_wal.clone();
+    if !update.cortex.is_empty() {
+        let seg = WalSegment {
+            sequence: new_seq,
+            records: update.cortex,
+        };
+        let pt = seg.encode().map_err(SecurityError::ContinuityError)?;
+        let sealed = seal_application_payload(
+            &subkeys,
+            &store_uuid,
+            KIND_CORTEX_WAL,
+            STORE_OBJECT_VERSION,
+            new_epoch,
+            &[0x20; 16],
+            &[0x20; 8],
+            &pt,
+        );
+        let id = ObjectId::calculate(KIND_CORTEX_WAL, STORE_OBJECT_VERSION, &sealed)
+            .map_err(crate::store::engine::StoreError::Format)?;
+        cortex_wal.push(id);
+        append_inputs.push((KIND_CORTEX_WAL, sealed));
+    }
+
+    let new_manifest = Manifest {
+        root: prev_sec.agent_root_id,
+        previous: Some(prev_sec.continuity_manifest_id),
+        sequence: new_seq,
+        incarnation,
+        agent_state: Some(state_id),
+        cortex_wal,
+    };
+    let mani_pt = new_manifest
+        .encode()
+        .map_err(SecurityError::ContinuityError)?;
+    let mani_sealed = seal_application_payload(
+        &subkeys,
+        &store_uuid,
+        KIND_MANIFEST,
+        STORE_OBJECT_VERSION,
+        new_epoch,
+        &[0x13; 16],
+        &[0x13; 8],
+        &mani_pt,
+    );
+    let new_manifest_id = ObjectId::calculate(KIND_MANIFEST, STORE_OBJECT_VERSION, &mani_sealed)
+        .map_err(crate::store::engine::StoreError::Format)?;
+
+    let mut new_sec = SecurityManifest {
+        format_version: SECURITY_FORMAT_VERSION,
+        flags: 0,
+        reserved: 0,
+        store_uuid,
+        generation: store.generation() + 1,
+        security_sequence: prev_sec.security_sequence + 1,
+        epoch: new_epoch,
+        key_epoch: prev_sec.key_epoch,
+        previous_security_manifest_id: sec_entry.object_id,
+        keyslot_manifest_id: prev_sec.keyslot_manifest_id,
+        agent_root_id: prev_sec.agent_root_id,
+        continuity_manifest_id: new_manifest_id,
+        migration_manifest_id: ObjectId([0; 32]),
+        root_mac: [0; 32],
+    };
+    new_sec.sign(&subkeys.k_root_auth);
+    let sec_bytes = new_sec.encode();
+
+    let mut inputs = alloc::vec::Vec::new();
+    for (k, b) in &append_inputs {
+        inputs.push(ObjectInput {
+            kind: *k,
+            version: STORE_OBJECT_VERSION,
+            bytes: b,
+        });
+    }
+    inputs.push(ObjectInput {
+        kind: KIND_MANIFEST,
+        version: STORE_OBJECT_VERSION,
+        bytes: &mani_sealed,
+    });
+    inputs.push(ObjectInput {
+        kind: KIND_SECURITY_MANIFEST,
+        version: STORE_OBJECT_VERSION,
+        bytes: &sec_bytes,
+    });
+
+    store.transact(&inputs)?;
+
+    let root_bytes = store.read_object(prev_sec.agent_root_id)?;
+    let root_pt = unseal_application_payload(
+        &subkeys,
+        &store_uuid,
+        KIND_AGENT_ROOT,
+        STORE_OBJECT_VERSION,
+        &root_bytes,
+    )?;
+    let root = AgentRoot::decode(&root_pt).map_err(SecurityError::ContinuityError)?;
+
+    let mut cortex_records = alloc::vec::Vec::new();
+    for wal_id in &new_manifest.cortex_wal {
+        let wb = store.read_object(*wal_id)?;
+        let pt = unseal_application_payload(
+            &subkeys,
+            &store_uuid,
+            KIND_CORTEX_WAL,
+            STORE_OBJECT_VERSION,
+            &wb,
+        )?;
+        let seg = WalSegment::decode(&pt).map_err(SecurityError::ContinuityError)?;
+        cortex_records.extend(seg.records);
+    }
+
+    Ok(Continuity {
+        root_id: prev_sec.agent_root_id,
+        root,
+        manifest_id: new_manifest_id,
+        manifest: new_manifest,
+        state,
+        cortex: cortex_records,
+    })
 }
 
 #[cfg(test)]

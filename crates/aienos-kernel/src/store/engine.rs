@@ -236,6 +236,12 @@ impl<D: StoreDevice> Store<D> {
     pub fn active_slot(&self) -> u32 {
         self.root.superblock.slot_id
     }
+    pub fn store_uuid(&self) -> [u8; 16] {
+        self.root.superblock.store_uuid
+    }
+    pub fn commit_record_id(&self) -> ObjectId {
+        self.root.commit_id
+    }
     pub fn catalog(&self) -> &Catalog {
         &self.root.catalog
     }
