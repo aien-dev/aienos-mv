@@ -28,32 +28,32 @@
         },
         {
           "digest": "3947ba1fe343472af9f2afe65c10051bdda114a47e52ed281c9c496928613a69",
-          "last_commit": "640522a",
+          "last_commit": "9d41efc",
           "name": "docs",
           "purpose": "Directory docs. Purpose not yet described by a human."
         },
         {
           "digest": "4c3af9c590d65bc53f1ff800c6c71a182d1198942af77723468fc3b1ec983d7d",
-          "last_commit": "640522a",
+          "last_commit": "9d41efc",
           "name": "native",
           "purpose": "Directory native. Purpose not yet described by a human."
         },
         {
-          "digest": "07ca1d2521f97f9ca307c0d11fd0793cb00558b2a429f581c9bd3c2b91e4f1cf",
-          "last_commit": "640522a",
+          "digest": "b5c64f0277790e020d9c0fde19cc064fafc5c64e1d37d4e92ed88f5a40e36da3",
+          "last_commit": "9d41efc",
           "name": "scripts",
           "purpose": "Directory scripts. Purpose not yet described by a human."
         }
       ],
-      "children_root": "sha256:71ab00ea4d4d7468795bbc75e618c4c1f85bc089a59a6f2d534ff3ec02e9edb0",
-      "compiled_at": "2026-10-05T02:27:48Z",
+      "children_root": "sha256:34e91caaa6cd847f34255bfc5007716c670703a1c50fbd1906b33c93e50e3261",
+      "compiled_at": "2026-10-05T03:53:55Z",
       "compiler": "crumb-compile/1",
-      "digest": "sha256:b97fc8060559ff252ae45da063dfe5d19a499c0fbf5c3df259116c76777971e6",
+      "digest": "sha256:566fdeaf23a0ba7e6a959bd9e881aaeb60c8183222903de7880358e8f6a495b2",
       "evidence_files": 147,
       "evidence_root": "sha256:3f1c80574189eaded43ead3929d21a74c01f77dee31e7b2e2bd3858e67155dc7",
       "files": 2853,
-      "generated_at_commit": "640522a03b9f939d2d07ef0d0fdc08e35ecefc7e",
-      "source_tree": "sha256:01fd2bbb73681268d64b27e5cf332a4ffe7d93c072aed2f1bc494d7d7e3c6798"
+      "generated_at_commit": "9d41efc9d1bea31be0640ca70eeeec9d1d000fad",
+      "source_tree": "sha256:ea33e3888e7b7b8a264b21d9004f724cb69bb1d6f6117225904ce15bd559aaf1"
     },
     "owner_lane": "",
     "provenance": {
