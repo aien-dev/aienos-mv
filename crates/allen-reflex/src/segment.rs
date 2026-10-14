@@ -1,11 +1,13 @@
 //! Ordered request handling. A message is cut into requests at explicit sequence markers
-//! ("and then", ", then", "after that", ";", "and approve ..."). The exam contract says
+//! ("and then", "and afterwards", ", later", "after that", ";", "and approve ..."). The exam contract says
 //! "if the message asks for several steps, give only the first step", so the core decides on
 //! the first request that is not a pure acknowledgement, and copies its argument only from it.
 //! Sentence breaks alone do not cut ("I do not know what to ask. Show me the options." is
 //! one request), except that a leading sentence of fillers ("Ok.") is dropped.
 
-use crate::lexicon::{is_in, AND_VERBS, FILLER, FILLER_COMMA};
+use crate::lexicon::{
+    is_in, longest, skip_polite, AND_VERBS, FILLER, FILLER_COMMA, SEQUENCE_ADVERBS, TEXT_FRAMES,
+};
 use crate::text::{gap, Token};
 use alloc::vec::Vec;
 
@@ -20,24 +22,70 @@ pub struct Clause {
 
 const TRAILING_MARKERS: &[&str] = &["afterwards", "afterward", "later", "next"];
 
+/// Most words between a payload frame and its colon ("Save this as a fact: ...").
+const FRAME_REACH: usize = 8;
+
+/// If a store, to-do, preference or writing frame opens at `at` (after courtesy words) and a
+/// colon or free dash follows it within [`FRAME_REACH`] words of the same sentence, the
+/// payload it introduces: `Some((first, end))`, ending at the next sentence stop or `;`.
+pub fn delimited_payload(toks: &[Token], at: usize) -> Option<(usize, usize)> {
+    let n = toks.len();
+    let lead = skip_polite(toks, at, n);
+    let f = longest(toks, lead, TEXT_FRAMES);
+    if f == 0 {
+        return None;
+    }
+    let hi = core::cmp::min(n, lead + FRAME_REACH + 1);
+    let mut j = lead + 1;
+    while j < hi {
+        let g = toks[j].gap;
+        if g & (gap::STOP | gap::SEMI) != 0 {
+            return None;
+        }
+        if g & (gap::COLON | gap::DASH) != 0 {
+            let mut e = j + 1;
+            while e < n && toks[e].gap & (gap::STOP | gap::SEMI) == 0 {
+                e += 1;
+            }
+            return Some((j, e));
+        }
+        j += 1;
+    }
+    None
+}
+
 /// Cut `toks` into requests in order.
+///
+/// Cuts: `;`; a sequence adverb ("then", "afterwards", "later", "next", ...) right after
+/// "and" or after a comma or sentence stop; "after that" in the same positions; and
+/// "X and <agent verb>". The last one is not made inside a delimited payload (a frame plus a
+/// colon or dash, see [`delimited_payload`]): there the operator is dictating content, and a
+/// coordinated verb belongs to it ("Note this: call Ann and cancel the gym" is one note).
+/// Explicit sequence words still cut everywhere.
 pub fn clauses(toks: &[Token]) -> Vec<Clause> {
     let mut out = Vec::new();
     let n = toks.len();
     let mut s = 0;
     let mut i = 0;
+    // current delimited payload [from, to)
+    let mut payload: Option<(usize, usize)> = None;
     while i < n {
         let w = toks[i].word.as_str();
         let g = toks[i].gap;
+        if i == s || g & (gap::STOP | gap::SEMI) != 0 {
+            if let Some(p) = delimited_payload(toks, i) {
+                payload = Some(p);
+            }
+        }
+        let in_payload = payload.is_some_and(|(a, b)| a <= i && i < b);
         // ";" always separates
         if i > s && g & gap::SEMI != 0 {
             out.push(Clause { start: s, end: i });
             s = i;
-            i += 1;
             continue;
         }
-        // "and then", ", then", ". Then"
-        if w == "then" && i > s {
+        // "and then", ", then", ". Then", "and afterwards", ", later", ...
+        if is_in(SEQUENCE_ADVERBS, w) && i > s {
             let prev_and = toks[i - 1].word == "and" && i - 1 > s;
             if prev_and || g & (gap::COMMA | gap::STOP) != 0 {
                 let e = if prev_and { i - 1 } else { i };
@@ -58,8 +106,13 @@ pub fn clauses(toks: &[Token]) -> Vec<Clause> {
                 continue;
             }
         }
-        // "X and approve it": a second agent verb starts a new request
-        if w == "and" && i > s && i + 1 < n && is_in(AND_VERBS, toks[i + 1].word.as_str()) {
+        // "X and approve it": a second agent verb starts a new request, outside a payload
+        if w == "and"
+            && i > s
+            && i + 1 < n
+            && !in_payload
+            && is_in(AND_VERBS, toks[i + 1].word.as_str())
+        {
             out.push(Clause { start: s, end: i });
             s = i + 1;
             i += 1;

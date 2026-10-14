@@ -73,6 +73,13 @@ fn main() {
     let pool = pool();
     let dev = load("dev");
     let only = std::env::args().nth(1).unwrap_or_default();
+    // "frozen": only the frozen configuration of each mode (dev + cross-validation)
+    if only == "frozen" {
+        for mode in [Mode::Reflex, Mode::Nearest, Mode::Perceptron] {
+            line("frozen", Config::frozen(mode), &pool, &dev);
+        }
+        return;
+    }
     if only.is_empty() || only == "grid" {
         for mode in [Mode::Reflex, Mode::Nearest, Mode::Perceptron] {
             let f = Config::frozen(mode);

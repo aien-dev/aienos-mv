@@ -61,6 +61,11 @@ pub enum Mode {
     Perceptron,
 }
 
+/// The scorer that makes ALLEN's decisions, chosen on dev by the predeclared rule (highest dev
+/// exact; tie: fewer over-blocks; tie: simpler). Front-end round F: REFLEX 22/23, nearest
+/// 20/23, perceptron 20/23 (docs/native/PI5-8-ALLEN-REFLEX.md).
+pub const DECIDER: Mode = Mode::Reflex;
+
 impl Mode {
     /// Mode name used in result file names.
     pub fn name(self) -> &'static str {
@@ -296,9 +301,11 @@ impl Reflex {
         let model = match cfg.mode {
             Mode::Reflex => Model::Hv(HvModel::new(cfg.hv)),
             Mode::Nearest => Model::Nearest(NearestModel::new(cfg.hv.k, cfg.hv.max_exemplars)),
-            Mode::Perceptron => {
-                Model::Perceptron(PerceptronModel::new(cfg.perceptron_epochs, 65536))
-            }
+            Mode::Perceptron => Model::Perceptron(PerceptronModel::new(
+                cfg.perceptron_epochs,
+                65536,
+                cfg.hv.max_exemplars,
+            )),
         };
         Reflex {
             cfg,
@@ -382,7 +389,11 @@ impl Reflex {
             a.msg.len()
         };
         let ends_q = a.msg.as_bytes()[from..to].contains(&b'?');
-        features::extract(&a.toks, p, &a.state, &self.cfg.weights, ends_q)
+        let lex_end = match segment::delimited_payload(&a.toks, p.start) {
+            Some((j, _)) if j > p.start && j < p.end => j,
+            _ => p.end,
+        };
+        features::extract(&a.toks, p, lex_end, &a.state, &self.cfg.weights, ends_q)
     }
 
     fn score(&self, f: &[Feat]) -> Scores {
@@ -487,10 +498,11 @@ impl Reflex {
             }
             Model::Perceptron(m) => {
                 if online {
-                    m.online(&f, label);
+                    m.online(&f, label)
                 } else {
-                    m.push(&f, label);
+                    m.push(&f, label)
                 }
+                .map_err(|_| LearnError::Full)?;
             }
         }
         if let (true, Some(t)) = (label.has_text(), text) {

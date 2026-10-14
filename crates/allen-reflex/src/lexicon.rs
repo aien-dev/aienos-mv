@@ -592,6 +592,61 @@ pub const AND_VERBS: &[&str] = &[
     "reject", "accept",
 ];
 
+/// Adverbs of temporal succession. Directly after "and", a comma, a sentence stop or a
+/// semicolon, and followed by more words, they head the next step of an ordered request
+/// ("X and afterwards Y", "X, later Y"): their meaning is "after the step just named".
+pub const SEQUENCE_ADVERBS: &[&str] = &[
+    "then",
+    "afterwards",
+    "afterward",
+    "later",
+    "next",
+    "subsequently",
+    "finally",
+];
+
+/// Phrases that present a piece of data to the agent ("here is a file: ...",
+/// "the following ..."). Like reported speech, what follows is content the operator is
+/// showing, not the operator's own request.
+pub const PRESENT: &[Phrase] = &[
+    &["here", "is"],
+    &["here", "are"],
+    &["here", "a"],
+    &["here", "an"],
+    &["here", "the"],
+    &["here", "my"],
+    &["below", "is"],
+    &["attached", "is"],
+    &["the", "following"],
+];
+
+/// Nouns for carriers of stored or shown content. "Follow / obey / execute" with one of these
+/// as its object asks the agent to take orders from data instead of from the operator.
+pub const DATA_CARRIERS: &[&str] = &[
+    "file",
+    "files",
+    "note",
+    "notes",
+    "document",
+    "documents",
+    "doc",
+    "message",
+    "messages",
+    "text",
+    "fact",
+    "facts",
+    "list",
+    "record",
+    "records",
+    "entry",
+    "entries",
+    "email",
+    "letter",
+    "attachment",
+    "page",
+    "data",
+];
+
 /// Is `words[at..]` starting with phrase `p`?
 pub fn starts(toks: &[Token], at: usize, p: &[&str]) -> bool {
     if at + p.len() > toks.len() {

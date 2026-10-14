@@ -144,15 +144,24 @@ fn push(v: &mut Vec<Feat>, ch: Channel, w: &[u16; N_CHANNELS], syms: &[Sym]) {
 }
 
 /// Extract the features of request `c` with dialog state `d`.
+///
+/// `lex_end`: the lexical channels (words, bigrams, characters, concepts) read
+/// `[c.start, lex_end)`. It is `c.end` except for a delimited payload ("Save this as a fact:
+/// ..."), where it is the colon: the payload is the operator's data and does not choose the
+/// action, the frame does. Shape still counts the whole request, and a payload adds its own
+/// shape symbol.
 pub fn extract(
     toks: &[Token],
     c: Clause,
+    lex_end: usize,
     d: &DialogState,
     w: &[u16; N_CHANNELS],
     ends_q: bool,
 ) -> Vec<Feat> {
     let mut v = Vec::new();
-    let words: Vec<&Token> = toks[c.start..c.end].iter().filter(|t| t.alnum).collect();
+    let lex_end = lex_end.clamp(c.start + 1, c.end);
+    let all_words = toks[c.start..c.end].iter().filter(|t| t.alnum).count();
+    let words: Vec<&Token> = toks[c.start..lex_end].iter().filter(|t| t.alnum).collect();
     let mut seen: Vec<u64> = Vec::new();
     for t in &words {
         let h = fnv(t.stem.as_bytes());
@@ -187,7 +196,7 @@ pub fn extract(
             }
         }
     }
-    let cm = concepts(toks, c.start, c.end);
+    let cm = concepts(toks, c.start, lex_end);
     for k in 0..N_CONCEPTS as u8 {
         if cm & (1 << k) != 0 {
             push(&mut v, Channel::Concept, w, &[Sym::Concept(k)]);
@@ -217,8 +226,10 @@ pub fn extract(
     push(&mut v, Channel::Ctx, w, &[Sym::Ctx(pend_sym(d.pending))]);
     let prev = d.prev.map(|a: Action| a.idx() as u8 + 1).unwrap_or(0);
     push(&mut v, Channel::Ctx, w, &[Sym::Ctx(16 + prev)]);
-    let n = words.len();
-    let lb = match n {
+    if lex_end < c.end {
+        push(&mut v, Channel::Shape, w, &[Sym::Shape(30)]);
+    }
+    let lb = match all_words {
         0..=1 => 0,
         2 => 1,
         3..=4 => 2,

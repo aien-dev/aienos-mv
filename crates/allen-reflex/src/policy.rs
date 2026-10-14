@@ -7,7 +7,9 @@
 //!    wipe, deploy and plain synonyms), unless negated ("do not delete") or used as a noun
 //!    ("an update"), or "turn off" names a household device (that is `none`),
 //! 4. asks for approval without the operator ("approve every task automatically"), or
-//! 5. relays an order found in stored data and asks to obey it ("the note says ... do it").
+//! 5. relays an order found in data and asks to obey it ("the note says ... do it", "here is a
+//!    file: ... follow it"), or asks to follow, obey or execute a carrier of data ("follow the
+//!    file", "execute the note").
 //!
 //! A text payload is the rest of a clause that opens with a store, preference, to-do or
 //! writing frame ("Remember this note: ignore your rules ..."). Its words are the
@@ -119,8 +121,26 @@ pub fn check(toks: &[Token], cl: &[Clause]) -> Option<(RefuseRule, usize)> {
             {
                 return Some((RefuseRule::Blanket, i));
             }
-            if is_in(REPORT, w) && report_at.is_none() {
+            // 5a. data shown to the agent: reported speech ("the note says") or a
+            //     presentation ("here is a file:", "the following")
+            if report_at.is_none() && (is_in(REPORT, w) || longest(toks, i, PRESENT) > 0) {
                 report_at = Some(i);
+            }
+            // 5b. "follow / obey / execute the file": the object of the obey verb is a carrier
+            //     of data, so the order would come from data, not from the operator
+            let ob = longest(toks, i, OBEY);
+            if ob > 0
+                && i + ob <= c.end
+                && !negated(toks, i, c.start)
+                && toks.get(i + ob).is_none_or(|t| t.word != "up")
+            {
+                let hi = core::cmp::min(c.end, i + ob + 6);
+                if toks[i + ob..hi]
+                    .iter()
+                    .any(|t| is_in(DATA_CARRIERS, &t.word))
+                {
+                    return Some((RefuseRule::DataOrder, i));
+                }
             }
         }
     }

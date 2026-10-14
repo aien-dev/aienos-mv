@@ -595,6 +595,8 @@ pub struct PerceptronModel {
     pub epochs: u32,
     /// bound on distinct features
     pub max_features: usize,
+    /// bound on kept training examples (the same cap as the exemplar memories)
+    pub max_examples: usize,
     w: BTreeMap<u64, [f32; N_LABELS]>,
     train: Vec<(Vec<(u64, u32)>, u8)>,
     n_label: [u32; N_LABELS],
@@ -602,23 +604,33 @@ pub struct PerceptronModel {
 
 impl PerceptronModel {
     /// Empty model.
-    pub fn new(epochs: u32, max_features: usize) -> PerceptronModel {
+    pub fn new(epochs: u32, max_features: usize, max_examples: usize) -> PerceptronModel {
         PerceptronModel {
             epochs,
             max_features,
+            max_examples,
             w: BTreeMap::new(),
             train: Vec::new(),
             n_label: [0; N_LABELS],
         }
     }
-    /// Queue one training example.
-    pub fn push(&mut self, f: &[Feat], label: Action) {
+    /// Queue one training example. Fails, changing nothing, when `max_examples` are kept.
+    pub fn push(&mut self, f: &[Feat], label: Action) -> Result<(), MemoryFull> {
+        if self.train.len() >= self.max_examples {
+            return Err(MemoryFull);
+        }
         self.train.push((sparse(f), label.idx() as u8));
         self.n_label[label.idx()] += 1;
+        Ok(())
     }
-    /// Bytes held.
+    /// Bytes held (weights and kept training examples).
     pub fn bytes(&self) -> usize {
         self.w.len() * (8 + 4 * N_LABELS + 32)
+            + self
+                .train
+                .iter()
+                .map(|(x, _)| x.capacity() * 16 + 32)
+                .sum::<usize>()
     }
     fn raw(w: &BTreeMap<u64, [f32; N_LABELS]>, x: &[(u64, u32)]) -> [f32; N_LABELS] {
         let mut s = [0.0f32; N_LABELS];
@@ -680,7 +692,11 @@ impl PerceptronModel {
     }
     /// Online correction: perceptron steps on this example until it is predicted right
     /// (at most 8 steps).
-    pub fn online(&mut self, f: &[Feat], label: Action) {
+    /// Fails, changing nothing, when `max_examples` are kept.
+    pub fn online(&mut self, f: &[Feat], label: Action) -> Result<(), MemoryFull> {
+        if self.train.len() >= self.max_examples {
+            return Err(MemoryFull);
+        }
         let x = sparse(f);
         let y = label.idx();
         self.n_label[y] += 1;
@@ -700,6 +716,7 @@ impl PerceptronModel {
                 r[p] -= *v as f32;
             }
         }
+        Ok(())
     }
     fn score_sparse(&self, x: &[(u64, u32)]) -> Scores {
         let mut out = Scores::empty();
