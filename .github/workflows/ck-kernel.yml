@@ -40,6 +40,8 @@ on:
       - 'scripts/ck_gates.sh'
       - 'scripts/qemu_ck_*.sh'
       - 'scripts/ck_pi5_build_check.sh'
+      - 'scripts/ck_pi5_rc_check.sh'
+      - 'scripts/ck_pi5_rc_image_check.sh'
       - 'crates/aienos-fpu-probe/**'
       - 'crates/aienos-infer-kernel/**'
       - 'scripts/lib_ck_m1_checks.sh'
@@ -54,6 +56,8 @@ on:
       - 'scripts/ck_gates.sh'
       - 'scripts/qemu_ck_*.sh'
       - 'scripts/ck_pi5_build_check.sh'
+      - 'scripts/ck_pi5_rc_check.sh'
+      - 'scripts/ck_pi5_rc_image_check.sh'
       - 'crates/aienos-fpu-probe/**'
       - 'crates/aienos-infer-kernel/**'
       - 'scripts/lib_ck_m1_checks.sh'
@@ -135,6 +139,8 @@ jobs:
         run: bash scripts/qemu_ck_service_disk_test.sh --build-only
       - name: Raspberry Pi 5 kernel image builds, and the default image carries none of its board glue (AIENOS-PI5 step 1, build only)
         run: bash scripts/ck_pi5_build_check.sh
+      - name: Raspberry Pi 5 release candidate refuses every TEST, mutant, unsafe-DMA, fw_cfg and staging switch; owner-key path refuses foreign signers (PI5-8 cut R, build only; the real RC build needs the ceremony owner file and SKIPs here)
+        run: bash scripts/ck_pi5_rc_check.sh
 
   # The three QEMU checks that are not table gates, one job each.
   qemu_checks:

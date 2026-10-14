@@ -14,7 +14,9 @@
  *
  * Trust: the qualification build (CK_SEED0B_TEST_ANCHOR=1) trusts the
  * RFC 8032 TEST 1 public key ONLY (SEED-0B, TEST ONLY). The ordinary build
- * has no anchors and refuses every candidate. No real key material here.
+ * has no anchors and refuses every candidate. The Pi 5 release candidate
+ * (CK_PI5_RC=1) trusts the owner root PUBLIC key from the PI5-8 ceremony only
+ * (core/artifact_anchor.h). No private key material here.
  *
  * Differences from the Rust kernel, all recorded in GATES.md:
  *   - one address space at a time on ASID 0 with a full TLB flush on every
@@ -83,15 +85,8 @@ extern int (*ck_lower_sync)(struct ck_frame *f, uint64_t esr);
 void ck_el0_enter(uint64_t entry, uint64_t user_sp, const uint64_t regs[31]);
 void ck_el0_resume(void);
 
-#ifdef CK_SEED0B_TEST_ANCHOR
-static const uint8_t (*const anchors)[32] = &cka_test1_pk;
-#define NANCHORS 1u
-#define FEATURE_TEST_ANCHOR 1u
-#else
-static const uint8_t (*const anchors)[32] = 0;
-#define NANCHORS 0u
-#define FEATURE_TEST_ANCHOR 0u
-#endif
+/* Trust anchors (none, TEST 1 for SEED-0B, or the owner root for the Pi 5 release candidate). */
+#include "artifact_anchor.h"
 
 /* ============================ platform ============================== */
 
@@ -1369,6 +1364,19 @@ static uint32_t fwcfg_source(void)
 }
 #endif
 
+#ifdef CK_ARTIFACT_OWNER_ANCHOR
+/* Pi 5 release candidate: name the one trusted signer so a log shows which key an admission rests on. */
+static void owner_anchor_announce(void)
+{
+    char pk[65], fp[65];
+    uint8_t d[32];
+    hex(pk, anchors[0], 32);
+    sha256_hash(anchors[0], 32, d);
+    hex(fp, d, 32);
+    ck_printf("artifact_trust: PI5-8 RC owner anchor only, test_anchors=0 owner_root_ed25519=%s signer_fp=%s\n", pk, fp);
+}
+#endif
+
 void ck_artifact_run(void)
 {
     static int ran;
@@ -1378,6 +1386,9 @@ void ck_artifact_run(void)
     ck_set_stage("artifacts");
 #ifdef CK_SEED0B_TEST_ANCHOR
     ck_puts("artifact_trust: seed0b-test qualification build \xe2\x80\x94 TEST ONLY\n");
+#endif
+#ifdef CK_ARTIFACT_OWNER_ANCHOR
+    owner_anchor_announce();
 #endif
 #ifdef CK_TEST_FWCFG_ARTIFACTS
     ck_puts(FWCFG_TEST_BANNER);
@@ -1410,6 +1421,9 @@ void ck_artifact_final(void)
 {
 #ifdef CK_SEED0B_TEST_ANCHOR
     ck_puts("artifact_trust: seed0b-test qualification build \xe2\x80\x94 TEST ONLY\n");
+#endif
+#ifdef CK_ARTIFACT_OWNER_ANCHOR
+    owner_anchor_announce();
 #endif
 #ifdef CK_TEST_FWCFG_ARTIFACTS
     ck_puts(FWCFG_TEST_BANNER);

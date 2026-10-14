@@ -60,10 +60,16 @@ of them:
   names. Real owner files are never committed.
   The owner file for a YubiKey-held owner key is made by `scripts/pi5-8/owner_pubkey_file.sh` from the exported PIV public key
   (`docs/native/PI5-8-OWNER-CEREMONY.md`, gate `scripts/ck_pi5_owner_check.sh`).
+- Pi 5 release candidate (PI5-8 cut R): `make pi5-rc CK_OWNER_PUBKEYS=<ceremony owner file>` builds the unlock-card
+  lifecycle image whose artifact loader trusts only that owner key (`core/artifact_anchor.h`, header from
+  `ck_owner_gen --anchor` in its own OUT). It takes only the PI5-8 ceremony file (sha256 pinned in the Makefile), never
+  sets `CK_HARDWARE_STAGING`, and carries every staging protection over explicitly; the full list and the test of each:
+  `docs/native/PI5-8-QUALIFICATION.md`, "PI5-8 RC"; proof: `scripts/ck_pi5_rc_check.sh`.
 - What the image uses: the machine id becomes the ARGUS machine id, the store
   uuid the boot Store uuid, and the boot log prints a SHA-256 fingerprint of
   the owner root key. Nothing in the kernel verifies with the owner root key
-  yet.
+  yet (this item is about the staging image; the Pi 5 release candidate
+  artifact loader above does verify with it).
 - **Production Store keys: TPM Slot 0 is BLOCKED_HARDWARE, Slot 1 recovery
   unlock is implemented (P04 cut 1).** Store keys derive from K_vol (ADR
   0017), which is secret and cannot come from public material.

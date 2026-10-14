@@ -138,6 +138,70 @@ HOSTCC ?= cc
 # UEFI stub's KLOG.MAP reader (native/boot/efi_klog.c). Own OUT, so it never
 # replaces a default image. Not for the Spark or QEMU: pi5_wdt.c and pi5.c
 # touch BCM2712-only addresses and refuse to build without CK_PI5.
+
+# Pi 5 release candidate (PI5-8 cut R): "make pi5-rc CK_OWNER_PUBKEYS=<owner pubkeys file>". The unlock-card lifecycle image
+# (CK_PI5_LIFECYCLE) built with CK_PI5_RC=1: its artifact loader trusts the owner root PUBLIC key from the PI5-8 key ceremony and
+# nothing else (core/artifact_anchor.h), and it carries no TEST public key. It cannot set CK_HARDWARE_STAGING (svc/store_boot.c
+# refuses that with CK_PI5_UNLOCK, and that rule stays), so it takes every staging protection over explicitly, in five layers
+# (the full list with the test of each: docs/native/PI5-8-QUALIFICATION.md, "PI5-8 RC"):
+#   1. inputs: only the PI5_RC_INPUTS variables may come from the command line or an override, and no CK_* variable from the
+#      environment; so no TEST, mutant, unsafe-DMA, fw_cfg, probe or staging switch, no CK_EXTRA_CFLAGS, no CK_MACHINE_ID;
+#   2. owner file: CK_OWNER_PUBKEYS is required and must be the ceremony file (sha256 pinned in PI5_RC_OWNER_SHA256), and
+#      tools/ck_owner_gen.c --anchor refuses the RFC 8032 TEST keys again;
+#   3. compile fence: include/ck_pi5_rc_guard.h is force-included into every unit and stops the build on any such switch;
+#   4. flag scan: the effective compile flags may hold no -D switch naming TEST, MUTANT, MUTATION, UNSAFE, BYPASS, SELFTEST,
+#      STAGING, FWCFG or SEED0B;
+#   5. image check after the link (scripts/ck_pi5_rc_image_check.sh): owner key bytes once and equal to the file, no TEST key
+#      or seed bytes, no TEST Store identity, no fw_cfg, the owner anchor announcement present; else the image is deleted.
+# The lifecycle block below still applies in full (CK_PI5_UNLOCK + CK_PI5_UNLOCK_CARD, no other tier, no TEST keys).
+# scripts/ck_pi5_rc_check.sh proves every layer refuses. "pi5-rc" must be the only goal; it sets CK_PI5_RC itself.
+# Given = set on the command line (also through MAKEFLAGS in a sub-make) or from the environment under make -e. Taken
+# before any PI5_RC_* variable is defined; every PI5_RC_* variable is "override", so no command-line value can change
+# this computation, the input list or the pin (and any command-line PI5_RC_* is refused as a non-input).
+override PI5_RC_GIVEN := $(foreach v,$(.VARIABLES),$(if $(or $(filter command,$(firstword $(origin $(v)))),$(filter override,$(word 2,$(origin $(v))))),$(v)))
+override PI5_RC_ENV_CK := $(foreach v,$(filter CK_%,$(.VARIABLES)),$(if $(filter environment,$(origin $(v))),$(if $(strip $($(v))),$(v))))
+override PI5_RC_OWNER_SHA256 := 9d2aabd949c71aa5e3d618e9182af1ce58bb8a2b52e10006caf0af2ceb34d181
+override PI5_RC_INPUTS := CK_PI5_RC CK_PI5_LIFECYCLE CK_PI5_UNLOCK CK_PI5_UNLOCK_CARD CK_INFER_LIB CK_OWNER_PUBKEYS OUT AIENOS_COMMIT \
+	CROSS HOSTCC
+CK_PI5_RC ?=
+override PI5_RC_MODE := $(if $(strip $(CK_PI5_RC))$(filter pi5-rc,$(MAKECMDGOALS)),1)
+ifneq ($(PI5_RC_MODE),)
+ifneq ($(filter pi5-rc,$(MAKECMDGOALS)),)
+ifneq ($(filter-out pi5-rc,$(MAKECMDGOALS)),)
+$(error pi5-rc must be the only goal (got: $(MAKECMDGOALS)))
+endif
+ifneq ($(strip $(CK_PI5_RC)),)
+$(error run "make pi5-rc CK_OWNER_PUBKEYS=<owner pubkeys file>": it sets CK_PI5_RC and the lifecycle flags itself)
+endif
+endif
+override PI5_RC_REFUSED := $(strip $(filter-out $(PI5_RC_INPUTS),$(PI5_RC_GIVEN)) $(PI5_RC_ENV_CK))
+ifneq ($(PI5_RC_REFUSED),)
+$(error the Pi 5 release candidate takes only $(PI5_RC_INPUTS) and no CK_* from the environment; refused: $(PI5_RC_REFUSED))
+endif
+ifeq ($(strip $(CK_OWNER_PUBKEYS)),)
+$(error the Pi 5 release candidate needs CK_OWNER_PUBKEYS=<owner pubkeys file> (the PI5-8 ceremony file, sha256 $(PI5_RC_OWNER_SHA256)))
+endif
+override PI5_RC_OWNER_FILE := $(abspath $(CK_OWNER_PUBKEYS))
+ifeq ($(wildcard $(PI5_RC_OWNER_FILE)),)
+$(error CK_OWNER_PUBKEYS file not found: $(PI5_RC_OWNER_FILE))
+endif
+override PI5_RC_OWNER_SUM := $(firstword $(shell sha256sum '$(PI5_RC_OWNER_FILE)'))
+ifneq ($(PI5_RC_OWNER_SUM),$(PI5_RC_OWNER_SHA256))
+$(error CK_OWNER_PUBKEYS is not the PI5-8 ceremony owner file: sha256 $(PI5_RC_OWNER_SUM), the release candidate takes only $(PI5_RC_OWNER_SHA256))
+endif
+ifneq ($(strip $(CK_PI5_RC)),)
+ifneq ($(strip $(CK_PI5_RC)),1)
+$(error CK_PI5_RC must be empty or 1)
+endif
+ifneq ($(strip $(CK_PI5_LIFECYCLE))$(strip $(CK_PI5_UNLOCK))$(strip $(CK_PI5_UNLOCK_CARD)),111)
+$(error CK_PI5_RC is the unlock-card lifecycle image: it needs CK_PI5_LIFECYCLE=1 CK_PI5_UNLOCK=1 CK_PI5_UNLOCK_CARD=1 (use "make pi5-rc"))
+endif
+OUT ?= $(REPO)/target/native-kernel-pi5-rc
+override PI5_RC_GEN := $(OUT)/gen-pi5-rc
+CK_EXTRA_CFLAGS += -DCK_PI5_RC=1 -include $(KDIR)/include/ck_pi5_rc_guard.h
+endif
+endif
+
 CK_PI5_STORE ?=
 ifneq ($(strip $(CK_PI5_STORE)),)
 ifneq ($(strip $(CK_PI5_STORE)),1)
@@ -762,9 +826,9 @@ endif
 ifeq ($(wildcard $(OWNER_MACHINE_FILE)),)
 $(error CK_MACHINE_ID file not found: $(OWNER_MACHINE_FILE))
 endif
-else
+else ifeq ($(PI5_RC_MODE),)
 ifneq ($(strip $(CK_OWNER_PUBKEYS)$(CK_MACHINE_ID)),)
-$(error CK_OWNER_PUBKEYS and CK_MACHINE_ID are only used with CK_HARDWARE_STAGING=1 (the default QEMU build keeps the labelled TEST keys))
+$(error CK_OWNER_PUBKEYS and CK_MACHINE_ID are only used with CK_HARDWARE_STAGING=1 or "make pi5-rc" (the default QEMU build keeps the labelled TEST keys))
 endif
 endif
 
@@ -827,6 +891,11 @@ endif
 ART_TRUST_FLAGS += -DCK_OSH_OP_TEST=1
 OSH_TEST_C += $(KDIR)/core/osh_op.c
 endif
+endif
+
+# Pi 5 release candidate: the artifact loader reads its owner anchor table from the generated header (core/artifact_anchor.h).
+ifneq ($(strip $(CK_PI5_RC)),)
+ART_TRUST_FLAGS += -I$(PI5_RC_GEN)
 endif
 
 # Screen hold before reset (core/console.c ck_console_fb_hold): seconds the
@@ -1012,6 +1081,9 @@ ifneq ($(strip $(CK_PI5_LIFECYCLE)),)
 STAGE_SRCS += $(filter-out $(KDIR)/svc/slot_service.c $(BOOT)/slot_select.c $(BOOT)/slot_control.c $(BOOT)/slot_update.c,$(SVC_STAGE_ADDED)) $(KDIR)/svc/slot_service_pi5.c
 endif
 endif
+ifneq ($(strip $(CK_PI5_RC)),)
+FULL_NAME := $(FULL_NAME)-rc
+endif
 FULL_OUT := $(OUT)/$(FULL_NAME)
 STAGE_KOBJ := $(OUT)/obj/stage-$(FULL_NAME)
 STAGE_HDRS := $(HDRS) $(wildcard $(NATIVE)/*/*.h $(NATIVE)/argus/bridge/*.h $(KDIR)/svc/compat/*.h)
@@ -1020,6 +1092,15 @@ STAGE_BUILT := $(foreach s,$(STAGE_SRCS),$(STAGE_KOBJ)/$(subst /,_,$(patsubst $(
 STAGE_KCFLAGS := $(STAGE_CFLAGS) $(KCFLAGS) $(MODULE_INC) -U_FORTIFY_SOURCE $(STAGE_DMA_FLAGS)
 # The core already links argus/sha256.c (artifact loader); link it once.
 STAGE_LINK := $(filter-out %/native_argus_sha256.c.o,$(STAGE_BUILT))
+
+# Pi 5 release candidate, layer 4: scan the effective compile flags (core, stage and trust) for a test-class -D switch.
+ifneq ($(strip $(CK_PI5_RC)),)
+override PI5_RC_FLAG_WORDS := TEST MUTANT MUTATION UNSAFE BYPASS SELFTEST STAGING FWCFG SEED0B
+override PI5_RC_BAD_FLAGS := $(sort $(foreach f,$(filter -D%,$(KCFLAGS) $(STAGE_KCFLAGS) $(ART_TRUST_FLAGS)),$(if $(strip $(foreach w,$(PI5_RC_FLAG_WORDS),$(findstring $(w),$(f)))),$(f))))
+ifneq ($(PI5_RC_BAD_FLAGS),)
+$(error the Pi 5 release candidate refuses test-class compile switches: $(PI5_RC_BAD_FLAGS))
+endif
+endif
 
 ELF := $(OUT)/aienos-ck.elf
 EFI := $(OUT)/BOOTAA64.EFI
@@ -1163,6 +1244,13 @@ endef
 
 # owner_check(elf): a hardware staging image must carry no TEST Store label,
 # TEST store uuid, TEST Store print lines or TEST key symbols.
+# pi5_rc_check(image): Pi 5 release candidate, layer 5 (scripts/ck_pi5_rc_image_check.sh); a failing image is deleted.
+define pi5_rc_check
+	@if [ -n "$(strip $(CK_PI5_RC))" ]; then \
+	  bash $(REPO)/scripts/ck_pi5_rc_image_check.sh $(1) $(PI5_RC_OWNER_FILE) $(KNM) || { rm -f $(1); exit 1; }; \
+	fi
+endef
+
 define owner_check
 	@if [ "$(strip $(CK_HARDWARE_STAGING))" = 1 ]; then \
 	  s=$$(grep -aoE "AIENOS-LANE18-TEST-KVOL-NOT-SECRET|AIEN-TEST-BOOT01|TEST identity, TEST keys|formatted TEST store|TEST machine id 0xA1" $(1) | sort -u | tr "\n" " "); \
@@ -1293,12 +1381,14 @@ $(FULL_ELF): $(CORE_OBJS) $(STAGE_BUILT) $(BOOT)/image.ld
 	$(call crash_check,$@)
 	$(call b7b_check,$@)
 	$(call cont_check,$@)
+	$(call pi5_rc_check,$@)
 
 $(EFI): $(ELF)
 	$(call pe_image,$<,$@)
 
 $(FULL_EFI): $(FULL_ELF)
 	$(call pe_image,$<,$@)
+	$(call pi5_rc_check,$@)
 
 # ---- host unit tests ----
 HOST_SRCS := $(KDIR)/core/fmt.c $(KDIR)/core/acpi.c $(KDIR)/core/smmu.c $(KDIR)/mm/frames.c \
@@ -2131,6 +2221,11 @@ pi5-lifecycle:
 	RUSTFLAGS="--remap-path-prefix=$(REPO)=/aienos" CARGO_TARGET_DIR=$(REPO)/target/infer-kernel cargo build -q --release --target aarch64-unknown-none --manifest-path $(REPO)/crates/aienos-infer-kernel/Cargo.toml
 	$(MAKE) CK_PI5_UNLOCK=1 CK_PI5_UNLOCK_CARD=1 CK_PI5_LIFECYCLE=1 CK_INFER_LIB=$(PI5_INFER_LIB) full
 
+# Pi 5 release candidate (PI5-8 cut R): "make pi5-rc CK_OWNER_PUBKEYS=<owner pubkeys file>" (see the CK_PI5_RC block).
+pi5-rc:
+	RUSTFLAGS="--remap-path-prefix=$(REPO)=/aienos" CARGO_TARGET_DIR=$(REPO)/target/infer-kernel cargo build -q --release --target aarch64-unknown-none --manifest-path $(REPO)/crates/aienos-infer-kernel/Cargo.toml
+	$(MAKE) CK_PI5_RC=1 CK_PI5_UNLOCK=1 CK_PI5_UNLOCK_CARD=1 CK_PI5_LIFECYCLE=1 CK_INFER_LIB=$(PI5_INFER_LIB) full
+
 pi5-artifact:
 	$(MAKE) CK_PI5_ARTIFACT=1 all
 
@@ -2176,6 +2271,31 @@ $(OWNER_HDR): $(OWNER_GEN) $(OWNER_PUBKEYS_FILE) $(OWNER_MACHINE_FILE)
 	$(OWNER_GEN) $(OWNER_PUBKEYS_FILE) $(OWNER_MACHINE_FILE) $@
 endif
 
+# Pi 5 release candidate (PI5-8 cut R): the owner anchor header the artifact loader links (core/artifact_anchor.h).
+ifneq ($(strip $(CK_PI5_RC)),)
+override PI5_RC_ANCHOR_HDR := $(PI5_RC_GEN)/ck_owner_anchor.h
+$(PI5_RC_ANCHOR_HDR): $(OWNER_GEN) $(PI5_RC_OWNER_FILE)
+	@mkdir -p $(dir $@)
+	$(OWNER_GEN) --anchor $(PI5_RC_OWNER_FILE) $@
+$(KOBJ)/kernel/core/artifact_loader.o: $(PI5_RC_ANCHOR_HDR)
+endif
+
+# Host test of the RC trust anchor (tests/test_pi5_rc_anchor.c): built against the anchor header generated from
+# PI5_RC_TEST_OWNER (default: the labelled TEST-fixture owner file, so it runs anywhere; scripts/ck_pi5_rc_check.sh also
+# runs it with the ceremony owner file and, as a red control, with the test's own throwaway key, where it must FAIL).
+# PI5_RC_TEST_OUT keeps each variant's header and binary apart.
+PI5_RC_TEST_OWNER ?= $(KDIR)/tests/fixtures/owner/TEST-FIXTURE-owner-pubkeys.txt
+PI5_RC_TEST_OUT ?= $(OUT)/host/pi5-rc-anchor
+$(PI5_RC_TEST_OUT)/ck_owner_anchor.h: $(OWNER_GEN) $(abspath $(PI5_RC_TEST_OWNER)) FORCE
+	@mkdir -p $(dir $@)
+	$(OWNER_GEN) --anchor $(abspath $(PI5_RC_TEST_OWNER)) $@
+$(PI5_RC_TEST_OUT)/test_pi5_rc_anchor: $(KDIR)/tests/test_pi5_rc_anchor.c $(PI5_RC_TEST_OUT)/ck_owner_anchor.h \
+		$(KDIR)/core/artifact_anchor.h $(ART_HOST_DEPS) $(KDIR)/tests/ck_test.h
+	$(HOSTCC) $(HCFLAGS) $(ART_HOST_INC) -I$(PI5_RC_TEST_OUT) -o $@ $< $(ART_HOST_SRCS)
+test-pi5-rc-anchor: $(PI5_RC_TEST_OUT)/test_pi5_rc_anchor
+	$< $(abspath $(PI5_RC_TEST_OWNER))
+.PHONY: test-pi5-rc-anchor
+
 clean:
 	rm -rf $(OUT)
 
@@ -2193,7 +2313,7 @@ $(OUT)/host-san/test_pi5_rng: $(KDIR)/tests/test_pi5_rng.c $(PI5_RNG_SRCS) $(KDI
 FORCE:
 .PHONY: uefi-vars slot-loader slot-loader-check pi5-diag
 .PHONY: artifact-tier-pi5 artifact-tier-mutant
-.PHONY: all full pi5 pi5-store pi5-infer pi5-unlock pi5-unlock-card pi5-fact pi5-agent pi5-lifecycle pi5-artifact artifact-card-mutant test sanitize context-mutant agent-cmd-mutant cortex-image handoff-mutant acpi-dev-mutant iort-mutants smmu-l2-mutants acpi-scan clean print-kcflags udp-echo tool store-image gpt-image cont-tool owner-gen fb-check continuity-mutants continuity-resolve-mutants FORCE
+.PHONY: all full pi5 pi5-store pi5-infer pi5-unlock pi5-unlock-card pi5-fact pi5-agent pi5-lifecycle pi5-rc pi5-artifact artifact-card-mutant test sanitize context-mutant agent-cmd-mutant cortex-image handoff-mutant acpi-dev-mutant iort-mutants smmu-l2-mutants acpi-scan clean print-kcflags udp-echo tool store-image gpt-image cont-tool owner-gen fb-check continuity-mutants continuity-resolve-mutants FORCE
 
 # AIENOS-PI5 step 3 marker + Pi card GPT test (hosted; a file stands in for the card, QEMU cannot model the Pi SD host).
 PI5_MARKER_SRCS := $(KDIR)/core/pi5_marker.c $(KDIR)/dev/disk_part.c $(NATIVE)/disk/disk.c $(NATIVE)/disk/disk_file.c \
