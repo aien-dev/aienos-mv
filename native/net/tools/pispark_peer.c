@@ -9,6 +9,7 @@
 #include <errno.h>
 #include <netinet/in.h>
 #include <poll.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -28,6 +29,8 @@ static uint64_t ms_now(void)
 }
 
 static uint64_t T0;
+static volatile sig_atomic_t STOP;
+static void on_term(int sig) { (void)sig; STOP = 1; }
 static void hex(const uint8_t *b, size_t n, char *o)
 {
     static const char d[] = "0123456789abcdef";
@@ -149,6 +152,8 @@ int main(int argc, char **argv)
         fprintf(stderr, "bad pi address\n");
         return 2;
     }
+    signal(SIGTERM, on_term);
+    signal(SIGINT, on_term);
     T0 = ms_now();
     end = T0 + (uint64_t)strtoul(argv[2], NULL, 10) * 1000u;
     for (s = 0; s < PSS_NSCN; s++) {
@@ -175,7 +180,7 @@ int main(int argc, char **argv)
            PSS_PORT_BASE, PSS_PORT_BASE + PSS_NSCN - 1, PSS_LABEL_SPARK, PSS_LABEL_PI);
     fflush(stdout);
     uint64_t ka_next = 0;
-    while (ms_now() < end) {
+    while (ms_now() < end && !STOP) {
         int k = poll(pf, PSS_NSCN, 5);
         uint64_t now = ms_now() - T0;
         keepalive(now, &ka_next);
