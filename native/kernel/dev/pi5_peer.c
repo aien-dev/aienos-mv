@@ -108,6 +108,31 @@ static int FDX;
 static uint8_t OURMAC[6];
 static uint8_t TXF[CK_PP_FRAME_MAX], RXB[CK_PP_FRAME_MAX], ANS[64];
 static pss_run RUN;
+const char *ck_entropy_source(void); /* core: "rng200" on the Pi */
+
+/* link-drop steps: the PHY power-down callback, and the exchange (1-based, within the session) before which it runs */
+static int (*LINK_DROP)(void *ctx, uint32_t down_ms);
+static void *LINK_CTX;
+static uint32_t DROP_AT, XCHG_N;
+static int DROP_RC = 1; /* 1 = not run */
+#define DROP_MS 3000u
+
+static int arp_resolve(uint32_t tries, uint32_t *used);
+static void do_link_drop(void)
+{
+    uint32_t used = 0;
+    uint64_t t0;
+    int arc = -1;
+    DROP_RC = LINK_DROP ? LINK_DROP(LINK_CTX, DROP_MS) : -1;
+    PP.have_mac = 0; /* learn the Spark again after the link came back, as a fresh link would */
+    t0 = ck_time_us();
+    if (DROP_RC == 0)
+        arc = arp_resolve(20, &used); /* r1: frames sent in the first seconds after link-up never reached the Spark */
+    ck_printf("pi5_peer: LINK DROP %s (rc=%d); Spark ARP again: %s after %u tries of 500 ms, %llu us\n", DROP_RC == 0 ? "DONE" : "FAILED", DROP_RC,
+              arc == 0 ? "answered" : "NO answer", used, (unsigned long long)(ck_time_us() - t0));
+    if (arc != 0)
+        DROP_RC = -2;
+}
 
 static int probe(void *ctx, const uint8_t *d, uint32_t n, uint32_t len) { return ck_pp_rx_frame((struct ck_pp *)ctx, d, n, len); }
 
@@ -187,6 +212,8 @@ static int io_xchg(void *io, uint16_t port, const uint8_t *d, size_t n, uint32_t
     uint32_t fl, used = 0;
     (void)io;
     ck_pi5_wdt_pet();
+    if (DROP_AT && ++XCHG_N == DROP_AT)
+        do_link_drop();
     if (PP.nask)
         answer_asks();
     if (!n) {
@@ -233,7 +260,7 @@ static void hexs(const uint8_t *b, uint32_t n, char *o)
     o[2 * n] = 0;
 }
 
-enum { EXP_OK, EXP_KEY_REFUSED, EXP_IDENTITY, EXP_REPLAY, EXP_STALE, EXP_TRUNC, EXP_SILENT };
+enum { EXP_OK, EXP_KEY_REFUSED, EXP_IDENTITY, EXP_REPLAY, EXP_STALE, EXP_TRUNC, EXP_SILENT, EXP_SURVIVE_OR_DOWN };
 struct step {
     const char *name;
     int scn;
@@ -241,7 +268,9 @@ struct step {
     uint32_t nmsg;
     int all_max; /* every message CT_MAX_PAYLOAD bytes (throughput) */
     int expect;
+    uint32_t drop; /* 0 none; DROP_BEFORE: link drop before the session; n > 0: before exchange n of the session */
 };
+#define DROP_BEFORE 0xffffffffu
 
 static int judge(const struct step *s, const pss_run *r)
 {
@@ -253,6 +282,11 @@ static int judge(const struct step *s, const pss_run *r)
     case EXP_STALE: return r->result == PSS_OK && r->verified == s->nmsg && r->sec_refusals[-SEC_ERR_REFUSED] >= 1;
     case EXP_TRUNC: return r->result == PSS_OK && r->verified == s->nmsg && r->sec_refusals[-SEC_ERR_MALFORMED] + r->sec_refusals[-SEC_ERR_BAD_TAG] >= 1;
     case EXP_SILENT: return r->link_down && r->verified == 1 && r->result == CT_ERR_LINK_DOWN && !r->closed_sent;
+    /* the outage (power-down plus link settle) can outlast the 8-retry window; both endings are correct if nothing is
+     * claimed that was not verified: the session finishes, or it ends link-down after the handshake with fewer verified */
+    case EXP_SURVIVE_OR_DOWN:
+        return r->confirmed && ((r->result == PSS_OK && r->verified == s->nmsg && r->closed_sent) ||
+                                (r->link_down && r->verified < s->nmsg && r->verified == r->delivered && !r->closed_sent));
     default: return 0;
     }
 }
@@ -267,6 +301,7 @@ static const char *expect_text(int e)
     case EXP_STALE: return "one record of an earlier session refused, every request still answered";
     case EXP_TRUNC: return "one truncated record refused, every request still answered";
     case EXP_SILENT: return "request 0 answered, then the peer goes silent: link down after max retries, nothing claimed";
+    case EXP_SURVIVE_OR_DOWN: return "the link drops mid-session: the session finishes, or ends link-down with only verified requests claimed";
     default: return "?";
     }
 }
@@ -286,11 +321,23 @@ static void run_step(const struct step *s, const pss_io *io, uint32_t *pass, uin
         r->msg_len[i] = (uint16_t)((s->all_max || i + 1 == s->nmsg) ? CT_MAX_PAYLOAD : PSS_REQ_MIN + 37u * i);
     r->rto_ms = 200;
     r->max_retries = 8;
-    r->budget_ms = 12000;
+    r->budget_ms = s->drop ? 25000 : 12000;
     ck_pi5_wdt_pet();
-    ck_printf("pi5_peer: SESSION %s: port %u scenario=%s pi_identity=TEST(%s) messages=%u expect: %s\n", s->name,
-              (unsigned)(PSS_PORT_BASE + (unsigned)s->scn), pss_scenario_name(s->scn), s->label, s->nmsg, expect_text(s->expect));
+    ck_printf("pi5_peer: SESSION %s: port %u scenario=%s pi_identity=TEST(%s) messages=%u expect: %s%s\n", s->name,
+              (unsigned)(PSS_PORT_BASE + (unsigned)s->scn), pss_scenario_name(s->scn), s->label, s->nmsg, expect_text(s->expect),
+              s->drop == DROP_BEFORE ? " (after a forced link drop and a fresh ARP)" : s->drop ? " (across a forced link drop inside the session)" : "");
+    DROP_RC = 1;
+    XCHG_N = 0;
+    DROP_AT = (s->drop && s->drop != DROP_BEFORE) ? s->drop : 0;
+    if (s->drop == DROP_BEFORE)
+        do_link_drop();
+    if (s->drop == DROP_BEFORE && DROP_RC != 0) {
+        ck_printf("pi5_peer: VERDICT %s FAIL (the link did not come back; no session attempted)\n", s->name);
+        (*total)++;
+        return;
+    }
     (void)pss_initiator_run(r, io);
+    DROP_AT = 0;
     ck_pi5_wdt_pet();
     hexs(r->session_id, 8, sid);
     ck_printf("pi5_peer: %s result=%d hs_status=%d established=%u confirmed=%u session=%s hs_us=%llu total_us=%llu sent=%u delivered=%u verified=%u link_down=%u closed_sent=%u first_reply_err=%d\n",
@@ -325,24 +372,30 @@ static void run_step(const struct step *s, const pss_io *io, uint32_t *pass, uin
               (unsigned long long)r->cc.rx_duplicate);
     ck_printf("pi5_peer: %s wire: exchanges=%u datagrams_rx=%u gem_transfers=%u udp_from_spark=%u other_frames_dropped=%u ring_full=%u\n", s->name,
               r->xchgs, r->datagrams_rx, PP.xfers - pp_x0, PP.udp_ok - pp_udp0, PP.ignored - pp_ign0, PP.ring_full - pp_rf0);
-    ok = (uint32_t)judge(s, r);
+    ok = (uint32_t)judge(s, r) && (!s->drop || DROP_RC == 0);
+    if (s->drop)
+        ck_printf("pi5_peer: %s link drop rc=%d (0 = the link went down and came back settled)\n", s->name, DROP_RC);
     ck_printf("pi5_peer: VERDICT %s %s\n", s->name, ok ? "PASS" : "FAIL");
     *pass += ok;
     (*total)++;
 }
 
-void ck_pi5peer_run(struct ck_gem *g, uint32_t speed, int full_duplex, const uint8_t mac[6], const uint8_t ip[4])
+void ck_pi5peer_run(struct ck_gem *g, uint32_t speed, int full_duplex, const uint8_t mac[6], const uint8_t ip[4],
+                    int (*link_drop)(void *ctx, uint32_t down_ms), void *link_ctx)
 {
     static const struct step steps[] = {
-        {"normal", PSS_NORMAL, PSS_LABEL_PI, 9, 0, EXP_OK},
-        {"wrong-pi-key", PSS_NORMAL, PSS_LABEL_WRONG, 1, 0, EXP_KEY_REFUSED},
-        {"wrong-spark-identity", PSS_WRONG_PEER, PSS_LABEL_PI, 1, 0, EXP_IDENTITY},
-        {"replay", PSS_REPLAY, PSS_LABEL_PI, 3, 0, EXP_REPLAY},
-        {"stale-session", PSS_STALE, PSS_LABEL_PI, 2, 0, EXP_STALE},
-        {"truncated", PSS_TRUNC, PSS_LABEL_PI, 2, 0, EXP_TRUNC},
-        {"silent-peer", PSS_SILENT, PSS_LABEL_PI, 3, 0, EXP_SILENT},
-        {"reconnect", PSS_NORMAL, PSS_LABEL_PI, 3, 0, EXP_OK},
-        {"throughput-1024x32", PSS_NORMAL, PSS_LABEL_PI, 32, 1, EXP_OK},
+        {"normal", PSS_NORMAL, PSS_LABEL_PI, 9, 0, EXP_OK, 0},
+        {"wrong-pi-key", PSS_NORMAL, PSS_LABEL_WRONG, 1, 0, EXP_KEY_REFUSED, 0},
+        {"wrong-spark-identity", PSS_WRONG_PEER, PSS_LABEL_PI, 1, 0, EXP_IDENTITY, 0},
+        {"replay", PSS_REPLAY, PSS_LABEL_PI, 3, 0, EXP_REPLAY, 0},
+        {"stale-session", PSS_STALE, PSS_LABEL_PI, 2, 0, EXP_STALE, 0},
+        {"truncated", PSS_TRUNC, PSS_LABEL_PI, 2, 0, EXP_TRUNC, 0},
+        {"silent-peer", PSS_SILENT, PSS_LABEL_PI, 3, 0, EXP_SILENT, 0},
+        {"reconnect", PSS_NORMAL, PSS_LABEL_PI, 3, 0, EXP_OK, 0},
+        {"throughput-1024x32", PSS_NORMAL, PSS_LABEL_PI, 32, 1, EXP_OK, 0},
+        /* forced link loss from the Pi side (PHY power-down), not a cable pull */
+        {"across-link-drop", PSS_NORMAL, PSS_LABEL_PI, 4, 0, EXP_SURVIVE_OR_DOWN, 6},
+        {"after-link-drop", PSS_NORMAL, PSS_LABEL_PI, 3, 0, EXP_OK, DROP_BEFORE},
     };
     pss_io io = {io_xchg, io_now_ms, io_rand, io_now_us, 0};
     uint32_t i, used = 0, pass = 0, total = 0;
@@ -350,6 +403,8 @@ void ck_pi5peer_run(struct ck_gem *g, uint32_t speed, int full_duplex, const uin
     if (!g)
         return;
     G = g;
+    LINK_DROP = link_drop;
+    LINK_CTX = link_ctx;
     SPEED = speed;
     FDX = full_duplex;
     memset(&PP, 0, sizeof PP);
@@ -362,9 +417,9 @@ void ck_pi5peer_run(struct ck_gem *g, uint32_t speed, int full_duplex, const uin
     PP.p.lport = (uint16_t)PSS_PI_PORT;
     PP.p.rport = (uint16_t)PSS_PORT_BASE;
     ck_pi5_wdt_pet();
-    ck_printf("pi5_peer: Pi <-> Spark session test (aienos-mv#398): we are %u.%u.%u.%u:%u, the Spark is %u.%u.%u.%u:%u..%u; M6-B (TEST Ed25519 identities, X25519, AES-256-GCM-SIV) carrying M6-A; entropy=%s; static state: sec_endpoint=%u ct_endpoint=%u run=%u bytes, no heap\n",
+    ck_printf("pi5_peer: Pi <-> Spark session test (aienos-mv#398): we are %u.%u.%u.%u:%u, the Spark is %u.%u.%u.%u:%u..%u; M6-B (TEST Ed25519 identities, X25519, AES-256-GCM-SIV) carrying M6-A; entropy source=%s state=%s; static state: sec_endpoint=%u ct_endpoint=%u run=%u bytes, no heap\n",
               ip[0], ip[1], ip[2], ip[3], (unsigned)PSS_PI_PORT, k_spark_ip[0], k_spark_ip[1], k_spark_ip[2], k_spark_ip[3],
-              (unsigned)PSS_PORT_BASE, (unsigned)(PSS_PORT_BASE + PSS_NSCN - 1), ck_entropy_reason(), (unsigned)sizeof(sec_endpoint),
+              (unsigned)PSS_PORT_BASE, (unsigned)(PSS_PORT_BASE + PSS_NSCN - 1), ck_entropy_source(), ck_entropy_reason(), (unsigned)sizeof(sec_endpoint),
               (unsigned)sizeof(ct_endpoint), (unsigned)sizeof(pss_run));
     t0 = ck_time_us();
     if (arp_resolve(6, &used) != 0) {

@@ -45,7 +45,9 @@ uint32_t ck_pp_arp_answer(const struct ck_pp *pp, uint32_t i, uint8_t *out, uint
 
 #ifdef CK_PI5_NET
 struct ck_gem;
-/* The whole session sequence (ARP the Spark, then every pispark scenario), logged line by line. */
-void ck_pi5peer_run(struct ck_gem *g, uint32_t speed, int full_duplex, const uint8_t mac[6], const uint8_t ip[4]);
+/* The whole session sequence (ARP the Spark, then every pispark scenario), logged line by line. link_drop forces a
+ * link loss from the Pi side (PHY power-down for down_ms, then a settled link) and returns 0 when it went down and back. */
+void ck_pi5peer_run(struct ck_gem *g, uint32_t speed, int full_duplex, const uint8_t mac[6], const uint8_t ip[4],
+                    int (*link_drop)(void *ctx, uint32_t down_ms), void *link_ctx);
 #endif
 #endif

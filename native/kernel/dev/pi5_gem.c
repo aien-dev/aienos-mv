@@ -1086,7 +1086,9 @@ int ck_phy_loopback_exit(const struct ck_rp1_io *io, uint32_t phy, uint16_t bmcr
 #ifdef CK_PI5_NET
 #include "ck.h"
 /* dev/pi5_peer.c (aienos-mv#398); declared here so this file does not need the net headers */
-void ck_pi5peer_run(struct ck_gem *g, uint32_t speed, int full_duplex, const uint8_t mac[6], const uint8_t ip[4]);
+#include "pi5_wdt.h"
+void ck_pi5peer_run(struct ck_gem *g, uint32_t speed, int full_duplex, const uint8_t mac[6], const uint8_t ip[4],
+                    int (*link_drop)(void *ctx, uint32_t down_ms), void *link_ctx);
 
 static int glue_bme(void *ctx, int on) { return ck_pi5gem_bme_set((const struct ck_pi5pcie_io *)ctx, on); }
 static void glue_barrier(void) { ck_mb(); }
@@ -1184,6 +1186,43 @@ static uint32_t canary_changed(volatile const uint8_t *p, uint32_t n, uint8_t pa
             c++;
         }
     return c;
+}
+
+/* aienos-mv#398 link-drop step (called back by the session test): put the PHY in power-down (BMCR bit 11, BMCR_PDOWN
+ * 0x0800, Linux uapi mii.h; IEEE 802.3 22.2.4.1.5) for down_ms, read the link while it is down, then power it up with
+ * autonegotiation restarted and wait for a settled link. A forced link loss from the Pi side, NOT a cable pull. Every
+ * wait is under the 15 s watchdog and pets it. Returns 0 when the link went down and came back settled. */
+static int link_drop(void *ctx, uint32_t down_ms)
+{
+    const struct ck_pi5gem_ctx *c = (const struct ck_pi5gem_ctx *)ctx;
+    struct ck_phy_link l0, ld = {0}, l1 = {0};
+    uint32_t t, waited = 0, seen_down = 0, reads = 0;
+    uint16_t bmcr0;
+    int rc, up;
+    ck_pi5_wdt_pet();
+    if (ck_phy_link_read(c->rio, c->phy_addr, &l0) != 0)
+        return -1;
+    bmcr0 = (uint16_t)(l0.bmcr & ~0x0800u);
+    rc = ck_gem_mdio_write(c->rio, c->phy_addr, CK_MII_BMCR, (uint16_t)(bmcr0 | 0x0800u));
+    for (t = 0; t < down_ms; t += 100) {
+        c->rio->delay_us(c->rio->ctx, 100000u);
+        ck_pi5_wdt_pet();
+        if (ck_phy_link_read(c->rio, c->phy_addr, &ld) == 0) {
+            reads++;
+            if (!ld.link)
+                seen_down++;
+        }
+    }
+    ck_printf("pi5_gem: LINK DROP: PHY power-down (BMCR 0x%04x -> 0x%04x, write rc=%d) for %u ms: link read down in %u of %u reads (last BMCR=0x%04x BMSR=0x%04x)\n",
+              l0.bmcr, (uint16_t)(bmcr0 | 0x0800u), rc, down_ms, seen_down, reads, ld.bmcr, ld.bmsr);
+    rc |= ck_gem_mdio_write(c->rio, c->phy_addr, CK_MII_BMCR,
+                            (uint16_t)((bmcr0 & CK_MII_BMCR_ANENABLE) ? (bmcr0 | CK_MII_BMCR_ANRESTART) : bmcr0));
+    ck_pi5_wdt_pet();
+    up = wait_link_stable(c, 10000, &l1, &waited);
+    ck_pi5_wdt_pet();
+    ck_printf("pi5_gem: LINK DROP: power-up rc=%d, link %s after %u ms: BMCR=0x%04x BMSR=0x%04x LPA=0x%04x STAT1000=0x%04x speed=%u duplex=%s\n",
+              rc, up ? "SETTLED" : "NOT settled", waited, l1.bmcr, l1.bmsr, l1.lpa, l1.stat1000, l1.speed, l1.full_duplex ? "full" : "half");
+    return (rc == 0 && seen_down > 0 && up) ? 0 : -1;
 }
 
 void ck_pi5gem_run(const struct ck_pi5gem_ctx *c)
@@ -1350,7 +1389,7 @@ void ck_pi5gem_run(const struct ck_pi5gem_ctx *c)
                 ck_printf("pi5_gem: ARP EXCHANGE FAIL: no accepted ARP reply within %u attempts\n", ae.attempts_used);
             }
             /* aienos-mv#398: the authenticated Pi <-> Spark session on the same link (dev/pi5_peer.c) */
-            ck_pi5peer_run(&g, ae.speed, ae.full_duplex, k_lan_mac, k_lan_ip);
+            ck_pi5peer_run(&g, ae.speed, ae.full_duplex, k_lan_mac, k_lan_ip, link_drop, (void *)c);
         }
     } else {
         ck_printf("pi5_gem: WIRE SKIPPED (no link partner found)\n");
