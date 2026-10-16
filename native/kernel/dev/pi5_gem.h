@@ -151,7 +151,9 @@ enum {
 
 #define CK_GEM_MAX_QUEUES 8u
 #define CK_GEM_TXRING 2u  /* slot 0 = the frame, slot 1 = a USED|WRAP sentinel */
-#define CK_GEM_RXRING 4u  /* power of two for the ring helper; unused slots are USED sentinels */
+#define CK_GEM_RXRING 8u  /* power of two for the ring helper; unused slots are USED sentinels */
+#define CK_GEM_RXMAX 7u   /* real RX buffers per transfer (one ring slot is always a sentinel) */
+#define CK_GEM_RXKEEP 64u /* bytes of each received frame kept for the caller (Ethernet+ARP is 42) */
 #define CK_GEM_RXCOPY 256u
 
 /* What the hardware says it is (read from the registers, never assumed). */
@@ -193,7 +195,7 @@ struct ck_gem_xfer {
     uint8_t mac[6];
     const uint8_t *frame;          /* sent as given (the MAC appends the FCS) */
     uint32_t frame_len;            /* 60..1514 */
-    uint32_t rx_count;             /* real RX buffers, 0..3 (0 = TX only); the rest are USED sentinels */
+    uint32_t rx_count;             /* real RX buffers, 0..CK_GEM_RXMAX (0 = TX only); the rest are USED sentinels */
     uint32_t rx_buf_len;           /* multiple of 64, 64..1536 */
     uint32_t tx_wait_us, rx_wait_us;
     uint64_t tx_addr, rx_addr;     /* 0 = allocate inside the window; non-zero = caller-chosen, STILL validated */
@@ -211,6 +213,20 @@ struct ck_gem_xfer {
     uint32_t rx_frames;            /* RX slots the device handed back (USED, SOF and EOF) */
     uint32_t rx_slot;              /* the first such slot; rx_data/rx_len/rx_ctrl/rx_word0 are its */
     int bme_enabled_for_us;        /* 1 once bus-master was turned on for this transfer */
+    /* Cut 4: every RX slot the device handed back, in ring order (the first CK_GEM_RXKEEP bytes, copied out of the
+     * window; the frame length is the device's word, already checked against the buffer size). */
+    uint32_t rx_all_n;
+    uint32_t rx_all_len[CK_GEM_RXMAX];
+    uint8_t rx_all[CK_GEM_RXMAX][CK_GEM_RXKEEP];
+    /* Optional early stop: called from the poll with each completed slot (data = first min(len,CK_GEM_RXKEEP) bytes).
+     * Non-zero ends the wait. It must not touch the device. Without it the wait ends on the first completed slot. */
+    int (*rx_probe)(void *ctx, const uint8_t *data, uint32_t n, uint32_t len);
+    void *rx_probe_ctx;
+    /* Optional: hand the probe up to rx_probe_cap bytes of each frame (copied out of the window into this caller
+     * buffer) instead of the first CK_GEM_RXKEEP. NULL = the CK_GEM_RXKEEP stack copy. */
+    uint8_t *rx_probe_buf;
+    uint32_t rx_probe_cap;
+    int rx_probe_hit;              /* the probe returned non-zero */
     int bme_off_at_end;
 };
 /* One transfer: validate everything, THEN program the GEM, THEN enable RP1 bus-master, kick, poll,
@@ -228,6 +244,77 @@ enum { CK_GEMF_RAW = 1, CK_GEMF_ARP = 2 };
 uint32_t ck_gem_frame_build(int kind, const uint8_t mac[6], uint32_t seq, const uint8_t tpa[4], uint8_t *out, uint32_t cap);
 /* 0 = identical; else 1 + index of the first difference (a length difference counts at min(len)). */
 uint32_t ck_gem_frame_diff(const uint8_t *a, uint32_t alen, const uint8_t *b, uint32_t blen);
+
+
+/* ============ Cut 4: one ARP exchange on the real LAN ============
+ * We send ONE broadcast ARP request (RFC 826) "who has <target>? tell <our ip>" and accept ONLY an ARP reply
+ * (opcode 2) that is addressed to our MAC, answers our request (sender IP = the address we asked about, target IP
+ * and target MAC = ours) and is internally consistent (Ethernet source = ARP sender MAC). Every other frame the MAC
+ * hands up (broadcasts, multicast, unrelated unicast) is only counted and classified, never parsed further.
+ * Sources: RFC 826 (packet format, opcodes 1 and 2), IEEE 802.3 (60 byte minimum frame without FCS; DRFCS strips the
+ * FCS on receive). */
+#define CK_ARP_FRAME_LEN 60u
+#define CK_ARP_MINLEN 42u  /* 14 Ethernet + 28 ARP */
+#define CK_ARP_MAXLEN 64u  /* a reply is 42..60 bytes (padded); anything longer is not ours to parse */
+enum {
+    CK_ARP_OK = 0,
+    CK_ARP_E_ARG = -1,
+    CK_ARP_E_LEN = -2,     /* shorter than 42, longer than 64, or the kept bytes do not cover the frame */
+    CK_ARP_E_ETYPE = -3,   /* not EtherType 0x0806 */
+    CK_ARP_E_DST = -4,     /* Ethernet destination is not our MAC (broadcast and other hosts are refused) */
+    CK_ARP_E_HDR = -5,     /* htype/ptype/hlen/plen are not Ethernet/IPv4/6/4 */
+    CK_ARP_E_OP = -6,      /* opcode is not 2 (reply) */
+    CK_ARP_E_SRC = -7,     /* Ethernet source differs from the ARP sender hardware address */
+    CK_ARP_E_THA = -8,     /* ARP target hardware address is not ours */
+    CK_ARP_E_TPA = -9,     /* ARP target protocol address is not our IP */
+    CK_ARP_E_SPA = -10     /* ARP sender IP is not the address we asked about */
+};
+#define CK_ARP_NREASONS 11u
+#define CK_ARP_MAXATT 8u
+#define CK_ARP_SEEN 8u     /* frames whose header is recorded for the log */
+#define CK_ARP_HDRKEEP 24u
+/* Build the 60 byte request (broadcast dst, our MAC, sender IP = our IP, target hardware zero, zero padding). */
+uint32_t ck_arp_request_build(const uint8_t mac[6], const uint8_t sip[4], const uint8_t tip[4], uint8_t *out, uint32_t cap);
+/* data = the kept bytes (n), len = the frame length the device reported. 0 = accepted; sender_mac/sender_ip filled. */
+int ck_arp_reply_check(const uint8_t *data, uint32_t n, uint32_t len, const uint8_t our_mac[6], const uint8_t our_ip[4],
+                       const uint8_t asked_ip[4], uint8_t sender_mac[6], uint8_t sender_ip[4]);
+enum { CK_FC_RUNT = 0, CK_FC_BROADCAST = 1, CK_FC_MULTICAST = 2, CK_FC_UNICAST_US = 3, CK_FC_UNICAST_OTHER = 4 };
+/* Classify by the Ethernet destination only (14 bytes needed); nothing else is looked at. */
+int ck_frame_class(const uint8_t *data, uint32_t n, const uint8_t our_mac[6]);
+
+struct ck_arp_exchange {
+    /* in */
+    uint8_t mac[6], our_ip[4], target_ip[4];
+    uint32_t speed;           /* 10, 100 or 1000 (from the PHY) */
+    int full_duplex;
+    uint32_t attempts;        /* 1..CK_ARP_MAXATT transfers, stop at the first accepted reply */
+    uint32_t wait_us;         /* receive wait per attempt, up to 10 s */
+    /* out */
+    int matched;
+    uint32_t attempts_used, tx_ok;     /* tx_ok = transmissions the MAC completed without an error bit */
+    uint8_t reply_mac[6], reply_ip[4];
+    uint8_t reply_frame[CK_ARP_MAXLEN];
+    uint32_t reply_len;
+    uint32_t frames_seen;     /* every frame the MAC handed up, the accepted reply included */
+    uint32_t n_broadcast, n_multicast, n_unicast_us, n_unicast_other, n_runt;
+    uint64_t (*now_us)(void);     /* optional clock for attempt_start_us */
+    uint64_t attempt_start_us[CK_ARP_MAXATT];
+    /* Optional: called before each attempt (qualification: try another documented clock-delay setting). */
+    void (*pre_attempt)(void *ctx, uint32_t attempt);
+    void *pre_ctx;
+    uint32_t seen_n;              /* frames recorded below (the first CK_ARP_SEEN of them) */
+    uint32_t seen_len[CK_ARP_SEEN];
+    uint32_t seen_attempt[CK_ARP_SEEN];
+    uint8_t seen_hdr[CK_ARP_SEEN][CK_ARP_HDRKEEP]; /* first CK_ARP_HDRKEEP bytes: Ethernet header + start of the ARP packet */
+    uint32_t n_arp_refused[CK_ARP_NREASONS]; /* frames that looked like ARP replies to us but failed a check, by -reason */
+    int last_rc;
+    uint32_t last_tsr, last_rsr, last_isr;
+    int bme_off_at_end;       /* of the last transfer */
+};
+/* Set the MAC speed/duplex when the PHY link comes up (RE/TE must be off; no DMA). Like Linux macb_mac_link_up. */
+int ck_gem_set_link(struct ck_gem *g, uint32_t speed, int full_duplex);
+/* Up to `attempts` transfers (each: validate, program, bus-master on, send, wait, quiesce, bus-master off). */
+int ck_gem_arp_exchange(struct ck_gem *g, struct ck_arp_exchange *e);
 
 /* ============ PHY (clause 22) ============ */
 int ck_gem_mdio_write(const struct ck_rp1_io *io, uint32_t phy, uint32_t reg, uint16_t val);

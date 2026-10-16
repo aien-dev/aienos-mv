@@ -55,3 +55,12 @@ size_t strlen(const char *s)
         n++;
     return n;
 }
+
+/* At most max bytes looked at (the M6-A/M6-B TEST-label derivations, aienos-mv#398). */
+size_t strnlen(const char *s, size_t max)
+{
+    size_t n = 0;
+    while (n < max && s[n])
+        n++;
+    return n;
+}

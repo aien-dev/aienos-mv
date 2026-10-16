@@ -889,6 +889,12 @@ CORE_C += $(KDIR)/dev/pi5_pcie.c $(KDIR)/dev/dma_window.c
 endif
 ifeq ($(strip $(CK_PI5_NET)),1)
 CORE_C += $(KDIR)/dev/pi5_pcie.c $(KDIR)/dev/dma_window.c $(KDIR)/dev/pi5_net.c $(KDIR)/dev/pi5_gem.c
+# aienos-mv#398: the Pi side of the Pi <-> Spark session (dev/pi5_peer.c) over the hosted-tested M6-A/M6-B code,
+# linked unchanged (native/net, native/crypto; SHA-256, Ed25519 and SHA-512 come with ART_C).
+PI5PEER_C := $(KDIR)/dev/net_udp.c $(KDIR)/dev/pi5_peer.c $(NATIVE)/net/aienos_net.c $(NATIVE)/net/aienos_ctl.c \
+	$(NATIVE)/net/aienos_sec.c $(NATIVE)/net/x25519.c $(NATIVE)/net/pispark.c $(NATIVE)/crypto/aes.c $(NATIVE)/crypto/polyval.c \
+	$(NATIVE)/crypto/gcm_siv.c $(NATIVE)/crypto/hmac.c $(NATIVE)/crypto/ct.c
+CORE_C += $(PI5PEER_C)
 endif
 ifneq ($(strip $(CK_PI5_UNLOCK_CARD)),)
 CORE_C += $(BOOT)/efi_unlock.c $(KDIR)/core/unlock_req.c
@@ -1074,6 +1080,10 @@ ART_OBJS := $(patsubst $(NATIVE)/%.c,$(KOBJ)/%.o,$(ART_C))
 ART_HDRS := $(wildcard $(NATIVE)/sig/*.h $(NATIVE)/argus/sha256.h $(KDIR)/svc/compat/*.h)
 $(ART_OBJS): KCFLAGS += $(ART_INC)
 $(ART_OBJS): $(ART_HDRS)
+# aienos-mv#398 Pi <-> Spark session objects (CK_PI5_NET image only): compat <string.h>, net and crypto headers.
+PI5PEER_OBJS := $(patsubst $(NATIVE)/%.c,$(KOBJ)/%.o,$(PI5PEER_C))
+$(PI5PEER_OBJS): KCFLAGS += $(ART_INC) -I$(NATIVE)/net -I$(NATIVE)/crypto -I$(KDIR)/dev
+$(PI5PEER_OBJS): $(wildcard $(NATIVE)/net/*.h $(NATIVE)/crypto/*.h $(KDIR)/dev/net_udp.h $(KDIR)/dev/pi5_peer.h)
 
 # core/pi5.c drives the SD card through native/disk.
 $(KOBJ)/kernel/core/pi5.o: KCFLAGS += -I$(NATIVE)/disk
@@ -2341,7 +2351,7 @@ pi5-net-mutants:
 	done; test $$fail -eq 0
 .PHONY: test-pi5-net pi5-net-mutants pi5-net
 
-# AIENOS-PI5 network cut 3 (GEM descriptors, transfer order, bus-master window, PHY loopback) over a fake GEM that checks every DMA it makes.
+# AIENOS-PI5 network cuts 3 and 4 (GEM descriptors, ARP exchange, transfer order, bus-master window, PHY loopback) over a fake GEM that checks every DMA it makes.
 PI5GEM_SRCS := $(KDIR)/dev/pi5_gem.c $(KDIR)/dev/pi5_net.c $(KDIR)/dev/pi5_pcie.c $(KDIR)/dev/dma_window.c
 PI5GEM_DEPS := $(KDIR)/tests/test_pi5_gem.c $(PI5GEM_SRCS) $(KDIR)/tests/ck_test.h $(KDIR)/dev/pi5_gem.h $(KDIR)/dev/pi5_net.h $(KDIR)/dev/pi5_pcie.h $(KDIR)/dev/dma_window.h
 $(OUT)/host/test_pi5_gem: $(PI5GEM_DEPS)
@@ -2353,7 +2363,7 @@ $(OUT)/host-san/test_pi5_gem: $(PI5GEM_DEPS)
 test-pi5-gem: $(OUT)/host/test_pi5_gem
 	$<
 # Each mutant removes one decision; the test must FAIL for every one.
-PI5GEM_MUTANTS := NO_VALIDATE BME_EARLY BME_LEFT_ON NO_QUIESCE_WAIT NO_RETE_OFF NO_BARRIER NO_TIEOFF NO_RXLEN_CHECK NO_TX_LAST NO_SENTINEL_USED NO_ADDR64 NO_HWWIN NOT_STICKY NO_FRAMECAP NO_SEQ NO_DIFF MDIO_OP PHYLB_BIT NO_WRAP NO_GBE NO_DRFCS NO_BME_VERIFY NO_LLB_CLEAR
+PI5GEM_MUTANTS := NO_VALIDATE BME_EARLY BME_LEFT_ON NO_QUIESCE_WAIT NO_RETE_OFF NO_BARRIER NO_TIEOFF NO_RXLEN_CHECK NO_TX_LAST NO_SENTINEL_USED NO_ADDR64 NO_HWWIN NOT_STICKY NO_FRAMECAP NO_SEQ NO_DIFF MDIO_OP PHYLB_BIT NO_WRAP NO_GBE NO_DRFCS NO_BME_VERIFY NO_LLB_CLEAR ARP_OP ARP_SIP_ZERO ARP_NO_LEN ARP_NO_MAXLEN ARP_NO_DST ARP_NO_HDR ARP_NO_OP ARP_NO_SRC ARP_NO_THA ARP_NO_TPA ARP_NO_SPA ARP_ACCEPT_ANY SETLINK_NO_WRITE
 pi5-gem-mutants:
 	@mkdir -p $(OUT)/host
 	@fail=0; for m in $(PI5GEM_MUTANTS); do \
@@ -2361,3 +2371,15 @@ pi5-gem-mutants:
 	  if $(OUT)/host/test_pi5_gem_mut_$$m >/dev/null; then echo "MUTANT SURVIVED: $$m"; fail=1; else echo "mutant killed: $$m"; fi; \
 	done; test $$fail -eq 0
 .PHONY: test-pi5-gem pi5-gem-mutants
+# aienos-mv#398: the Pi side of the Pi <-> Spark session, frame level (dev/pi5_peer.c over dev/net_udp.c and native/net).
+PI5PEER_HOST_SRCS := $(KDIR)/dev/pi5_peer.c $(KDIR)/dev/net_udp.c $(NATIVE)/net/aienos_net.c
+$(OUT)/host/test_pi5_peer: $(KDIR)/tests/test_pi5_peer.c $(PI5PEER_HOST_SRCS) $(KDIR)/dev/pi5_peer.h $(KDIR)/dev/net_udp.h $(KDIR)/tests/ck_test.h
+	@mkdir -p $(dir $@)
+	$(HOSTCC) $(HCFLAGS) -I$(KDIR)/dev -I$(NATIVE)/net -o $@ $< $(PI5PEER_HOST_SRCS)
+$(OUT)/host-san/test_pi5_peer: $(KDIR)/tests/test_pi5_peer.c $(PI5PEER_HOST_SRCS) $(KDIR)/dev/pi5_peer.h $(KDIR)/dev/net_udp.h
+	@mkdir -p $(dir $@)
+	$(HOSTCC) $(HCFLAGS) $(SANFLAGS) -I$(KDIR)/dev -I$(NATIVE)/net -o $@ $< $(PI5PEER_HOST_SRCS)
+test-pi5-peer: $(OUT)/host/test_pi5_peer $(OUT)/host-san/test_pi5_peer
+	$(OUT)/host/test_pi5_peer
+	$(OUT)/host-san/test_pi5_peer
+.PHONY: test-pi5-peer

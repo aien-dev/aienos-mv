@@ -35,7 +35,7 @@ DIFF_DIGEST = 9ddf33a859ade2d92d0e86a213d29d682708b0ac308239a7b6f003dbf9a5cdfe
 # build (out/net_diff_ref). C-only pin, recorded 2026-10-01; no Rust run.
 DIFF_DIGEST_FIXED = 034151b28953e23cbcdc2b805885ea88887b3da52e46369e8c01bd5b276241cb
 
-SRCS = aienos_net.c aienos_virtio_pci.c aienos_virtio_net.c aienos_ctl.c x25519.c aienos_sec.c
+SRCS = aienos_net.c aienos_virtio_pci.c aienos_virtio_net.c aienos_ctl.c x25519.c aienos_sec.c pispark.c
 # M6-B links (never edits) the in-house AES-GCM-SIV/HMAC and Ed25519 code.
 CRYPTO_SRCS = ../crypto/aes.c ../crypto/polyval.c ../crypto/gcm_siv.c ../crypto/hmac.c ../crypto/ct.c
 SIG_SRCS = ../sig/ed25519.c ../sig/sha512.c ../sig/ct.c
@@ -79,12 +79,18 @@ $(OUT)/x25519_test: tests/x25519_test.c $(LIB)
 	$(CC) $(CFLAGS) -o $@ $< $(LIB)
 $(OUT)/sec_test: tests/sec_test.c $(LIB)
 	$(CC) $(CFLAGS) -o $@ $< $(LIB)
+$(OUT)/pispark_test: tests/pispark_test.c $(LIB)
+	$(CC) $(CFLAGS) -o $@ $< $(LIB)
+# Spark-side peer for the physical Pi <-> Spark session run (Linux host tool, TEST identities only)
+$(OUT)/pispark_peer: tools/pispark_peer.c $(LIB)
+	$(CC) $(CFLAGS) -o $@ $< $(LIB)
 
-test: lib-checks $(OUT)/net_test $(OUT)/ctl_test $(OUT)/vnet_test $(OUT)/x25519_test $(OUT)/sec_test diff-check
+test: lib-checks $(OUT)/net_test $(OUT)/ctl_test $(OUT)/vnet_test $(OUT)/x25519_test $(OUT)/sec_test $(OUT)/pispark_test diff-check
 	./$(OUT)/net_test $(SEED) $(ITERS)
 	./$(OUT)/ctl_test
 	./$(OUT)/x25519_test
 	./$(OUT)/sec_test
+	./$(OUT)/pispark_test
 	./$(OUT)/vnet_test
 
 # Protocol objects must not allocate, read a clock or do their own I/O.
@@ -132,6 +138,8 @@ ifeq ($(shell uname -s),Linux)
 	ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 ./$(OUT)/sec_test_asan
 	$(CC) $(CFLAGS) $(SANFLAGS) -o $(OUT)/vnet_test_asan tests/vnet_test.c $(SRCS) $(DEP_SRCS)
 	ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 ./$(OUT)/vnet_test_asan
+	$(CC) $(CFLAGS) $(SANFLAGS) -o $(OUT)/pispark_test_asan tests/pispark_test.c $(SRCS) $(DEP_SRCS)
+	ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 ./$(OUT)/pispark_test_asan
 	@echo "NET_SANITIZE: PASS"
 else
 	@echo "sanitize: Linux only"
@@ -180,6 +188,23 @@ mutants: $(OBJS) $(NET_MUT_TEST_OBJS) | $(OUT)
 	echo "NET_SECURE_MUTANTS: $$killed/$$total killed"; \
 	[ -z "$$survived" ] && [ $$total -ge 12 ] || { echo "NET_SECURE_MUTANTS: FAIL (not killed:$$survived)"; exit 1; }
 
+# Pi <-> Spark session test protocol (aienos-mv#398): delete each GUARD line in pispark.c;
+# tests/pispark_test.c must then fail.
+pispark-mutants: $(OBJS) | $(OUT)
+	@killed=0; total=0; survived=""; \
+	for g in $$(grep -o "GUARD:[a-z0-9-]*" pispark.c | cut -d: -f2); do \
+	  total=$$((total+1)); mdir=$(OUT)/pmut_$$g; rm -rf $$mdir; mkdir -p $$mdir; cp *.h $$mdir/; \
+	  sed "/GUARD:$$g \*\//d" pispark.c > $$mdir/pispark.c; \
+	  if cmp -s pispark.c $$mdir/pispark.c; then echo "mutant $$g: guard line not found"; survived="$$survived $$g"; continue; fi; \
+	  others=""; for s in $(SRCS); do [ "$$s" = pispark.c ] || others="$$others $(OUT)/$${s%.c}.o"; done; \
+	  if ! $(CC) $(CFLAGS) -Wno-error -I$$mdir -I. -o $$mdir/t tests/pispark_test.c $$mdir/pispark.c $$others $(DEP_OBJS) 2>/dev/null; then \
+	    echo "mutant $$g: does not compile (counts as not killed)"; survived="$$survived $$g"; continue; fi; \
+	  if ./$$mdir/t >/dev/null 2>&1; then echo "mutant $$g: SURVIVED"; survived="$$survived $$g"; \
+	  else echo "mutant $$g: killed"; killed=$$((killed+1)); fi; \
+	done; \
+	echo "PISPARK_MUTANTS: $$killed/$$total killed"; \
+	[ -z "$$survived" ] && [ $$total -ge 15 ] || { echo "PISPARK_MUTANTS: FAIL (not killed:$$survived)"; exit 1; }
+
 # M6-B verdict. Hosted only: proves the protocol code, not a native binding,
 # real keys, timing behaviour or a formal protocol proof (see README.md).
 secure:
@@ -195,4 +220,4 @@ receipt:
 clean:
 	rm -rf $(OUT)
 
-.PHONY: all test lib-checks diff-corpus diff-check sanitize mutants secure receipt clean
+.PHONY: all test lib-checks diff-corpus diff-check sanitize mutants pispark-mutants secure receipt clean

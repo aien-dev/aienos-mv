@@ -1,4 +1,4 @@
-/* test_pi5_gem.c -- Pi 5 network lane cut 3 (dev/pi5_gem.c) over a FAKE GEM that behaves like the Cadence
+/* test_pi5_gem.c -- Pi 5 network lane cuts 3 and 4 (dev/pi5_gem.c) over a FAKE GEM that behaves like the Cadence
  * descriptor DMA and checks every access it makes: any DMA address outside the bounce window, any DMA while RP1
  * bus-master is off, bus-master dropped while the transmitter still runs, malformed rings, missing tie-offs.
  * Hosted: this proves the decisions and the ORDER of register writes, NOT the hardware. Run under ASan/UBSan
@@ -37,6 +37,10 @@ struct fk {
     uint32_t cap_w0, cap_ctrl0, cap_ctrl1, cap_w2;
     char ev[64];
     int nev;
+    /* frames the pretend LAN hands to the receiver after our transmit (WIRE mode only) */
+    uint8_t wire[8][1536];
+    uint32_t wire_len[8];
+    int nwire;
 };
 static struct fk f;
 
@@ -167,8 +171,13 @@ static void kick(uint32_t ncr)
             f.r[CK_GEM_TSR / 4] |= CK_GEM_TSR_COMP;
         }
         f.tgo_hold = f.tgo_delay_cfg;
-        if ((ncr & CK_GEM_NCR_LLB) || (f.phy[0] & CK_MII_BMCR_LOOPBACK))
+        if ((ncr & CK_GEM_NCR_LLB) || (f.phy[0] & CK_MII_BMCR_LOOPBACK)) {
             deliver(data, len);
+        } else {
+            int wi;
+            for (wi = 0; wi < f.nwire; wi++)
+                deliver(f.wire[wi], f.wire_len[wi]);
+        }
         if (ctrl & CK_GEMD_TX_WRAP)
             a = ((uint64_t)f.r[CK_GEM_TBQPH / 4] << 32) | f.r[CK_GEM_TBQP / 4];
         else
@@ -723,6 +732,282 @@ static void t_bme_set(void)
     CHECK(ck_pi5gem_bme_set(&rcio, 0) == CK_GEM_E_BME);
 }
 
+
+/* ================= Cut 4: ARP request/reply and the exchange ================= */
+static const uint8_t OURMAC[6] = {0x2c, 0xcf, 0x67, 0x3f, 0x54, 0x76};
+static const uint8_t OURIP[4] = {192, 168, 1, 192};
+static const uint8_t GWIP[4] = {192, 168, 1, 1};
+static const uint8_t GWMAC[6] = {0x4c, 0x43, 0x41, 0x1f, 0x5f, 0xb4};
+
+/* A well formed reply from the gateway to us (60 bytes, padded). */
+static void mkreply(uint8_t *r)
+{
+    memset(r, 0, 60);
+    memcpy(r, OURMAC, 6);
+    memcpy(r + 6, GWMAC, 6);
+    r[12] = 0x08; r[13] = 0x06;
+    r[14] = 0; r[15] = 1; r[16] = 8; r[17] = 0; r[18] = 6; r[19] = 4; r[20] = 0; r[21] = 2;
+    memcpy(r + 22, GWMAC, 6);
+    memcpy(r + 28, GWIP, 4);
+    memcpy(r + 32, OURMAC, 6);
+    memcpy(r + 38, OURIP, 4);
+}
+static int chk(const uint8_t *r, uint32_t len)
+{
+    uint8_t sm[6], si[4];
+    return ck_arp_reply_check(r, len < CK_GEM_RXKEEP ? len : CK_GEM_RXKEEP, len, OURMAC, OURIP, GWIP, sm, si);
+}
+
+static void t_arp_build(void)
+{
+    uint8_t q[64];
+    uint32_t i;
+    CHECK(ck_arp_request_build(OURMAC, OURIP, GWIP, q, sizeof q) == 60);
+    for (i = 0; i < 6; i++) CHECK(q[i] == 0xff);
+    CHECK(memcmp(q + 6, OURMAC, 6) == 0 && q[12] == 0x08 && q[13] == 0x06);
+    CHECK(q[14] == 0 && q[15] == 1 && q[16] == 8 && q[17] == 0 && q[18] == 6 && q[19] == 4);
+    CHECK(q[20] == 0 && q[21] == 1);                                  /* request */
+    CHECK(memcmp(q + 22, OURMAC, 6) == 0 && memcmp(q + 28, OURIP, 4) == 0); /* sender: us, with our real IP (not a probe) */
+    for (i = 32; i < 38; i++) CHECK(q[i] == 0);                       /* target hardware unknown */
+    CHECK(memcmp(q + 38, GWIP, 4) == 0);
+    for (i = 42; i < 60; i++) CHECK(q[i] == 0);
+    CHECK(ck_arp_request_build(OURMAC, OURIP, GWIP, q, 59) == 0 && ck_arp_request_build(0, OURIP, GWIP, q, 64) == 0);
+}
+
+static void t_arp_check(void)
+{
+    uint8_t r[1536], sm[6] = {0}, si[4] = {0};
+    mkreply(r);
+    CHECK(ck_arp_reply_check(r, 60, 60, OURMAC, OURIP, GWIP, sm, si) == CK_ARP_OK);
+    CHECK(memcmp(sm, GWMAC, 6) == 0 && memcmp(si, GWIP, 4) == 0);
+    CHECK(chk(r, 42) == CK_ARP_OK);                                   /* unpadded 42 bytes is a valid reply */
+    /* each refusal exactly as listed */
+    r[0] ^= 1;                                                        /* addressed to another MAC */
+    CHECK(chk(r, 60) == CK_ARP_E_DST);
+    mkreply(r); memset(r, 0xff, 6);                                   /* broadcast is not "addressed to us" */
+    CHECK(chk(r, 60) == CK_ARP_E_DST);
+    mkreply(r); r[21] = 1;                                            /* a request */
+    CHECK(chk(r, 60) == CK_ARP_E_OP);
+    mkreply(r); r[21] = 3;
+    CHECK(chk(r, 60) == CK_ARP_E_OP);
+    mkreply(r); r[20] = 1;
+    CHECK(chk(r, 60) == CK_ARP_E_OP);
+    mkreply(r); r[13] = 0x00;                                         /* IPv4 EtherType */
+    CHECK(chk(r, 60) == CK_ARP_E_ETYPE);
+    mkreply(r); r[15] = 6;                                            /* htype not Ethernet */
+    CHECK(chk(r, 60) == CK_ARP_E_HDR);
+    mkreply(r); r[19] = 16;                                           /* plen not 4 */
+    CHECK(chk(r, 60) == CK_ARP_E_HDR);
+    mkreply(r); r[22] ^= 0x80;                                        /* Ethernet source != ARP sender hardware */
+    CHECK(chk(r, 60) == CK_ARP_E_SRC);
+    mkreply(r); r[32 + 5] ^= 1;                                       /* target hardware is not us */
+    CHECK(chk(r, 60) == CK_ARP_E_THA);
+    mkreply(r); r[38 + 3] ^= 1;                                       /* target IP is not ours */
+    CHECK(chk(r, 60) == CK_ARP_E_TPA);
+    mkreply(r); r[28 + 3] ^= 1;                                       /* sender IP is not the one we asked about */
+    CHECK(chk(r, 60) == CK_ARP_E_SPA);
+    /* lengths */
+    mkreply(r);
+    CHECK(chk(r, 41) == CK_ARP_E_LEN && chk(r, 0) == CK_ARP_E_LEN);
+    CHECK(chk(r, 65) == CK_ARP_E_LEN);                                /* oversize */
+    CHECK(chk(r, 1500) == CK_ARP_E_LEN);
+    CHECK(chk(r, 64) == CK_ARP_OK);
+    CHECK(ck_arp_reply_check(r, 50, 60, OURMAC, OURIP, GWIP, 0, 0) == CK_ARP_E_LEN); /* kept bytes do not cover the frame */
+    CHECK(ck_arp_reply_check(0, 60, 60, OURMAC, OURIP, GWIP, 0, 0) == CK_ARP_E_ARG);
+    CHECK(ck_arp_reply_check(r, 60, 60, OURMAC, OURIP, 0, 0, 0) == CK_ARP_E_ARG);
+}
+
+static void t_classify(void)
+{
+    uint8_t r[64];
+    mkreply(r);
+    CHECK(ck_frame_class(r, 60, OURMAC) == CK_FC_UNICAST_US);
+    memset(r, 0xff, 6);
+    CHECK(ck_frame_class(r, 60, OURMAC) == CK_FC_BROADCAST);
+    r[0] = 0x01; r[1] = 0x00; r[2] = 0x5e; r[3] = 0; r[4] = 0; r[5] = 0xfb;
+    CHECK(ck_frame_class(r, 60, OURMAC) == CK_FC_MULTICAST);
+    mkreply(r); r[3] ^= 1;
+    CHECK(ck_frame_class(r, 60, OURMAC) == CK_FC_UNICAST_OTHER);
+    CHECK(ck_frame_class(r, 13, OURMAC) == CK_FC_RUNT && ck_frame_class(0, 60, OURMAC) == CK_FC_RUNT);
+}
+
+static void wire_put(const uint8_t *d, uint32_t len)
+{
+    memcpy(f.wire[f.nwire], d, len);
+    f.wire_len[f.nwire++] = len;
+}
+static void mkex(struct ck_arp_exchange *e)
+{
+    *e = (struct ck_arp_exchange){0};
+    memcpy(e->mac, OURMAC, 6);
+    memcpy(e->our_ip, OURIP, 4);
+    memcpy(e->target_ip, GWIP, 4);
+    e->speed = 1000;
+    e->full_duplex = 1;
+    e->attempts = 3;
+    e->wait_us = 20000;
+}
+static void bcast(uint8_t *b, uint8_t tag)
+{
+    memset(b, 0, 60);
+    memset(b, 0xff, 6);
+    b[6] = 0x10; b[7] = tag;
+    b[12] = 0x08; b[13] = 0x06; b[14] = 0; b[15] = 1; b[16] = 8; b[17] = 0; b[18] = 6; b[19] = 4; b[21] = 1; /* someone else's request */
+}
+
+static uint64_t fake_clock;
+static uint64_t fclock(void) { fake_clock += 1000; return fake_clock; }
+
+static void t_set_link(void)
+{
+    uint32_t n;
+    fresh();
+    CHECK(ck_gem_set_link(&g, 1000, 1) == 0);
+    n = f.r[CK_GEM_NCFGR / 4];
+    CHECK((n & CK_GEM_NCFGR_GBE) && (n & CK_GEM_NCFGR_FD) && (n & CK_GEM_NCFGR_DRFCS) && !(n & CK_GEM_NCFGR_SPD));
+    CHECK(((n >> 18) & 7u) == 5u);                 /* MDC divider kept */
+    CHECK(((n >> CK_GEM_NCFGR_DBW_SHIFT) & 3u) == g.caps.dbw);
+    CHECK(ck_gem_set_link(&g, 100, 0) == 0);
+    n = f.r[CK_GEM_NCFGR / 4];
+    CHECK((n & CK_GEM_NCFGR_SPD) && !(n & CK_GEM_NCFGR_GBE) && !(n & CK_GEM_NCFGR_FD));
+    CHECK(ck_gem_set_link(&g, 10, 1) == 0);
+    n = f.r[CK_GEM_NCFGR / 4];
+    CHECK(!(n & CK_GEM_NCFGR_SPD) && !(n & CK_GEM_NCFGR_GBE) && (n & CK_GEM_NCFGR_FD));
+    CHECK(ck_gem_set_link(&g, 777, 1) == CK_GEM_E_ARG && ck_gem_set_link(0, 1000, 1) == CK_GEM_E_ARG);
+    CHECK(f.bme_on_n == 0 && f.kicks == 0);        /* no DMA, no bus-master */
+    f.r[CK_GEM_NCR / 4] |= CK_GEM_NCR_TE;          /* refused while the MAC runs */
+    CHECK(ck_gem_set_link(&g, 1000, 1) == CK_GEM_E_ARG);
+    f.r[CK_GEM_NCR / 4] &= ~(uint32_t)CK_GEM_NCR_TE;
+    g.halted = 1;
+    CHECK(ck_gem_set_link(&g, 1000, 1) == CK_GEM_E_HALTED);
+}
+
+static uint32_t pre_calls, pre_last;
+static void pre_cb(void *ctx, uint32_t a) { pre_calls++; pre_last = a; CHECK(ctx == (void *)&pre_calls); }
+
+static void t_exchange_ok(void)
+{
+    struct ck_arp_exchange e;
+    uint8_t b1[60], b2[60], rp[60], q[60];
+    fresh();
+    bcast(b1, 1); bcast(b2, 2); mkreply(rp);
+    wire_put(b1, 60); wire_put(rp, 60); wire_put(b2, 60);
+    mkex(&e);
+    pre_calls = 0; e.pre_attempt = pre_cb; e.pre_ctx = (void *)&pre_calls;
+    e.now_us = fclock;
+    CHECK(ck_gem_arp_exchange(&g, &e) == 0);
+    CHECK(e.matched == 1 && e.attempts_used == 1 && e.tx_ok == 1);
+    CHECK(pre_calls == 1 && pre_last == 0);
+    CHECK(e.attempt_start_us[0] != 0 && e.attempt_start_us[1] == 0);
+    CHECK(e.seen_n == 3 && e.seen_len[0] == 60 && e.seen_attempt[0] == 1 && e.seen_attempt[2] == 1);
+    CHECK(memcmp(e.seen_hdr[1], rp, CK_ARP_HDRKEEP) == 0 && memcmp(e.seen_hdr[0], b1, CK_ARP_HDRKEEP) == 0);
+    CHECK(memcmp(e.reply_mac, GWMAC, 6) == 0 && memcmp(e.reply_ip, GWIP, 4) == 0 && e.reply_len == 60);
+    CHECK(memcmp(e.reply_frame, rp, 60) == 0);
+    CHECK(e.frames_seen == 3 && e.n_broadcast == 2 && e.n_multicast == 0 && e.n_unicast_us == 0 && e.n_unicast_other == 0 && e.n_runt == 0);
+    /* what went out was the 60 byte broadcast request with our real MAC and IP */
+    CHECK(ck_arp_request_build(OURMAC, OURIP, GWIP, q, sizeof q) == 60);
+    CHECK(f.frames_sent == 1 && f.last_tx_len == 60 && memcmp(f.last_tx, q, 60) == 0);
+    CHECK(f.r[CK_GEM_SA1B / 4] == 0x3f67cf2cu && f.r[CK_GEM_SA1T / 4] == 0x00007654u);
+    /* bus-master and the MAC are off afterwards */
+    CHECK(f.bme == 0 && g.bme_on == 0 && f.bme_on_n == 1 && f.bme_off_n == 1 && e.bme_off_at_end == 1);
+    CHECK(!(f.r[CK_GEM_NCR / 4] & (CK_GEM_NCR_RE | CK_GEM_NCR_TE | CK_GEM_NCR_LLB)));
+    CHECK(g.halted == 0);
+    clean_flags();
+}
+
+static void t_exchange_refusals(void)
+{
+    struct ck_arp_exchange e;
+    uint8_t rp[1536], bc[60];
+    int k;
+    /* the "reply" arrives but fails exactly one check; the exchange must not accept it, on every attempt */
+    for (k = 0; k < 6; k++) {
+        fresh();
+        mkreply(rp);
+        if (k == 0) rp[0] ^= 2;                  /* to another MAC: seen as unicast_other */
+        if (k == 1) rp[21] = 1;                  /* wrong opcode */
+        if (k == 2) rp[38] ^= 1;                 /* not our IP */
+        if (k == 3) rp[28] ^= 1;                 /* not the gateway's IP */
+        if (k == 4) rp[32] ^= 1;                 /* not our target MAC */
+        if (k == 5) { memset(rp + 60, 0, 40); }  /* 100 byte frame: oversize */
+        wire_put(rp, k == 5 ? 100 : 60);
+        mkex(&e);
+        CHECK(ck_gem_arp_exchange(&g, &e) == 0);
+        CHECK(e.matched == 0 && e.attempts_used == 3 && e.frames_seen == 3 && f.frames_sent == 3);
+        CHECK(e.reply_len == 0);
+        if (k == 0) CHECK(e.n_unicast_other == 3 && e.n_unicast_us == 0);
+        if (k == 1) CHECK(e.n_unicast_us == 3 && e.n_arp_refused[-CK_ARP_E_OP] == 3);
+        if (k == 2) CHECK(e.n_arp_refused[-CK_ARP_E_TPA] == 3);
+        if (k == 3) CHECK(e.n_arp_refused[-CK_ARP_E_SPA] == 3);
+        if (k == 4) CHECK(e.n_arp_refused[-CK_ARP_E_THA] == 3);
+        if (k == 5) CHECK(e.n_unicast_us == 3 && e.n_arp_refused[-CK_ARP_E_LEN] == 3);
+        CHECK(f.bme == 0 && f.bme_on_n == 3 && f.bme_off_n == 3);
+        clean_flags();
+    }
+    /* only broadcasts on the wire: counted, never accepted */
+    fresh();
+    bcast(bc, 1); wire_put(bc, 60); bcast(bc, 2); wire_put(bc, 60);
+    mkex(&e);
+    e.attempts = 1;
+    CHECK(ck_gem_arp_exchange(&g, &e) == 0);
+    CHECK(e.matched == 0 && e.frames_seen == 2 && e.n_broadcast == 2);
+    clean_flags();
+    /* nothing at all */
+    fresh();
+    mkex(&e);
+    CHECK(ck_gem_arp_exchange(&g, &e) == 0 && e.matched == 0 && e.frames_seen == 0 && e.attempts_used == 3 && e.tx_ok == 3);
+    clean_flags();
+    /* a reply on the second attempt stops the loop there */
+    fresh();
+    mkex(&e);
+    CHECK(ck_gem_arp_exchange(&g, &e) == 0 && e.matched == 0);
+    mkreply(rp);
+    wire_put(rp, 60);
+    mkex(&e);
+    CHECK(ck_gem_arp_exchange(&g, &e) == 0 && e.matched == 1 && e.attempts_used == 1);
+}
+
+static void t_exchange_args_and_lies(void)
+{
+    struct ck_arp_exchange e;
+    struct ck_gem_xfer x;
+    uint8_t fr[64], rp[60];
+    fresh();
+    mkex(&e); e.attempts = 0;
+    CHECK(ck_gem_arp_exchange(&g, &e) == CK_GEM_E_ARG);
+    mkex(&e); e.attempts = 9;
+    CHECK(ck_gem_arp_exchange(&g, &e) == CK_GEM_E_ARG);
+    mkex(&e); e.speed = 7;
+    CHECK(ck_gem_arp_exchange(&g, &e) == CK_GEM_E_ARG);
+    mkex(&e); e.wait_us = 10000001u;
+    CHECK(ck_gem_arp_exchange(&g, &e) == CK_GEM_E_ARG);
+    CHECK(ck_gem_arp_exchange(&g, 0) == CK_GEM_E_ARG && ck_gem_arp_exchange(0, &e) == CK_GEM_E_ARG);
+    CHECK(f.bme_on_n == 0 && f.kicks == 0 && g.halted == 0);
+    /* RX buffer count: 7 allowed, 8 refused */
+    mkx(&x, CK_GEMX_LLB, fr, 1);
+    x.rx_count = CK_GEM_RXMAX + 1;
+    CHECK(ck_gem_xfer(&g, &x) == CK_GEM_E_ARG);
+    mkx(&x, CK_GEMX_LLB, fr, 1);
+    x.rx_count = CK_GEM_RXMAX;
+    CHECK(ck_gem_xfer(&g, &x) == 0 && x.rx_done && x.rx_all_n == 1 && x.rx_all_len[0] == 60);
+    clean_flags();
+    /* a device that claims more bytes than the buffer holds: the exchange fails, nothing is accepted, window latched */
+    fresh();
+    mkreply(rp);
+    wire_put(rp, 60);
+    f.rx_len_lie = 1;
+    mkex(&e);
+    CHECK(ck_gem_arp_exchange(&g, &e) == CK_GEM_E_DEVICE);
+    CHECK(e.matched == 0 && g.halted == 1 && ck_dmaw_halted(&dw) && f.bme == 0);
+    mkex(&e);
+    CHECK(ck_gem_arp_exchange(&g, &e) == CK_GEM_E_HALTED);
+    /* the root-complex gate and the descriptor validator still apply */
+    fresh();
+    g.hw_window_ok = 0;
+    mkex(&e);
+    CHECK(ck_gem_arp_exchange(&g, &e) == CK_GEM_E_HWWIN && f.bme_on_n == 0 && f.kicks == 0);
+}
+
 int main(void)
 {
     t_probe();
@@ -740,6 +1025,13 @@ int main(void)
     t_frames();
     t_mdio_phy();
     t_bme_set();
+    t_arp_build();
+    t_arp_check();
+    t_classify();
+    t_set_link();
+    t_exchange_ok();
+    t_exchange_refusals();
+    t_exchange_args_and_lies();
     free(f.mem);
     return ck_t_verdict("test_pi5_gem");
 }
