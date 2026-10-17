@@ -45,9 +45,10 @@
 static const char *const allowed_keys[] = {
     "acpi_rsdp", "ahci", "ahci_disk", "ahci_gpt", "ahci_port", "ahci_read", "aienos_commit", "apic", "cpu",
     "descriptors", "exit_boot_services", "firmware_cpl", "firmware_revision", "firmware_vendor", "gop",
-    "guard_page", "handoff", "image", "kernel", "kernel_impl", "madt", "net", "net_tg3", "note", "nvme",
-    "nvme_disk", "nvme_gpt", "nvme_read", "paging", "panic", "pci", "power", "report", "report_kind", "screen",
-    "smp", "stack", "storage", "summary", "timebase", "timer_irq", "timer_stats",
+    "guard_page", "handoff", "image", "kernel", "kernel_impl", "keyboard", "keyboard_line", "madt", "net",
+    "net_tg3", "note", "nvme", "nvme_disk", "nvme_gpt", "nvme_read", "paging", "panic", "pci", "power", "report",
+    "report_kind", "screen", "smp", "stack", "storage", "summary", "timebase", "timer_irq", "timer_stats", "usb",
+    "xhci",
 };
 static const char *const allowed_lines[] = {
     "AIENOS-IMAC-KERNEL-0",
@@ -179,23 +180,23 @@ unsigned ck_x86_report_hold(uint64_t tsc_hz, unsigned seconds)
     static int busy; /* a fault while sending ends up here again: only wait */
     uint64_t t0 = ck_rdtsc(), end = t0 + (uint64_t)seconds * tsc_hz, next = t0;
     if (busy++ || !ck_x86_tg3_ready()) {
-        while (ck_rdtsc() < end)
+        while (ck_rdtsc() < end) {
+            ck_x86_kbd_hold_poll(&end);
             ck_pause();
+        }
         return 0;
     }
     ck_printf("report: LAB BUILD, sending allowlisted diagnostic lines to UDP port %u (broadcast, "
               "unauthenticated, auth=none) every 2 s during the hold\n",
               (unsigned)CK_X86_REPORT_PORT);
     static char report[CK_X86_REPORT_MAX];
-    size_t raw_len;
-    const char *raw = ck_x86_console_log(&raw_len);
-    /* Only the filtered copy leaves the machine; the raw console never does. */
-    size_t len = ck_x86_report_filter(raw, raw_len, report, sizeof report);
-    unsigned parts = ck_x86_report_parts(len), rounds = 0, failed = 0;
+    size_t len = 0;
+    unsigned parts = 0, rounds = 0, failed = 0;
     uint8_t mac[6];
     ck_x86_tg3_mac(mac);
-    uint64_t run = t0 ^ (uint64_t)len << 48;
+    uint64_t run = 0;
     while (ck_rdtsc() < end) {
+        ck_x86_kbd_hold_poll(&end); /* typing keeps the hold going */
         if (ck_rdtsc() < next) {
             ck_pause();
             continue;
@@ -203,6 +204,17 @@ unsigned ck_x86_report_hold(uint64_t tsc_hz, unsigned seconds)
         next += 2 * tsc_hz;
         if (!ck_x86_tg3_link())
             continue;
+        /* A fresh filtered copy each round, so lines typed during the hold go
+         * out too; a new copy gets a new run id. Only the filtered copy leaves
+         * the machine; the raw console never does. */
+        size_t raw_len;
+        const char *raw = ck_x86_console_log(&raw_len);
+        size_t n_len = ck_x86_report_filter(raw, raw_len, report, sizeof report);
+        if (n_len != len || !run) {
+            len = n_len;
+            parts = ck_x86_report_parts(len);
+            run = ck_rdtsc() ^ (uint64_t)len << 48;
+        }
         for (unsigned p = 0; p < parts; p++) {
             size_t n = ck_x86_report_frame(mac, run, report, len, p, frame, sizeof frame);
             if (!n || ck_x86_tg3_send(frame, n))
@@ -212,7 +224,7 @@ unsigned ck_x86_report_hold(uint64_t tsc_hz, unsigned seconds)
             failed++;
         rounds++;
     }
-    /* Printed after the snapshot, so only the screen shows it. */
+    /* Printed after the last copy, so only the screen shows it. */
     ck_printf("report: rounds=%u parts=%u bytes=%u send_failures=%u\n", rounds, parts, (unsigned)len, failed);
     return rounds;
 }

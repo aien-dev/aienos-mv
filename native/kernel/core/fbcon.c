@@ -118,6 +118,11 @@ void ck_fbcon_write(struct ck_fbcon *c, const char *s, size_t n)
                 c->col = 0;
             continue;
         }
+        if (ch == '\b') { /* cursor one cell left, within the line; the caller overwrites */
+            if (!c->pending_nl && c->col)
+                c->col--;
+            continue;
+        }
         if (c->pending_nl) {
             advance(c);
             c->pending_nl = 0;

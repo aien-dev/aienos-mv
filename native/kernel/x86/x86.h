@@ -102,6 +102,23 @@ int ck_x86_map_mmio(uint64_t pa, uint64_t len);
 void ck_x86_ahci_start(unsigned ctrl, uint64_t abar, struct ck_frames *fr, uint64_t tsc_hz);
 unsigned ck_x86_ahci_disks(void);
 
+/* pci_x86.c: offers every xHCI controller the walk found to xhci_x86.c until
+ * one has a USB boot keyboard; prints "keyboard: ready (...)" or why none.
+ * Call after ck_x86_storage. */
+void ck_x86_usb(struct ck_frames *fr, uint64_t tsc_hz);
+/* xhci_x86.c: the USB keyboard, polled. start: bar0 = the controller's
+ * registers (mapped), memory decode and bus master on; 0 when a keyboard is
+ * running. hold_poll: handles waiting keys (echo, line editing, a
+ * "keyboard_line: ..." line on Enter) and, while keys arrive, moves *end (a
+ * TSC deadline) out to idle_s after the last key, capped. */
+int ck_x86_xhci_start(unsigned ctrl, volatile uint8_t *bar0, struct ck_frames *fr, uint64_t tsc_hz);
+int ck_x86_kbd_ready(void);
+void ck_x86_kbd_hold_poll(uint64_t *end);
+unsigned ck_x86_kbd_idle_s(void);
+/* Ends the typing session at the end of the hold: "keyboard: done (lines=N)" on
+ * its own line (once; nothing when no keyboard ran). */
+void ck_x86_kbd_done(void);
+
 /* tg3_x86.c: the Broadcom BCM57766 Ethernet chip, transmit only, polled.
  * start: regs = BAR0 (mapped), cfg = its ECAM config space; 0 when the chip
  * is up (the link may still be negotiating). The rest report on or use it. */

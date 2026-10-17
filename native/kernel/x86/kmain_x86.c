@@ -263,16 +263,25 @@ static __attribute__((noreturn)) void finish(void)
         for (;;)
             __asm__ volatile("hlt");
     }
+    if (CK_X86_HOLD_S && ck_x86_kbd_ready())
+        ck_printf("keyboard: type a line and press Enter; the screen stays on until %u s after the last key\n",
+                  ck_x86_kbd_idle_s());
     if (CK_X86_HOLD_S) {
 #if CK_X86_REPORT
         /* Lab build only (make imac-kernel CK_X86_REPORT=1): sends the
          * allowlisted, unauthenticated report if the network is up. */
         ck_printf("power: holding the screen %u s, then restart\n", (unsigned)CK_X86_HOLD_S);
         ck_x86_report_hold(tsc_hz, CK_X86_HOLD_S);
+        ck_x86_kbd_done();
 #else
         /* Default and resident builds: no report code is linked; nothing is sent. */
         ck_printf("power: holding the screen %u s, then ACPI S5\n", (unsigned)CK_X86_HOLD_S);
-        delay_ms((uint64_t)CK_X86_HOLD_S * 1000u);
+        uint64_t end = ck_rdtsc() + (uint64_t)CK_X86_HOLD_S * tsc_hz; /* typing moves it out */
+        while (ck_rdtsc() < end) {
+            ck_x86_kbd_hold_poll(&end);
+            ck_pause();
+        }
+        ck_x86_kbd_done();
 #endif
     }
 #if CK_X86_REPORT
@@ -1077,6 +1086,7 @@ static __attribute__((noreturn)) void kernel_main(void *arg)
     }
 
     const struct ck_x86_storage_result *st = ck_x86_storage(h->rsdp, &frames, tsc_hz, mm.top);
+    ck_x86_usb(&frames, tsc_hz);
     ck_puts("kernel: alive\n");
     ck_printf("summary: cores=%u/%u timer=ok sata_disks=%u nvme_disks=%u gpt_valid=%u writes=none net=%s\n",
               sr.started + 1, sr.listed, st->ahci_disks, st->nvme_disks, st->gpt_valid,

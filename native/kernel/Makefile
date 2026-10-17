@@ -2241,7 +2241,8 @@ imac-diag: $(IMACDIAG_EFI)
 # (GDT/TSS/IDT, own page tables, guard page, HPET-timed TSC, local APIC timer, ACPI S5)
 # + x86/pci_x86.c (PCI walk; AHCI via x86/ahci_x86.c and NVMe via ../disk/disk_nvme.c, both
 # read-only, GPT checked by dev/disk_part.c; a look at the Ethernet chip) + x86/smp_x86.S
-# (secondary cores started and parked) + x86/tg3_x86.c (BCM57766 Ethernet: link detection; no
+# (secondary cores started and parked) + x86/xhci_x86.c (USB boot keyboard, polled, hubs; key
+# decode and line editor from dev/usb_hid.c) + x86/tg3_x86.c (BCM57766 Ethernet: link detection; no
 # transmit in the default image)
 # + x86/trap.S + x86/console_x86.c (COM1 when present, GOP framebuffer), on the
 # arch-neutral core: fbcon, fmt, acpi, handoff_check, frames, heap. Same toolchain and PE
@@ -2267,14 +2268,15 @@ else
 $(error CK_X86_REPORT must be 0 (default) or 1 (lab-only network report))
 endif
 IMACKERN_ELF := $(IMACKERN_DIR)/imackern.elf
-IMACKERN_CFLAGS := $(X86CFLAGS) -I$(KDIR)/include -I$(KDIR)/mm -I$(KDIR)/dev -I$(NATIVE)/disk -I$(NATIVE)/net
+IMACKERN_CFLAGS := $(X86CFLAGS) -I$(KDIR)/include -I$(KDIR)/mm -I$(KDIR)/dev -I$(NATIVE)/disk -I$(NATIVE)/net \
+	-I$(NATIVE)/argus
 IMACKERN_OBJS := $(IMACKERN_DIR)/efi_entry_x86_64.o $(IMACKERN_DIR)/efi_x86.o $(IMACKERN_DIR)/efi_gop.o \
 	$(IMACKERN_DIR)/kmain_x86.o $(IMACKERN_DIR)/console_x86.o $(IMACKERN_DIR)/trap.o \
 	$(IMACKERN_DIR)/fbcon.o $(IMACKERN_DIR)/fmt.o $(IMACKERN_DIR)/acpi.o $(IMACKERN_DIR)/handoff_check.o \
 	$(IMACKERN_DIR)/frames.o $(IMACKERN_DIR)/heap.o $(IMACKERN_DIR)/libc_min.o \
 	$(IMACKERN_DIR)/ahci_x86.o $(IMACKERN_DIR)/disk_part.o $(IMACKERN_DIR)/disk.o \
 	$(IMACKERN_DIR)/pci_x86.o $(IMACKERN_DIR)/smp_x86.o $(IMACKERN_DIR)/disk_nvme.o \
-	$(IMACKERN_DIR)/tg3_x86.o
+	$(IMACKERN_DIR)/tg3_x86.o $(IMACKERN_DIR)/xhci_x86.o $(IMACKERN_DIR)/usb_hid.o $(IMACKERN_DIR)/sha256.o
 IMACKERN_REPORT_OBJS := $(IMACKERN_DIR)/report_x86.o $(IMACKERN_DIR)/aienos_net.o
 # Symbols only the lab image may contain; the default image is checked for them after linking.
 IMACKERN_REPORT_SYMS := ck_x86_report_hold|ck_x86_report_frame|ck_x86_report_filter|ck_x86_report_parts|ck_x86_tg3_send|ck_x86_tg3_drain|net_udp_build
@@ -2303,6 +2305,9 @@ $(IMACKERN_DIR)/pci_x86.o: $(X86K)/pci_x86.c $(IMACKERN_HDRS) $(KDIR)/mm/frames.
 $(IMACKERN_DIR)/smp_x86.o: $(X86K)/smp_x86.S
 $(IMACKERN_DIR)/disk_nvme.o: $(NATIVE)/disk/disk_nvme.c $(NATIVE)/disk/disk_nvme.h $(NATIVE)/disk/disk.h
 $(IMACKERN_DIR)/tg3_x86.o: $(X86K)/tg3_x86.c $(IMACKERN_HDRS) $(KDIR)/mm/frames.h
+$(IMACKERN_DIR)/xhci_x86.o: $(X86K)/xhci_x86.c $(IMACKERN_HDRS) $(KDIR)/mm/frames.h $(KDIR)/dev/usb_hid.h
+$(IMACKERN_DIR)/usb_hid.o: $(KDIR)/dev/usb_hid.c $(KDIR)/dev/usb_hid.h $(NATIVE)/argus/sha256.h
+$(IMACKERN_DIR)/sha256.o: $(NATIVE)/argus/sha256.c $(NATIVE)/argus/sha256.h
 $(IMACKERN_DIR)/report_x86.o: $(X86K)/report_x86.c $(X86K)/report_x86.h $(IMACKERN_HDRS) $(NATIVE)/net/aienos_net.h
 $(IMACKERN_DIR)/aienos_net.o: $(NATIVE)/net/aienos_net.c $(NATIVE)/net/aienos_net.h
 $(sort $(IMACKERN_OBJS) $(IMACKERN_REPORT_OBJS)):
