@@ -9,7 +9,8 @@
  * PHY link), then the BCM57766 driven for transmit by tg3_x86.c, which waits
  * up to 8 s for a link. Config writes: memory decode and bus mastering for the
  * functions the kernel drives, and the BCM57766's own register-access and
- * PCIe settings (tg3_x86.c).
+ * PCIe settings (tg3_x86.c). Afterwards, ck_x86_usb offers each xHCI
+ * controller to the keyboard driver (xhci_x86.c).
  *
  * Disks are read-only here. The NVMe driver resets and enables the controller
  * and creates its queues (no media is touched by that); the kernel then reads
@@ -226,6 +227,51 @@ static void net_drive(const struct pfn *f, struct ck_frames *fr)
     res.net_link = ck_x86_tg3_link() ? 1 : 2;
     if (res.net_link != 1)
         ck_puts("net_tg3: no link after 8 s (cable unplugged?); the report is sent if it comes up during the hold\n");
+}
+
+/* ---- USB: the keyboard ----
+ * Every xHCI function (class 0x0c0330) in walk order, brought to D0 with
+ * memory decode and bus mastering on, is offered to xhci_x86.c until one has a
+ * boot keyboard. A controller that answers all ones (the Thunderbolt one
+ * powered down with nothing plugged in) is skipped there. */
+void ck_x86_usb(struct ck_frames *fr, uint64_t tsc_hz)
+{
+    unsigned n = 0;
+    for (unsigned i = 0; i < nfound && !ck_x86_kbd_ready(); i++) {
+        const struct pfn *f = &found[i];
+        if (f->cls != 0x0c0330 || (f->ht & 0x7f) != 0)
+            continue;
+        uint32_t lo = cr32(f->cfg, 0x10), hi = (lo & 6) == 4 ? cr32(f->cfg, 0x14) : 0;
+        uint64_t bar = ((uint64_t)hi << 32 | lo) & ~0xfull;
+        ck_printf("pci: xhci %02x:%02x.%u id=%04x:%04x bar0=0x%llx\n", f->bus, f->dev, f->fn, f->vendor, f->device,
+                  (unsigned long long)bar);
+        unsigned ctrl = n++;
+        if ((lo & 1) || !bar || ck_x86_map_mmio(bar, 0x10000)) {
+            ck_printf("xhci: ctrl=%u skipped (BAR0 not a usable memory BAR)\n", ctrl);
+            continue;
+        }
+        if (cr16(f->cfg, 6) & 0x10) /* power management capability: D3hot -> D0 */
+            for (unsigned p = cr32(f->cfg, 0x34) & 0xfc, k = 0; p && k < 48; k++) {
+                uint32_t h = cr32(f->cfg, p);
+                if ((h & 0xff) == 1) {
+                    uint16_t pmcsr = cr16(f->cfg, p + 4);
+                    if (pmcsr & 3) {
+                        cw16(f->cfg, p + 4, (uint16_t)(pmcsr & ~3u));
+                        uint64_t t0 = ck_rdtsc();
+                        while (ck_rdtsc() - t0 < tsc_hz / 100) /* 10 ms, PCI PM 1.2 D3hot -> D0 */
+                            ck_pause();
+                    }
+                    break;
+                }
+                p = (h >> 8) & 0xfc;
+            }
+        cw16(f->cfg, 4, (uint16_t)(cr16(f->cfg, 4) | 0x6)); /* memory decode + bus master */
+        (void)ck_x86_xhci_start(ctrl, (volatile uint8_t *)(uintptr_t)bar, fr, tsc_hz);
+    }
+    if (!n)
+        ck_puts("keyboard: none (no USB controller)\n");
+    else if (!ck_x86_kbd_ready())
+        ck_puts("keyboard: none (no USB keyboard found)\n");
 }
 
 const struct ck_x86_storage_result *ck_x86_storage(uint64_t rsdp, struct ck_frames *fr, uint64_t tsc_hz,
