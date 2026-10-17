@@ -27,6 +27,8 @@
 #include "../core/handoff_check.h"
 #include "../mm/frames.h"
 #include "../mm/heap.h"
+#include "../svc/allen_reply.h"
+#include "../ui/allen_ui.h"
 #include "x86.h"
 
 #ifndef AIENOS_COMMIT
@@ -251,6 +253,63 @@ static void acpi_reset(void)
 }
 #endif
 
+/* Allen on the screen (ui/allen_ui.c) with its first local answers
+ * (svc/allen_reply.c). Every Enter gets an answer on the console
+ * ("allen: ..."); when a keyboard is ready and the RAM for drawing is there,
+ * the screen switches from the boot report to Allen's window for the hold.
+ * Without either, the text screen stays as it was. */
+static int allen_on;
+
+static void allen_edit(const char *buf, unsigned len) { ck_allen_ui_input(buf, len, ck_rdtsc()); }
+
+static void allen_line(const char *text)
+{
+    const char *reply = ck_allen_reply(text);
+    ck_printf("allen: %s\n", reply);
+    /* the only line about it the lab report may carry: lengths, no words */
+    ck_printf("screen: Allen answered (%u characters in, %u out)\n", (unsigned)strlen(text), (unsigned)strlen(reply));
+    ck_allen_ui_said(text, reply, ck_rdtsc());
+}
+
+static void allen_window(void)
+{
+    static char footer[64];
+    volatile uint32_t *px;
+    uint32_t w, h, pitch, format;
+    uint64_t pa;
+    ck_x86_kbd_sink(0, allen_line);
+    if (ck_x86_console_fb_get(&px, &w, &h, &pitch, &format)) {
+        ck_puts("screen: text only (no framebuffer for Allen's window)\n");
+        return;
+    }
+    size_t need = ck_allen_ui_mem_bytes(w, h);
+    uint64_t pages = (need + CK_PAGE - 1) / CK_PAGE;
+    if (ck_frames_alloc(&frames, pages, CK_PAGE, &pa)) {
+        ck_printf("screen: text only (no %llu MiB for Allen's window)\n", (unsigned long long)(need >> 20));
+        return;
+    }
+    ck_snprintf(footer, sizeof footer, "This iMac %s %u s after the last key", CK_X86_REPORT ? "restarts" : "turns off",
+                ck_x86_kbd_idle_s());
+    ck_printf("screen: Allen's window (%ux%u, %llu MiB drawing memory)\n", w, h, (unsigned long long)(need >> 20));
+    uint64_t t0 = ck_rdtsc();
+    if (ck_allen_ui_start(px, w, h, pitch, format, (void *)(uintptr_t)pa, pages * CK_PAGE, tsc_hz, t0, footer)) {
+        ck_puts("screen: text only (Allen's window refused the screen)\n");
+        ck_frames_free(&frames, pa, pages);
+        return;
+    }
+    ck_x86_console_fb_off();
+    ck_x86_kbd_sink(allen_edit, allen_line);
+    allen_on = 1;
+    ck_printf("screen: Allen's window drawn in %llu ms\n", (unsigned long long)((ck_rdtsc() - t0) * 1000 / tsc_hz));
+}
+
+void ck_x86_hold_step(uint64_t *end)
+{
+    ck_x86_kbd_hold_poll(end);
+    if (allen_on)
+        ck_allen_ui_tick(ck_rdtsc());
+}
+
 static __attribute__((noreturn)) void finish(void)
 {
     ck_cli();
@@ -266,6 +325,8 @@ static __attribute__((noreturn)) void finish(void)
     if (CK_X86_HOLD_S && ck_x86_kbd_ready())
         ck_printf("keyboard: type a line and press Enter; the screen stays on until %u s after the last key\n",
                   ck_x86_kbd_idle_s());
+    if (CK_X86_HOLD_S && ck_x86_kbd_ready())
+        allen_window();
     if (CK_X86_HOLD_S) {
 #if CK_X86_REPORT
         /* Lab build only (make imac-kernel CK_X86_REPORT=1): sends the
@@ -278,7 +339,7 @@ static __attribute__((noreturn)) void finish(void)
         ck_printf("power: holding the screen %u s, then ACPI S5\n", (unsigned)CK_X86_HOLD_S);
         uint64_t end = ck_rdtsc() + (uint64_t)CK_X86_HOLD_S * tsc_hz; /* typing moves it out */
         while (ck_rdtsc() < end) {
-            ck_x86_kbd_hold_poll(&end);
+            ck_x86_hold_step(&end);
             ck_pause();
         }
         ck_x86_kbd_done();

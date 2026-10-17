@@ -40,12 +40,14 @@
 
 /* The allowlist: every key the iMac kernel prints (the x86 sources, efi_gop.c,
  * and the disk report's ahci_/nvme_ _read and _gpt lines), minus "memory:",
- * which describes the kernel's own memory layout. A new key stays off the
+ * which describes the kernel's own memory layout, and minus what is said to
+ * Allen ("keyboard_line:" and "allen:"): the conversation never leaves the
+ * iMac; "screen: Allen answered" carries only lengths. A new key stays off the
  * report until it is added here. */
 static const char *const allowed_keys[] = {
     "acpi_rsdp", "ahci", "ahci_disk", "ahci_gpt", "ahci_port", "ahci_read", "aienos_commit", "apic", "cpu",
     "descriptors", "exit_boot_services", "firmware_cpl", "firmware_revision", "firmware_vendor", "gop",
-    "guard_page", "handoff", "image", "kernel", "kernel_impl", "keyboard", "keyboard_line", "madt", "net",
+    "guard_page", "handoff", "image", "kernel", "kernel_impl", "keyboard", "madt", "net",
     "net_tg3", "note", "nvme", "nvme_disk", "nvme_gpt", "nvme_read", "paging", "panic", "pci", "power", "report",
     "report_kind", "screen", "smp", "stack", "storage", "summary", "timebase", "timer_irq", "timer_stats", "usb",
     "xhci",
@@ -181,7 +183,7 @@ unsigned ck_x86_report_hold(uint64_t tsc_hz, unsigned seconds)
     uint64_t t0 = ck_rdtsc(), end = t0 + (uint64_t)seconds * tsc_hz, next = t0;
     if (busy++ || !ck_x86_tg3_ready()) {
         while (ck_rdtsc() < end) {
-            ck_x86_kbd_hold_poll(&end);
+            ck_x86_hold_step(&end);
             ck_pause();
         }
         return 0;
@@ -196,7 +198,7 @@ unsigned ck_x86_report_hold(uint64_t tsc_hz, unsigned seconds)
     ck_x86_tg3_mac(mac);
     uint64_t run = 0;
     while (ck_rdtsc() < end) {
-        ck_x86_kbd_hold_poll(&end); /* typing keeps the hold going */
+        ck_x86_hold_step(&end); /* typing keeps the hold going */
         if (ck_rdtsc() < next) {
             ck_pause();
             continue;

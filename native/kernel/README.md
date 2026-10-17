@@ -200,6 +200,25 @@ and rebuilds each run into `OUTDIR/imac-<run>.unauthenticated.txt`;
 the allowlist (sentinel lines never leave), the frames and reassembly on the
 host.
 
+**Keyboard and Allen's window.** `x86/xhci_x86.c` drives a wired USB boot
+keyboard (polled xHCI, through USB 2.0 hubs). When one is ready and the frame
+allocator has room for two full-screen layers, the screen switches from the
+boot report to Allen's window (`ui/allen_ui.c`): an aurora background, a glass
+window with Allen's orb (it breathes while waiting, glows while answering),
+the conversation as bubbles and an input field, all in Allen's own stroke
+typeface (`ui/allen_font.c`, every printable ASCII character as pen strokes,
+rasterized with integer math). Each Enter gets a local answer from
+`svc/allen_reply.c` ("Hello Allen" gives "Hello Humanity."; anything it does
+not know gives "I don't know that yet."), printed as `allen: <answer>` on the
+console. The conversation stays on the iMac: `keyboard_line:` and `allen:`
+are off the lab report's allowlist, which carries only `screen: Allen
+answered (N characters in, M out)`. Without a keyboard or the memory the text
+screen stays. Tests: `scripts/ck_allen_ui_test.sh` (host, pictures in
+`target/native-kernel-allen-ui/`) and `scripts/qemu_ck_imac_keyboard_test.sh`
+(QEMU, types "Hello Allen", keeps a screenshot as
+`target/native-kernel-imac-keyboard/allen-qemu.png`). Nothing is remembered
+across a restart yet.
+
 Output: the GOP framebuffer
 (`core/fbcon.c`, lines from before ExitBootServices replayed onto it) and COM1
 when a 16550 answers there (QEMU; the iMac has none). Shared, unchanged:

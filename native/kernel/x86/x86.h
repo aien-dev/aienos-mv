@@ -85,6 +85,13 @@ int ck_x86_console_fb_on(volatile void *base, uint32_t width, uint32_t height, u
 /* console_x86.c: the RAM copy of everything written so far (the first
  * 16 KiB); in the lab image, the input the network report filters. */
 const char *ck_x86_console_log(size_t *len);
+/* console_x86.c: the screen for another drawer (Allen's window). get: its
+ * framebuffer (pitch in pixels, format 0 RGBX / 1 BGRX), or -1 when there is
+ * none; off: console text stops drawing on it and goes on to the RAM copy and
+ * COM1 only. */
+int ck_x86_console_fb_get(volatile uint32_t **px, uint32_t *width, uint32_t *height, uint32_t *pitch,
+                          uint32_t *format);
+void ck_x86_console_fb_off(void);
 
 /* pci_x86.c: PCI walk over the MCFG ECAM window; every AHCI and NVMe disk
  * read-only (identify, read, GPT check), a look at the Ethernet chip. */
@@ -118,6 +125,13 @@ unsigned ck_x86_kbd_idle_s(void);
 /* Ends the typing session at the end of the hold: "keyboard: done (lines=N)" on
  * its own line (once; nothing when no keyboard ran). */
 void ck_x86_kbd_done(void);
+/* Where typed text goes besides the console: edit(buf, len) after every key
+ * that changed the line, line(text) after each Enter (after its
+ * "keyboard_line:" line). Either may be NULL. */
+void ck_x86_kbd_sink(void (*edit)(const char *buf, unsigned len), void (*line)(const char *text));
+/* kmain_x86.c: one step of the screen hold: waiting keys (which may move *end
+ * out) and the window's animation. Called in every hold loop. */
+void ck_x86_hold_step(uint64_t *end);
 
 /* tg3_x86.c: the Broadcom BCM57766 Ethernet chip, transmit only, polled.
  * start: regs = BAR0 (mapped), cfg = its ECAM config space; 0 when the chip

@@ -726,6 +726,15 @@ int ck_x86_xhci_start(unsigned ctrl, volatile uint8_t *bar0, struct ck_frames *f
 
 int ck_x86_kbd_ready(void) { return x.kbd && !x.stopped; }
 
+static void (*sink_edit)(const char *buf, unsigned len);
+static void (*sink_line)(const char *text);
+
+void ck_x86_kbd_sink(void (*edit)(const char *buf, unsigned len), void (*line)(const char *text))
+{
+    sink_edit = edit;
+    sink_line = line;
+}
+
 static void echo(char c)
 {
     if (c == '\b')
@@ -767,10 +776,18 @@ static int poll_keys(void)
                 ck_printf("\nkeyboard_line: refused (%u keys typed, limit %u)\n", g_line.typed,
                           (unsigned)CK_LINE_CAP);
                 ck_line_reset(&g_line);
+                if (sink_edit)
+                    sink_edit(g_line.buf, 0);
             } else if (r == CK_LINE_DONE) {
                 g_lines++;
                 ck_printf("\nkeyboard_line: %s\n", g_line.buf);
+                if (sink_line)
+                    sink_line(g_line.buf);
                 ck_line_reset(&g_line);
+                if (sink_edit)
+                    sink_edit(g_line.buf, 0);
+            } else if (sink_edit) {
+                sink_edit(g_line.buf, g_line.len);
             }
         }
     }

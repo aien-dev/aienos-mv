@@ -38,6 +38,7 @@ static const char allowed_part[] =
     "pci: ahci 00:1f.2 id=8086:2922 class=0106\n"
     "net_tg3: link up 1000 Mb/s full duplex\n"
     "summary: cores=4/4 timer=ok sata_disks=1 nvme_disks=1 gpt_valid=1 writes=none net=up\n"
+    "screen: Allen answered (11 characters in, 15 out)\n"
     "kernel: alive\n"
     "panic: exception: vector 14 #PF error=0x2\n"
     "AIENOS-IMAC-KERNEL-0 DONE\n";
@@ -64,6 +65,8 @@ static size_t build_mixed(char *out, size_t cap)
         "power: \r SENTINEL-CR\n",
         "net_tg3: link up 1000 Mb/s full duplex\n",
         "summary: cores=4/4 timer=ok sata_disks=1 nvme_disks=1 gpt_valid=1 writes=none net=up\n",
+        "keyboard_line: Hello SENTINEL-TYPED\n",
+        "screen: Allen answered (11 characters in, 15 out)\n",
         "\n",
         "kernel: alive\n",
         "panic: exception: vector 14 #PF error=0x2\n",
