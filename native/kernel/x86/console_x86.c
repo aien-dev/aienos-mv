@@ -82,6 +82,21 @@ int ck_x86_console_fb_on(volatile void *base, uint32_t width, uint32_t height, u
     return 0;
 }
 
+int ck_x86_console_fb_get(volatile uint32_t **px, uint32_t *width, uint32_t *height, uint32_t *pitch,
+                          uint32_t *format)
+{
+    if (!fb_on || fb_busy)
+        return -1;
+    *px = fb.px;
+    *width = fb.width;
+    *height = fb.height;
+    *pitch = fb.pitch;
+    *format = fb.format;
+    return 0;
+}
+
+void ck_x86_console_fb_off(void) { fb_on = 0; /* text keeps going to the RAM copy and COM1 */ }
+
 const char *ck_x86_console_log(size_t *len)
 {
     *len = log_len;

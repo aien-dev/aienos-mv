@@ -7,11 +7,15 @@
 # with OVMF and a qemu-xhci controller:
 #   hub     a usb-kbd behind a usb-hub (the shape of Apple's wired keyboards, which
 #           carry their own hub); keys are typed from OUTSIDE the guest through the
-#           QEMU monitor ("sendkey"): "hello" Enter, then "xy" Backspace "z" Enter.
+#           QEMU monitor ("sendkey"): "Hello Allen" Enter, then "xy" Backspace "z" Enter.
 #           The kernel must find the keyboard behind the hub (QEMU numbers its USB 2
 #           ports after the USB 3 ones, so "port=1.1" shows as e.g. 5.1), echo both lines as
-#           "keyboard_line: hello" and "keyboard_line: xz", keep the screen on while
-#           typed on, and power QEMU off by itself afterwards;
+#           "keyboard_line: Hello Allen" and "keyboard_line: xz", have Allen answer them
+#           ("allen: Hello Humanity.", "allen: I don't know that yet.", plus the
+#           content-free "screen: Allen answered (11 characters in, 15 out)"), switch the
+#           screen to Allen's window (a QEMU screendump of it is kept as
+#           $out/allen-qemu.png), keep the screen on while typed on, and power QEMU
+#           off by itself afterwards;
 #   direct  a usb-kbd on a root port: found on that port;
 #   none    the controller with nothing on it: "keyboard: none (no USB keyboard
 #           found)" and the normal boot otherwise.
@@ -39,6 +43,7 @@ if ! gh_quiet_check || ! gh_lock_take qemu_ck_imac_keyboard_test "${AIENOS_GATE_
     echo "${tag}: NOT_RUN (${gh_why})"
     exit 3
 fi
+rm -f "${out}/allen-qemu.png"
 work="$(mktemp -d)"
 pids=()
 cleanup() {
@@ -101,8 +106,17 @@ start none
 typed_ok=0
 if wait_for hub 300 '^keyboard: type a line and press Enter'; then
     exec 3>"${work}/hub.mon.in"
-    for k in h e l l o ret x y backspace z ret; do echo "sendkey ${k}" >&3; sleep 0.15; done
+    for k in shift-h e l l o spc shift-a l l e n ret; do echo "sendkey ${k}" >&3; sleep 0.15; done
     typed_ok=1
+    # Allen's answer appears letter by letter; give it time, then photograph the screen.
+    if wait_for hub 120 "^allen: Hello Humanity\.\$"; then
+        sleep 4
+        echo "screendump ${work}/hub.png -f png" >&3
+        for _ in $(seq 1 50); do [[ -s "${work}/hub.png" ]] && break; sleep 0.2; done
+        sleep 1
+        [[ -s "${work}/hub.png" ]] && cp "${work}/hub.png" "${out}/allen-qemu.png"
+    fi
+    for k in x y backspace z ret; do echo "sendkey ${k}" >&3; sleep 0.15; done
 fi
 wait_for direct 300 '^power: holding the screen' || true
 wait_for none 300 '^power: holding the screen' || true
@@ -123,8 +137,13 @@ chk "hub: hub walked" "${work}/hub.txt" '^usb: port [0-9]+: hub, [1-9][0-9]* por
 chk "hub: keyboard found behind the hub" "${work}/hub.txt" '^keyboard: ready \(controller 0, port [0-9]+\.1, full speed, slot [1-8], endpoint 0x8[1-9a-f]\)$'
 chk "hub: typing prompt" "${work}/hub.txt" '^keyboard: type a line and press Enter; the screen stays on until 60 s after the last key$'
 [[ ${typed_ok} == 1 ]] && echo "PASS  hub: keys sent from outside the guest" || { echo "FAIL  hub: keys not sent"; fails=$((fails + 1)); }
-chk "hub: first line typed" "${work}/hub.txt" '^keyboard_line: hello$'
+chk "hub: Allen's window took the screen" "${work}/hub.txt" '^screen: Allen.s window \([0-9]+x[0-9]+, [0-9]+ MiB drawing memory\)$'
+chk "hub: first line typed" "${work}/hub.txt" '^keyboard_line: Hello Allen$'
+chk "hub: Allen answers Hello Humanity." "${work}/hub.txt" '^allen: Hello Humanity\.$'
+chk "hub: the answer reported by lengths only (11 characters in, 15 out)" "${work}/hub.txt" '^screen: Allen answered \(11 characters in, 15 out\)$'
+[[ -s "${out}/allen-qemu.png" ]] && echo "PASS  hub: screenshot of Allen's window kept (${out}/allen-qemu.png)" || { echo "FAIL  hub: no screenshot"; fails=$((fails + 1)); }
 chk "hub: backspace edits the line" "${work}/hub.txt" '^keyboard_line: xz$'
+chk "hub: Allen says what it does not know" "${work}/hub.txt" "^allen: I don't know that yet\.\$"
 chk "hub: typing session ended on its own line" "${work}/hub.txt" '^keyboard: done \(lines=2\)$'
 chk "hub: kernel alive" "${work}/hub.txt" '^kernel: alive$'
 chk "hub: ACPI S5 power off" "${work}/hub.txt" '^power: off via ACPI S5 '
@@ -142,6 +161,11 @@ if grep -aqE '^keyboard: ready' "${work}/none.txt"; then
     echo "FAIL  none: claimed a keyboard"; fails=$((fails + 1))
 else
     echo "PASS  none: no keyboard claimed"
+fi
+if grep -aqE '^screen: Allen' "${work}/none.txt"; then
+    echo "FAIL  none: Allen's window without a keyboard"; fails=$((fails + 1))
+else
+    echo "PASS  none: text screen kept without a keyboard"
 fi
 
 for r in hub direct none; do
