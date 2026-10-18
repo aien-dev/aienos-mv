@@ -479,6 +479,31 @@ endif
 OUT ?= $(REPO)/target/native-kernel-test-pipe
 SMP_TEST_FLAGS += -DCK_PIPE_TEST=1
 endif
+# aienos-mv#429: CK_TASK_TEST=1 adds the TEST-ONLY task self-test (core/task_test.c, gate scripts/qemu_ck_task_test.sh):
+# when the boot disk Store has handed the three stage units (tests/fixtures/task) to admission, it runs pipelines of
+# them over native pipes with the task lifecycle (core/task.c) and the kernel runner (core/task_osc.c), and prints
+# task_check lines. Needs CK_SEED0B_TEST_ANCHOR=1 (TEST-signed units); exclusive with the other launch self-tests;
+# own OUT; announces itself; refused with CK_HARDWARE_STAGING and CK_SERVICE. Default images are checked to carry no
+# trace of it (task_check).
+CK_TASK_TEST ?=
+TASK_TEST_C :=
+ifneq ($(strip $(CK_TASK_TEST)),)
+ifneq ($(strip $(CK_TASK_TEST)),1)
+$(error CK_TASK_TEST must be empty or 1)
+endif
+ifneq ($(strip $(CK_HARDWARE_STAGING)),)
+$(error CK_TASK_TEST (TEST-only task self-test) cannot be combined with CK_HARDWARE_STAGING)
+endif
+ifneq ($(strip $(CK_SEED0B_TEST_ANCHOR)),1)
+$(error CK_TASK_TEST needs CK_SEED0B_TEST_ANCHOR=1 (it launches TEST-signed units))
+endif
+ifneq ($(strip $(CK_OSC_LAUNCH_TEST)$(CK_OSH_TEST)$(CK_PIPE_TEST)),)
+$(error CK_TASK_TEST is exclusive with CK_OSC_LAUNCH_TEST, CK_OSH_TEST and CK_PIPE_TEST)
+endif
+OUT ?= $(REPO)/target/native-kernel-test-task
+SMP_TEST_FLAGS += -DCK_TASK_TEST=1
+TASK_TEST_C := $(KDIR)/core/task.c $(KDIR)/core/task_osc.c $(KDIR)/core/task_test.c $(KDIR)/core/pipe.c
+endif
 # SLOTLDR.EFI trusted keys (native v1 plan P11 cut 2a; native/boot/slot_loader.c,
 # make slot-loader):
 #   CK_SLOT_KEYS=<file>  owner public keys, "owner_root_ed25519 <64 hex>" lines
@@ -659,7 +684,7 @@ endif
 ifneq ($(strip $(CK_CONSOLE_SESSION)),)
 $(error CK_SERVICE cannot be combined with CK_CONSOLE_SESSION)
 endif
-ifneq ($(strip $(CK_TEST_XHCI_MUTATION)$(CK_TEST_STORE_CRASH)$(CK_TEST_CONTINUITY)$(CK_TEST_FWCFG_ARTIFACTS)$(CK_TEST_SMP_SKIP_CPU)$(CK_TEST_ROLLBACK)$(CK_TEST_STALE_HANDOFF)$(CK_TEST_DISK_XLATE_BYPASS)$(CK_PIPE_TEST)),)
+ifneq ($(strip $(CK_TEST_XHCI_MUTATION)$(CK_TEST_STORE_CRASH)$(CK_TEST_CONTINUITY)$(CK_TEST_FWCFG_ARTIFACTS)$(CK_TEST_SMP_SKIP_CPU)$(CK_TEST_ROLLBACK)$(CK_TEST_STALE_HANDOFF)$(CK_TEST_DISK_XLATE_BYPASS)$(CK_PIPE_TEST)$(CK_TASK_TEST)),)
 $(error CK_SERVICE cannot be combined with a CK_TEST_* flag)
 endif
 endif
@@ -921,7 +946,7 @@ ART_C := $(KDIR)/core/artifact_loader.c $(KDIR)/core/osc_admit.c $(KDIR)/core/os
 	$(KDIR)/artifact/receipt.c $(KDIR)/artifact/osc_unit.c $(KDIR)/artifact/osc_receipt.c $(NATIVE)/argus/sha256.c $(NATIVE)/sig/sha512.c \
 	$(NATIVE)/sig/ed25519.c $(NATIVE)/sig/ct.c
 ART_INC := -I$(KDIR)/svc/compat -I$(KDIR)/artifact -I$(NATIVE)/sig -I$(NATIVE)/argus
-ART_C += $(OSH_TEST_C)
+ART_C += $(OSH_TEST_C) $(TASK_TEST_C)
 ifneq ($(strip $(CK_ARTIFACT_CARD)),)
 ART_C += $(KDIR)/core/artifact_card.c $(KDIR)/core/artifact_card_stage.c
 CORE_C += $(BOOT)/efi_artifact.c
@@ -1234,6 +1259,15 @@ define pipe_check
 	fi
 endef
 
+# task_check(elf): only a CK_TASK_TEST image may carry the TEST-only task self-test, and it must announce itself.
+define task_check
+	@if [ "$(strip $(CK_TASK_TEST))" = 1 ]; then \
+	  grep -aqF "TEST-ONLY task self-test" $(1) || { echo "task test image lacks its TEST-ONLY announcement"; rm -f $(1); exit 1; }; \
+	else \
+	  if grep -aqF "TEST-ONLY task self-test" $(1); then echo "default image carries the TEST-ONLY task self-test"; rm -f $(1); exit 1; fi; \
+	fi
+endef
+
 # smp_check(elf): only a CK_TEST_SMP_SKIP_CPU image may carry the SMP mutation
 # announcement, and such an image must carry it.
 define smp_check
@@ -1326,6 +1360,7 @@ $(ELF): $(CORE_OBJS) $(BOOT)/image.ld
 	  echo "default image carries the TEST-only stale handoff"; rm -f $@; exit 1; fi
 	$(call rollback_check,$@)
 	$(call pipe_check,$@)
+	$(call task_check,$@)
 	@s=$$($(KNM) $@ | grep -E ' [TtDdBbWwVv] ck_stage_(devices|security|store|quiesce)$$' || true); \
 	if [ -n "$$s" ]; then echo "core image defines stage symbols: $$s"; rm -f $@; exit 1; fi
 	$(call fwcfg_check,$@)
@@ -1336,6 +1371,7 @@ $(FULL_ELF): $(CORE_OBJS) $(STAGE_BUILT) $(BOOT)/image.ld
 	$(call link_image,$@,$(CORE_OBJS) $(STAGE_LINK) $(CK_RUST_LIBS) $(CK_INFER_LIB))
 	$(call rollback_check,$@)
 	$(call pipe_check,$@)
+	$(call task_check,$@)
 	@for s in $(FULL_STAGE_SYMS); do \
 	  $(KNM) $@ | grep -qE " [TW] $$s$$" || { echo "full image lacks $$s"; rm -f $@; exit 1; }; done
 	$(call fwcfg_check,$@)

@@ -21,6 +21,10 @@
 void ck_osh_save(const char *name, const uint8_t *b, size_t len, const struct osc_accept *acc);
 void ck_osh_all(void);
 #endif
+#ifdef CK_TASK_TEST
+void ck_task_save(const char *name, const uint8_t *b, size_t len, const struct osc_accept *acc);
+void ck_task_selftest(void);
+#endif
 #ifdef CK_SEED0B_TEST_ANCHOR
 #include "osc_unit_test_anchor.h"
 #include "osc_receipt_test_anchor.h"
@@ -462,6 +466,9 @@ unsigned ck_osc_candidate(const char *name, const uint8_t *b, size_t len)
 #ifdef CK_OSH_TEST
         ck_osh_save(name, b, len, &acc);
 #endif
+#ifdef CK_TASK_TEST
+        ck_task_save(name, b, len, &acc);
+#endif
         ck_printf("osc_unit: %s ACCEPT unit_digest=%s program_id=%s funcs=%u caps=%u signer=%s\n", name, d, i,
                   (unsigned)acc.function_count, (unsigned)acc.cap_count,
                   acc.signer_class == OSC_SIGNER_TEST ? "TEST" : "OWNER");
@@ -487,12 +494,14 @@ void ck_osc_summary(void)
         ck_printf("osc_receipts: seen=%u stored=%u dropped=%u (each is verified when a launch presents it)\n", rcpt_seen,
                   rcpt_n, rcpt_dropped);
     if (seen || oversize)
-#if defined(CK_OSC_LAUNCH_TEST) || defined(CK_OSH_TEST)
+#if defined(CK_OSC_LAUNCH_TEST) || defined(CK_OSH_TEST) || defined(CK_TASK_TEST)
     {
         ck_printf("osc_units: seen=%u accepted=%u refused=%u oversize=%u (admission; launches follow)\n", seen, accepted,
                   refused, oversize);
-#ifdef CK_OSC_LAUNCH_TEST
+#if defined(CK_OSC_LAUNCH_TEST)
         lt_all();
+#elif defined(CK_TASK_TEST)
+        ck_task_selftest(); /* TEST-ONLY (core/task_test.c, scripts/qemu_ck_task_test.sh) */
 #else
         ck_osh_all();
 #endif

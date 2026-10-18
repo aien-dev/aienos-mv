@@ -1,0 +1,37 @@
+// tgen.osc -- pipeline stage "gen" for the native task lifecycle test (aienos-mv#429). TEST fixture.
+// Stage ABI v1 (this kernel's own, core/task.h, UNVERIFIED against a frozen contract): one resumable step
+// `gen_step(inp: bytes, w: cells) -> u64`; returns 0 MORE (call again) or 1 DONE (exit status in w[4]); w[3] = output
+// bytes this step, one byte per cell from w[64]. Header w[0] = 0x4F535447 ("OSTG"), w[1] = 1, w[2] bit 0 = stdin EOF.
+// Parameters: w[8] total bytes to emit (0 = never ends), w[9] bytes per step (1..4096, else 4096). State: w[16] sent.
+// Byte i of the stream is 0 when i % 5 == 0, else ((i * 2654435761) mod 2^32) >> 13, low 8 bits (pipe_drive.h pd_byte).
+fn gen_step(inp: bytes, w: cells) -> u64 {
+    if w[0] != 1330861127 || w[1] != 1 { return 200; }
+    let total: u64 = w[8];
+    let mut per: u64 = w[9];
+    if per == 0 || per > 4096 { per = 4096; }
+    let sent: u64 = w[16];
+    let mut n: u64 = per;
+    if total != 0 {
+        if sent >= total {
+            w[3] = 0;
+            w[4] = 0;
+            return 1;
+        }
+        if total - sent < n { n = total - sent; }
+    }
+    let mut j: u64 = 0;
+    while j < n bound 4096 {
+        let i: u64 = sent + j;
+        let mut b: u64 = (((i * 2654435761) & 4294967295) >> 13) & 255;
+        if i % 5 == 0 { b = 0; }
+        w[64 + j] = b;
+        j = j + 1;
+    }
+    w[16] = sent + n;
+    w[3] = n;
+    if total != 0 && sent + n >= total {
+        w[4] = 0;
+        return 1;
+    }
+    return 0;
+}

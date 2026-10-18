@@ -1,0 +1,28 @@
+// txform.osc -- pipeline stage "xform" for the native task lifecycle test (aienos-mv#429). TEST fixture.
+// Stage ABI v1 (core/task.h, UNVERIFIED): see tgen.osc. Copies its input to its output XORed with a key.
+// Parameters: w[8] key (low 8 bits), w[9] stop after this many input bytes with exit status w[10] (0 = never),
+// w[11] trap after this many input bytes (0 = never): an out-of-bounds cell index, OSC_TRAP_BOUNDS (3).
+// State: w[16] bytes seen. At stdin EOF (w[2] bit 0) with no input it ends with status 0.
+fn xform_step(inp: bytes, w: cells) -> u64 {
+    if w[0] != 1330861127 || w[1] != 1 { return 200; }
+    let n: u64 = inp.len;
+    let key: u64 = w[8] & 255;
+    let mut j: u64 = 0;
+    while j < n bound 4096 {
+        w[64 + j] = inp[j] ^ key;
+        j = j + 1;
+    }
+    let seen: u64 = w[16] + n;
+    w[16] = seen;
+    w[3] = n;
+    if w[11] != 0 && seen >= w[11] { return w[w.len]; }
+    if w[9] != 0 && seen >= w[9] {
+        w[4] = w[10];
+        return 1;
+    }
+    if (w[2] & 1) == 1 && n == 0 {
+        w[4] = 0;
+        return 1;
+    }
+    return 0;
+}

@@ -1,0 +1,24 @@
+Native task lifecycle fixtures (aienos-mv#429): three pipeline stage units and their realization receipts.
+Label for everything here: QEMU (aarch64 virt), TEST signer, not physical.
+
+Sources:    tgen.osc, txform.osc, tsink.osc (this directory; stage ABI v1, core/task.h, UNVERIFIED own contract).
+Compiler:   oscc built from aien-dev/omega a8ffd2b912c84197d08f963b05f9c7d8b30a3f8a (main on 2026-10-18).
+            IR and code are REAL oscc output, one function per unit, entry record from oscc's .entries
+            (fn 0, nregs 4, ret_kind 5, reg_kind 11 5 12 5: bytes, u64, cells, u64).
+Containers: the spec's own generator helpers (aien-protocols-mv specs/osc-unit-artifact/tools/make-vectors.sh at
+            fb5fca98e6676bb104888c73268e0f9a81e9c63e), TEST signer (throwaway key test1), no caps,
+            max_stack_bytes 16384, cpu_ticks 1000.
+Receipts:   omega checker2 (src/checker2 unchanged since 265ce82a, the commit pinned in osc_receipt/PROVENANCE.txt, so the
+            same checker_id), TEST key, target aienos-ck-aarch64-el0, epoch 10, expiry 1000; each verified VALID by
+            checker2 under the kernel's qualification policy (floor 10, epoch 20) by make-task-units.sh.
+Reproduce:  make-task-units.sh --check <aien-protocols specs/osc-unit-artifact> <omega checkout> rebuilds all six files in
+            a temporary directory and requires them byte-identical (run on 2026-10-18: all six "same").
+  tgen.osc    sha256=99612174766e20494f5cccdea10d3d6512313e89c534a9cd5bd660b927d66fc7
+  tgen.unit   sha256=515dd55e1e87d293181a3ce8cd844e5c0ae568fb59eb9a10b924b4a45a62e115 bytes=3656
+  tgen.rcpt   sha256=d0fad94e14f1af25190242cf7019d19e9947fc90b15a56176999e23d16837dad
+  txform.osc    sha256=68eb2395e352b1b1d47d0615d4ecb82ab385f9a9046bfdd81b96bffc0cfe79c9
+  txform.unit   sha256=969416857991812951a62220bee0aef454a80819f1001bd2cb0546a3ceefd849 bytes=3384
+  txform.rcpt   sha256=c49f0a672676a3a0224418db2a49c4aa17eefb06218c1008dc93e694724ebfd4
+  tsink.osc    sha256=2daa865c40145c37cf29612ccc2aab9258139f814f226a1ca059052b7f4c6570
+  tsink.unit   sha256=f7d52277661889bd812cc5aed884f074b5333d5073146b8eae252d60e07dfdd1 bytes=4168
+  tsink.rcpt   sha256=6fc3605969472f852ed3daaa5576b318c15cc2ff608565c27bc74a11dbe4ebea

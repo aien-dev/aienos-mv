@@ -1,0 +1,36 @@
+// tsink.osc -- pipeline stage "sink" for the native task lifecycle test (aienos-mv#429). TEST fixture.
+// Stage ABI v1 (core/task.h, UNVERIFIED): see tgen.osc. Counts its input and folds it into FNV-1a 64; at stdin EOF
+// (or early, see w[9]) it writes 16 bytes: the count then the hash, each 8 bytes little-endian, and ends with status 0.
+// Parameters: w[9] stop early after this many input bytes (0 = never: a consumer that exits early).
+// State: w[16] count, w[17] hash, w[18] 1 once the hash is seeded.
+fn sink_step(inp: bytes, w: cells) -> u64 {
+    if w[0] != 1330861127 || w[1] != 1 { return 200; }
+    let n: u64 = inp.len;
+    let mut h: u64 = w[17];
+    if w[18] == 0 {
+        h = 14695981039346656037;
+        w[18] = 1;
+    }
+    let mut j: u64 = 0;
+    while j < n bound 4096 {
+        h = (h ^ inp[j]) * 1099511628211;
+        j = j + 1;
+    }
+    w[17] = h;
+    let c: u64 = w[16] + n;
+    w[16] = c;
+    w[3] = 0;
+    let mut fin: u64 = 0;
+    if w[9] != 0 && c >= w[9] { fin = 1; }
+    if (w[2] & 1) == 1 && n == 0 { fin = 1; }
+    if fin == 1 {
+        for k in 0 .. 8 {
+            w[64 + k] = (c >> (k * 8)) & 255;
+            w[72 + k] = (h >> (k * 8)) & 255;
+        }
+        w[3] = 16;
+        w[4] = 0;
+        return 1;
+    }
+    return 0;
+}
