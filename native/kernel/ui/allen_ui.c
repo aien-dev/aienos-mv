@@ -31,7 +31,8 @@ static struct {
     uint32_t *base, *back;
     uint32_t k; /* 1/256 px per design px */
     ck_af_face title, body, small;
-    struct rect win, orb, convo, input;
+    struct rect win, orb, convo, input, map;
+    int map_on; /* the screen has room for the notes map beside the window */
     int32_t orb_r, radius;
     const char *footer;
     struct msg msgs[MSG_MAX];
@@ -305,11 +306,141 @@ static void header_text(const struct rect *cl)
     }
 }
 
+/* ---- the notes map ---- */
+
+/* What the map shows; kept apart from ui, so it survives ck_allen_ui_start. */
+static struct {
+    unsigned n, ne, total, links;
+    int lit;
+    uint8_t ea[CK_ALLEN_UI_MAP_LINKS], eb[CK_ALLEN_UI_MAP_LINKS];
+    char label[TEXT_MAX];
+    unsigned label_len;
+} map;
+
+static int32_t imin(int32_t a, int32_t b) { return a < b ? a : b; }
+static int32_t iabs(int32_t a) { return a < 0 ? -a : a; }
+
+/* A line th px wide from (x0, y0) to (x1, y1), anti-aliased, added as light. */
+static void seg(uint32_t *buf, const struct rect *cl, int32_t x0, int32_t y0, int32_t x1, int32_t y1, int32_t th,
+                uint32_t color, uint32_t a)
+{
+    struct rect d = {imin(x0, x1) - th - 1, imin(y0, y1) - th - 1, iabs(x1 - x0) + 2 * th + 3,
+                     iabs(y1 - y0) + 2 * th + 3};
+    if (!clip(&d, cl))
+        return;
+    int64_t ax = (int64_t)x0 * 16 + 8, ay = (int64_t)y0 * 16 + 8;
+    int64_t vx = (int64_t)(x1 - x0) * 16, vy = (int64_t)(y1 - y0) * 16, vv = vx * vx + vy * vy;
+    for (int32_t y = d.y; y < d.y + d.h; y++) {
+        uint32_t *row = buf + (size_t)y * ui.w;
+        for (int32_t x = d.x; x < d.x + d.w; x++) {
+            int64_t wx = (int64_t)x * 16 + 8 - ax, wy = (int64_t)y * 16 + 8 - ay;
+            int64_t t = vv ? wx * vx + wy * vy : 0;
+            t = t < 0 ? 0 : t > vv ? vv : t;
+            int64_t qx = wx - (vv ? vx * t / vv : 0), qy = wy - (vv ? vy * t / vv : 0);
+            uint32_t cov = cover((int32_t)ck_af_isqrt((uint64_t)(qx * qx + qy * qy)) - th * 8);
+            if (cov)
+                row[x] = add_sat(row[x], color, cov * a / 255);
+        }
+    }
+}
+
+/* Decimal digits of v into s; returns how many. */
+static unsigned put_num(char *s, unsigned v)
+{
+    char t[10];
+    unsigned n = 0, k = 0;
+    do
+        t[n++] = (char)('0' + v % 10);
+    while ((v /= 10) && n < sizeof t);
+    while (n)
+        s[k++] = t[--n];
+    return k;
+}
+
+/* Where point j sits: the newest at the centre, then a golden-angle spiral,
+ * spread by the square root of the order so the points cover the disc evenly
+ * (a few notes stay nearer the centre). */
+static void map_point(unsigned j, int32_t cx, int32_t cy, int32_t R, int32_t *x, int32_t *y)
+{
+    unsigned spread = map.n > 7 ? map.n - 1 : 6;
+    int32_t rad = (int32_t)((int64_t)R * ck_af_isqrt((uint64_t)j * 65536u / spread) / 256);
+    int32_t ang = (int32_t)(j * 275u / 2u % 360u);
+    *x = cx + (int32_t)((int64_t)rad * ck_af_cos(ang) / 16384);
+    *y = cy + (int32_t)((int64_t)rad * ck_af_sin(ang) / 16384);
+}
+
+static void map_panel(const struct rect *cl)
+{
+    if (!ui.map_on)
+        return;
+    struct rect p = ui.map, c = *cl;
+    if (!clip(&c, &p))
+        return;
+    rrect(ui.base, &c, p, S(26), RGB(22, 26, 48), RGB(22, 26, 48), 120, 0);
+    rrect(ui.base, &c, p, S(26), C_WHITE, C_WHITE, 34, S(1) > 1 ? S(1) : 1);
+    int32_t left = p.x + S(28);
+    text(ui.base, &c, &ui.body, left, p.y + S(50), "Notes", 5, C_TEXT, 255);
+    char line[48];
+    unsigned k = put_num(line, map.total);
+    const char *w1 = map.total == 1 ? " note, " : " notes, ";
+    for (; *w1; w1++)
+        line[k++] = *w1;
+    k += put_num(line + k, map.links);
+    const char *w2 = map.links == 1 ? " link" : " links";
+    for (; *w2; w2++)
+        line[k++] = *w2;
+    text(ui.base, &c, &ui.small, left, p.y + S(78), line, k, C_MUTED, 230);
+    /* the field: between the heading and the label line */
+    int32_t top = p.y + S(100), bottom = p.y + p.h - S(64);
+    int32_t cx = p.x + p.w / 2, cy = (top + bottom) / 2;
+    int32_t R = imin(p.w / 2 - S(34), (bottom - top) / 2 - S(14));
+    if (map.n == 0) {
+        static const char hint[] = "Saved notes appear here";
+        int32_t hw = (int32_t)ck_af_measure(&ui.small, hint, sizeof hint - 1);
+        text(ui.base, &c, &ui.small, cx - hw / 2, cy, hint, sizeof hint - 1, C_MUTED, 170);
+        return;
+    }
+    int32_t px[CK_ALLEN_UI_MAP_NODES], py[CK_ALLEN_UI_MAP_NODES];
+    unsigned deg[CK_ALLEN_UI_MAP_NODES] = {0};
+    for (unsigned j = 0; j < map.n; j++)
+        map_point(j, cx, cy, R, &px[j], &py[j]);
+    int32_t th = S(1) > 1 ? S(1) : 1;
+    for (unsigned i = 0; i < map.ne; i++) {
+        unsigned a = map.ea[i], b = map.eb[i];
+        int hot = (int)a == map.lit || (int)b == map.lit;
+        seg(ui.base, &c, px[a], py[a], px[b], py[b], hot ? th + 1 : th, hot ? C_TEAL : C_ACCENT, hot ? 170 : 70);
+        deg[a]++;
+        deg[b]++;
+    }
+    for (unsigned j = 0; j < map.n; j++) {
+        int32_t r = S(5) + (int32_t)(deg[j] < 6 ? deg[j] : 6) * S(1);
+        int hot = (int)j == map.lit;
+        if (hot)
+            r += S(3);
+        glow(ui.base, &c, px[j], py[j], r * (hot ? 6 : 3), hot ? C_TEAL : RGB(70, 90, 255), hot ? 170 : 80, 1);
+        rrect(ui.base, &c, (struct rect){px[j] - r, py[j] - r, 2 * r, 2 * r}, r, hot ? RGB(220, 255, 250)
+              : RGB(150, 190, 255), hot ? C_TEAL : RGB(110, 70, 230), 255, 0);
+    }
+    if (map.lit >= 0 && map.label_len) {
+        /* the lit note's text on the bottom line, cut with "..." to fit */
+        int32_t avail = p.w - S(56), dots = (int32_t)ck_af_measure(&ui.small, "...", 3);
+        unsigned n = map.label_len;
+        int cut = 0;
+        while (n && (int32_t)ck_af_measure(&ui.small, map.label, n) + (cut ? dots : 0) > avail)
+            n--, cut = 1;
+        int32_t lw = (int32_t)ck_af_measure(&ui.small, map.label, n) + (cut ? dots : 0);
+        int32_t x = text(ui.base, &c, &ui.small, cx - lw / 2, p.y + p.h - S(30), map.label, n, C_TEXT, 255);
+        if (cut)
+            text(ui.base, &c, &ui.small, x, p.y + p.h - S(30), "...", 3, C_TEXT, 255);
+    }
+}
+
 static void draw_base(const struct rect *cl)
 {
     background(cl);
     window(cl);
     header_text(cl);
+    map_panel(cl);
 }
 
 /* ---- the live layer ---- */
@@ -601,6 +732,9 @@ int ck_allen_ui_start(volatile uint32_t *fb, uint32_t w, uint32_t h, uint32_t pi
     ui.orb = (struct rect){ui.win.x + ww / 2 - ui.orb_r, ui.win.y + S(92) - ui.orb_r, 2 * ui.orb_r, 2 * ui.orb_r};
     ui.input = (struct rect){ui.win.x + S(48), ui.win.y + wh - S(132), ww - S(96), S(66)};
     ui.convo = (struct rect){ui.win.x + S(48), ui.win.y + S(272), ww - S(96), ui.input.y - S(26) - (ui.win.y + S(272))};
+    /* the notes map: right of the window, when it fits on the screen */
+    ui.map = (struct rect){ui.win.x + ww + S(40), ((int32_t)h - S(560)) / 2, S(340), S(560)};
+    ui.map_on = ui.map.x + ui.map.w <= (int32_t)w - S(8);
     ui.caret = 1;
     struct rect all = {0, 0, (int32_t)w, (int32_t)h};
     draw_base(&all);
@@ -677,4 +811,28 @@ void ck_allen_ui_tick(uint64_t now)
         ui.next_orb = now + ui.hz / 30;
         redraw(orb_area(), t);
     }
+}
+
+void ck_allen_ui_map(unsigned n, const uint8_t *ea, const uint8_t *eb, unsigned ne, int lit, const char *label,
+                     unsigned total, unsigned links)
+{
+    map.n = n < CK_ALLEN_UI_MAP_NODES ? n : CK_ALLEN_UI_MAP_NODES;
+    map.ne = 0;
+    for (unsigned i = 0; i < ne && map.ne < CK_ALLEN_UI_MAP_LINKS; i++)
+        if (ea[i] < map.n && eb[i] < map.n && ea[i] != eb[i]) {
+            map.ea[map.ne] = ea[i];
+            map.eb[map.ne++] = eb[i];
+        }
+    map.lit = lit >= 0 && (unsigned)lit < map.n ? lit : -1;
+    map.label_len = 0;
+    while (label && label[map.label_len] && map.label_len < TEXT_MAX)
+        map.label_len++;
+    for (unsigned i = 0; i < map.label_len; i++)
+        map.label[i] = label[i];
+    map.total = total;
+    map.links = links;
+    if (!ui.on || !ui.map_on)
+        return;
+    draw_base(&ui.map);
+    redraw(ui.map, 0);
 }

@@ -1,6 +1,6 @@
 /* allen_ui_test.c -- host test for Allen's window (ui/allen_ui.c), its
  * typeface (ui/allen_font.c) and its first answers (svc/allen_reply.c).
- * Draws the window into RAM at the iMac's 3840 x 2160 (and at 1280 x 800 RGBX),
+ * Draws the window into RAM at 3840 x 2160 BGRX (and at 1280 x 800 RGBX),
  * types "Hello Allen", lets Allen answer, checks the pixels, and writes PNG
  * pictures to the directory given as argv[1] (if any) for a person to look at.
  * Final line: ALLEN_UI_TEST: PASS|FAIL (N checks). */
@@ -140,6 +140,18 @@ static unsigned count(const uint32_t *px, uint32_t w, uint32_t h, int fmt, int k
     return n;
 }
 
+/* Pixels in a rectangle of a BGRX picture that are lit teal (the lit note). */
+static unsigned teal(const uint32_t *px, uint32_t pitch, uint32_t x0, uint32_t y0, uint32_t w, uint32_t h)
+{
+    unsigned n = 0;
+    for (uint32_t y = y0; y < y0 + h; y++)
+        for (uint32_t x = x0; x < x0 + w; x++) {
+            uint32_t c = px[(size_t)y * pitch + x];
+            n += (c >> 16 & 255) < 120 && (c >> 8 & 255) > 170 && (c & 255) > 150;
+        }
+    return n;
+}
+
 int main(int argc, char **argv)
 {
     const char *dir = argc > 1 ? argv[1] : 0;
@@ -242,7 +254,7 @@ int main(int argc, char **argv)
     ck_af_face_init(&small, 30, 1250, tiny, sizeof tiny);
     CHECK(ck_af_glyph_get(&small, 'W') == 0, "font: a full pool refuses instead of overrunning");
 
-    /* ---- the window at 3840 x 2160, BGRX (the iMac) ---- */
+    /* ---- the window at 3840 x 2160, BGRX ---- */
     uint32_t W = 3840, H = 2160;
     uint32_t *fb = calloc((size_t)W * H, 4);
     size_t need = ck_allen_ui_mem_bytes(W, H);
@@ -310,6 +322,49 @@ int main(int argc, char **argv)
             snprintf(path, sizeof path, "%s/allen-conversation.png", dir);
             png(path, fb, W, 1, 0, 0, W, H, 2);
         }
+    }
+
+    {
+        /* The notes map beside the window (at this size: x 3080..3760, y 520..1640):
+         * empty, then six notes with links and the newest lit, then none lit. */
+        const uint32_t mx = 3080, my = 520, mw = 680, mh = 1120;
+        CHECK(teal(fb, W, mx, my, mw, mh) == 0, "map: empty, nothing lit");
+        static const char *const said[] = {"the gate code is 4471", "the garage code is 9012",
+                                           "the wifi password is Blue-Fox-88", "the garage door opener is in the truck",
+                                           "the dentist is on friday at 10", "the truck needs new tires before the winter"};
+        static ck_allen_notes ns;
+        ns.n = 6;
+        for (unsigned i = 0; i < 6; i++)
+            ck_allen_note_set(&ns.note[i], said[i], 1);
+        uint8_t ea[32], eb[32];
+        unsigned ne = 0, links = 0;
+        for (unsigned a = 0; a < 6; a++) /* point 0 is the newest note */
+            for (unsigned b = a + 1; b < 6; b++)
+                if (ck_allen_note_links(&ns.note[5 - a], &ns.note[5 - b])) {
+                    ea[ne] = (uint8_t)a;
+                    eb[ne++] = (uint8_t)b;
+                    links++;
+                }
+        CHECK(links >= 3, "map: the six notes link (garage, code, truck)");
+        uint32_t mid = fb[(size_t)(H / 2) * W + W / 2];
+        ck_allen_ui_map(6, ea, eb, ne, 0, ns.note[5].text, 6, links);
+        unsigned lit = teal(fb, W, mx, my, mw, mh);
+        CHECK(lit > 150, "map: the lit note glows");
+        CHECK(fb[(size_t)(H / 2) * W + W / 2] == mid, "map: the conversation is left as it was");
+        if (dir) {
+            snprintf(path, sizeof path, "%s/allen-map.png", dir);
+            png(path, fb, W, 1, 0, 0, W, H, 2);
+            snprintf(path, sizeof path, "%s/allen-map-detail.png", dir);
+            png(path, fb, W, 1, mx - 40, my - 40, mw + 80, mh + 80, 1);
+        }
+        ck_allen_ui_map(6, ea, eb, ne, -1, 0, 6, links);
+        CHECK(teal(fb, W, mx, my, mw, mh) < lit / 4, "map: nothing lit after");
+        for (unsigned i = 0; i < 60; i++, now += 33)
+            ck_allen_ui_tick(now);
+        CHECK(teal(fb, W, mx, my, mw, mh) < lit / 4, "map: the orb's animation leaves the map alone");
+        ck_allen_ui_map(6, ea, eb, ne, 3, "a very long note that cannot possibly fit on the one line under the map", 6,
+                        links);
+        CHECK(teal(fb, W, mx, my, mw, mh) > 150, "map: a long label is cut to fit, not overrun");
     }
 
     /* ---- 1280 x 800 RGBX (QEMU's usual mode) ---- */

@@ -1,10 +1,11 @@
 /* allen_ui.h -- Allen's window on the display: an aurora background, a glass
  * window with Allen's living orb (it breathes while waiting and glows while
- * answering), the conversation as bubbles, and the line being typed in an
- * input field. Drawn with integer math into RAM and copied to the screen,
- * only where something changed. Pure: no MMIO of its own (the caller hands
- * in the framebuffer), host tested in ui/tests/allen_ui_test.c. Allen's text
- * uses its own stroke typeface (allen_font.h). */
+ * answering), the conversation as bubbles, the line being typed in an input
+ * field, and beside the window the map of Allen's notes. Drawn with integer
+ * math into RAM and copied to the screen, only where something changed. Pure:
+ * no MMIO of its own (the caller hands in the framebuffer), host tested in
+ * ui/tests/allen_ui_test.c. Allen's text uses its own stroke typeface
+ * (allen_font.h). */
 #ifndef AIENOS_ALLEN_UI_H
 #define AIENOS_ALLEN_UI_H
 #include <stddef.h>
@@ -28,5 +29,17 @@ void ck_allen_ui_input(const char *buf, unsigned len, uint64_t now);
 void ck_allen_ui_said(const char *line, const char *reply, uint64_t now);
 /* Animation: call often (every poll); it redraws only what is due. */
 void ck_allen_ui_tick(uint64_t now);
+
+/* The notes map, a glass panel beside the window (drawn when the screen has
+ * room for it): n notes as points, 0 the newest at the centre, the older ones
+ * spiralling out (at most CK_ALLEN_UI_MAP_NODES); ne links, point ea[i] to
+ * point eb[i] (notes that share a key word; at most CK_ALLEN_UI_MAP_LINKS);
+ * lit the point of the note just saved or handed back (-1: none) and label
+ * its text; total and links count every live note and link (the map may show
+ * only the newest). Kept, and drawn at once when the window is on. */
+#define CK_ALLEN_UI_MAP_NODES 48u
+#define CK_ALLEN_UI_MAP_LINKS 160u
+void ck_allen_ui_map(unsigned n, const uint8_t *ea, const uint8_t *eb, unsigned ne, int lit, const char *label,
+                     unsigned total, unsigned links);
 
 #endif
