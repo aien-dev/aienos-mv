@@ -32,6 +32,7 @@
 #include "../svc/allen_reply.h"
 #include "../ui/allen_ui.h"
 #include "x86.h"
+#include "../../boot/netboot_proto.h"
 
 #ifndef AIENOS_COMMIT
 #define AIENOS_COMMIT "unknown"
@@ -264,6 +265,19 @@ static void acpi_reset(void)
 static int allen_on;
 static uint64_t allen_bye; /* TSC when Allen said goodbye; 0 = still talking */
 static uint64_t allen_woke; /* TSC when Allen's window took the screen */
+
+#define STEP_MAX 16
+static struct {
+    const char *name;
+    uint64_t tsc;
+} steps[STEP_MAX];
+static unsigned nsteps;
+
+void ck_x86_step(const char *name)
+{
+    if (nsteps < STEP_MAX)
+        steps[nsteps].name = name, steps[nsteps++].tsc = ck_rdtsc();
+}
 static void night_stats(const char *when);
 static ck_allen_facts allen_facts; /* filled at the summary line */
 static ck_allen_mind allen_mind;
@@ -410,12 +424,45 @@ static void night_stats(const char *when)
               draw_on ? "a secondary core" : "the boot core");
 }
 
+/* Time since the power button for each step. The TSC counts from power-on
+ * (and from every reset), so its value at a step is the time since then:
+ * firmware until the loader (or this kernel) starts, the loader, this kernel
+ * until Allen's window takes the screen and the keyboard. */
+static void boot_times(void)
+{
+    const struct nb_pass *np = ck_x86_netldr_pass(0);
+    uint64_t per_ms = tsc_hz / 1000u, entry = hand->uefi_entry_ticks;
+    if (!per_ms)
+        return;
+    if (np)
+        ck_printf("boot_time: since power on: firmware until the loader %llu ms, loader %llu ms, kernel %llu ms; "
+                  "Allen's window at %llu ms\n", (unsigned long long)(np->loader_tsc / per_ms),
+                  (unsigned long long)((entry - np->loader_tsc) / per_ms),
+                  (unsigned long long)((allen_woke - entry) / per_ms), (unsigned long long)(allen_woke / per_ms));
+    else
+        ck_printf("boot_time: since power on: firmware until this kernel %llu ms (no loader), kernel %llu ms; "
+                  "Allen's window at %llu ms\n", (unsigned long long)(entry / per_ms),
+                  (unsigned long long)((allen_woke - entry) / per_ms), (unsigned long long)(allen_woke / per_ms));
+    /* each step of this kernel, and when the night reached the screen */
+    static char line[240]; /* the report keeps lines up to 240 characters */
+    uint64_t prev = entry;
+    int n = ck_snprintf(line, sizeof line, "boot_time: steps in ms:");
+    for (unsigned k = 0; k < nsteps && n > 0 && (size_t)n < sizeof line; k++) {
+        n += ck_snprintf(line + n, sizeof line - (size_t)n, " %s %llu", steps[k].name,
+                         (unsigned long long)((steps[k].tsc - prev) / per_ms));
+        prev = steps[k].tsc;
+    }
+    ck_printf("%s window %llu; the night on screen at %llu ms\n", line, (unsigned long long)((allen_woke - prev) / per_ms),
+              night_t0 ? (unsigned long long)(night_t0 / per_ms + night_ms) : 0ull);
+}
+
 static void allen_window(void)
 {
     static char footer[64];
     volatile uint32_t *px;
     uint32_t w, h, pitch, format;
     uint64_t pa;
+    ck_x86_step("keyboard");
     ck_allen_mind_init(&allen_mind, &allen_facts);
     allen_mind.notes = &allen_notes;
     if (ck_x86_memory_open(&allen_mind.mem, &allen_notes, tsc_hz)) {
@@ -427,6 +474,7 @@ static void allen_window(void)
         allen_notes.n = 0; /* nothing half-loaded is kept */
         allen_mind.mem.nnotes = 0;
     }
+    ck_x86_step("memory");
     ck_x86_kbd_sink(0, allen_line);
     if (ck_x86_console_fb_get(&px, &w, &h, &pitch, &format)) {
         ck_puts("screen: text only (no framebuffer for Allen's window)\n");
@@ -458,6 +506,7 @@ static void allen_window(void)
     ck_x86_kbd_sink(allen_edit, allen_line);
     allen_on = 1;
     allen_woke = ck_rdtsc();
+    boot_times();
     night_stats("before Allen woke");
     allen_map(); /* the notes loaded from disk, before the first word */
     const char *hello = ck_allen_welcome(&allen_mind);
@@ -1267,7 +1316,9 @@ static __attribute__((noreturn)) void kernel_main(void *arg)
     (void)arg;
     const struct ck_handoff *h = hand;
     tsc_measure(); /* first: the night runs on this clock */
+    ck_x86_step("clock");
     night_start(h);
+    ck_x86_step("night");
     if (h->fb_status == CK_HANDOFF_FB_PRESENT && mm.fb_ok) {
         uint32_t scale, cols, rows;
         if (ck_x86_console_fb_on((volatile void *)(uintptr_t)h->fb_base, h->fb_width, h->fb_height,
@@ -1346,6 +1397,7 @@ static __attribute__((noreturn)) void kernel_main(void *arg)
     struct apic_report ar = {0};
     madt_walk(&ar);
     apic_start(&ar);
+    ck_x86_step("timer");
     ck_printf("apic: mode=%s id=%u version=0x%x timer_hz=%u\n", "xapic", ar.id,
               ar.version, ar.lapic_hz);
     ck_printf("madt: cpus=%u ioapics=%u ioapic_lines_masked=%u\n", ar.cpus, ar.ioapics, ar.ioapic_lines);
@@ -1358,6 +1410,7 @@ static __attribute__((noreturn)) void kernel_main(void *arg)
 
     struct smp_report sr = {0};
     smp_start(&ar, &sr);
+    ck_x86_step("cores");
     wx_retire_trampoline();
     uint64_t wx, exec4k, text4k = (uint64_t)(__text_end - __text_start) >> 12;
     wx_audit(&wx, &exec4k);
@@ -1381,7 +1434,9 @@ static __attribute__((noreturn)) void kernel_main(void *arg)
 
     const struct ck_x86_storage_result *st = ck_x86_storage(h->rsdp, &frames, tsc_hz, mm.top);
     ck_x86_sound(&frames, tsc_hz, night_t0); /* before the keyboard: the chirp is already under way */
+    ck_x86_step("sound");
     ck_x86_usb(&frames, tsc_hz);
+    ck_x86_step("usb");
     allen_facts.cores = sr.started + 1;
     allen_facts.sata_disks = st->ahci_disks;
     allen_facts.nvme_disks = st->nvme_disks;
@@ -1392,6 +1447,7 @@ static __attribute__((noreturn)) void kernel_main(void *arg)
               : st->net_driver == 2   ? "driver-failed"
               : st->net_link == 1     ? "link-up"
               : st->net_link == 2     ? "link-down"
+              : st->net_link == 3     ? "link-pending"
                                       : "seen");
     ck_puts("AIENOS-KERNEL-0 DONE\n");
     ck_puts("note: QEMU qualifies nothing physical\n");
@@ -1415,5 +1471,6 @@ void ck_x86_kernel_entry(struct ck_handoff *h)
         ck_panic("handoff: %s", why);
     ck_puts("handoff: CHANDOF3 ok\n");
     mm_build();
+    ck_x86_step("paging");
     ck_x86_call_on_stack(kernel_main, 0, (uint64_t)(uintptr_t)(kstack + sizeof kstack));
 }
