@@ -65,7 +65,8 @@ static void logf_(const char *fmt, ...)
 {
     char ts[32];
     time_t t = time(0);
-    strftime(ts, sizeof ts, "%Y-%m-%dT%H:%M:%SZ", gmtime(&t));
+    struct tm tm;
+    strftime(ts, sizeof ts, "%Y-%m-%dT%H:%M:%SZ", gmtime_r(&t, &tm));
     va_list ap;
     va_start(ap, fmt);
     printf("%s ", ts);
@@ -266,6 +267,18 @@ static int tftp_xfer(int s, const struct sockaddr_in *peer, const uint8_t *b, si
     return -1;
 }
 
+/* Appends "name" NUL "val" NUL to the option acknowledgement at `at` when it
+ * fits in cap bytes; returns the new length (unchanged when it does not). */
+static size_t oack_put(uint8_t *buf, size_t cap, size_t at, const char *name, const char *val)
+{
+    size_t a = strlen(name) + 1, b = strlen(val) + 1;
+    if (at > cap || a + b > cap - at)
+        return at;
+    memcpy(buf + at, name, a);
+    memcpy(buf + at + a, val, b);
+    return at + a + b;
+}
+
 static void tftp_request(const uint8_t *in, size_t n, const struct sockaddr_in *peer)
 {
     int s = socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
@@ -307,11 +320,12 @@ static void tftp_request(const uint8_t *in, size_t n, const struct sockaddr_in *
             long b = strtol(val, 0, 10);
             if (b >= 8) {
                 blk = (size_t)(b > BLK_MAX ? BLK_MAX : b);
-                on += (size_t)snprintf((char *)oack + on, sizeof oack - on, "blksize%c%zu", 0, blk) + 1;
+                snprintf(num, sizeof num, "%zu", blk);
+                on = oack_put(oack, sizeof oack, on, "blksize", num);
             }
         } else if (strcasecmp(o, "tsize") == 0) {
             snprintf(num, sizeof num, "%zu", booter_len);
-            on += (size_t)snprintf((char *)oack + on, sizeof oack - on, "tsize%c%s", 0, num) + 1;
+            on = oack_put(oack, sizeof oack, on, "tsize", num);
         }
         o = val + strlen(val) + 1;
     }

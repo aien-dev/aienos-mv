@@ -459,7 +459,7 @@ static void done(const uint8_t nonce[16], uint8_t status, const char *text)
 {
     struct nb_msg m = {0};
     size_t n = 0;
-    while (text[n] && n < NB_TEXT_MAX)
+    while (n < NB_TEXT_MAX && text[n])
         n++;
     m.type = NB_DONE;
     memcpy(m.nonce, nonce, 16);
