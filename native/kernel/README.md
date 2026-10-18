@@ -233,10 +233,18 @@ output stream: the chirp from the moment the night has reached, then 8 s of
 silence; the stream is stopped once the chirp is over. Intel controllers get
 Linux's PCI settings first (`pci_x86.c`). In QEMU the recording of what the
 guest played matches the chirp sample for sample, starting at the night's
-moment. **Not yet on real hardware:** the desktop test computer's codec is a
-Cirrus CS8409 bridge whose speaker amplifiers sit behind it on I2C and need
-their own set-up, which this driver does not do yet, so its speakers are
-expected to stay silent; its next report carries the codec's map.
+moment. A Cirrus CS8409 bridge on an Apple board (the desktop test
+computer's codec) gets its own set-up instead: its four speaker amplifiers
+sit behind it on its own I2C bus, so the driver sets the bridge's defaults,
+resets the amplifiers into shutdown, sets the TDM slots and clocks, configures
+and switches on each amplifier and synchronises the two converters, following
+the sequence davidjo/snd_hda_macbookpro replays from macOS. That sequence only
+plays 44.1 kHz 24-bit, so behind a CS8409 the chirp is resampled to that
+(`ck_chirp_fill_441`, host tested against the 48 kHz sound). The amplifiers
+run 12 dB under the level macOS uses until the sound has been heard.
+**Not yet heard on real hardware:** QEMU has no CS8409, so this path has not
+run anywhere yet; the test computer's next report says whether the bridge was
+set up and how many I2C transfers went unconfirmed.
 Tests: `scripts/ck_allen_ui_test.sh` (host; pictures in
 `target/native-kernel-allen-ui/`), `scripts/ck_chirp_test.sh` (the sound as
 `target/native-kernel-chirp/chirp.wav`); the QEMU kernel test requires the

@@ -165,3 +165,28 @@ void ck_chirp_fill(int16_t *out, uint32_t from, uint32_t n)
         out[2 * i] = out[2 * i + 1] = (int16_t)v;
     }
 }
+
+/* The same chirp at 44.1 kHz for converters that take only that rate: frame
+ * j sits at 48 kHz frame j * 160 / 147, drawn as a straight line between the
+ * two 48 kHz frames either side (the chirp stays under 1000 Hz, far below
+ * either rate's limit). Each sample goes in the top 16 bits of a 32-bit slot,
+ * the layout a 24-bit converter reads (Linux: S32_LE with 24 bits used). */
+void ck_chirp_fill_441(int32_t *out, uint32_t from, uint32_t n)
+{
+    int16_t src[2 * 144];
+    while (n) {
+        uint32_t m = n < 128u ? n : 128u, s0 = (uint32_t)((uint64_t)from * 160u / 147u);
+        uint32_t s1 = (uint32_t)((uint64_t)(from + m - 1) * 160u / 147u) + 1;
+        ck_chirp_fill(src, s0, s1 - s0 + 1);
+        for (uint32_t i = 0; i < m; i++) {
+            uint64_t at = (uint64_t)(from + i) * 160u;
+            uint32_t s = (uint32_t)(at / 147u) - s0, frac = (uint32_t)(at % 147u);
+            int32_t a = src[2 * s], b = src[2 * s + 2];
+            int32_t v = (a * (int32_t)(147u - frac) + b * (int32_t)frac) / 147;
+            out[2 * i] = out[2 * i + 1] = (int32_t)((uint32_t)v << 16);
+        }
+        out += 2 * m;
+        from += m;
+        n -= m;
+    }
+}

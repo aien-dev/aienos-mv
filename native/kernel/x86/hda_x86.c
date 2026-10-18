@@ -19,9 +19,11 @@
  * 0 dB, the pins driven and their external amplifiers switched on (EAPD; on
  * Apple boards also every codec GPIO, which Linux's Cirrus fixups use as the
  * speaker and headphone amplifier enables); Cirrus CS4206/7/8 get their
- * vendor set-up words (Linux cs420x.c). Then the first output stream plays
- * the chirp from the night's current moment, 16-bit stereo at 48 kHz, and
- * HDA_TAIL_MS of silence after it. A stream loops by design (the controller
+ * vendor set-up words (Linux cs420x.c); a Cirrus CS8409 bridge on an Apple
+ * board gets its own set-up instead (cs8409_apple, below). Then the first
+ * output stream plays the chirp from the night's current moment, 16-bit
+ * stereo at 48 kHz (44.1 kHz 24-bit behind a CS8409), and HDA_TAIL_MS of
+ * silence after it. A stream loops by design (the controller
  * has no play-once), so ck_x86_hda_step stops it once the chirp is over.
  * Register offsets and bits: Linux's hda_register.h and hda_verbs.h; the
  * Intel PCI settings are in pci_x86.c (docs-read records). */
@@ -122,6 +124,7 @@ static uint64_t g_hz;
 static volatile uint32_t *corb; /* 256 commands */
 static volatile uint32_t *rirb; /* 256 answers of two words: the answer, then which codec */
 static unsigned corb_wp, rirb_rp, rings;
+static unsigned g_fmt; /* the stream format: FMT_48K_16_STEREO unless a codec takes only another */
 
 /* the stream once playing: ck_x86_hda_step stops it */
 static volatile uint8_t *play_bar;
@@ -395,6 +398,178 @@ static const uint16_t cs4208_words[][3] = {
     {0x24, V_COEF_INDEX, 0x34}, {0x24, V_PROC_COEF, 0x1c01},
 };
 
+/* ---- Cirrus CS8409 on Apple boards ----
+ * The CS8409 is a bridge: its converters feed a TDM bus (several channels
+ * time-shared on one wire) to four TAS576x-family speaker amplifiers, which it
+ * sets up over its own I2C bus (a two-wire link to small chips). Its
+ * converters leave nothing on the pins without that, so the generic path
+ * above stays silent. The sequence is the one davidjo/snd_hda_macbookpro
+ * replays from macOS for subsystem 106b:1000 (cirrus_apple.h -> new84 ->
+ * real84; boot84 helpers), reduced to the speakers: bridge defaults, I2C
+ * set-up, the four amplifiers reset into shutdown, then per amplifier pair
+ * its TDM slots and clocks, the amplifiers configured and switched on, and
+ * the converters synchronised. That driver plays only 44.1 kHz 24-bit
+ * (cirrus_apple.h:1300), so the chirp goes out in that format here. The
+ * amplifiers' digital volume is CS_AMP_VOLUME, 12 dB under the 0 dB (0xcf,
+ * 0.5 dB a step) macOS uses, until the level has been heard. */
+#define CS_VENDOR 0x47u        /* the vendor widget holding the coefficients */
+#define CS_I2C_ADDR 0x59u      /* coefficient: the chip spoken to */
+#define CS_I2C_STS 0x5cu       /* bits 3 and 4 both set: the transfer is done */
+#define CS_I2C_WRITE 0x5du     /* register << 8 | value */
+#define CS_I2C_READ 0x5eu
+#define CS_AMP_VOLUME 0xb7u
+#define FMT_441_24_STEREO 0x4031u
+#define V_GET_COEF 0xc00
+#define V_VENDOR_7F0 0x7f0
+
+static unsigned cs_a, cs_i2c_bad;
+
+static uint32_t coef_get(unsigned idx)
+{
+    uint32_t v = 0;
+    verb(cs_a, CS_VENDOR, V_COEF_INDEX, idx, 0);
+    verb(cs_a, CS_VENDOR, V_GET_COEF, 0, &v);
+    verb(cs_a, CS_VENDOR, V_COEF_INDEX, 0, 0);
+    return v & 0xffffu;
+}
+static void coef_set(unsigned idx, unsigned v)
+{
+    verb(cs_a, CS_VENDOR, V_COEF_INDEX, idx, 0);
+    verb(cs_a, CS_VENDOR, V_PROC_COEF, v & 0xffffu, 0);
+    verb(cs_a, CS_VENDOR, V_COEF_INDEX, 0, 0);
+}
+/* the bits in mask replaced by bits (new84.h cs_8409_vendor_coef_set_mask) */
+static void coef_mask(unsigned idx, unsigned mask, unsigned bits) { coef_set(idx, (coef_get(idx) & ~mask) | bits); }
+
+/* One register write to the chip at I2C address chip (new84.h
+ * cs_8409_vendor_i2cWrite, unpaged): clock on (coefficient 0 bit 3), address,
+ * register and value, then up to 9 status reads 2 ms apart, clock off. After
+ * 13 unconfirmed transfers the rest are skipped. */
+static void i2c_write(unsigned chip, unsigned reg, unsigned val)
+{
+    if (cs_i2c_bad > 12) /* nothing is answering: the rest would only slow the boot */
+        return;
+    verb(cs_a, CS_VENDOR, V_PROC_STATE, 1, 0);
+    coef_set(0, coef_get(0) | 0x8u);
+    coef_set(CS_I2C_ADDR, chip);
+    coef_set(CS_I2C_WRITE, (reg & 0xffu) << 8 | (val & 0xffu));
+    int done = 0;
+    for (unsigned k = 0; k < 9 && !done; k++) {
+        done = (coef_get(CS_I2C_STS) & 0x18u) == 0x18u;
+        if (!done)
+            spin_us(2000);
+    }
+    cs_i2c_bad += !done;
+    coef_set(0, coef_get(0) & 0xfff7u);
+}
+
+/* The TDM unit's routing refresh after slots change (real84.h configureTDMUR) */
+static void cs_tdm_refresh(void)
+{
+    coef_set(0x6b, 0x001f);
+    coef_set(0x71, coef_get(0x71) | 0x400fu);
+    verb(cs_a, CS_VENDOR, V_VENDOR_7F0, 0xb6, 0);
+}
+
+/* One amplifier configured and switched on (real84.h cs_8409_setup_amp_tas576,
+ * playback): I2S input, its TDM slot, analogue gain, fault set-up, volume. */
+static void cs_amp_on(unsigned chip, unsigned slot)
+{
+    static const uint8_t regs[][2] = {{0x02, 0x44}, {0x03, 0x80}, {0x06, 0x55}, {0x08, 0x18},
+                                      {0x04, 0},    {0x13, 0x00}, {0x02, 0x44}, {0x01, 0xfd}};
+    for (unsigned k = 0; k < sizeof regs / sizeof regs[0]; k++)
+        i2c_write(chip, regs[k][0], regs[k][0] == 0x03 ? 0x80u | slot : regs[k][0] == 0x04 ? CS_AMP_VOLUME : regs[k][1]);
+}
+
+static unsigned cs8409_apple(unsigned a, unsigned afg, char *say, size_t say_n)
+{
+    static const uint8_t amps[4] = {0xd8, 0xda, 0xdc, 0xde};
+    static const uint8_t amp_reset[][2] = {{0x01, 0xfc}, {0x02, 0x04}, {0x03, 0x80}, {0x04, 0xcf}, {0x06, 0x51},
+                                           {0x08, 0x00}, {0x10, 0xff}, {0x11, 0xfc}, {0x13, 0x00}, {0x14, 0x02}};
+    uint64_t t0 = ck_rdtsc();
+    cs_a = a;
+    cs_i2c_bad = 0;
+    verb(a, CS_VENDOR, V_PROC_STATE, 1, 0);
+    /* bridge defaults: every TDM slot off (boot84.h init_for_node_vendor) */
+    coef_set(0x00, 0x9008);
+    coef_set(0x01, 0);
+    coef_set(0x17, 0);
+    coef_set(0x18, 0);
+    coef_set(0x02, 0);
+    for (unsigned i = 0x19; i <= 0x57; i++)
+        coef_set(i, 0x8000);
+    coef_set(0x0a, 0);
+    coef_set(0x82, 0);
+    coef_set(0x6b, 0x001f);
+    coef_set(0x6c, 0x001f);
+    coef_set(0x82, 0);
+    /* I2C set-up (boot84.h) */
+    verb(a, CS_VENDOR, V_PROC_STATE, 1, 0);
+    coef_set(0x00, 0x9008);
+    coef_set(0x02, 0x0080);
+    coef_set(0x5b, 0x0010);
+    coef_set(0x00, 0x9000);
+    verb(a, 0x24, V_PIN_CTL, 0, 0);
+    verb(a, 0x25, V_PIN_CTL, 0, 0);
+    /* the amplifiers reset into shutdown, GPIOs 1 and 4 driven high around
+       each (boot84.h setup_amps_reset_i2c_tas576, setup_gpio_set_10) */
+    for (unsigned c = 0; c < 4; c++) {
+        verb(a, afg, V_GPIO_DIR, 0x12, 0);
+        verb(a, afg, V_GPIO_DATA, 0x12, 0);
+        verb(a, afg, V_GPIO_MASK, 0x1f, 0);
+        for (unsigned k = 0; k < sizeof amp_reset / sizeof amp_reset[0]; k++)
+            i2c_write(amps[c], amp_reset[k][0], amp_reset[k][1]);
+    }
+    /* amplifiers 1 and 2: converter 0x02 on TDM slots 0 and 1, the bus clocks,
+       pin 0x24 (real84.h cs_8409_setup_TDM_amps12, cs_8409_setup_TDM_sample_rate,
+       cs_8409_setup_TDM_proper_amps12) */
+    verb(a, 0x02, V_FORMAT, FMT_441_24_STEREO, 0);
+    verb(a, 0x02, V_STREAM, TAG << 4, 0);
+    coef_set(0x01, coef_get(0x01));
+    coef_mask(0x01, 0x0380, 0x0200);
+    coef_mask(0x05, 0x0007, 0x0001);
+    coef_mask(0x04, 0x01ff, 0x08ff);
+    coef_set(0x19, 0x0800);
+    coef_set(0x1a, 0x0820);
+    unsigned saved = coef_get(0x00);
+    coef_set(0x00, 0xb000);
+    coef_set(0x04, 0x08ff);
+    coef_set(0x00, saved);
+    coef_set(0x03, 0x8000);
+    coef_set(0x05, 0x0001);
+    coef_mask(0x82, 0, 0x5400);
+    coef_set(0x02, 0x0280);
+    coef_set(0x01, coef_get(0x01) | 0x20u);
+    cs_tdm_refresh();
+    verb(a, 0x24, V_PIN_CTL, 0x40, 0);
+    cs_amp_on(0xd8, 0);
+    cs_amp_on(0xda, 2);
+    /* amplifiers 3 and 4: converter 0x03 on slots 2 and 3, pin 0x25 */
+    verb(a, 0x03, V_FORMAT, FMT_441_24_STEREO, 0);
+    verb(a, 0x03, V_STREAM, TAG << 4, 0);
+    coef_set(0x1b, 0x0840);
+    coef_set(0x1c, 0x0860);
+    cs_tdm_refresh();
+    verb(a, 0x25, V_PIN_CTL, 0x40, 0);
+    cs_amp_on(0xdc, 1);
+    cs_amp_on(0xde, 3);
+    /* the converters synchronised (real84.h cs_8409_sync_converters_on) */
+    verb(a, CS_VENDOR, V_PROC_STATE, 1, 0);
+    verb(a, 0x02, V_STREAM, 0, 0);
+    coef_set(0x17, 0x0001);
+    verb(a, 0x03, V_STREAM, 0, 0);
+    coef_set(0x17, 0x0003);
+    verb(a, 0x02, V_STREAM, TAG << 4, 0);
+    verb(a, 0x03, V_STREAM, TAG << 4, 0);
+    g_fmt = FMT_441_24_STEREO;
+    ck_printf("sound: codec=%u CS8409 bridge set up: 4 amplifiers at 0x%02x volume, %u I2C transfer(s) unconfirmed%s, "
+              "coef 0x01=0x%04x 0x17=0x%04x 0x82=0x%04x; %u ms\n", a, CS_AMP_VOLUME, cs_i2c_bad,
+              cs_i2c_bad > 12 ? " (gave up)" : "", coef_get(0x01), coef_get(0x17), coef_get(0x82),
+              (unsigned)((ck_rdtsc() - t0) * 1000 / g_hz));
+    ck_snprintf(say, say_n, "codec %u CS8409 0x24(spk)<-0x02 0x25(spk)<-0x03, amplifiers on", a);
+    return 2;
+}
+
 /* Maps codec a, opens every output path it has; the number of pins opened
  * (their converters set to the stream's tag), with a summary in *say. */
 static unsigned codec_open(unsigned ctrl, unsigned a, char *say, size_t say_n)
@@ -448,6 +623,9 @@ static unsigned codec_open(unsigned ctrl, unsigned a, char *say, size_t say_n)
     if (id == 0x10134208)
         for (unsigned k = 0; k < sizeof cs4208_words / sizeof cs4208_words[0]; k++)
             verb(a, cs4208_words[k][0], cs4208_words[k][1], cs4208_words[k][2], 0);
+    if (id == 0x10138409 && (sub >> 16) == 0x106b && W[0x24].type == W_PIN && W[0x25].type == W_PIN &&
+        W[0x02].type == W_AUD_OUT && W[0x03].type == W_AUD_OUT)
+        return cs8409_apple(a, afg, say, say_n);
     /* output pins, speakers first: device 1 speaker, 0 line out, 2 headphone */
     static const unsigned order[3] = {1, 0, 2};
     unsigned opened = 0;
@@ -502,29 +680,34 @@ static int stream_play(unsigned ctrl, unsigned sd, uint8_t *buf, size_t bytes, u
         ck_printf("sound: ctrl=%u stream did not leave reset\n", ctrl);
         return -1;
     }
-    const uint32_t per_ms = CK_CHIRP_RATE / 1000u;
+    const int wide = g_fmt == FMT_441_24_STEREO;
+    const uint32_t rate = wide ? CK_CHIRP_RATE_441 : CK_CHIRP_RATE, all = wide ? CK_CHIRP_FRAMES_441 : CK_CHIRP_FRAMES;
+    const size_t fb = wide ? 8 : 4; /* bytes a frame */
     uint64_t t_fill = ck_rdtsc();
-    uint32_t from = (uint32_t)((t_fill - night_t0) * 1000 / g_hz) * per_ms;
-    if (from >= CK_CHIRP_FRAMES) {
+    uint32_t from = (uint32_t)((t_fill - night_t0) * rate / g_hz);
+    if (from >= all) {
         ck_printf("sound: ctrl=%u ready at night %u ms, after the chirp (%u ms); nothing played\n", ctrl,
-                  from / per_ms, CK_CHIRP_END_MS);
+                  (uint32_t)((uint64_t)from * 1000 / rate), CK_CHIRP_END_MS);
         return -1;
     }
-    uint32_t frames = CK_CHIRP_FRAMES - from, tail = per_ms * HDA_TAIL_MS;
-    if ((size_t)(frames + tail) * 4 > bytes)
-        tail = (uint32_t)(bytes / 4) - frames;
-    ck_chirp_fill((int16_t *)buf, from, frames);
-    memset(buf + (size_t)frames * 4, 0, (size_t)tail * 4);
-    flush(buf, (size_t)(frames + tail) * 4);
+    uint32_t frames = all - from, tail = rate / 1000u * HDA_TAIL_MS;
+    if ((frames + tail) * fb > bytes)
+        tail = (uint32_t)(bytes / fb) - frames;
+    if (wide)
+        ck_chirp_fill_441((int32_t *)buf, from, frames);
+    else
+        ck_chirp_fill((int16_t *)buf, from, frames);
+    memset(buf + frames * fb, 0, tail * fb);
+    flush(buf, (frames + tail) * fb);
     uint64_t t_run = ck_rdtsc();
-    uint32_t now = (uint32_t)((t_run - night_t0) * 1000 / g_hz) * per_ms, skip = (now - from) & ~31u;
+    uint32_t now = (uint32_t)((t_run - night_t0) * rate / g_hz), skip = (now - from) & ~31u;
     if (skip >= frames) {
-        ck_printf("sound: ctrl=%u the chirp was over (night %u ms) once its %u ms were made\n", ctrl, now / per_ms,
-                  (uint32_t)((t_run - t_fill) * 1000 / g_hz));
+        ck_printf("sound: ctrl=%u the chirp was over (night %u ms) once its %u ms were made\n", ctrl,
+                  (uint32_t)((uint64_t)now * 1000 / rate), (uint32_t)((t_run - t_fill) * 1000 / g_hz));
         return -1;
     }
-    uint8_t *p = buf + (size_t)skip * 4; /* 128-byte aligned, as descriptors need */
-    size_t used = (size_t)(frames + tail - skip) * 4 & ~(size_t)127;
+    uint8_t *p = buf + skip * fb; /* 128-byte aligned, as descriptors need */
+    size_t used = (frames + tail - skip) * fb & ~(size_t)127;
     unsigned entries = (unsigned)((used + CHUNK - 1) / CHUNK);
     for (unsigned k = 0; k < entries; k++) {
         size_t off = (size_t)k * CHUNK, len = used - off < CHUNK ? used - off : CHUNK;
@@ -534,17 +717,18 @@ static int stream_play(unsigned ctrl, unsigned sd, uint8_t *buf, size_t bytes, u
     flush(bdl, (size_t)entries * 16);
     w32(s + SD_CBL, (uint32_t)used);
     w16(s + SD_LVI, (uint16_t)(entries - 1));
-    w16(s + SD_FMT, FMT_48K_16_STEREO);
+    w16(s + SD_FMT, (uint16_t)g_fmt);
     w32(s + SD_BDLPL, (uint32_t)(uintptr_t)bdl);
     w32(s + SD_BDLPU, (uint32_t)((uint64_t)(uintptr_t)bdl >> 32));
     w8(s + 2, (uint8_t)((r8(s + 2) & 0x0fu) | TAG << 4));
     w8(s + SD_STS, 0x1c); /* old status cleared */
     w8(s, RUN);
-    uint32_t start_ms = (from + skip) / per_ms;
+    uint32_t start_ms = (uint32_t)((uint64_t)(from + skip) * 1000 / rate);
     spin_us(2000);
     ck_printf("sound: ctrl=%u stream %u playing the chirp from night %u ms (%u ms of it, then %u ms quiet; made in "
-              "%u ms); position after 2 ms %u bytes, status 0x%02x\n", ctrl, sd, start_ms, (frames - skip) / per_ms,
-              tail / per_ms, (uint32_t)((t_run - t_fill) * 1000 / g_hz), r32(s + SD_LPIB), r8(s + SD_STS));
+              "%u ms; format 0x%04x); position after 2 ms %u bytes, status 0x%02x\n", ctrl, sd, start_ms,
+              (uint32_t)((uint64_t)(frames - skip) * 1000 / rate), HDA_TAIL_MS,
+              (uint32_t)((t_run - t_fill) * 1000 / g_hz), g_fmt, r32(s + SD_LPIB), r8(s + SD_STS));
     play_bar = g_bar;
     play_sd = s;
     play_t0 = night_t0;
@@ -556,6 +740,7 @@ int ck_x86_hda_start(unsigned ctrl, volatile uint8_t *bar, struct ck_frames *fr,
 {
     g_bar = bar;
     g_hz = tsc_hz;
+    g_fmt = FMT_48K_16_STEREO;
     rings = 0;
     uint16_t gcap = r16(GCAP);
     unsigned iss = gcap >> 8 & 15u, oss = gcap >> 12 & 15u, bss = gcap >> 3 & 31u, nsd = iss + oss + bss;
@@ -627,8 +812,10 @@ int ck_x86_hda_start(unsigned ctrl, volatile uint8_t *bar, struct ck_frames *fr,
         ck_printf("sound: ctrl=%u has no output stream\n", ctrl);
         return -1;
     }
-    size_t bytes = ((size_t)(CK_CHIRP_FRAMES + CK_CHIRP_RATE / 1000u * HDA_TAIL_MS) * 4 + CK_PAGE - 1) &
-                   ~(size_t)(CK_PAGE - 1);
+    size_t bytes = g_fmt == FMT_441_24_STEREO
+                       ? (size_t)(CK_CHIRP_FRAMES_441 + CK_CHIRP_RATE_441 / 1000u * HDA_TAIL_MS) * 8
+                       : (size_t)(CK_CHIRP_FRAMES + CK_CHIRP_RATE / 1000u * HDA_TAIL_MS) * 4;
+    bytes = (bytes + CK_PAGE - 1) & ~(size_t)(CK_PAGE - 1);
     uint64_t pa, bpa;
     if (!fr || ck_frames_alloc(fr, bytes / CK_PAGE, CK_PAGE, &pa) || ck_frames_alloc(fr, 1, CK_PAGE, &bpa)) {
         ck_printf("sound: ctrl=%u no memory for the chirp (%llu KiB)\n", ctrl, (unsigned long long)(bytes >> 10));
