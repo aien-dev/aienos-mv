@@ -254,3 +254,35 @@ pi5-agent-mutants:
 	done; exit $$fail
 stage-test: pi5-agent-test
 stage-sanitize: pi5-agent-sanitize
+
+# ---- Many-piece region host test (dev/tests/disk_extent_test.c) ----
+# The test plus one mutant per guarded refusal in dev/disk_extent.c: each
+# mutant drops one GUARD:ext-* return and must FAIL, so every guard is shown
+# to be load-bearing. The tools ck_region_map / ck_region_probe make and prove
+# a REGION.MAP on a Linux host (see dev/disk_extent.h).
+DISK_EXT_SRCS := $(STAGE_DIR)/dev/disk_extent.c $(STAGE_NATIVE)/disk/disk.c $(STAGE_NATIVE)/argus/sha256.c
+DISK_EXT_INC := -I$(STAGE_NATIVE)/disk -I$(STAGE_NATIVE)/argus -I$(STAGE_DIR)/dev
+DISK_EXT_GUARDS := ext-window ext-gapfree ext-piece ext-disjoint ext-seal ext-sealmatch
+
+$(STAGE_OUT)/disk_extent_test: $(DISK_EXT_SRCS) $(STAGE_DIR)/dev/tests/disk_extent_test.c $(STAGE_DIR)/dev/disk_extent.h
+	@mkdir -p $(@D)
+	$(STAGE_CC) $(STAGE_HOST_FLAGS) $(STAGE_SAN_FLAGS) $(DISK_EXT_INC) -o $@ $(STAGE_DIR)/dev/tests/disk_extent_test.c $(DISK_EXT_SRCS)
+
+disk-extent-test: $(STAGE_OUT)/disk_extent_test
+	$(STAGE_OUT)/disk_extent_test
+	@for g in $(DISK_EXT_GUARDS); do \
+	  sed "/GUARD:$$g/s/return /(void)0; if (0) return /" $(STAGE_DIR)/dev/disk_extent.c > $(STAGE_OUT)/ext_mut.c; \
+	  $(STAGE_CC) -std=c11 -w -O1 $(DISK_EXT_INC) -o $(STAGE_OUT)/ext_mut $(STAGE_DIR)/dev/tests/disk_extent_test.c \
+	    $(STAGE_OUT)/ext_mut.c $(STAGE_NATIVE)/disk/disk.c $(STAGE_NATIVE)/argus/sha256.c || exit 1; \
+	  if $(STAGE_OUT)/ext_mut >/dev/null 2>&1; then echo "CK_DISK_EXT_MUTANT $$g: FAIL (guard not caught)"; exit 1; fi; \
+	  echo "CK_DISK_EXT_MUTANT $$g: PASS (caught)"; done
+
+region-tools: $(STAGE_OUT)/ck_region_map $(STAGE_OUT)/ck_region_probe
+$(STAGE_OUT)/ck_region_map: $(STAGE_DIR)/tools/ck_region_map.c $(DISK_EXT_SRCS)
+	@mkdir -p $(@D)
+	$(STAGE_CC) -std=c11 -D_GNU_SOURCE -Wall -Wextra -Werror -O2 $(DISK_EXT_INC) -o $@ $< $(STAGE_NATIVE)/argus/sha256.c
+$(STAGE_OUT)/ck_region_probe: $(STAGE_DIR)/tools/ck_region_probe.c $(DISK_EXT_SRCS)
+	@mkdir -p $(@D)
+	$(STAGE_CC) -std=c11 -D_GNU_SOURCE -Wall -Wextra -Werror -O2 $(DISK_EXT_INC) -o $@ $< $(DISK_EXT_SRCS)
+
+stage-test: disk-extent-test
