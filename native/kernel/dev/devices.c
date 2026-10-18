@@ -177,7 +177,11 @@ int ck_stage_console_session(void)
     ck_printf("WARNING: TEST-ONLY console session MUTATION BUILD (CK_TEST_CONSOLE_MUTATION=bm-left-on-after-exit, "
               "QEMU gate self-test only, never a PASS)\n");
 #endif
+#if defined(CK_ALLEN) && CK_ALLEN && defined(CK_HARDWARE_STAGING)
+    ck_printf("console_session: begin (Allen hardware image: lines go to Allen only, no shell)\n");
+#else
     ck_printf("console_session: begin (TEST-ONLY QEMU image, CK_CONSOLE_SESSION=1; QEMU only, hardware NOT_RUN)\n");
+#endif
 #if defined(CK_ALLEN) && CK_ALLEN
     {
         ck_allen_facts facts = {0, 0, g_nvme.pf ? 1u : 0u, 0, 0};

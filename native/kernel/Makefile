@@ -604,8 +604,16 @@ ifneq ($(strip $(CK_CONSOLE_SESSION)),)
 ifneq ($(strip $(CK_CONSOLE_SESSION)),1)
 $(error CK_CONSOLE_SESSION must be empty or 1)
 endif
+# CK_ALLEN=1 is the one session allowed on hardware: its lines go only to
+# Allen's conversation (svc/allen_session.c), the shell is never called, so
+# the session adds no command authority; the xHCI DMA fence is unchanged.
 ifneq ($(strip $(CK_HARDWARE_STAGING)),)
+ifneq ($(strip $(CK_ALLEN)),1)
 $(error CK_CONSOLE_SESSION (QEMU test console session) cannot be combined with CK_HARDWARE_STAGING)
+endif
+ifneq ($(strip $(CK_TEST_CONSOLE_MUTATION)),)
+$(error CK_TEST_CONSOLE_MUTATION is QEMU only and cannot be combined with CK_HARDWARE_STAGING)
+endif
 endif
 ifneq ($(strip $(CK_QEMU_UNSAFE_DMA)),)
 $(error CK_CONSOLE_SESSION cannot be combined with CK_QEMU_UNSAFE_DMA)
@@ -956,7 +964,11 @@ endif
 ifneq ($(strip $(CK_HARDWARE_STAGING)),)
 # Own OUT subdirectory: stage objects built with these flags never mix with
 # the default full image's objects.
+ifeq ($(strip $(CK_ALLEN)),1)
+FULL_NAME := full-allen-hardware
+else
 FULL_NAME := full-hardware-staging
+endif
 OWNER_HDR := $(OUT)/gen-$(FULL_NAME)/ck_owner_prov.h
 STAGE_DMA_FLAGS += -DCK_HARDWARE_STAGING=1 -I$(dir $(OWNER_HDR))
 else

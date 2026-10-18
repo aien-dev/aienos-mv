@@ -19,7 +19,8 @@
 #define CK_XHCI_MUT 0
 #endif
 #if defined(CK_CONSOLE_SESSION) && CK_CONSOLE_SESSION
-#if defined(CK_HARDWARE_STAGING)
+/* Hardware only for the Allen session (CK_ALLEN=1: lines reach Allen, never the shell; see Makefile). */
+#if defined(CK_HARDWARE_STAGING) && !(defined(CK_ALLEN) && CK_ALLEN)
 #error "CK_CONSOLE_SESSION (QEMU test console session) cannot be combined with CK_HARDWARE_STAGING"
 #endif
 #if defined(CK_QEMU_UNSAFE_DMA)
