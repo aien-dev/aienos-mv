@@ -604,8 +604,16 @@ ifneq ($(strip $(CK_CONSOLE_SESSION)),)
 ifneq ($(strip $(CK_CONSOLE_SESSION)),1)
 $(error CK_CONSOLE_SESSION must be empty or 1)
 endif
+# CK_ALLEN=1 is the one session allowed on hardware: its lines go only to
+# Allen's conversation (svc/allen_session.c), the shell is never called, so
+# the session adds no command authority; the xHCI DMA fence is unchanged.
 ifneq ($(strip $(CK_HARDWARE_STAGING)),)
+ifneq ($(strip $(CK_ALLEN)),1)
 $(error CK_CONSOLE_SESSION (QEMU test console session) cannot be combined with CK_HARDWARE_STAGING)
+endif
+ifneq ($(strip $(CK_TEST_CONSOLE_MUTATION)),)
+$(error CK_TEST_CONSOLE_MUTATION is QEMU only and cannot be combined with CK_HARDWARE_STAGING)
+endif
 endif
 ifneq ($(strip $(CK_QEMU_UNSAFE_DMA)),)
 $(error CK_CONSOLE_SESSION cannot be combined with CK_QEMU_UNSAFE_DMA)
@@ -858,6 +866,11 @@ endif
 # GOP framebuffer console keeps the last report on screen before the PSCI
 # reset, so an operator can read or photograph it. 0 (default) in every QEMU
 # gate; scripts/stage_one_time_boot_ck.sh builds the hardware image with 120.
+# The Allen hardware image holds its last screen 120 s (the owner reads or
+# photographs it before the reset) unless the build line sets CK_FB_HOLD_S.
+ifeq ($(strip $(CK_ALLEN))$(if $(strip $(CK_HARDWARE_STAGING)),hw),1hw)
+CK_FB_HOLD_S ?= 120
+endif
 CK_FB_HOLD_S ?= 0
 ifeq ($(shell echo '$(CK_FB_HOLD_S)' | grep -Ex '[0-9]{1,4}'),)
 $(error CK_FB_HOLD_S must be 0..9999 seconds)
@@ -942,10 +955,25 @@ FULL_NAME := full-test-console-mutation
 STAGE_DMA_FLAGS += -DCK_TEST_CONSOLE_MUTATION=1
 endif
 endif
+# CK_ALLEN=1 (with CK_CONSOLE_SESSION=1): the console session hands each line
+# to Allen (svc/allen_session.c) instead of the shell; own OUT full-allen/.
+ifneq ($(strip $(CK_ALLEN)),)
+ifneq ($(strip $(CK_CONSOLE_SESSION)),1)
+$(error CK_ALLEN needs CK_CONSOLE_SESSION=1)
+endif
+FULL_NAME := full-allen
+STAGE_DMA_FLAGS += -DCK_ALLEN=1
+STAGE_SRCS += $(KDIR)/svc/allen_reply.c $(KDIR)/svc/allen_notes.c $(KDIR)/svc/allen_memory.c \
+  $(KDIR)/svc/allen_session.c $(KDIR)/dev/disk_extent.c
+endif
 ifneq ($(strip $(CK_HARDWARE_STAGING)),)
 # Own OUT subdirectory: stage objects built with these flags never mix with
 # the default full image's objects.
+ifeq ($(strip $(CK_ALLEN)),1)
+FULL_NAME := full-allen-hardware
+else
 FULL_NAME := full-hardware-staging
+endif
 OWNER_HDR := $(OUT)/gen-$(FULL_NAME)/ck_owner_prov.h
 STAGE_DMA_FLAGS += -DCK_HARDWARE_STAGING=1 -I$(dir $(OWNER_HDR))
 else
@@ -1061,11 +1089,19 @@ $(OUT)/commit.stamp: FORCE
 	@mkdir -p $(OUT)
 	@echo '$(AIENOS_COMMIT)' | cmp -s - $@ || echo '$(AIENOS_COMMIT)' > $@
 
-$(KOBJ)/%.o: $(NATIVE)/%.c $(HDRS)
+# Shared kernel objects are rebuilt whenever the compile flags change (e.g.
+# CK_FB_HOLD_S differs between the QEMU and the hardware Allen image), so one
+# image never links another image's objects.
+$(OUT)/kcflags.stamp: FORCE
+	@mkdir -p $(OUT)
+	$(file >$@.new,$(KCC) $(KCFLAGS))
+	@cmp -s $@.new $@ && rm -f $@.new || mv -f $@.new $@
+
+$(KOBJ)/%.o: $(NATIVE)/%.c $(HDRS) $(OUT)/kcflags.stamp
 	@mkdir -p $(dir $@)
 	$(KCC) $(KCFLAGS) -c -o $@ $<
 
-$(KOBJ)/kernel/core/report.o: $(KDIR)/core/report.c $(HDRS) $(OUT)/commit.stamp
+$(KOBJ)/kernel/core/report.o: $(KDIR)/core/report.c $(HDRS) $(OUT)/commit.stamp $(OUT)/kcflags.stamp
 	@mkdir -p $(dir $@)
 	$(KCC) $(KCFLAGS) -DAIENOS_COMMIT='"$(AIENOS_COMMIT)"' -c -o $@ $<
 
@@ -1107,7 +1143,7 @@ $(KOBJ)/kernel/core/osh_test.o: $(KDIR)/core/osh_test.c $(HDRS) $(ART_HDRS) $(OU
 	@mkdir -p $(dir $@)
 	$(KCC) $(KCFLAGS) $(ART_TRUST_FLAGS) -c -o $@ $<
 
-$(KOBJ)/%.o: $(NATIVE)/%.S
+$(KOBJ)/%.o: $(NATIVE)/%.S $(OUT)/kcflags.stamp
 	@mkdir -p $(dir $@)
 	$(KCC) $(KCFLAGS) -c -o $@ $<
 

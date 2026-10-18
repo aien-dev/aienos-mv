@@ -743,3 +743,8 @@ low-water free bytes.
   (no FP/SIMD; EL0 FP/SIMD traps). Placement is computed from the MADT; no
   secondary core is started (same as Rust). See GATES.md rows 16-20.
 - MAIR adds a Normal Non-cacheable attribute (index 2) for the DMA pool.
+
+## Allen on AArch64 and the many-piece region (2026-10-18)
+
+- `make full CK_CONSOLE_SESSION=1 CK_ALLEN=1` builds the Allen image: the console session hands every typed line to Allen (`svc/allen_session.c`), never to the shell. Add `CK_HARDWARE_STAGING=1` with the owner files for the hardware image (`full-allen-hardware/`); it is the only console session allowed on hardware. Without a keyboard it says so and the boot ends. Test: `scripts/qemu_ck_allen_arm64_test.sh` (A1-A6; `AIENOS_NO_KBD=1` for B1-B3; `AIENOS_ALLEN_EFI=` to test a prebuilt image).
+- `dev/disk_extent.c` turns a locked host file's pieces (`REGION.MAP`) into one linear disk with fail-closed checks; `tools/ck_region_map.c` makes the map from FIEMAP and `tools/ck_region_probe.c` proves it against the raw disk. `make disk-extent-test` runs the host test and one mutant per guard. Evidence: `evidence/spark_region_probe_2026-10-18.md`.

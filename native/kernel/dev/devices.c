@@ -160,6 +160,10 @@ void ck_stage_quiesce(void)
     if (xhci_live) ck_printf("devices: quiesce before reset xhci=released-now\n");
 }
 
+#if defined(CK_ALLEN) && CK_ALLEN
+#include "../svc/allen_reply.h"
+void ck_allen_session_begin(const ck_allen_facts *facts);
+#endif
 #if defined(CK_CONSOLE_SESSION) && CK_CONSOLE_SESSION
 /* Final boot stage "console" (C3-1a, TEST-ONLY QEMU image built with
  * CK_CONSOLE_SESSION=1): runs after every other boot step. Serial (PL011) and
@@ -173,10 +177,28 @@ int ck_stage_console_session(void)
     ck_printf("WARNING: TEST-ONLY console session MUTATION BUILD (CK_TEST_CONSOLE_MUTATION=bm-left-on-after-exit, "
               "QEMU gate self-test only, never a PASS)\n");
 #endif
+#if defined(CK_ALLEN) && CK_ALLEN && defined(CK_HARDWARE_STAGING)
+    ck_printf("console_session: begin (Allen hardware image: lines go to Allen only, no shell)\n");
+#else
     ck_printf("console_session: begin (TEST-ONLY QEMU image, CK_CONSOLE_SESSION=1; QEMU only, hardware NOT_RUN)\n");
+#endif
+#if defined(CK_ALLEN) && CK_ALLEN
+    {
+        ck_allen_facts facts = {0, 0, g_nvme.pf ? 1u : 0u, 0, 0};
+        ck_allen_session_begin(&facts);
+    }
+#endif
     int xrc = ck_xhci_session(&g_pci);
     ck_printf("console_session: xhci fence returned rc=%d state=%s\n", xrc, ck_xhci_state());
+#if defined(CK_ALLEN) && CK_ALLEN && defined(CK_HARDWARE_STAGING)
+    /* Hardware Allen: no serial operator is assumed. Without the keyboard the
+     * session ends here and the boot goes on to its report and reset, so the
+     * machine returns to its default system instead of waiting forever. */
+    if (!ck_console_session_ended())
+        ck_printf("allen: I can't hear the keyboard on this computer yet, so I'll stop here for now. (keyboard: %s)\n", ck_xhci_state());
+#else
     ck_console_session_serial_only(); /* no-op once the exit came inside the fence */
+#endif
     ck_printf("console_session: end (exit) xhci=%s\n", ck_xhci_live() ? "LIVE" : "released");
     return 0;
 }
