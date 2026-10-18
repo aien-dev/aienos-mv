@@ -58,11 +58,20 @@ typedef struct {
     int slot;              /* 0 or 1: the slot \EFI\BOOT names; -1: none (or not valid) */
     uint32_t image_len;    /* BOOTX64.EFI's size when slot >= 0 */
     uint32_t slot_max;     /* the largest image a slot holds, in bytes */
+    /* when not ours: the first byte that differs from what ck_fatb_format
+     * wrote (where = "boot sector", "FAT 1", "FAT 2", "root", "EFI" or
+     * "BOOT"; 0 when the geometry or a read failed) */
+    const char *where;
+    uint32_t at;
+    uint8_t got, want;
 } ck_fatb_state;
 
 /* Reads the volume: is it ours, and which slot holds a complete, valid pair
  * of files (directory entries, contiguous FAT chains ending in the
- * end-of-chain mark). Reads only. CK_FATB_OK (also for "not ours") or
+ * end-of-chain mark). Reads only. Fields that FAT drivers change in normal use
+ * are not compared: the boot sector's BS_Reserved1 (the NT dirty flag),
+ * FAT[1]'s ClnShutBitMask and HrdErrBitMask, each directory entry's
+ * DIR_LstAccDate. CK_FATB_OK (also for "not ours") or
  * CK_FATB_EGEOM / CK_FATB_EIO. */
 int ck_fatb_state_read(const disk_dev *p, uint32_t serial, ck_fatb_state *st);
 

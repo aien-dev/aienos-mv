@@ -133,6 +133,10 @@ void ck_x86_ahci_allow_none(unsigned index);
 struct nb_pass;
 const struct nb_pass *ck_x86_netldr_pass(int *object_dropped);
 
+/* kmain_x86.c: marks the end of a start-up step (TSC now) for boot_time's
+ * breakdown; name is a short static string. */
+void ck_x86_step(const char *name);
+
 /* memory_x86.c: Allen's memory and notes on a hard disk (svc/allen_memory.h).
  * open: finds the disk holding Allen's section (or adds one on an approved
  * disk, in unused space), lists its partitions, installs the network loader's

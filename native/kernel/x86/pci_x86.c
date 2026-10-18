@@ -398,15 +398,18 @@ const struct ck_x86_storage_result *ck_x86_storage(uint64_t rsdp, struct ck_fram
         res.ahci_ctrls++;
     }
     res.ahci_disks = ck_x86_ahci_disks();
+    ck_x86_step("disk");
     for (unsigned i = 0; i < nfound; i++)
         if (found[i].cls == 0x010802 && (found[i].ht & 0x7f) == 0)
             nvme_start(&found[i], fr);
+    ck_x86_step("nvme");
     for (unsigned i = 0; i < nfound; i++)
         if ((found[i].cls >> 8) == 0x0200 && (found[i].ht & 0x7f) == 0)
             net_look(&found[i]);
     for (unsigned i = 0; i < nfound; i++)
         if ((found[i].cls >> 8) == 0x0200 && (found[i].ht & 0x7f) == 0 && !res.net_driver)
             net_drive(&found[i], fr);
+    ck_x86_step("network");
     if (!res.net_found)
         ck_puts("net: no Ethernet controller\n");
     ck_printf("storage: pci_functions=%u ahci_controllers=%u disks=%u nvme_controllers=%u nvme_disks=%u "

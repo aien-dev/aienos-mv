@@ -253,34 +253,58 @@ static int find(const uint8_t *dir, const char *name11, uint32_t *clus, uint32_t
     return 0;
 }
 
+/* Compares n bytes read (got) with what ck_fatb_format wrote (want), after
+ * taking over from want the fields FAT drivers change in normal use (see
+ * fat_boot.h). Records the first difference in st; 1 when none. */
+enum { BOOT_SEC, FAT_SEC, DIR_SEC };
+static int as_written(uint8_t *got, const uint8_t *want, uint32_t n, int kind, const char *where, ck_fatb_state *st)
+{
+    if (kind == BOOT_SEC) {
+        got[65] = want[65]; /* BS_Reserved1 */
+    } else if (kind == FAT_SEC) {
+        got[7] = (uint8_t)((got[7] & ~0x0cu) | (want[7] & 0x0cu)); /* FAT[1] bits 27, 26 */
+    } else {
+        for (uint32_t e = 0; e + 32u <= n; e += 32u)
+            got[e + 18] = want[e + 18], got[e + 19] = want[e + 19]; /* DIR_LstAccDate */
+    }
+    for (uint32_t i = 0; i < n; i++)
+        if (got[i] != want[i]) {
+            st->where = where, st->at = i, st->got = got[i], st->want = want[i];
+            return 0;
+        }
+    return 1;
+}
+
 int ck_fatb_state_read(const disk_dev *p, uint32_t serial, ck_fatb_state *st)
 {
+    static const char *const dir_name[] = {"root", "EFI", "BOOT"};
     geo g;
     int rc = geometry(p, &g);
     st->ours = 0;
     st->slot = -1;
     st->image_len = 0;
     st->slot_max = 0;
+    st->where = 0;
     if (rc)
         return rc;
     st->slot_max = slot_max(&g);
     boot_sector(&g, serial, g_want);
     if (rd(p, 0, 1, g_sec))
         return CK_FATB_EIO;
-    if (!same(g_sec, g_want, SEC))
+    if (!as_written(g_sec, g_want, SEC, BOOT_SEC, "boot sector", st))
         return CK_FATB_OK;
     fat_sector0(g_want);
     for (int f = 0; f < 2; f++) {
         if (rd(p, g.rsv + (uint32_t)f * g.fatsz, 1, g_sec))
             return CK_FATB_EIO;
-        if (!same(g_sec, g_want, 4u * (BOOT_DIR + 1u)))
+        if (!as_written(g_sec, g_want, 4u * (BOOT_DIR + 1u), FAT_SEC, f ? "FAT 2" : "FAT 1", st))
             return CK_FATB_OK;
     }
     for (uint32_t c = ROOT; c <= BOOT_DIR; c++) {
         dir_sector(c, g_want);
         if (rd(p, clus_sec(&g, c), 1, g_sec))
             return CK_FATB_EIO;
-        if (!same(g_sec, g_want, c == BOOT_DIR ? 64u : SEC))
+        if (!as_written(g_sec, g_want, c == BOOT_DIR ? 64u : SEC, DIR_SEC, dir_name[c - ROOT], st))
             return CK_FATB_OK;
     }
     st->ours = 1;

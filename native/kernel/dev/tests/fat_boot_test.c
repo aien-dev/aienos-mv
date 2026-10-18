@@ -86,6 +86,25 @@ static int export_part(const ck_part *p, const char *name)
     return rc;
 }
 
+/* xors byte at of the partition's sector lba with x, through the disk itself */
+static int poke(const ck_part *p, uint32_t lba, uint32_t at, uint8_t x)
+{
+    uint8_t s[BS];
+    if (disk_read(&p->dev, lba, 1, s) != DISK_OK)
+        return -1;
+    s[at] ^= x;
+    return disk_write(&p->dev, lba, 1, s) == DISK_OK ? 0 : -1;
+}
+
+/* the changes FAT drivers make in normal use: BS_Reserved1, FAT[1]'s two
+ * flags in both FATs, DIR_LstAccDate in the root and in BOOT */
+static int driver_marks(const ck_part *p, uint32_t rsv, uint32_t fatsz)
+{
+    uint32_t root = rsv + 2u * fatsz;
+    return poke(p, 0, 65, 0x01) || poke(p, rsv, 7, 0x0c) || poke(p, rsv + fatsz, 7, 0x08) ||
+           poke(p, root, 32 + 18, 0x5a) || poke(p, root + 2, 19, 0x01);
+}
+
 static int install(disk_file *f, const ck_part *p, int fmt, const uint8_t *man, const uint8_t *img, uint32_t len,
                    ck_fatb_result *r, uint64_t *blocks)
 {
@@ -153,6 +172,21 @@ int main(int argc, char **argv)
     free(after);
     CHECK(ck_fatb_state_read(&p.dev, serial, &st) == CK_FATB_OK && st.ours && st.slot == 0 && st.image_len == len1);
     CHECK(ck_fatb_state_read(&p.dev, serial + 1u, &st) == CK_FATB_OK && st.ours == 0); /* another serial: not ours */
+    {
+        /* what FAT drivers change in normal use leaves it ours; any other change is named */
+        uint8_t s0[BS];
+        CHECK(disk_read(&p.dev, 0, 1, s0) == DISK_OK);
+        uint32_t rsv = (uint32_t)s0[14] | (uint32_t)s0[15] << 8, fatsz;
+        memcpy(&fatsz, s0 + 36, 4);
+        uint32_t efi = rsv + 2u * fatsz + 1u, boot_entry = 64u + 13u; /* EFI dir, BOOT's DIR_CrtTimeTenth */
+        CHECK(driver_marks(&p, rsv, fatsz) == 0);
+        CHECK(ck_fatb_state_read(&p.dev, serial, &st) == CK_FATB_OK && st.ours && st.slot == 0 && st.image_len == len1);
+        CHECK(poke(&p, efi, boot_entry, 0x01) == 0);
+        CHECK(ck_fatb_state_read(&p.dev, serial, &st) == CK_FATB_OK && !st.ours && st.where &&
+              !strcmp(st.where, "EFI") && st.at == boot_entry && st.got == 1 && st.want == 0);
+        CHECK(poke(&p, efi, boot_entry, 0x01) == 0 && driver_marks(&p, rsv, fatsz) == 0); /* back as written */
+        CHECK(ck_fatb_state_read(&p.dev, serial, &st) == CK_FATB_OK && st.ours && st.slot == 0);
+    }
     CHECK(export_part(&p, "part1.img") == 0 && spill("img1.bin", img1, len1) == 0);
     CHECK(install(&f, &p, 0, man1, img1, len1, &r, &wrote) == CK_FATB_OK && !r.written && r.slot == 0 && wrote == 0);
     static uint8_t big[1];

@@ -141,7 +141,12 @@ static void boot_section(const disk_dev *d)
     if (!obj) {
         if (rc == CK_GPT_ENOPART)
             ck_puts("boot_disk: no boot section yet (made when the network loader starts a kernel)\n");
-        else if (ck_fatb_state_read(&bp.dev, boot_serial(&bp), &st) == CK_FATB_OK && st.slot >= 0)
+        else if ((rc = ck_fatb_state_read(&bp.dev, boot_serial(&bp), &st)) != CK_FATB_OK)
+            ck_printf("boot_disk: the boot section could not be read (%s)\n", ck_fatb_strerror(rc));
+        else if (!st.ours)
+            ck_printf("boot_disk: the boot section is not as AIENOS wrote it: %s byte %u is 0x%02x, not 0x%02x\n",
+                      st.where, st.at, st.got, st.want);
+        else if (st.slot >= 0)
             ck_printf("boot_disk: \\EFI\\BOOT\\BOOTX64.EFI on disk %u: %u bytes (slot %c)\n", disk_index,
                       st.image_len, 'A' + st.slot);
         else
