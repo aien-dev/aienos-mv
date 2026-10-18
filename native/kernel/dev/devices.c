@@ -190,7 +190,15 @@ int ck_stage_console_session(void)
 #endif
     int xrc = ck_xhci_session(&g_pci);
     ck_printf("console_session: xhci fence returned rc=%d state=%s\n", xrc, ck_xhci_state());
+#if defined(CK_ALLEN) && CK_ALLEN && defined(CK_HARDWARE_STAGING)
+    /* Hardware Allen: no serial operator is assumed. Without the keyboard the
+     * session ends here and the boot goes on to its report and reset, so the
+     * machine returns to its default system instead of waiting forever. */
+    if (!ck_console_session_ended())
+        ck_printf("allen: I can't hear the keyboard on this computer yet, so I'll stop here for now. (keyboard: %s)\n", ck_xhci_state());
+#else
     ck_console_session_serial_only(); /* no-op once the exit came inside the fence */
+#endif
     ck_printf("console_session: end (exit) xhci=%s\n", ck_xhci_live() ? "LIVE" : "released");
     return 0;
 }

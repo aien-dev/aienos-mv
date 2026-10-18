@@ -26,7 +26,7 @@ if [ "$(uname -m)" != "aarch64" ]; then cross="aarch64-linux-gnu-"; fi
 commit="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
 out="${repo_root}/target/native-kernel"
 make -s -C native/kernel CROSS="${cross}" OUT="${out}" AIENOS_COMMIT="${commit}" full CK_CONSOLE_SESSION=1 CK_ALLEN=1 >/dev/null
-efi="${out}/full-allen/BOOTAA64.EFI"
+efi="${AIENOS_ALLEN_EFI:-${out}/full-allen/BOOTAA64.EFI}" # AIENOS_ALLEN_EFI: run a prebuilt image (e.g. the hardware one) instead
 
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib_gate_hold.sh"
 if ! gh_quiet_check; then echo "${final_tag}: NOT_RUN (quiet flag held: ${gh_why})"; exit 3; fi
@@ -52,6 +52,8 @@ wait_for() { # seconds ERE: 0 once the serial log matches, 1 when QEMU ended or 
 key() { echo "sendkey $1" >&3; sleep 0.12; }
 usb_say() { local s="$1" i c; for ((i = 0; i < ${#s}; i++)); do c="${s:i:1}"; [[ "$c" == " " ]] && c=spc; key "$c"; done; key ret; sleep 1; }
 
+kbd_dev="-device usb-kbd,bus=xhci.0,id=kbd0"
+[[ -z "${AIENOS_NO_KBD:-}" ]] || kbd_dev=""
 mkdir -p "${work}/esp/EFI/BOOT" "${work}/esp/EFI/AIENOS"
 touch "${work}/esp/EFI/AIENOS/BOOTREPORT.TXT"
 cp "${efi}" "${work}/esp/EFI/BOOT/BOOTAA64.EFI"
@@ -65,7 +67,7 @@ qemu-system-aarch64 \
     -drive if=pflash,format=raw,file="${work}/vars.fd" \
     -drive if=none,id=esp,format=raw,file=fat:rw:"${work}/esp" -device virtio-blk-pci,drive=esp \
     -drive if=none,id=nvme0,format=raw,file="${work}/nvme.img" -device nvme,drive=nvme0,serial=aienos-allen-test \
-    -device qemu-xhci,id=xhci -device usb-kbd,bus=xhci.0,id=kbd0 \
+    -device qemu-xhci,id=xhci ${kbd_dev} \
     -device ramfb -display none -nic none \
     -chardev pipe,id=mon,path="${work}/mon" -mon chardev=mon,mode=readline \
     -chardev pipe,id=ser,path="${work}/ser" -serial chardev:ser -no-reboot 2>"${work}/qemu.err" &
@@ -76,6 +78,15 @@ exec 3>"${work}/mon.in"
 
 fails=0
 row() { if [[ "$2" == 1 ]]; then echo "PASS  $1"; else echo "FAIL  $1"; fails=$((fails + 1)); fi; }
+if [[ -n "${AIENOS_NO_KBD:-}" ]]; then # hardware Allen image without a keyboard: say so, end, reset
+    wait_for "${AIENOS_QEMU_WAIT:-900}" "^report_kind: (final|panic|fault)" || true
+    sleep 3
+    log="$(tr -d "\\r" <"${work}/serial.log")"
+    row "B1 Allen says it cannot hear the keyboard" $(grep -q "allen: I can.t hear the keyboard" <<<"${log}" && echo 1 || echo 0)
+    row "B2 the boot ends (report_kind: final) instead of waiting" $(grep -q "report_kind: final" <<<"${log}" && echo 1 || echo 0)
+    row "B3 QEMU exited on its own (reset)" $(qemu_running && echo 0 || echo 1)
+    if [[ "${fails}" == 0 ]]; then echo "${final_tag}_NOKBD: PASS (QEMU only)"; exit 0; else echo "${final_tag}_NOKBD: FAIL"; exit 1; fi
+fi
 if ! wait_for "${AIENOS_QEMU_WAIT:-900}" '^you> |^console_session: ready'; then
     echo "session never opened; last lines:"; tail -n 15 "${work}/serial.log" | tr -d '\r'
     echo "${final_tag}: FAIL (no session)"; exit 1
