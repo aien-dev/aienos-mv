@@ -1,17 +1,24 @@
-/* allen_ui_test.c -- host test for Allen's window (ui/allen_ui.c), its
- * typeface (ui/allen_font.c) and its first answers (svc/allen_reply.c).
- * Draws the window into RAM at 3840 x 2160 BGRX (and at 1280 x 800 RGBX),
- * types "Hello Allen", lets Allen answer, checks the pixels, and writes PNG
+/* allen_ui_test.c -- host test for Allen's home (ui/allen_ui.c with the night
+ * sky, ui/night.c, and his presence, ui/mind.c), his typeface
+ * (ui/allen_font.c) and his first answers (svc/allen_reply.c). Runs the
+ * startup at 3840 x 2160 BGRX on a hand-moved clock, wakes Allen, types
+ * "Hello Allen", lets him answer, leaves him alone, saves a note; checks the
+ * pixels at each step, checks that drawing only the changed parts gives the
+ * same picture as drawing everything, runs 1280 x 800 RGBX with and without
+ * three helper threads (the frames must match exactly), and writes PNG
  * pictures to the directory given as argv[1] (if any) for a person to look at.
  * Final line: ALLEN_UI_TEST: PASS|FAIL (N checks). */
+#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "../../svc/allen_reply.h"
 #include "../allen_font.h"
 #include "../allen_ui.h"
+#include "../night.h"
 
 static int checks, fails;
 #define CHECK(cond, what)                                                                                     \
@@ -121,35 +128,110 @@ static void png(const char *path, const uint32_t *px, uint32_t pitch, int fmt, u
     printf("note: wrote %s (%ux%u)\n", path, ow, oh);
 }
 
-static unsigned count(const uint32_t *px, uint32_t w, uint32_t h, int fmt, int kind)
+/* ---- looking at a picture: counts over a rectangle of 0x00RRGGBB pixels ---- */
+struct pic {
+    const uint32_t *px;
+    uint32_t pitch;
+    int fmt; /* 0: red in the low byte (RGBX) */
+};
+static void rgb(const struct pic *p, uint32_t x, uint32_t y, int *r, int *g, int *b)
 {
-    unsigned n = 0;
-    for (size_t i = 0; i < (size_t)w * h; i++) {
-        uint32_t c = px[i];
-        int r = c >> 16 & 255, g = c >> 8 & 255, b = c & 255;
-        if (fmt == 0) {
-            int t = r;
-            r = b;
-            b = t;
-        }
-        if (kind == 0 && b > 200 && r < 170 && g < 150 && r > 60) /* the person's bubble */
-            n++;
-        if (kind == 1 && r > 215 && g > 215 && b > 215) /* bright text and the orb's highlight */
-            n++;
+    uint32_t c = p->px[(size_t)y * p->pitch + x];
+    *r = c >> 16 & 255, *g = c >> 8 & 255, *b = c & 255;
+    if (p->fmt == 0) {
+        int t = *r;
+        *r = *b;
+        *b = t;
     }
-    return n;
 }
-
-/* Pixels in a rectangle of a BGRX picture that are lit teal (the lit note). */
-static unsigned teal(const uint32_t *px, uint32_t pitch, uint32_t x0, uint32_t y0, uint32_t w, uint32_t h)
+enum { BRIGHT, BLACK, VIOLET, LIT };
+static unsigned count(const struct pic *p, uint32_t x0, uint32_t y0, uint32_t w, uint32_t h, int kind)
 {
     unsigned n = 0;
     for (uint32_t y = y0; y < y0 + h; y++)
         for (uint32_t x = x0; x < x0 + w; x++) {
-            uint32_t c = px[(size_t)y * pitch + x];
-            n += (c >> 16 & 255) < 120 && (c >> 8 & 255) > 170 && (c & 255) > 150;
+            int r, g, b;
+            rgb(p, x, y, &r, &g, &b);
+            if (kind == BRIGHT)
+                n += r > 150 && g > 150 && b > 150;
+            else if (kind == BLACK)
+                n += r == 0 && g == 0 && b == 0;
+            else if (kind == VIOLET)
+                n += b > 120 && b > r + 30;
+            else
+                n += r > 60 || g > 60 || b > 90;
         }
     return n;
+}
+/* pixels of a and b (w x h, rows `pitch`) that differ by more than tol in any channel */
+static unsigned differ(const uint32_t *a, const uint32_t *b, uint32_t pitch, uint32_t w, uint32_t h, int tol)
+{
+    unsigned n = 0;
+    for (uint32_t y = 0; y < h; y++)
+        for (uint32_t x = 0; x < w; x++) {
+            uint32_t c = a[(size_t)y * pitch + x], d = b[(size_t)y * pitch + x];
+            for (int s = 0; s < 24; s += 8) {
+                int e = (int)(c >> s & 255) - (int)(d >> s & 255);
+                if (e > tol || e < -tol) {
+                    n++;
+                    break;
+                }
+            }
+        }
+    return n;
+}
+
+static uint64_t real_us(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000000u + (uint64_t)ts.tv_nsec / 1000u;
+}
+
+/* the screen's clock in these checks: microseconds, moved by hand */
+static uint64_t now_us;
+static void run_to(uint32_t ms)
+{
+    for (; now_us <= (uint64_t)ms * 1000u; now_us += 16000)
+        ck_allen_ui_tick(now_us);
+}
+
+/* the frame drawn by changed parts against the whole screen drawn again at the same moment */
+static unsigned stale(uint32_t *fb, uint32_t *copy, uint32_t pitch, uint32_t w, uint32_t h)
+{
+    memcpy(copy, fb, (size_t)pitch * h * 4);
+    ck_allen_ui_refresh();
+    ck_allen_ui_tick(now_us - 16000);
+    return differ(fb, copy, pitch, w, h, 6);
+}
+
+/* The bare night sky as Allen's screen draws it (same scale and centre) with
+ * nothing in front of it, and the pixels in a rectangle of the screen that
+ * differ from it at the moment of the last frame: only what the screen added. */
+static ck_night bare_night;
+static int bare_init(uint32_t w, uint32_t h, void *scratch)
+{
+    uint32_t k = w * 256u / 1920u;
+    size_t nb = ck_night_mem_bytes(w, h, k);
+    return ck_night_init(&bare_night, w, h, k, (int32_t)w / 2, (int32_t)(h * 40 / 100), malloc(nb), nb, scratch);
+}
+static unsigned added(const struct pic *p, uint32_t *sky, uint32_t x0, uint32_t y0, uint32_t w, uint32_t h)
+{
+    ck_canvas cv = {sky, (int32_t)p->pitch, bare_night.h};
+    ck_rect r = {(int32_t)x0, (int32_t)y0, (int32_t)w, (int32_t)h};
+    ck_night_at(&bare_night, (uint32_t)((now_us - 16000) / 1000));
+    ck_night_base(&bare_night, &cv, &r);
+    ck_night_lights(&bare_night, &cv, &r, 0, 0);
+    return differ(p->px + (size_t)y0 * p->pitch + x0, sky + (size_t)y0 * p->pitch + x0, p->pitch, w, h, 24);
+}
+
+static volatile int helpers_run;
+static void *helper(void *arg)
+{
+    (void)arg;
+    while (helpers_run)
+        ck_allen_ui_help();
+    return 0;
 }
 
 int main(int argc, char **argv)
@@ -254,148 +336,205 @@ int main(int argc, char **argv)
     ck_af_face_init(&small, 30, 1250, tiny, sizeof tiny);
     CHECK(ck_af_glyph_get(&small, 'W') == 0, "font: a full pool refuses instead of overrunning");
 
-    /* ---- the window at 3840 x 2160, BGRX ---- */
+    /* ---- Allen's home at 3840 x 2160, BGRX ---- */
     uint32_t W = 3840, H = 2160;
-    uint32_t *fb = calloc((size_t)W * H, 4);
+    uint32_t *fb = calloc((size_t)W * H, 4), *copy = malloc((size_t)W * H * 4), *sky = malloc((size_t)W * H * 4);
     size_t need = ck_allen_ui_mem_bytes(W, H);
     void *mem = malloc(need);
-    CHECK(ck_allen_ui_start(fb, W, H, W, 1, mem, need - 1, 1000, 0, "x") == -1, "ui: short memory refused");
-    CHECK(ck_allen_ui_start(fb, W, H, W, 2, mem, need, 1000, 0, "x") == -1, "ui: unknown pixel format refused");
-    CHECK(ck_allen_ui_start(fb, W, H, W, 1, mem, need, 1000, 0, "Type goodbye to restart this computer") == 0,
-          "ui: starts at 3840x2160");
+    struct pic P = {fb, W, 1};
+    CHECK(ck_allen_ui_start(fb, W, H, W, 1, mem, need - 1, 1000000, 0, real_us) == -1, "ui: short memory refused");
+    CHECK(ck_allen_ui_start(fb, W, H, W, 2, mem, need, 1000000, 0, real_us) == -1, "ui: unknown pixel format refused");
+    CHECK(bare_init(W, H, sky) == 0, "night: the bare sky for the checks");
+    uint64_t t_init = real_us();
+    CHECK(ck_allen_ui_start(fb, W, H, W, 1, mem, need, 1000000, 0, real_us) == 0, "ui: starts at 3840x2160");
+    printf("note: the night made in %llu ms (this host)\n", (unsigned long long)((real_us() - t_init) / 1000));
+    CHECK(ck_allen_ui_started() && !ck_allen_ui_on(), "ui: the night has begun; Allen is not awake yet");
+    now_us = 0;
+    run_to(0);
+    CHECK(count(&P, 0, 0, W, H, LIT) == 0, "night: it opens in the dark");
+    run_to(1800);
+    unsigned early = count(&P, 0, 0, W, H, LIT);
+    run_to(4200);
+    unsigned later = count(&P, 0, 0, W, H, LIT);
+    CHECK(early > 0 && later > early * 2, "night: the stars come out, the brightest first");
+    CHECK(stale(fb, copy, W, W, H) == 0, "night: the fading sky is drawn whole");
+    if (dir) {
+        snprintf(path, sizeof path, "%s/night-1-stars.png", dir);
+        png(path, fb, W, 1, 0, 0, W, H, 2);
+    }
+    uint32_t cx = W / 2, cy = H * 40 / 100, R = 236;
+    run_to(8000);
+    CHECK(count(&P, cx - 800, cy - 500, 1600, 1000, BLACK) > 2000, "night: two black holes, their shadows");
+    CHECK(count(&P, 0, 0, W, H, BLACK) < 200000, "night: and only the holes are black");
+    CHECK(stale(fb, copy, W, W, H) < 40, "night: the bent starlight round the holes is redrawn as they move");
+    if (dir) {
+        snprintf(path, sizeof path, "%s/night-2-holes.png", dir);
+        png(path, fb, W, 1, 0, 0, W, H, 2);
+        snprintf(path, sizeof path, "%s/night-2-holes-detail.png", dir);
+        png(path, fb, W, 1, cx - 900, cy - 560, 1800, 1120, 1);
+    }
+    run_to(11600);
+    unsigned before = count(&P, cx - 300, cy - 300, 600, 600, BRIGHT);
+    run_to(12100);
+    CHECK(count(&P, cx - 300, cy - 300, 600, 600, BRIGHT) > before + 1500, "night: the merger flashes");
+    run_to(12900);
+    CHECK(stale(fb, copy, W, W, H) < 40, "night: the ripple is redrawn wherever it runs");
+    if (dir) {
+        snprintf(path, sizeof path, "%s/night-3-ripple.png", dir);
+        png(path, fb, W, 1, 0, 0, W, H, 2);
+    }
+    run_to(16500);
+    CHECK(count(&P, 0, 0, W, H, BLACK) == 0, "night: the last black hole has dissolved");
+    CHECK(count(&P, cx - R, cy - R, 2 * R, 2 * R, BRIGHT) > 1000 && count(&P, cx - R, cy - R, 2 * R, 2 * R, VIOLET) > 5000,
+          "allen: formed, a bright violet mind in the middle");
+    uint32_t bx = W / 2 - 720, by = H - 300, bw = 1440, bh = 108;
+    CHECK(added(&P, sky, 0, by - 40, W, H - by + 40) < 400, "allen: no bar before he is awake");
+    CHECK(stale(fb, copy, W, W, H) < 40, "allen: drawn whole as he turns");
+    if (dir) {
+        snprintf(path, sizeof path, "%s/allen-1-formed.png", dir);
+        png(path, fb, W, 1, 0, 0, W, H, 2);
+        snprintf(path, sizeof path, "%s/allen-1-formed-detail.png", dir);
+        png(path, fb, W, 1, cx - 600, cy - 500, 1200, 1000, 1);
+    }
+    /* awake: the bar comes up */
+    ck_allen_ui_wake("Type goodbye to restart this computer", now_us);
+    run_to(17800);
     CHECK(ck_allen_ui_on(), "ui: on");
-    uint32_t corner = fb[0];
-    CHECK((corner >> 16 & 255) < 60 && (corner & 255) < 90, "ui: background is dark");
-    unsigned user0 = count(fb, W, H, 1, 0);
-    unsigned bright0 = count(fb, W, H, 1, 1);
-    CHECK(bright0 > 500, "ui: title and orb are drawn");
-    if (dir) {
-        snprintf(path, sizeof path, "%s/allen-start.png", dir);
-        png(path, fb, W, 1, 0, 0, W, H, 2);
-    }
+    unsigned bar0 = added(&P, sky, bx, by, bw, bh);
+    CHECK(bar0 > 2500, "bar: up once he is awake, with its hint");
+    CHECK(added(&P, sky, 0, by + bh + 10, W, H - by - bh - 10) > 1000, "bar: the footer under the empty bar");
     const char *typed = "Hello Allen";
-    uint64_t now = 1000;
-    for (unsigned i = 1; i <= 11; i++, now += 120) {
-        ck_allen_ui_input(typed, i, now);
-        ck_allen_ui_tick(now);
+    for (unsigned i = 1; i <= 11; i++) {
+        ck_allen_ui_input(typed, i, now_us);
+        run_to((uint32_t)(now_us / 1000) + 120);
     }
-    unsigned bright_typed = count(fb, W, H, 1, 1);
-    CHECK(bright_typed > bright0, "ui: typed letters appear in the input field");
+    CHECK(count(&P, bx, by, bw, bh, BRIGHT) > 500, "bar: what is typed appears in it");
+    CHECK(added(&P, sky, 0, by + bh + 10, W, H - by - bh - 10) < 400, "bar: the footer goes while typing");
     if (dir) {
-        snprintf(path, sizeof path, "%s/allen-typing.png", dir);
+        snprintf(path, sizeof path, "%s/allen-2-typing.png", dir);
         png(path, fb, W, 1, 0, 0, W, H, 2);
     }
-    ck_allen_ui_said(typed, ck_allen_reply(typed), now);
-    CHECK(count(fb, W, H, 1, 0) > user0 + 2000, "ui: the person's bubble appears");
-    unsigned before = count(fb, W, H, 1, 1);
-    for (unsigned i = 0; i < 300; i++, now += 10)
-        ck_allen_ui_tick(now);
-    unsigned after = count(fb, W, H, 1, 1);
-    CHECK(after > before, "ui: Allen's answer appears letter by letter");
-    uint32_t snap_mid = fb[(size_t)(H / 2) * W + W / 2];
-    for (unsigned i = 0; i < 60; i++, now += 33)
-        ck_allen_ui_tick(now);
-    CHECK(fb[(size_t)(H / 2) * W + W / 2] == snap_mid, "ui: the conversation stays put while the orb moves");
+    /* Enter: the line rises into him, he thinks, then answers under him */
+    uint32_t wy = cy + 500 - 90, wh = 5 * 80 + 60;
+    ck_allen_ui_said(typed, ck_allen_reply(typed), now_us);
+    uint32_t said = (uint32_t)(now_us / 1000);
+    run_to(said + 500);
+    CHECK(stale(fb, copy, W, W, H) < 40, "talk: the rising line and the thoughts are redrawn");
     if (dir) {
-        snprintf(path, sizeof path, "%s/allen-answer.png", dir);
+        snprintf(path, sizeof path, "%s/allen-3-thinking.png", dir);
         png(path, fb, W, 1, 0, 0, W, H, 2);
-        snprintf(path, sizeof path, "%s/allen-bg-detail.png", dir);
-        png(path, fb, W, 1, 0, 0, 1600, 1000, 1);
-        snprintf(path, sizeof path, "%s/allen-answer-detail.png", dir);
-        png(path, fb, W, 1, 840, 1100, 2160, 820, 1);
     }
-    {
-        /* A longer talk: long answers wrap, older bubbles scroll up and out. */
-        static const char *const lines[] = {"my name is drake", "how are you", "good", "what can you do",
-                                            "tell me about this computer", "what is 12 times 4"};
-        ck_allen_facts facts = {4, 1, 1, W, H};
-        ck_allen_mind m;
-        ck_allen_mind_init(&m, &facts);
-        for (size_t i = 0; i < sizeof lines / sizeof lines[0]; i++) {
-            ck_allen_ui_said(lines[i], ck_allen_answer(&m, lines[i], 60 + i), now);
-            for (unsigned j = 0; j < 400; j++, now += 10)
-                ck_allen_ui_tick(now);
-        }
-        unsigned talk = count(fb, W, H, 1, 0);
-        CHECK(talk > user0 + 2000, "ui: a longer conversation scrolls and keeps drawing");
-        if (dir) {
-            snprintf(path, sizeof path, "%s/allen-conversation.png", dir);
-            png(path, fb, W, 1, 0, 0, W, H, 2);
-        }
+    run_to(said + 1300);
+    CHECK(stale(fb, copy, W, W, H) < 40, "talk: the galaxies' shimmer is redrawn while he speaks");
+    run_to(said + 2600);
+    CHECK(added(&P, sky, W / 4, wy, W / 2, wh) > 3000, "talk: Allen's answer appears under him");
+    CHECK(count(&P, bx, by, bw, bh, BRIGHT) < 500, "talk: the bar is cleared for the next line");
+    if (dir) {
+        snprintf(path, sizeof path, "%s/allen-4-answer.png", dir);
+        png(path, fb, W, 1, 0, 0, W, H, 2);
+        snprintf(path, sizeof path, "%s/allen-4-answer-detail.png", dir);
+        png(path, fb, W, 1, W / 4, cy - 400, W / 2, 1300, 1);
     }
-
+    /* left alone: his words fade once read, then the bar; only Allen is left, waiting */
+    run_to(said + 24000);
+    CHECK(added(&P, sky, W / 4, wy, W / 2, wh) < 400, "rest: his words fade once read");
+    CHECK(added(&P, sky, 0, by - 40, W, H - by + 40) < 400, "rest: the bar fades when nothing is in use");
+    CHECK(count(&P, cx - R, cy - R, 2 * R, 2 * R, BRIGHT) > 1000 && count(&P, cx - R, cy - R, 2 * R, 2 * R, VIOLET) > 5000,
+          "rest: Allen stays, waiting");
+    CHECK(stale(fb, copy, W, W, H) < 40, "rest: nothing is left behind on the screen");
+    if (dir) {
+        snprintf(path, sizeof path, "%s/allen-5-waiting.png", dir);
+        png(path, fb, W, 1, 0, 0, W, H, 2);
+    }
+    ck_allen_ui_input("h", 1, now_us);
+    run_to((uint32_t)(now_us / 1000) + 400);
+    CHECK(added(&P, sky, bx, by, bw, bh) > 2500, "rest: a key brings the bar back");
+    ck_allen_ui_input("", 0, now_us);
     {
-        /* The notes map beside the window (at this size: x 3080..3760, y 520..1640):
-         * empty, then six notes with links and the newest lit, then none lit. */
-        const uint32_t mx = 3080, my = 520, mw = 680, mh = 1120;
-        CHECK(teal(fb, W, mx, my, mw, mh) == 0, "map: empty, nothing lit");
-        static const char *const said[] = {"the gate code is 4471", "the garage code is 9012",
-                                           "the wifi password is Blue-Fox-88", "the garage door opener is in the truck",
-                                           "the dentist is on friday at 10", "the truck needs new tires before the winter"};
+        /* the notes constellation: shown when a note is saved, then it goes */
+        static const char *const notes[] = {"the gate code is 4471", "the garage code is 9012",
+                                            "the wifi password is Blue-Fox-88", "the garage door opener is in the truck",
+                                            "the dentist is on friday at 10", "the truck needs new tires before the winter"};
         static ck_allen_notes ns;
         ns.n = 6;
         for (unsigned i = 0; i < 6; i++)
-            ck_allen_note_set(&ns.note[i], said[i], 1);
+            ck_allen_note_set(&ns.note[i], notes[i], 1);
         uint8_t ea[32], eb[32];
-        unsigned ne = 0, links = 0;
+        unsigned ne = 0;
         for (unsigned a = 0; a < 6; a++) /* point 0 is the newest note */
             for (unsigned b = a + 1; b < 6; b++)
-                if (ck_allen_note_links(&ns.note[5 - a], &ns.note[5 - b])) {
-                    ea[ne] = (uint8_t)a;
-                    eb[ne++] = (uint8_t)b;
-                    links++;
-                }
-        CHECK(links >= 3, "map: the six notes link (garage, code, truck)");
-        uint32_t mid = fb[(size_t)(H / 2) * W + W / 2];
-        ck_allen_ui_map(6, ea, eb, ne, 0, ns.note[5].text, 6, links);
-        unsigned lit = teal(fb, W, mx, my, mw, mh);
-        CHECK(lit > 150, "map: the lit note glows");
-        CHECK(fb[(size_t)(H / 2) * W + W / 2] == mid, "map: the conversation is left as it was");
+                if (ck_allen_note_links(&ns.note[5 - a], &ns.note[5 - b]))
+                    ea[ne] = (uint8_t)a, eb[ne++] = (uint8_t)b;
+        CHECK(ne >= 3, "map: the six notes link (garage, code, truck)");
+        uint32_t mx = W * 84 / 100 - 380, my = H * 42 / 100 - 390, mw = 760, mh = 820;
+        ck_allen_ui_map(6, ea, eb, ne, -1, 0, 6, ne);
+        run_to((uint32_t)(now_us / 1000) + 1500);
+        CHECK(added(&P, sky, mx, my, mw, mh) < 400, "map: not shown when nothing was saved");
+        ck_allen_ui_map(6, ea, eb, ne, 0, ns.note[5].text, 6, ne);
+        uint32_t m0 = (uint32_t)(now_us / 1000);
+        run_to(m0 + 500);
+        CHECK(stale(fb, copy, W, W, H) < 40, "map: the spark from Allen to the note is redrawn");
+        run_to(m0 + 1500);
+        CHECK(added(&P, sky, mx, my, mw, mh) > 3000, "map: the note just saved glows");
         if (dir) {
-            snprintf(path, sizeof path, "%s/allen-map.png", dir);
+            snprintf(path, sizeof path, "%s/allen-6-notes.png", dir);
             png(path, fb, W, 1, 0, 0, W, H, 2);
-            snprintf(path, sizeof path, "%s/allen-map-detail.png", dir);
-            png(path, fb, W, 1, mx - 40, my - 40, mw + 80, mh + 80, 1);
+            snprintf(path, sizeof path, "%s/allen-6-notes-detail.png", dir);
+            png(path, fb, W, 1, mx, my, mw, mh, 1);
         }
-        ck_allen_ui_map(6, ea, eb, ne, -1, 0, 6, links);
-        CHECK(teal(fb, W, mx, my, mw, mh) < lit / 4, "map: nothing lit after");
-        for (unsigned i = 0; i < 60; i++, now += 33)
-            ck_allen_ui_tick(now);
-        CHECK(teal(fb, W, mx, my, mw, mh) < lit / 4, "map: the orb's animation leaves the map alone");
         ck_allen_ui_map(6, ea, eb, ne, 3, "a very long note that cannot possibly fit on the one line under the map", 6,
-                        links);
-        CHECK(teal(fb, W, mx, my, mw, mh) > 150, "map: a long label is cut to fit, not overrun");
+                        ne);
+        run_to(m0 + 3000);
+        CHECK(added(&P, sky, mx, my, mw, mh) > 3000, "map: a long label is cut to fit, not overrun");
+        run_to(m0 + 15000);
+        CHECK(added(&P, sky, mx, my, mw, mh) < 400, "map: it goes again after a while");
     }
+    uint32_t frames, slowest, average;
+    ck_allen_ui_stats(&frames, &slowest, &average);
+    printf("note: %u frames at 3840x2160 on one core of this host: average %u us, slowest %u us\n", frames, average,
+           slowest);
+    CHECK(frames > 1000, "ui: frames counted");
 
-    /* ---- 1280 x 800 RGBX (QEMU's usual mode) ---- */
+    /* ---- 1280 x 800 RGBX with a padded pitch (QEMU's usual mode); then the same with three helper cores ---- */
     uint32_t w2 = 1280, h2 = 800, pitch2 = 1344;
-    uint32_t *fb2 = calloc((size_t)pitch2 * h2, 4);
+    uint32_t *fb2[2];
     size_t need2 = ck_allen_ui_mem_bytes(w2, h2);
     void *mem2 = malloc(need2);
-    CHECK(ck_allen_ui_start(fb2, w2, h2, pitch2, 0, mem2, need2, 1000, 0, "footer") == 0, "ui: starts at 1280x800");
-    ck_allen_ui_said("Hello Allen", "Hello Humanity.", 10);
-    for (unsigned i = 0; i < 300; i++)
-        ck_allen_ui_tick(10 + i * 10);
-    unsigned user2 = 0, padding_clean = 1;
+    for (int run = 0; run < 2; run++) {
+        fb2[run] = calloc((size_t)pitch2 * h2, 4);
+        CHECK(ck_allen_ui_start(fb2[run], w2, h2, pitch2, 0, mem2, need2, 1000000, 0, 0) == 0, "ui: starts at 1280x800");
+        pthread_t th[3];
+        helpers_run = run;
+        for (int i = 0; run && i < 3; i++)
+            pthread_create(&th[i], 0, helper, 0);
+        now_us = 0;
+        run_to(15000);
+        ck_allen_ui_wake("footer", now_us);
+        ck_allen_ui_said("Hello Allen", "Hello Humanity.", now_us);
+        run_to(18000);
+        helpers_run = 0;
+        for (int i = 0; run && i < 3; i++)
+            pthread_join(th[i], 0);
+    }
+    struct pic P2 = {fb2[0], pitch2, 0};
+    unsigned padding_clean = 1;
     for (uint32_t y = 0; y < h2; y++)
-        for (uint32_t x = 0; x < pitch2; x++) {
-            uint32_t c = fb2[(size_t)y * pitch2 + x];
-            if (x >= w2 && c)
-                padding_clean = 0;
-            if (x < w2 && (c >> 16 & 255) > 200 && (c & 255) < 170 && (c & 255) > 60 && (c >> 8 & 255) < 150)
-                user2++; /* RGBX: blue lands in the top byte */
-        }
-    CHECK(user2 > 300, "ui: RGBX screens get red and blue swapped");
+        for (uint32_t x = w2; x < pitch2; x++)
+            padding_clean &= fb2[0][(size_t)y * pitch2 + x] == 0;
+    uint32_t c2x = w2 / 2, c2y = h2 * 40 / 100;
+    CHECK(count(&P2, c2x - 60, c2y - 60, 120, 120, VIOLET) > 2000, "ui: RGBX screens get red and blue swapped");
+    CHECK(count(&P2, w2 / 4, c2y + 120, w2 / 2, 200, BRIGHT) > 100, "ui: Allen answers at 1280x800");
     CHECK(padding_clean, "ui: nothing written past the visible width");
+    CHECK(memcmp(fb2[0], fb2[1], (size_t)pitch2 * h2 * 4) == 0, "ui: three helper cores draw exactly the same frames");
     if (dir) {
         snprintf(path, sizeof path, "%s/allen-1280x800.png", dir);
         uint32_t *tmp = malloc((size_t)w2 * h2 * 4);
         for (uint32_t y = 0; y < h2; y++)
-            memcpy(tmp + (size_t)y * w2, fb2 + (size_t)y * pitch2, w2 * 4);
+            memcpy(tmp + (size_t)y * w2, fb2[0] + (size_t)y * pitch2, w2 * 4);
         png(path, tmp, w2, 0, 0, 0, w2, h2, 1);
         free(tmp);
     }
-    free(fb), free(mem), free(fb2), free(mem2);
+    free(fb), free(copy), free(sky), free(mem), free(fb2[0]), free(fb2[1]), free(mem2);
     printf("ALLEN_UI_TEST: %s (%d checks%s)\n", fails ? "FAIL" : "PASS", checks, fails ? ", some failed" : "");
     return fails ? 1 : 0;
 }
