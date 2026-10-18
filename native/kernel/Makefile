@@ -866,6 +866,11 @@ endif
 # GOP framebuffer console keeps the last report on screen before the PSCI
 # reset, so an operator can read or photograph it. 0 (default) in every QEMU
 # gate; scripts/stage_one_time_boot_ck.sh builds the hardware image with 120.
+# The Allen hardware image holds its last screen 120 s (the owner reads or
+# photographs it before the reset) unless the build line sets CK_FB_HOLD_S.
+ifeq ($(strip $(CK_ALLEN))$(if $(strip $(CK_HARDWARE_STAGING)),hw),1hw)
+CK_FB_HOLD_S ?= 120
+endif
 CK_FB_HOLD_S ?= 0
 ifeq ($(shell echo '$(CK_FB_HOLD_S)' | grep -Ex '[0-9]{1,4}'),)
 $(error CK_FB_HOLD_S must be 0..9999 seconds)
@@ -1084,11 +1089,19 @@ $(OUT)/commit.stamp: FORCE
 	@mkdir -p $(OUT)
 	@echo '$(AIENOS_COMMIT)' | cmp -s - $@ || echo '$(AIENOS_COMMIT)' > $@
 
-$(KOBJ)/%.o: $(NATIVE)/%.c $(HDRS)
+# Shared kernel objects are rebuilt whenever the compile flags change (e.g.
+# CK_FB_HOLD_S differs between the QEMU and the hardware Allen image), so one
+# image never links another image's objects.
+$(OUT)/kcflags.stamp: FORCE
+	@mkdir -p $(OUT)
+	$(file >$@.new,$(KCC) $(KCFLAGS))
+	@cmp -s $@.new $@ && rm -f $@.new || mv -f $@.new $@
+
+$(KOBJ)/%.o: $(NATIVE)/%.c $(HDRS) $(OUT)/kcflags.stamp
 	@mkdir -p $(dir $@)
 	$(KCC) $(KCFLAGS) -c -o $@ $<
 
-$(KOBJ)/kernel/core/report.o: $(KDIR)/core/report.c $(HDRS) $(OUT)/commit.stamp
+$(KOBJ)/kernel/core/report.o: $(KDIR)/core/report.c $(HDRS) $(OUT)/commit.stamp $(OUT)/kcflags.stamp
 	@mkdir -p $(dir $@)
 	$(KCC) $(KCFLAGS) -DAIENOS_COMMIT='"$(AIENOS_COMMIT)"' -c -o $@ $<
 
@@ -1130,7 +1143,7 @@ $(KOBJ)/kernel/core/osh_test.o: $(KDIR)/core/osh_test.c $(HDRS) $(ART_HDRS) $(OU
 	@mkdir -p $(dir $@)
 	$(KCC) $(KCFLAGS) $(ART_TRUST_FLAGS) -c -o $@ $<
 
-$(KOBJ)/%.o: $(NATIVE)/%.S
+$(KOBJ)/%.o: $(NATIVE)/%.S $(OUT)/kcflags.stamp
 	@mkdir -p $(dir $@)
 	$(KCC) $(KCFLAGS) -c -o $@ $<
 

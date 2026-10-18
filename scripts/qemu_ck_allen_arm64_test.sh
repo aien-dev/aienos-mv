@@ -84,7 +84,10 @@ if [[ -n "${AIENOS_NO_KBD:-}" ]]; then # hardware Allen image without a keyboard
     log="$(tr -d "\\r" <"${work}/serial.log")"
     row "B1 Allen says it cannot hear the keyboard" $(grep -q "allen: I can.t hear the keyboard" <<<"${log}" && echo 1 || echo 0)
     row "B2 the boot ends (report_kind: final) instead of waiting" $(grep -q "report_kind: final" <<<"${log}" && echo 1 || echo 0)
-    row "B3 QEMU exited on its own (reset)" $(qemu_running && echo 0 || echo 1)
+    hold="$(tr -d "\\r" <"${work}/serial.log" | sed -n 's/^screen: holding \([0-9]*\) s before reset$/\1/p' | head -1)"
+    hold_end=$(( $(date +%s) + ${hold:-0} + 30 )) # the hardware image holds its last screen before reset
+    while qemu_running && (( $(date +%s) < hold_end )); do sleep 1; done
+    row "B3 QEMU exited on its own (reset, after a ${hold:-0} s screen hold)" $(qemu_running && echo 0 || echo 1)
     if [[ "${fails}" == 0 ]]; then echo "${final_tag}_NOKBD: PASS (QEMU only)"; exit 0; else echo "${final_tag}_NOKBD: FAIL"; exit 1; fi
 fi
 if ! wait_for "${AIENOS_QEMU_WAIT:-900}" '^you> |^console_session: ready'; then
