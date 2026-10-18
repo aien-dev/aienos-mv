@@ -1,4 +1,4 @@
-/* x86.h -- x86_64 machine access for the AIENOS-IMAC-KERNEL-0 kernel
+/* x86.h -- x86_64 machine access for the AIENOS-KERNEL-0 kernel
  * (native/kernel/x86): port and MSR I/O, CPUID, TSC, control registers,
  * the trap frame trap.S builds, and the entry points between the files.
  * Everything is compiled -mabi=ms (UEFI calling convention, like the stub),
@@ -118,13 +118,16 @@ int ck_x86_ahci_allow(unsigned index, uint64_t first, uint64_t last);
 /* Closes every write range of the disk. */
 void ck_x86_ahci_allow_none(unsigned index);
 
-/* memory_x86.c: Allen's memory on the approved hard disk (svc/allen_memory.h).
- * open: finds the disk, lists its partitions, adds the AIENOS partition in
- * unused space if there is none, loads the newest copy into *mem. 1 when
- * saves will reach the disk, 0 when Allen remembers only until power off.
- * save: 0 or -1 (then nothing more is written this boot). */
-int ck_x86_memory_open(ck_allen_memory *mem, uint64_t tsc_hz);
+/* memory_x86.c: Allen's memory and notes on a hard disk (svc/allen_memory.h).
+ * open: finds the disk holding Allen's section (or adds one on an approved
+ * disk, in unused space), lists its partitions, loads the newest copy into
+ * *mem and the notes it counts into *notes. 1 when saves will reach the disk,
+ * 0 when Allen remembers only until power off. save, notes_write (note index,
+ * written before the save that counts it): 0 or -1 (then nothing more is
+ * written this boot). */
+int ck_x86_memory_open(ck_allen_memory *mem, ck_allen_notes *notes, uint64_t tsc_hz);
 int ck_x86_memory_save(const ck_allen_memory *mem);
+int ck_x86_notes_write(const ck_allen_notes *notes, uint32_t index);
 
 /* pci_x86.c: offers every xHCI controller the walk found to xhci_x86.c until
  * one has a USB boot keyboard; prints "keyboard: ready (...)" or why none.

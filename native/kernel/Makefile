@@ -2236,7 +2236,7 @@ $(IMACDIAG_EFI): $(IMACDIAG_ELF)
 	@echo "built $@ (commit $(AIENOS_COMMIT))"
 imac-diag: $(IMACDIAG_EFI)
 
-# ---- IMACKERN.EFI: AIENOS-IMAC-KERNEL-0, the C kernel core on x86_64 (2017 iMac) ----
+# ---- IMACKERN.EFI: AIENOS-KERNEL-0, the C kernel core on x86_64 (2017 iMac) ----
 # x86/efi_x86.c (stub: GOP, RSDP, memory map, ExitBootServices, CHANDOF3) + x86/kmain_x86.c
 # (GDT/TSS/IDT, own page tables, guard page, HPET-timed TSC, local APIC timer, ACPI S5)
 # + x86/pci_x86.c (PCI walk; AHCI via x86/ahci_x86.c and NVMe via ../disk/disk_nvme.c, both
@@ -2253,7 +2253,7 @@ imac-diag: $(IMACDIAG_EFI)
 #   make imac-kernel CK_X86_REPORT=1 -> $(OUT)/IMACKERN-LAB.EFI (own object dir)
 # adds x86/report_x86.c + ../../net/aienos_net.c and tg3 transmit (-DCK_X86_REPORT=1): during the
 # hold it broadcasts only allowlisted console lines (ck_x86_report_filter, never the raw console)
-# as UDP to port 47031, header "AIENOS-IMAC-REPORT v=2 auth=none": UNAUTHENTICATED, never a
+# as UDP to port 47031, header "AIENOS-REPORT v=2 auth=none": UNAUTHENTICATED, never a
 # receipt, evidence or a command. Host test scripts/ck_imac_report_test.sh, receiver
 # tools/ck_imac_report_listen.c. The default image, and any resident or service (ALLEN) build,
 # must not contain it: the link step below fails a default image that has a report symbol.
@@ -2279,7 +2279,7 @@ IMACKERN_OBJS := $(IMACKERN_DIR)/efi_entry_x86_64.o $(IMACKERN_DIR)/efi_x86.o $(
 	$(IMACKERN_DIR)/pci_x86.o $(IMACKERN_DIR)/smp_x86.o $(IMACKERN_DIR)/disk_nvme.o \
 	$(IMACKERN_DIR)/tg3_x86.o $(IMACKERN_DIR)/xhci_x86.o $(IMACKERN_DIR)/usb_hid.o $(IMACKERN_DIR)/sha256.o \
 	$(IMACKERN_DIR)/allen_ui.o $(IMACKERN_DIR)/allen_font.o $(IMACKERN_DIR)/allen_reply.o \
-	$(IMACKERN_DIR)/allen_memory.o $(IMACKERN_DIR)/gpt_add.o $(IMACKERN_DIR)/memory_x86.o
+	$(IMACKERN_DIR)/allen_memory.o $(IMACKERN_DIR)/allen_notes.o $(IMACKERN_DIR)/gpt_add.o $(IMACKERN_DIR)/memory_x86.o
 IMACKERN_REPORT_OBJS := $(IMACKERN_DIR)/report_x86.o $(IMACKERN_DIR)/aienos_net.o
 # Symbols only the lab image may contain; the default image is checked for them after linking.
 IMACKERN_REPORT_SYMS := ck_x86_report_hold|ck_x86_report_frame|ck_x86_report_filter|ck_x86_report_parts|ck_x86_tg3_send|ck_x86_tg3_drain|net_udp_build
@@ -2313,10 +2313,11 @@ $(IMACKERN_DIR)/usb_hid.o: $(KDIR)/dev/usb_hid.c $(KDIR)/dev/usb_hid.h $(NATIVE)
 $(IMACKERN_DIR)/sha256.o: $(NATIVE)/argus/sha256.c $(NATIVE)/argus/sha256.h
 $(IMACKERN_DIR)/allen_ui.o: $(KDIR)/ui/allen_ui.c $(KDIR)/ui/allen_ui.h $(KDIR)/ui/allen_font.h
 $(IMACKERN_DIR)/allen_font.o: $(KDIR)/ui/allen_font.c $(KDIR)/ui/allen_font.h
-$(IMACKERN_DIR)/allen_reply.o: $(KDIR)/svc/allen_reply.c $(KDIR)/svc/allen_reply.h
-$(IMACKERN_DIR)/allen_memory.o: $(KDIR)/svc/allen_memory.c $(KDIR)/svc/allen_memory.h $(KDIR)/svc/allen_reply.h $(NATIVE)/disk/disk.h $(NATIVE)/argus/sha256.h
+$(IMACKERN_DIR)/allen_reply.o: $(KDIR)/svc/allen_reply.c $(KDIR)/svc/allen_reply.h $(KDIR)/svc/allen_notes.h
+$(IMACKERN_DIR)/allen_notes.o: $(KDIR)/svc/allen_notes.c $(KDIR)/svc/allen_notes.h
+$(IMACKERN_DIR)/allen_memory.o: $(KDIR)/svc/allen_memory.c $(KDIR)/svc/allen_memory.h $(KDIR)/svc/allen_reply.h $(KDIR)/svc/allen_notes.h $(NATIVE)/disk/disk.h $(NATIVE)/argus/sha256.h
 $(IMACKERN_DIR)/gpt_add.o: $(KDIR)/dev/gpt_add.c $(KDIR)/dev/gpt_add.h $(KDIR)/dev/disk_part.h $(NATIVE)/disk/disk.h $(NATIVE)/argus/sha256.h
-$(IMACKERN_DIR)/memory_x86.o: $(X86K)/memory_x86.c $(IMACKERN_HDRS) $(KDIR)/svc/allen_memory.h $(KDIR)/dev/gpt_add.h $(KDIR)/dev/disk_part.h
+$(IMACKERN_DIR)/memory_x86.o: $(X86K)/memory_x86.c $(IMACKERN_HDRS) $(KDIR)/svc/allen_memory.h $(KDIR)/svc/allen_notes.h $(KDIR)/dev/gpt_add.h $(KDIR)/dev/disk_part.h
 $(IMACKERN_DIR)/report_x86.o: $(X86K)/report_x86.c $(X86K)/report_x86.h $(IMACKERN_HDRS) $(NATIVE)/net/aienos_net.h
 $(IMACKERN_DIR)/aienos_net.o: $(NATIVE)/net/aienos_net.c $(NATIVE)/net/aienos_net.h
 $(sort $(IMACKERN_OBJS) $(IMACKERN_REPORT_OBJS)):
@@ -2347,7 +2348,7 @@ $(IMACKERN_ELF): $(IMACKERN_OBJS) $(BOOT)/image_x86_64.ld
 	elif [ -n "$$r" ]; then \
 	  echo "default iMac image links the lab-only network report (build it with CK_X86_REPORT=1 only):"; \
 	  echo "$$r"; rm -f $@; exit 1; fi
-	@if [ "$(CK_X86_REPORT)" != 1 ] && grep -aq "AIENOS-IMAC-REPORT" $@; then \
+	@if [ "$(CK_X86_REPORT)" != 1 ] && grep -aq "AIENOS-REPORT" $@; then \
 	  echo "default iMac image carries the report header string"; rm -f $@; exit 1; fi
 $(IMACKERN_EFI): $(IMACKERN_ELF)
 	$(X86OBJCOPY) -O binary $< $@

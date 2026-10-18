@@ -22,7 +22,7 @@ fail() { echo "AIENOS_ALLEN_UI: FAIL $*"; exit 1; }
 CC=${HOSTCC:-cc}
 mkdir -p "$OUT"
 $CC -std=c11 -O2 -Wall -Wextra -Werror -o "$W/test" $K/ui/tests/allen_ui_test.c $K/ui/allen_ui.c \
-    $K/ui/allen_font.c $K/svc/allen_reply.c || fail "test does not build"
+    $K/ui/allen_font.c $K/svc/allen_reply.c $K/svc/allen_notes.c || fail "test does not build"
 "$W/test" "$OUT" || fail "window checks"
 echo "pictures: $OUT"
 echo "AIENOS_ALLEN_UI: PASS"

@@ -14,7 +14,7 @@ QEMU qualifies nothing physical: a PASS here says nothing about real hardware.
 | `core/` | Console, printf, ACPI, reports/panic/PSCI reset, M3 (threads, scheduler, EL0, capabilities, IPC), `kmain.c`. |
 | `tests/` | Host unit tests. |
 | `third_party/omega/` | The canonical Omega Cortex store, byte for byte from the omega commit in `omega.lock` (checked by `scripts/omega_lock_check.sh`); built freestanding by `svc/cortex_store.c` over the sealed Store through `svc/cortex_journal.c` (native v1 plan P06). |
-| `x86/` | x86_64 port, first cut (AIENOS-IMAC-KERNEL-0, 2017 iMac): UEFI stub, descriptor tables and interrupt stubs, page tables, local APIC timer, ACPI power off, console, secondary-core start, PCI walk, read-only AHCI and NVMe disks, BCM57766 Ethernet link detection; a lab-only, opt-in network report (`CK_X86_REPORT=1`). |
+| `x86/` | x86_64 port, first cut (AIENOS-KERNEL-0, 2017 iMac): UEFI stub, descriptor tables and interrupt stubs, page tables, local APIC timer, ACPI power off, console, secondary-core start, PCI walk, read-only AHCI and NVMe disks, BCM57766 Ethernet link detection; a lab-only, opt-in network report (`CK_X86_REPORT=1`). |
 | `../boot/` | Minimal UEFI entry stub (one image with the kernel). |
 
 ## Build and test
@@ -143,7 +143,7 @@ of them:
   host tools) are still present as data in every image, including hardware
   staging; the ordinary loader trusts no anchor.
 
-## 2017 iMac image (AIENOS-IMAC-KERNEL-0, x86_64)
+## 2017 iMac image (AIENOS-KERNEL-0, x86_64)
 
     make -C native/kernel imac-kernel        # target/native-kernel/IMACKERN.EFI
     scripts/qemu_ck_imac_kernel_test.sh      # QEMU q35 + OVMF, two CPU models, ends AIENOS_IMAC_KERNEL
@@ -188,7 +188,7 @@ kernel diagnostic keys; everything else, including `memory:`, is dropped
 whole, so chat, keys, tokens and credentials cannot enter it), as UDP
 broadcast from 0.0.0.0 to 255.255.255.255 port 47031 (TTL 1), in 1 KiB parts
 that each start with
-`AIENOS-IMAC-REPORT v=2 auth=none run=<id> part=<i>/<n> bytes=<total>`.
+`AIENOS-REPORT v=2 auth=none run=<id> part=<i>/<n> bytes=<total>`.
 Anyone on the LAN can read or forge these datagrams; the run id and checksum
 are not authenticity, so a report is never a receipt, evidence or a command.
 Future service diagnostics belong on the authenticated transport with an

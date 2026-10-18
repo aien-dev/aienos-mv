@@ -154,7 +154,7 @@ int main(int argc, char **argv)
     CHECK(!strncmp(ck_allen_reply(""), "I don't know that yet.", 22), "reply: empty line");
     CHECK(!strncmp(ck_allen_reply(0), "I don't know that yet.", 22), "reply: no line");
     CHECK(!strncmp(ck_allen_reply("xz"), "I don't know that yet.", 22), "reply: unknown line");
-    CHECK(!strcmp(ck_allen_reply("who are you"), "I am Allen. I live on this iMac."), "reply: who are you");
+    CHECK(!strcmp(ck_allen_reply("who are you"), "I am Allen. I live in AIENOS."), "reply: who are you");
     CHECK(ck_allen_reply("Goodbye, Allen!") == ck_allen_goodbye && ck_allen_reply("bye") == ck_allen_goodbye &&
               ck_allen_reply("good bye") == ck_allen_goodbye && ck_allen_reply("goodbye now") != ck_allen_goodbye,
           "reply: goodbye ends the session (and only goodbye)");
@@ -179,7 +179,7 @@ int main(int argc, char **argv)
             {"nine divided by two", "9 divided by 2 is 4 remainder 1.", 14},
             {"3 minus 10", "3 minus 10 is minus 7.", 15},
             {"what is 5 divided by zero", "Nobody can divide by zero", 16},
-            {"tell me about this computer", "This iMac has 4 cores, a 3840 by 2160 screen, 1 hard drive and 1 SSD.",
+            {"tell me about this computer", "This computer has 4 cores, a 3840 by 2160 screen, 1 hard drive and 1 SSD.",
              17},
             {"how long have you been awake?", "I've been awake for 2 minutes and 5 seconds.", 125},
             {"what time is it", "I can't read the clock yet. I've been awake for 1 hour and 1 minute.", 3660},
@@ -188,7 +188,7 @@ int main(int argc, char **argv)
             {"tell me a joke", "", 3663},
             {"thank you", "You're welcome, Drake.", 3664},
             {"can you remember things", "Teach me like this: remember my favorite color is blue.", 3665},
-            {"help", "I learn your name and what you teach me", 3666},
+            {"help", "I learn what you teach me (remember my car is red) and keep notes", 3666},
             {"i'm fine", "Glad to hear it.", 3667},
             {"blorp", "I don't know that yet.", 3668},
         };
@@ -249,7 +249,7 @@ int main(int argc, char **argv)
     void *mem = malloc(need);
     CHECK(ck_allen_ui_start(fb, W, H, W, 1, mem, need - 1, 1000, 0, "x") == -1, "ui: short memory refused");
     CHECK(ck_allen_ui_start(fb, W, H, W, 2, mem, need, 1000, 0, "x") == -1, "ui: unknown pixel format refused");
-    CHECK(ck_allen_ui_start(fb, W, H, W, 1, mem, need, 1000, 0, "Type goodbye to restart this iMac") == 0,
+    CHECK(ck_allen_ui_start(fb, W, H, W, 1, mem, need, 1000, 0, "Type goodbye to restart this computer") == 0,
           "ui: starts at 3840x2160");
     CHECK(ck_allen_ui_on(), "ui: on");
     uint32_t corner = fb[0];

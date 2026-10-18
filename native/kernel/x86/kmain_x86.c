@@ -1,4 +1,4 @@
-/* kmain_x86.c -- AIENOS-IMAC-KERNEL-0: the C kernel core on x86_64, first
+/* kmain_x86.c -- AIENOS-KERNEL-0: the C kernel core on x86_64, first
  * cut, for the 2017 iMac (iMac18,3, Core i5-7500) and QEMU q35.
  *
  * After ExitBootServices (efi_x86.c) on the firmware's page tables:
@@ -265,21 +265,29 @@ static int allen_on;
 static uint64_t allen_bye; /* TSC when Allen said goodbye; 0 = still talking */
 static ck_allen_facts allen_facts; /* filled at the summary line */
 static ck_allen_mind allen_mind;
+static ck_allen_notes allen_notes; /* loaded from disk at the window, or empty */
 
 static void allen_edit(const char *buf, unsigned len) { ck_allen_ui_input(buf, len, ck_rdtsc()); }
 
 static void allen_line(const char *text)
 {
     const char *reply = ck_allen_answer(&allen_mind, text, ck_rdtsc() / tsc_hz);
-    /* What was taught goes to disk before Allen says it will remember it;
-     * goodbye saves the line count. A failed save is said out loud. */
-    if (allen_mind.lasting && (allen_mind.changed || reply == ck_allen_goodbye) &&
-        ck_x86_memory_save(&allen_mind.mem)) {
+    /* What was taught goes to disk before Allen says it will remember it: a
+     * note first, then the memory copy that counts it; goodbye saves the line
+     * count. A failed write is said out loud. */
+    int save = allen_mind.changed || reply == ck_allen_goodbye;
+    if (allen_mind.lasting && allen_mind.note_dirty &&
+        ck_x86_notes_write(&allen_notes, (uint32_t)allen_mind.note_dirty - 1u)) {
+        allen_mind.lasting = 0;
+        reply = ck_allen_save_failed;
+    }
+    if (allen_mind.lasting && save && ck_x86_memory_save(&allen_mind.mem)) {
         allen_mind.lasting = 0;
         if (allen_mind.changed)
             reply = ck_allen_save_failed;
     }
     allen_mind.changed = 0;
+    allen_mind.note_dirty = 0;
     ck_printf("allen: %s\n", reply);
     /* the only line about it the lab report may carry: lengths, no words */
     ck_printf("screen: Allen answered (%u characters in, %u out)\n", (unsigned)strlen(text), (unsigned)strlen(reply));
@@ -295,11 +303,15 @@ static void allen_window(void)
     uint32_t w, h, pitch, format;
     uint64_t pa;
     ck_allen_mind_init(&allen_mind, &allen_facts);
-    if (ck_x86_memory_open(&allen_mind.mem, tsc_hz)) {
+    allen_mind.notes = &allen_notes;
+    if (ck_x86_memory_open(&allen_mind.mem, &allen_notes, tsc_hz)) {
         allen_mind.lasting = 1;
         allen_mind.mem.starts++;
         if (ck_x86_memory_save(&allen_mind.mem))
             allen_mind.lasting = 0;
+    } else {
+        allen_notes.n = 0; /* nothing half-loaded is kept */
+        allen_mind.mem.nnotes = 0;
     }
     ck_x86_kbd_sink(0, allen_line);
     if (ck_x86_console_fb_get(&px, &w, &h, &pitch, &format)) {
@@ -315,7 +327,7 @@ static void allen_window(void)
         ck_printf("screen: text only (no %llu MiB for Allen's window)\n", (unsigned long long)(need >> 20));
         return;
     }
-    ck_snprintf(footer, sizeof footer, "Type goodbye to %s this iMac", CK_X86_REPORT ? "restart" : "turn off");
+    ck_snprintf(footer, sizeof footer, "Type goodbye to %s this computer", CK_X86_REPORT ? "restart" : "turn off");
     ck_printf("screen: Allen's window (%ux%u, %llu MiB drawing memory)\n", w, h, (unsigned long long)(need >> 20));
     uint64_t t0 = ck_rdtsc();
     if (ck_allen_ui_start(px, w, h, pitch, format, (void *)(uintptr_t)pa, pages * CK_PAGE, tsc_hz, t0, footer)) {
@@ -1203,7 +1215,7 @@ static __attribute__((noreturn)) void kernel_main(void *arg)
               : st->net_link == 1     ? "link-up"
               : st->net_link == 2     ? "link-down"
                                       : "seen");
-    ck_puts("AIENOS-IMAC-KERNEL-0 DONE\n");
+    ck_puts("AIENOS-KERNEL-0 DONE\n");
     ck_puts("note: QEMU qualifies nothing physical\n");
     finish();
 }
