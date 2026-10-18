@@ -155,6 +155,41 @@ int main(int argc, char **argv)
     }
     check(!memcmp(s, p, 4 * (size_t)(N + extra)), "pieces in any order give the same sound");
 
+    /* the 44.1 kHz copy: where the two rates meet (every 147th frame) it is
+     * the 48 kHz sample exactly, in the top 16 bits; in between it lies
+     * between its neighbours; pieces agree; silent after the end */
+    const uint32_t N4 = CK_CHIRP_FRAMES_441, extra4 = CK_CHIRP_RATE_441 / 5u;
+    int32_t *q = calloc(2 * (size_t)(N4 + extra4), sizeof *q), *r = calloc(2 * (size_t)(N4 + extra4), sizeof *r);
+    if (!q || !r)
+        return 2;
+    ck_chirp_fill_441(q, 0, N4 + extra4);
+    int meet = 1, between = 1, lr = 1, low = 1;
+    for (uint32_t j = 0; j < N4; j++) {
+        uint32_t f = j * 160u / 147u;
+        int32_t a = s[2 * f], b = s[2 * f + 2], v = q[2 * j] >> 16;
+        if (j % 147u == 0 && q[2 * j] != (int32_t)((uint32_t)a << 16))
+            meet = 0;
+        if (v < (a < b ? a : b) || v > (a < b ? b : a))
+            between = 0;
+        lr &= q[2 * j] == q[2 * j + 1];
+        low &= (q[2 * j] & 0xffff) == 0;
+    }
+    check(meet, "44.1 kHz copy equals the 48 kHz sound where the rates meet");
+    check(between, "44.1 kHz copy lies between its 48 kHz neighbours");
+    check(lr && low, "44.1 kHz copy: left equals right, sample in the top 16 bits");
+    for (uint32_t end = N4 + extra4; end;) {
+        uint32_t n = end < 1009 ? end : 1009;
+        end -= n;
+        ck_chirp_fill_441(r + 2 * (size_t)end, end, n);
+    }
+    check(!memcmp(q, r, 8 * (size_t)(N4 + extra4)), "44.1 kHz pieces in any order give the same sound");
+    quiet = 1;
+    for (uint32_t j = N4 + 2; j < N4 + extra4; j++)
+        quiet &= q[2 * j] == 0;
+    check(quiet, "44.1 kHz copy silent after the end");
+    free(q);
+    free(r);
+
     if (argc > 1) {
         char path[4096];
         snprintf(path, sizeof path, "%s/chirp.wav", argv[1]);

@@ -28,4 +28,11 @@ void ck_chirp_fill(int16_t *out, uint32_t from, uint32_t n);
 /* The pitch in Hz and the loudness (0..CK_CHIRP_PEAK) at a frame. */
 uint32_t ck_chirp_hz(uint32_t frame);
 uint32_t ck_chirp_level(uint32_t frame);
+
+/* The chirp at 44.1 kHz instead: frames [from, from + n) of that rate, frame
+ * 0 the night's 0 ms, each sample in the top 16 bits of a 32-bit slot (a
+ * 24-bit converter's layout), left and right. */
+#define CK_CHIRP_RATE_441 44100u
+#define CK_CHIRP_FRAMES_441 (CK_CHIRP_RATE_441 / 100u * CK_CHIRP_END_MS / 10u)
+void ck_chirp_fill_441(int32_t *out, uint32_t from, uint32_t n);
 #endif
