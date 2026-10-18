@@ -257,6 +257,15 @@ keeps each run's serial log and a `.wav` recording of its sound.
 for every function it finds, before the drivers claim theirs. On the real machine these lines are
 the ground truth for which drivers are still missing (lab report allowlist: `pci:`).
 
+**Sleep.** "goodbye", or a tap of the power button, puts Allen to sleep: the screen goes
+black but for a faint point of light where he was, nothing moves, nothing is typed. Any key or
+another tap wakes him and the sky comes back at once (the waking key is not typed). Holding the
+power button 4 s is still the chipset's own hard power-off. The button is read by polling the
+PM1 status register named in the ACPI FADT (bit 8, PWRBTN_STS; its interrupt enable is cleared so
+the firmware never sees the press); the QEMU keyboard test drives it with the monitor's
+`system_powerdown`. Without a keyboard there is no window and no sleep: the screen holds
+CK_X86_HOLD_S seconds, then ACPI S5.
+
 **Keyboard and Allen's window.** `x86/xhci_x86.c` drives a wired USB boot
 keyboard (polled xHCI, through USB 2.0 hubs). When one is ready, Allen wakes:
 the person is his guest. A quiet glass bar comes up at the bottom for what

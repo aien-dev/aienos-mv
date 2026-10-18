@@ -760,6 +760,16 @@ void ck_x86_kbd_sink(void (*edit)(const char *buf, unsigned len), void (*line)(c
     sink_line = line;
 }
 
+/* The key that woke Allen is not typed: whatever is on the line goes. */
+void ck_x86_kbd_discard(void)
+{
+    if (g_line.len || g_line.typed)
+        ck_puts("\n");
+    ck_line_reset(&g_line);
+    if (sink_edit)
+        sink_edit(g_line.buf, 0);
+}
+
 static void echo(char c)
 {
     if (c == '\b')
