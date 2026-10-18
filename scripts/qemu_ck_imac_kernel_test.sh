@@ -69,13 +69,16 @@ chk() { # description, file, pattern
 run() { # name, -cpu model, expected APIC mode
     local name="$1" cpu="$2" mode="$3" log="${work}/$1.log" txt="${work}/$1.txt"
     cp "${vars_fd}" "${work}/vars.fd"
+    # AIENOS_IMAC_KERNEL_KEEP_DIR: keep each run's serial log (.txt) and a recording of its sound (.wav) there
+    local audio="none,id=snd0" keep="${AIENOS_IMAC_KERNEL_KEEP_DIR:-}"
+    [[ -z "${keep}" ]] || audio="wav,id=snd0,path=${keep}/${name}.wav,out.frequency=48000,out.channels=2,out.format=s16"
     qemu-system-x86_64 -M q35 -accel tcg -cpu "${cpu}" -smp 4 -m 1024 \
         -drive if=pflash,format=raw,readonly=on,file="${code_fd}" \
         -drive if=pflash,format=raw,file="${work}/vars.fd" \
         -drive if=none,id=esp,format=raw,file="${img}" -device ide-hd,drive=esp,bus=ide.0 \
         -drive if=none,id=data,format=raw,file="${data}" -device ide-hd,drive=data,bus=ide.1 \
         -drive if=none,id=nvm,format=raw,file="${nvm}" -device nvme,drive=nvm,serial=AIENOSQEMU \
-        -audiodev none,id=snd0 -device ich9-intel-hda -device hda-output,audiodev=snd0 \
+        -audiodev "${audio}" -device ich9-intel-hda -device hda-output,audiodev=snd0 \
         -display none -nic none -serial file:"${log}" -no-reboot &
     qpid=$!
     local self_exit=0
@@ -87,6 +90,7 @@ run() { # name, -cpu model, expected APIC mode
     wait "${qpid}" 2>/dev/null || true
     qpid=""
     tr -d '\r' <"${log}" >"${txt}" 2>/dev/null || : >"${txt}"
+    [[ -z "${keep}" ]] || cp "${txt}" "${keep}/${name}.txt"
     echo "== run ${name} (-cpu ${cpu}) =="
     chk "${name}: title" "${txt}" '^AIENOS-KERNEL-0$'
     chk "${name}: commit" "${txt}" "^aienos_commit: ${commit}\$"
@@ -117,7 +121,10 @@ run() { # name, -cpu model, expected APIC mode
     chk "${name}: the night began at boot" "${txt}" "^screen: night: the sky made in [0-9]+ ms \([0-9]+ MiB drawing memory\); stars, black holes, then Allen\$"
     chk "${name}: sound controller found" "${txt}" "^pci: sound [0-9a-f:.]+ id=8086:293e class=0403[0-9a-f]{2} "
     chk "${name}: sound controller looked at" "${txt}" "^sound: ctrl=0 version=1\\.0 streams out=[1-9][0-9]* "
-    chk "${name}: codec named" "${txt}" "^sound: codec=0 id=1af4:[0-9a-f]{4} rev=0x[0-9a-f]{8} function_groups=1 audio_group_node=1\$"
+    chk "${name}: codec mapped through the command rings" "${txt}" "^sound: codec=0 id=1af4:[0-9a-f]{4} sub=[0-9a-f]{4}:[0-9a-f]{4} rev=0x[0-9a-f]{8} afg=1 power=D0 widgets=0x02\\.\\.0x03 "
+    chk "${name}: output path opened" "${txt}" "^sound: ctrl=0 opened 1 output pin\\(s\\): codec 0 pins 0x03\\(line\\)<-0x02\$"
+    chk "${name}: chirp stream running" "${txt}" "^sound: ctrl=0 stream 4 playing the chirp from night [0-9]+ ms .* position after 2 ms [1-9][0-9]* bytes, status 0x[0-9a-f]{2}\$"
+    chk "${name}: chirp stream stopped after the chirp" "${txt}" "^sound: chirp over; stream stopped at night [0-9]+ ms "
     chk "${name}: no Ethernet in this VM" "${txt}" "^net: no Ethernet controller\$"
     chk "${name}: storage summary" "${txt}" "^storage: pci_functions=[1-9][0-9]* ahci_controllers=1 disks=2 nvme_controllers=1 nvme_disks=1 gpt_valid=2 writes=none\$"
     chk "${name}: one-line summary" "${txt}" "^summary: cores=4/4 timer=ok sata_disks=2 nvme_disks=1 gpt_valid=2 writes=none net=none\$"
