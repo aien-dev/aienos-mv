@@ -187,8 +187,8 @@ int main(int argc, char **argv)
             {"what is aienos", "AIENOS is the operating system I live in", 3662},
             {"tell me a joke", "", 3663},
             {"thank you", "You're welcome, Drake.", 3664},
-            {"can you remember things", "I can't keep memories past a restart yet.", 3665},
-            {"help", "I can learn your name", 3666},
+            {"can you remember things", "Teach me like this: remember my favorite color is blue.", 3665},
+            {"help", "I learn your name and what you teach me", 3666},
             {"i'm fine", "Glad to hear it.", 3667},
             {"blorp", "I don't know that yet.", 3668},
         };

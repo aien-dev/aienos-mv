@@ -2278,7 +2278,8 @@ IMACKERN_OBJS := $(IMACKERN_DIR)/efi_entry_x86_64.o $(IMACKERN_DIR)/efi_x86.o $(
 	$(IMACKERN_DIR)/ahci_x86.o $(IMACKERN_DIR)/disk_part.o $(IMACKERN_DIR)/disk.o \
 	$(IMACKERN_DIR)/pci_x86.o $(IMACKERN_DIR)/smp_x86.o $(IMACKERN_DIR)/disk_nvme.o \
 	$(IMACKERN_DIR)/tg3_x86.o $(IMACKERN_DIR)/xhci_x86.o $(IMACKERN_DIR)/usb_hid.o $(IMACKERN_DIR)/sha256.o \
-	$(IMACKERN_DIR)/allen_ui.o $(IMACKERN_DIR)/allen_font.o $(IMACKERN_DIR)/allen_reply.o
+	$(IMACKERN_DIR)/allen_ui.o $(IMACKERN_DIR)/allen_font.o $(IMACKERN_DIR)/allen_reply.o \
+	$(IMACKERN_DIR)/allen_memory.o $(IMACKERN_DIR)/gpt_add.o $(IMACKERN_DIR)/memory_x86.o
 IMACKERN_REPORT_OBJS := $(IMACKERN_DIR)/report_x86.o $(IMACKERN_DIR)/aienos_net.o
 # Symbols only the lab image may contain; the default image is checked for them after linking.
 IMACKERN_REPORT_SYMS := ck_x86_report_hold|ck_x86_report_frame|ck_x86_report_filter|ck_x86_report_parts|ck_x86_tg3_send|ck_x86_tg3_drain|net_udp_build
@@ -2313,6 +2314,9 @@ $(IMACKERN_DIR)/sha256.o: $(NATIVE)/argus/sha256.c $(NATIVE)/argus/sha256.h
 $(IMACKERN_DIR)/allen_ui.o: $(KDIR)/ui/allen_ui.c $(KDIR)/ui/allen_ui.h $(KDIR)/ui/allen_font.h
 $(IMACKERN_DIR)/allen_font.o: $(KDIR)/ui/allen_font.c $(KDIR)/ui/allen_font.h
 $(IMACKERN_DIR)/allen_reply.o: $(KDIR)/svc/allen_reply.c $(KDIR)/svc/allen_reply.h
+$(IMACKERN_DIR)/allen_memory.o: $(KDIR)/svc/allen_memory.c $(KDIR)/svc/allen_memory.h $(KDIR)/svc/allen_reply.h $(NATIVE)/disk/disk.h $(NATIVE)/argus/sha256.h
+$(IMACKERN_DIR)/gpt_add.o: $(KDIR)/dev/gpt_add.c $(KDIR)/dev/gpt_add.h $(KDIR)/dev/disk_part.h $(NATIVE)/disk/disk.h $(NATIVE)/argus/sha256.h
+$(IMACKERN_DIR)/memory_x86.o: $(X86K)/memory_x86.c $(IMACKERN_HDRS) $(KDIR)/svc/allen_memory.h $(KDIR)/dev/gpt_add.h $(KDIR)/dev/disk_part.h
 $(IMACKERN_DIR)/report_x86.o: $(X86K)/report_x86.c $(X86K)/report_x86.h $(IMACKERN_HDRS) $(NATIVE)/net/aienos_net.h
 $(IMACKERN_DIR)/aienos_net.o: $(NATIVE)/net/aienos_net.c $(NATIVE)/net/aienos_net.h
 $(sort $(IMACKERN_OBJS) $(IMACKERN_REPORT_OBJS)):
@@ -2321,8 +2325,10 @@ $(sort $(IMACKERN_OBJS) $(IMACKERN_REPORT_OBJS)):
 $(IMACKERN_ELF): $(IMACKERN_OBJS) $(BOOT)/image_x86_64.ld
 	@if grep -nE -- 'rt->|RuntimeServices' $(X86K)/*.c; then \
 	  echo "the x86 kernel calls a UEFI runtime service; it must never call one"; exit 1; fi
-	@if grep -nE "define ATA_" $(X86K)/ahci_x86.c | grep -vE "ATA_(IDENTIFY 0xec|READ_DMA_EXT 0x25)$$"; then \
-	  echo "ahci_x86.c defines an ATA command other than IDENTIFY and READ DMA EXT; the driver is read-only"; exit 1; fi
+	@if grep -nE "define ATA_" $(X86K)/ahci_x86.c | grep -vE "ATA_(IDENTIFY 0xec|READ_DMA_EXT 0x25|WRITE_DMA_EXT 0x35|FLUSH_CACHE_EXT 0xea)$$"; then \
+	  echo "ahci_x86.c defines an ATA command other than IDENTIFY, READ/WRITE DMA EXT and FLUSH CACHE EXT"; exit 1; fi
+	@if grep -nE "ck_x86_ahci_allow\(" $(X86K)/*.c | grep -vE "^$(X86K)/(memory_x86\.c|ahci_x86\.c:[0-9]+:int ck_x86_ahci_allow\()"; then \
+	  echo "only memory_x86.c may open a write range on an AHCI disk"; exit 1; fi
 	@if grep -nE "nvme_(write|flush)\(" $(X86K)/*.c; then \
 	  echo "the x86 kernel calls nvme_write or nvme_flush; its disks are read-only"; exit 1; fi
 	@mkdir -p $(dir $@)

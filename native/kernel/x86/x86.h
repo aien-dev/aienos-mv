@@ -7,6 +7,8 @@
 #define AIENOS_CK_X86_H
 #include <stddef.h>
 #include <stdint.h>
+#include "disk.h"
+#include "../svc/allen_reply.h"
 
 static inline void ck_outb(uint16_t p, uint8_t v) { __asm__ volatile("outb %0, %1" ::"a"(v), "Nd"(p)); }
 static inline void ck_outw(uint16_t p, uint16_t v) { __asm__ volatile("outw %0, %1" ::"a"(v), "Nd"(p)); }
@@ -105,9 +107,24 @@ const struct ck_x86_storage_result *ck_x86_storage(uint64_t rsdp, struct ck_fram
                                                    uint64_t map_top);
 /* kmain_x86.c: maps [pa, pa + len) uncached when it lies above the identity map. */
 int ck_x86_map_mmio(uint64_t pa, uint64_t len);
-/* ahci_x86.c: one AHCI controller at abar, polled, read-only. */
+/* ahci_x86.c: one AHCI controller at abar, polled; read-only until a write
+ * range is opened (only x86/memory_x86.c does). */
 void ck_x86_ahci_start(unsigned ctrl, uint64_t abar, struct ck_frames *fr, uint64_t tsc_hz);
 unsigned ck_x86_ahci_disks(void);
+/* The disk_dev of AHCI disk index (NULL past the last) and its IDENTIFY model. */
+const disk_dev *ck_x86_ahci_dev(unsigned index, const char **model);
+/* Opens one more write range [first, last] (never LBA 0; at most 3): 0 or -1. */
+int ck_x86_ahci_allow(unsigned index, uint64_t first, uint64_t last);
+/* Closes every write range of the disk. */
+void ck_x86_ahci_allow_none(unsigned index);
+
+/* memory_x86.c: Allen's memory on the approved hard disk (svc/allen_memory.h).
+ * open: finds the disk, lists its partitions, adds the AIENOS partition in
+ * unused space if there is none, loads the newest copy into *mem. 1 when
+ * saves will reach the disk, 0 when Allen remembers only until power off.
+ * save: 0 or -1 (then nothing more is written this boot). */
+int ck_x86_memory_open(ck_allen_memory *mem, uint64_t tsc_hz);
+int ck_x86_memory_save(const ck_allen_memory *mem);
 
 /* pci_x86.c: offers every xHCI controller the walk found to xhci_x86.c until
  * one has a USB boot keyboard; prints "keyboard: ready (...)" or why none.

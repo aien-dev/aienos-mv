@@ -39,18 +39,19 @@
 #define REPORT_HDR "AIENOS-IMAC-REPORT v=2 auth=none "
 
 /* The allowlist: every key the iMac kernel prints (the x86 sources, efi_gop.c,
- * and the disk report's ahci_/nvme_ _read and _gpt lines), minus "memory:",
- * which describes the kernel's own memory layout, and minus what is said to
- * Allen ("keyboard_line:" and "allen:"): the conversation never leaves the
+ * the disk report's ahci_/nvme_ _read and _gpt lines, and Allen's memory
+ * status "allen_memory:", which carries only counts and the disk layout),
+ * minus "memory:", which describes the kernel's own memory layout, and
+ * minus what is said to Allen ("keyboard_line:" and "allen:"): the conversation never leaves the
  * iMac; "screen: Allen answered" carries only lengths. A new key stays off the
  * report until it is added here. */
 static const char *const allowed_keys[] = {
-    "acpi_rsdp", "ahci", "ahci_disk", "ahci_gpt", "ahci_port", "ahci_read", "aienos_commit", "apic", "cpu",
-    "descriptors", "exit_boot_services", "firmware_cpl", "firmware_revision", "firmware_vendor", "gop",
-    "guard_page", "handoff", "image", "kernel", "kernel_impl", "keyboard", "madt", "net",
-    "net_tg3", "note", "nvme", "nvme_disk", "nvme_gpt", "nvme_read", "paging", "panic", "pci", "power", "report",
-    "report_kind", "screen", "smp", "stack", "storage", "summary", "timebase", "timer_irq", "timer_stats", "usb",
-    "xhci",
+    "acpi_rsdp", "ahci", "ahci_disk", "ahci_gpt", "ahci_part", "ahci_port", "ahci_read", "ahci_write",
+    "aienos_commit", "allen_memory", "apic", "cpu", "descriptors", "exit_boot_services", "firmware_cpl",
+    "firmware_revision", "firmware_vendor", "gop", "guard_page", "handoff", "image", "kernel", "kernel_impl",
+    "keyboard", "madt", "net", "net_tg3", "note", "nvme", "nvme_disk", "nvme_gpt", "nvme_read", "paging", "panic",
+    "pci", "power", "report", "report_kind", "screen", "smp", "stack", "storage", "summary", "timebase",
+    "timer_irq", "timer_stats", "usb", "xhci",
 };
 static const char *const allowed_lines[] = {
     "AIENOS-IMAC-KERNEL-0",

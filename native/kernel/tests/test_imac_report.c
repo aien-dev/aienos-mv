@@ -39,6 +39,8 @@ static const char allowed_part[] =
     "net_tg3: link up 1000 Mb/s full duplex\n"
     "summary: cores=4/4 timer=ok sata_disks=1 nvme_disks=1 gpt_valid=1 writes=none net=up\n"
     "screen: Allen answered (11 characters in, 15 out)\n"
+    "allen_memory: saved generation 2 to copy B (1 fact) in 9 ms\n"
+    "ahci_part: disk=0 entry=1 type=38daac89-5ead-4b40-8b1e-3687a7418061 first_lba=2048 last_lba=2099199 mib=1024 name=\"AIENOS Allen memory\" (AIENOS)\n"
     "kernel: alive\n"
     "panic: exception: vector 14 #PF error=0x2\n"
     "AIENOS-IMAC-KERNEL-0 DONE\n";
@@ -67,6 +69,10 @@ static size_t build_mixed(char *out, size_t cap)
         "summary: cores=4/4 timer=ok sata_disks=1 nvme_disks=1 gpt_valid=1 writes=none net=up\n",
         "keyboard_line: Hello SENTINEL-TYPED\n",
         "screen: Allen answered (11 characters in, 15 out)\n",
+        "allen: Your favorite color is SENTINEL-FACT.\n",
+        "allen_memory: saved generation 2 to copy B (1 fact) in 9 ms\n",
+        "allen_memoryx: SENTINEL-NEAR2\n",
+        "ahci_part: disk=0 entry=1 type=38daac89-5ead-4b40-8b1e-3687a7418061 first_lba=2048 last_lba=2099199 mib=1024 name=\"AIENOS Allen memory\" (AIENOS)\n",
         "\n",
         "kernel: alive\n",
         "panic: exception: vector 14 #PF error=0x2\n",
