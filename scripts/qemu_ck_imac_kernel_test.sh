@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# qemu_ck_imac_kernel_test.sh -- QEMU test for IMACKERN.EFI (AIENOS-IMAC-KERNEL-0,
+# qemu_ck_imac_kernel_test.sh -- QEMU test for IMACKERN.EFI (AIENOS-KERNEL-0,
 # native/kernel/x86). QEMU is an emulator: a PASS here qualifies nothing about a
 # 2017 iMac or any other real x86_64 machine.
 #
@@ -87,7 +87,7 @@ run() { # name, -cpu model, expected APIC mode
     qpid=""
     tr -d '\r' <"${log}" >"${txt}" 2>/dev/null || : >"${txt}"
     echo "== run ${name} (-cpu ${cpu}) =="
-    chk "${name}: title" "${txt}" '^AIENOS-IMAC-KERNEL-0$'
+    chk "${name}: title" "${txt}" '^AIENOS-KERNEL-0$'
     chk "${name}: commit" "${txt}" "^aienos_commit: ${commit}\$"
     chk "${name}: GOP found" "${txt}" '^gop: ok '
     chk "${name}: RSDP" "${txt}" '^acpi_rsdp: 0x[0-9a-f]*[1-9a-f][0-9a-f]*$'
@@ -121,7 +121,7 @@ run() { # name, -cpu model, expected APIC mode
     chk "${name}: W^X probes (#409)" "${txt}" '^wx: ok nx=on wp=on text=rx ro=r data=rw-nx text_write=fault ro_write=fault heap_exec=fault stack_exec=fault$'
     chk "${name}: W^X audit, only code executable" "${txt}" '^wx_audit: ok wx_leaves=0 exec_pages=([1-9][0-9]*) text_pages=\1 pages_4k=[1-9][0-9]* trampoline=retired$'
     chk "${name}: kernel alive" "${txt}" '^kernel: alive$'
-    chk "${name}: DONE" "${txt}" '^AIENOS-IMAC-KERNEL-0 DONE$'
+    chk "${name}: DONE" "${txt}" '^AIENOS-KERNEL-0 DONE$'
     chk "${name}: ACPI S5 power off" "${txt}" '^power: off via ACPI S5 pm1a=0x[0-9a-f]+ '
     if grep -aqE '^(panic|power: still running|power: halted)' "${txt}"; then
         echo "FAIL  ${name}: panic or failed power off"; fails=$((fails + 1))

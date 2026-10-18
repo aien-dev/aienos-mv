@@ -281,17 +281,17 @@ static void header_text(const struct rect *cl)
     const char *name = "Allen";
     int32_t tw = (int32_t)ck_af_measure(&ui.title, name, 5);
     text(ui.base, cl, &ui.title, cx - tw / 2, ui.win.y + S(186), name, 5, C_TEXT, 255);
-    /* status: a teal dot, "On this iMac", a separator dot, "Spark not connected" */
-    const char *s1 = "On this iMac", *s2 = "Spark not connected";
-    int32_t w1 = (int32_t)ck_af_measure(&ui.small, s1, 12), w2 = (int32_t)ck_af_measure(&ui.small, s2, 19);
+    /* status: a teal dot, "Running on AIENOS", a separator dot, "All local" */
+    const char *s1 = "Running on AIENOS", *s2 = "All local";
+    int32_t w1 = (int32_t)ck_af_measure(&ui.small, s1, 17), w2 = (int32_t)ck_af_measure(&ui.small, s2, 9);
     int32_t gap = S(14), dot = S(4), total = dot * 2 + gap + w1 + gap * 2 + w2;
     int32_t x = cx - total / 2, base = ui.win.y + S(222);
     int32_t mid = base - S(5);
     glow(ui.base, cl, x + dot, mid, dot * 3, C_TEAL, 90, 1);
     rrect(ui.base, cl, (struct rect){x, mid - dot, dot * 2, dot * 2}, dot, C_TEAL, C_TEAL, 255, 0);
-    x = text(ui.base, cl, &ui.small, x + dot * 2 + gap, base, s1, 12, C_MUTED, 255) + gap;
+    x = text(ui.base, cl, &ui.small, x + dot * 2 + gap, base, s1, 17, C_MUTED, 255) + gap;
     rrect(ui.base, cl, (struct rect){x - S(2), mid - S(2), S(4), S(4)}, S(2), C_MUTED, C_MUTED, 160, 0);
-    text(ui.base, cl, &ui.small, x + gap, base, s2, 19, C_MUTED, 255);
+    text(ui.base, cl, &ui.small, x + gap, base, s2, 9, C_MUTED, 255);
     /* divider */
     rrect(ui.base, cl, (struct rect){ui.win.x + S(48), ui.win.y + S(250), ui.win.w - S(96), S(1) > 1 ? S(1) : 1}, 0,
           C_WHITE, C_WHITE, 22, 0);

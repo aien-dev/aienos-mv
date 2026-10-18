@@ -4,7 +4,7 @@
 #include <stddef.h>
 
 const char ck_allen_goodbye[] = "Goodbye. Until next time.";
-const char ck_allen_save_failed[] = "I couldn't save that to my disk, so I'll only remember it until this iMac turns off.";
+const char ck_allen_save_failed[] = "I couldn't save that to my disk, so I'll only remember it until this computer turns off.";
 static const char not_yet[] = "I don't know that yet. Type help to see what I can talk about.";
 
 /* Lowercases letters, keeps digits, turns every other run into one space,
@@ -305,7 +305,7 @@ static void put_fact(struct say *s, const ck_allen_fact *f, int cap)
 
 static const char *saved_note(const ck_allen_mind *m)
 {
-    return m->lasting ? " I'll remember that." : " I'll remember that until this iMac turns off.";
+    return m->lasting ? " I'll remember that." : " I'll remember that until this computer turns off.";
 }
 
 /* "remember (that) KEY is|are VALUE": stores it (or learns the name for
@@ -465,6 +465,226 @@ static void list_memory(const ck_allen_mind *m, struct say *s)
     put(s, ".");
 }
 
+
+/* ---- Notes (svc/allen_notes.h): saved as typed, handed back when asked ---- */
+
+/* line past its first `words` words (runs of letters and digits) and the
+ * spaces, colons, commas and dashes after them: the note as typed. */
+static const char *raw_after(const char *line, unsigned words)
+{
+    const char *p = line;
+#define ALNUM(c) (((c) >= 'a' && (c) <= 'z') || ((c) >= 'A' && (c) <= 'Z') || ((c) >= '0' && (c) <= '9'))
+    for (unsigned k = 0; k < words; k++) {
+        while (*p && !ALNUM(*p))
+            p++;
+        while (ALNUM(*p))
+            p++;
+    }
+#undef ALNUM
+    while (*p == ' ' || *p == ':' || *p == ',' || *p == '-')
+        p++;
+    return p;
+}
+
+static unsigned words_in(const char *phrase)
+{
+    unsigned n = 1;
+    for (; *phrase; phrase++)
+        n += *phrase == ' ';
+    return n;
+}
+
+/* The leading phrase of f from list, or NULL; *rest: what follows it ("" for
+ * the whole line). */
+static const char *lead_of(const char *f, const char *const *list, const char **rest)
+{
+    for (; *list; list++) {
+        if (eq(f, *list)) {
+            *rest = f + len_of(f);
+            return *list;
+        }
+        if ((*rest = after(f, *list)))
+            return *list;
+    }
+    return 0;
+}
+
+/* "From your notes: <the note>." and how many others matched. */
+static void hand_note(ck_allen_mind *m, struct say *s, int i, unsigned also)
+{
+    const ck_allen_note *n = &m->notes->note[i];
+    put(s, "From your notes: ");
+    put(s, n->text);
+    char last = n->text[n->len ? n->len - 1 : 0];
+    if (last != '.' && last != '!' && last != '?')
+        put(s, ".");
+    if (also && s->n + 24 < s->cap) {
+        put(s, " I have ");
+        putu(s, also);
+        put(s, " more on that.");
+    }
+    m->lit = i + 1;
+    m->map_changed = 1;
+}
+
+static void list_notes(const ck_allen_mind *m, struct say *s)
+{
+    unsigned live = m->notes ? ck_allen_notes_live(m->notes) : 0;
+    if (!live) {
+        put(s, "You haven't saved any notes yet. Save one like this: save the gate code is 4471.");
+        return;
+    }
+    put(s, "You have ");
+    put_count(s, live, "note", "notes");
+    put(s, ". The newest: ");
+    for (uint32_t i = m->notes->n; i-- > 0;)
+        if (!m->notes->note[i].gone) {
+            put(s, m->notes->note[i].text);
+            break;
+        }
+    put(s, ".");
+}
+
+static int note_save(ck_allen_mind *m, struct say *s, const char *f, const char *line)
+{
+    static const char *const lead[] = {"make a note that", "make a note", "write down that", "write down",
+                                       "jot down", "note that", "save that", "save this", "note", "save", 0};
+    const char *rest, *l = lead_of(f, lead, &rest);
+    if (!l)
+        return 0;
+    ck_allen_notes *ns = m->notes;
+    const char *text = raw_after(line, words_in(l));
+    if (!*rest || !*text) {
+        put(s, "Tell me what to save, like: save the gate code is 4471.");
+        return 1;
+    }
+    if (!ns) {
+        put(s, "I can't keep notes on this machine yet.");
+        return 1;
+    }
+    char want[CK_ALLEN_NOTE_MAX], have[CK_ALLEN_NOTE_MAX];
+    fold(text, want, sizeof want);
+    for (uint32_t i = 0; i < ns->n; i++) {
+        if (ns->note[i].gone)
+            continue;
+        fold(ns->note[i].text, have, sizeof have);
+        if (eq(want, have)) {
+            put(s, "I already have that saved.");
+            m->lit = (int)i + 1;
+            m->map_changed = 1;
+            return 1;
+        }
+    }
+    if (ns->n >= CK_ALLEN_NOTES_MAX) {
+        put(s, "My notebook is full. Delete one to make room, like: delete the note about the gate.");
+        return 1;
+    }
+    if (ck_allen_note_set(&ns->note[ns->n], text, m->mem.starts)) {
+        put(s, "That's longer than I can hold yet. Try something shorter.");
+        return 1;
+    }
+    uint32_t i = ns->n++;
+    m->mem.nnotes = ns->n;
+    m->changed = 1;
+    m->note_dirty = (int)i + 1;
+    m->lit = (int)i + 1;
+    m->map_changed = 1;
+    unsigned links = ck_allen_note_degree(ns, i);
+    put(s, "Saved.");
+    if (ck_allen_notes_live(ns) == 1) {
+        put(s, " It's your first note.");
+    } else if (links) {
+        put(s, " It links to ");
+        put_count(s, links, "other note.", "other notes.");
+    } else {
+        put(s, " It doesn't link to any other note yet.");
+    }
+    if (!m->lasting)
+        put(s, " Only until this computer turns off: my disk isn't ready.");
+    return 1;
+}
+
+static int note_forget(ck_allen_mind *m, struct say *s, const char *f)
+{
+    static const char *const lead[] = {"forget the note about", "forget my note about", "forget the note",
+                                       "delete the note about", "delete my note about", "delete the note",
+                                       "delete note", "remove the note about", "remove the note",
+                                       "erase the note about", 0};
+    const char *rest;
+    if (!lead_of(f, lead, &rest))
+        return 0;
+    int i = m->notes ? ck_allen_notes_best(m->notes, rest, 0, 0) : -1;
+    if (i < 0) {
+        put(s, "I have no note about ");
+        put_turned(s, *rest ? rest : "that", 0);
+        put(s, ".");
+        return 1;
+    }
+    m->notes->note[i].gone = 1;
+    m->note_dirty = i + 1;
+    m->lit = 0;
+    m->map_changed = 1;
+    put(s, "Deleted the note: ");
+    put(s, m->notes->note[i].text);
+    put(s, ".");
+    return 1;
+}
+
+/* Asked for outright ("find the gate code", "show me my notes"). */
+static int note_find(ck_allen_mind *m, struct say *s, const char *f)
+{
+    static const char *const lead[] = {"do i have anything about", "do i have anything on", "what do i have about",
+                                       "what do i have on", "anything about", "anything on", "search for",
+                                       "search", "look up", "find", "show me", "pull up", "remind me about",
+                                       "remind me of", "get me", "give me", 0};
+    static const char *const listing[] = {"how many notes", "my notes", "list my notes", "list notes",
+                                          "what notes do i have", "show my notes", 0};
+    const char *rest;
+    uint32_t q[1];
+    if (lead_of(f, listing, &rest) && !*rest) {
+        list_notes(m, s);
+        return 1;
+    }
+    if (!lead_of(f, lead, &rest))
+        return 0;
+    if (!ck_allen_key_words(rest, q, 1)) {
+        if (!find(rest, "note") && !find(rest, "notes"))
+            return 0;
+        list_notes(m, s);
+        return 1;
+    }
+    unsigned also = 0;
+    int i = m->notes ? ck_allen_notes_best(m->notes, rest, 0, &also) : -1;
+    if (i < 0) {
+        put(s, "I have nothing saved about ");
+        put_turned(s, rest, 0);
+        put(s, ".");
+        return 1;
+    }
+    hand_note(m, s, i, also);
+    return 1;
+}
+
+/* A question whose every key word is in one note ("what's the gate code"). */
+static int note_answer(ck_allen_mind *m, struct say *s, const char *f)
+{
+    static const char *const ask[] = {"what", "whats", "where", "when", "who", "which", "how", "is", "are", "do",
+                                      "does", "did", "can", "tell", "remind", 0};
+    if (!m->notes)
+        return 0;
+    int asking = 0;
+    for (const char *const *a = ask; *a && !asking; a++)
+        asking = eq(f, *a) || after(f, *a);
+    if (!asking)
+        return 0;
+    unsigned also = 0;
+    int i = ck_allen_notes_best(m->notes, f, 1, &also);
+    if (i < 0)
+        return 0;
+    hand_note(m, s, i, also);
+    return 1;
+}
+
 void ck_allen_mind_init(ck_allen_mind *m, const ck_allen_facts *facts)
 {
     char *p = (char *)m;
@@ -478,7 +698,8 @@ const char *ck_allen_welcome(ck_allen_mind *m)
 {
     struct say s = {m->out, 0, sizeof m->out};
     m->out[0] = 0;
-    if (!m->mem.name[0] && !m->mem.nfacts)
+    unsigned notes = m->notes ? ck_allen_notes_live(m->notes) : 0;
+    if (!m->mem.name[0] && !m->mem.nfacts && !notes)
         return 0;
     put(&s, "Welcome back");
     put_name(&s, m);
@@ -486,8 +707,12 @@ const char *ck_allen_welcome(ck_allen_mind *m)
     if (m->mem.nfacts) {
         put(&s, " I still remember ");
         put_count(&s, m->mem.nfacts, "thing", "things");
-        put(&s, " you taught me.");
+        put(&s, notes ? " you taught me, and your " : " you taught me.");
+    } else if (notes) {
+        put(&s, " I still have your ");
     }
+    if (notes)
+        put_count(&s, notes, "note.", "notes.");
     return m->out;
 }
 
@@ -511,7 +736,9 @@ const char *ck_allen_answer(ck_allen_mind *m, const char *line, uint64_t awake_s
         return "Hello Humanity.";
     if (!f[0])
         return not_yet;
-    /* What Allen has been taught, before anything else can claim the line. */
+    /* Notes, then what Allen has been taught, before anything else can claim the line. */
+    if (note_forget(m, &s, f) || note_save(m, &s, f, line ? line : "") || note_find(m, &s, f))
+        return m->out;
     const char *asked_my = 0;
     if (teach(m, &s, f) || forget(m, &s, f) || recall(m, &s, f, &asked_my))
         return m->out;
@@ -574,8 +801,8 @@ const char *ck_allen_answer(ck_allen_mind *m, const char *line, uint64_t awake_s
     static const char *const help[] = {"help", "what can you do", "what do you do", "what can i say",
                                        "what can i ask", "commands", 0};
     if (any(f, help))
-        return "I learn your name and what you teach me, like: remember my car is red. I also do sums, talk about "
-               "this iMac and tell jokes. Type goodbye to end.";
+        return "I learn what you teach me (remember my car is red) and keep notes (save the gate code is 4471), "
+               "then hand them back when you ask. Type goodbye to end.";
     static const char *const your_name[] = {"what is your name", "whats your name", "what s your name",
                                             "your name", 0};
     if (any(f, your_name))
@@ -583,7 +810,7 @@ const char *ck_allen_answer(ck_allen_mind *m, const char *line, uint64_t awake_s
     static const char *const maker[] = {"who made you", "who built you", "who created you", "who wrote you",
                                         "who programmed you", "who is your creator", "who owns you", 0};
     if (any(f, maker))
-        return "Drake built me, from the ground up, on this iMac.";
+        return "Drake built me, from the ground up.";
     static const char *const what_are[] = {"what are you", "are you an ai", "are you ai", "are you alive",
                                            "are you real", "are you a robot", "are you conscious",
                                            "are you smart", "are you a computer", 0};
@@ -591,19 +818,16 @@ const char *ck_allen_answer(ck_allen_mind *m, const char *line, uint64_t awake_s
         return "I'm a small program living inside AIENOS. For now I answer from what I was taught by heart, but I'm "
                "meant to grow.";
     if (find(f, "who are you"))
-        return "I am Allen. I live on this iMac.";
+        return "I am Allen. I live in AIENOS.";
     if (find(f, "where are you"))
-        return "Here, on this iMac. The Spark is not connected.";
+        return "Right here, on this computer. Everything I know stays on it.";
     if (find(f, "aienos"))
-        return "AIENOS is the operating system I live in, built from scratch. There is no macOS or Linux underneath "
+        return "AIENOS is the operating system I live in, built from scratch. There is no other system underneath "
                "me.";
-    if (find(f, "spark"))
-        return "The Spark is the bigger computer on the network. Someday it may help me think, but it will never be in "
-               "charge of me. It's not connected now.";
-    static const char *const machine[] = {"imac", "computer", "machine", "hardware", "specs", "cores", "cpu",
+    static const char *const machine[] = {"computer", "machine", "hardware", "specs", "cores", "cpu",
                                           "screen", "disk", "disks", "drive", 0};
     if (any(f, machine)) {
-        put(&s, "This iMac has ");
+        put(&s, "This computer has ");
         if (m->facts.cores) {
             put_count(&s, m->facts.cores, "core", "cores");
             put(&s, ", ");
@@ -630,12 +854,14 @@ const char *ck_allen_answer(ck_allen_mind *m, const char *line, uint64_t awake_s
         put(&s, " in all.");
         return m->out;
     }
+    if (note_answer(m, &s, f))
+        return m->out;
     static const char *const awake[] = {"how long", "uptime", "awake", "how old are you", 0};
     static const char *const clock[] = {"what time", "time is it", "what day", "date", "time", 0};
     if (any(f, awake) || any(f, clock)) {
         if (any(f, clock) && !any(f, awake))
             put(&s, "I can't read the clock yet. ");
-        put(&s, find(f, "how old are you") ? "I was born when this iMac started, " : "I've been awake for ");
+        put(&s, find(f, "how old are you") ? "I was born when this computer started, " : "I've been awake for ");
         put_awake(&s, awake_s);
         put(&s, find(f, "how old are you") ? " ago." : ".");
         return m->out;
@@ -643,9 +869,9 @@ const char *ck_allen_answer(ck_allen_mind *m, const char *line, uint64_t awake_s
     static const char *const remember[] = {"remember", "learn", "teach", "memory", "forget", 0};
     if (any(f, remember))
         return m->lasting ? "Teach me like this: remember my favorite color is blue. Then ask: what is my "
-                            "favorite color. I keep it on this iMac's own disk."
+                            "favorite color. I keep it on this computer's own disk."
                           : "Teach me like this: remember my favorite color is blue. Then ask: what is my "
-                            "favorite color. My disk isn't ready, so only until this iMac turns off.";
+                            "favorite color. My disk isn't ready, so only until this computer turns off.";
     static const char *const joke[] = {"joke", "funny", "make me laugh", 0};
     if (any(f, joke)) {
         static const char *const jokes[] = {
@@ -680,7 +906,7 @@ const char *ck_allen_answer(ck_allen_mind *m, const char *line, uint64_t awake_s
         return m->out;
     }
     if (find(f, "good night"))
-        return "Good night. Type goodbye when you want this iMac to turn off.";
+        return "Good night. Type goodbye when you want this computer to turn off.";
     static const char *const test[] = {"test", "testing", "can you hear me", "are you there", 0};
     if (any(f, test))
         return "I hear you. Everything is working.";

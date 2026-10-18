@@ -1,4 +1,4 @@
-/* console_x86.c -- ck_puts/ck_printf for AIENOS-IMAC-KERNEL-0.
+/* console_x86.c -- ck_puts/ck_printf for AIENOS-KERNEL-0.
  *
  * Three sinks. COM1 (I/O port 0x3f8) only when a 16550 answers there (the
  * scratch register keeps a written value): QEMU has one, the 2017 iMac has

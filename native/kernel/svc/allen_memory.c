@@ -5,7 +5,8 @@
 
 #define HDR 64u
 #define FACT_BYTES (CK_ALLEN_KEY_MAX + CK_ALLEN_VAL_MAX + 1u)
-#define PAYLOAD_FIXED (4u + 4u + CK_ALLEN_NAME_MAX + 4u)
+#define PAYLOAD_FIXED (4u + 4u + CK_ALLEN_NAME_MAX + 4u + 4u)
+#define VERSION 2u
 
 _Static_assert(HDR + PAYLOAD_FIXED + CK_ALLEN_FACTS_MAX * FACT_BYTES <= CK_ALLEN_MEM_UNIT, "memory fits one unit");
 
@@ -91,7 +92,7 @@ void ck_allen_mem_encode(const ck_allen_memory *mem, uint64_t gen, uint8_t unit[
     uint32_t plen = PAYLOAD_FIXED + n * FACT_BYTES;
     zero(unit, CK_ALLEN_MEM_UNIT);
     copy(unit, magic, 8);
-    put32(unit + 8, 1);
+    put32(unit + 8, VERSION);
     put32(unit + 12, plen);
     put64(unit + 16, gen);
     uint8_t *p = unit + HDR;
@@ -100,6 +101,7 @@ void ck_allen_mem_encode(const ck_allen_memory *mem, uint64_t gen, uint8_t unit[
     copy(p + 8, mem->name, CK_ALLEN_NAME_MAX);
     p[8 + CK_ALLEN_NAME_MAX - 1] = 0;
     put32(p + 8 + CK_ALLEN_NAME_MAX, n);
+    put32(p + 12 + CK_ALLEN_NAME_MAX, mem->nnotes);
     p += PAYLOAD_FIXED;
     for (uint32_t i = 0; i < n; i++, p += FACT_BYTES) {
         copy(p, mem->fact[i].key, CK_ALLEN_KEY_MAX);
@@ -113,11 +115,12 @@ void ck_allen_mem_encode(const ck_allen_memory *mem, uint64_t gen, uint8_t unit[
 
 int ck_allen_mem_decode(const uint8_t unit[CK_ALLEN_MEM_UNIT], ck_allen_memory *mem, uint64_t *gen)
 {
-    if (!same(unit, magic, 8) || get32(unit + 8) != 1)
+    if (!same(unit, magic, 8) || get32(unit + 8) != VERSION)
         return -1;
     const uint8_t *p = unit + HDR;
     uint32_t plen = get32(unit + 12), n = get32(p + 8 + CK_ALLEN_NAME_MAX);
-    if (n > CK_ALLEN_FACTS_MAX || plen != PAYLOAD_FIXED + n * FACT_BYTES || get64(unit + 16) == 0)
+    if (n > CK_ALLEN_FACTS_MAX || get32(p + 12 + CK_ALLEN_NAME_MAX) > CK_ALLEN_NOTES_MAX ||
+        plen != PAYLOAD_FIXED + n * FACT_BYTES || get64(unit + 16) == 0)
         return -1;
     for (uint32_t i = 24; i < 32; i++)
         if (unit[i])
@@ -145,6 +148,7 @@ int ck_allen_mem_decode(const uint8_t unit[CK_ALLEN_MEM_UNIT], ck_allen_memory *
     mem->lines = get32(p + 4);
     copy(mem->name, p + 8, CK_ALLEN_NAME_MAX);
     mem->nfacts = n;
+    mem->nnotes = get32(p + 12 + CK_ALLEN_NAME_MAX);
     f = p + PAYLOAD_FIXED;
     for (uint32_t i = 0; i < n; i++, f += FACT_BYTES) {
         copy(mem->fact[i].key, f, CK_ALLEN_KEY_MAX);
@@ -211,4 +215,97 @@ int ck_allen_store_save(ck_allen_store *st, const ck_allen_memory *mem)
     if (st->valid < 2)
         st->valid++;
     return CK_ALLEN_MEM_OK;
+}
+
+/* ---- notes: one unit each, from unit CK_ALLEN_NOTES_FIRST ---- */
+
+static const uint8_t note_magic[8] = {'A', 'I', 'E', 'N', 'N', 'O', 'T', '1'};
+
+void ck_allen_note_encode(const ck_allen_note *n, uint32_t index, uint8_t unit[CK_ALLEN_MEM_UNIT])
+{
+    uint32_t len = n->len < CK_ALLEN_NOTE_MAX ? n->len : CK_ALLEN_NOTE_MAX - 1u;
+    zero(unit, CK_ALLEN_MEM_UNIT);
+    copy(unit, note_magic, 8);
+    put32(unit + 8, 1);
+    put32(unit + 12, len);
+    put32(unit + 16, index);
+    put32(unit + 20, n->start);
+    put32(unit + 24, n->gone ? 1u : 0u);
+    copy(unit + HDR, n->text, len);
+    seal(unit, len);
+}
+
+int ck_allen_note_decode(const uint8_t unit[CK_ALLEN_MEM_UNIT], uint32_t index, ck_allen_note *n)
+{
+    uint32_t len = get32(unit + 12);
+    if (!same(unit, note_magic, 8) || get32(unit + 8) != 1 || len == 0 || len >= CK_ALLEN_NOTE_MAX ||
+        get32(unit + 16) != index || get32(unit + 24) > 1 || get32(unit + 28))
+        return -1;
+    for (uint32_t i = HDR + len; i < CK_ALLEN_MEM_UNIT; i++)
+        if (unit[i])
+            return -1;
+    for (uint32_t i = 0; i < len; i++)
+        if (unit[HDR + i] < 0x20 || unit[HDR + i] > 0x7e)
+            return -1;
+    uint8_t want[32];
+    sha256_ctx h;
+    sha256_init(&h);
+    sha256_update(&h, unit, 32);
+    sha256_update(&h, unit + HDR, len);
+    sha256_final(&h, want);
+    if (!same(want, unit + 32, 32))
+        return -1;
+    zero(n, sizeof *n);
+    copy(n->text, unit + HDR, len);
+    n->len = (uint16_t)len;
+    n->start = get32(unit + 20);
+    n->gone = (uint8_t)get32(unit + 24);
+    ck_allen_note_index(n);
+    return 0;
+}
+
+static int notes_geom(const disk_dev *d, uint32_t count, uint32_t *per)
+{
+    int rc = geom(d, per);
+    if (rc)
+        return rc;
+    if (count > CK_ALLEN_NOTES_MAX || d->block_count < (uint64_t)*per * (CK_ALLEN_NOTES_FIRST + count))
+        return CK_ALLEN_MEM_EGEOM;
+    return CK_ALLEN_MEM_OK;
+}
+
+int ck_allen_notes_load(const disk_dev *part, uint32_t count, ck_allen_notes *ns, uint32_t *damaged)
+{
+    uint32_t per = 0;
+    zero(ns, sizeof *ns);
+    *damaged = 0;
+    int rc = notes_geom(part, count, &per);
+    if (rc)
+        return rc;
+    for (uint32_t i = 0; i < count; i++) {
+        if (disk_read(part, (uint64_t)(CK_ALLEN_NOTES_FIRST + i) * per, per, g_unit) != DISK_OK)
+            return CK_ALLEN_MEM_EIO;
+        if (ck_allen_note_decode(g_unit, i, &ns->note[i])) {
+            zero(&ns->note[i], sizeof ns->note[i]);
+            ns->note[i].gone = 1;
+            (*damaged)++;
+        }
+    }
+    ns->n = count;
+    return CK_ALLEN_MEM_OK;
+}
+
+int ck_allen_note_write(const disk_dev *part, const ck_allen_notes *ns, uint32_t index)
+{
+    uint32_t per = 0;
+    int rc = notes_geom(part, index + 1u, &per);
+    if (rc)
+        return rc;
+    uint64_t lba = (uint64_t)(CK_ALLEN_NOTES_FIRST + index) * per;
+    ck_allen_note_encode(&ns->note[index], index, g_unit);
+    if (disk_write(part, lba, per, g_unit) != DISK_OK || disk_flush(part) != DISK_OK)
+        return CK_ALLEN_MEM_EIO;
+    if (disk_read(part, lba, per, g_back) != DISK_OK)
+        return CK_ALLEN_MEM_EIO;
+    return same(g_unit, g_back, CK_ALLEN_MEM_UNIT) ? CK_ALLEN_MEM_OK : CK_ALLEN_MEM_EVERIFY;
 }

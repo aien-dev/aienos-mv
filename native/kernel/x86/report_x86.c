@@ -16,7 +16,7 @@
  * 0.0.0.0:PORT to 255.255.255.255:PORT in an Ethernet broadcast frame (no
  * address to configure, no ARP, nothing to answer), with a one-line header the
  * receiver checks:
- *   "AIENOS-IMAC-REPORT v=2 auth=none run=<16 hex> part=<i>/<n> bytes=<total>\n"
+ *   "AIENOS-REPORT v=2 auth=none run=<16 hex> part=<i>/<n> bytes=<total>\n"
  * auth=none says what it is: anyone on the LAN can read or forge one, and the
  * run id and checksum are not authenticity. A received report is never a
  * receipt, evidence or a command. The host side is
@@ -36,7 +36,7 @@
 #include "aienos_net.h"
 #include "report_x86.h"
 
-#define REPORT_HDR "AIENOS-IMAC-REPORT v=2 auth=none "
+#define REPORT_HDR "AIENOS-REPORT v=2 auth=none "
 
 /* The allowlist: every key the iMac kernel prints (the x86 sources, efi_gop.c,
  * the disk report's ahci_/nvme_ _read and _gpt lines, and Allen's memory
@@ -54,8 +54,8 @@ static const char *const allowed_keys[] = {
     "timer_irq", "timer_stats", "usb", "xhci",
 };
 static const char *const allowed_lines[] = {
-    "AIENOS-IMAC-KERNEL-0",
-    "AIENOS-IMAC-KERNEL-0 DONE",
+    "AIENOS-KERNEL-0",
+    "AIENOS-KERNEL-0 DONE",
     "exiting firmware boot services",
 };
 

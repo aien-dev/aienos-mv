@@ -11,6 +11,7 @@
 #ifndef AIENOS_ALLEN_REPLY_H
 #define AIENOS_ALLEN_REPLY_H
 #include <stdint.h>
+#include "allen_notes.h"
 
 /* What Allen knows about the machine (filled by the kernel; 0 = unknown). */
 typedef struct {
@@ -37,6 +38,7 @@ typedef struct {
     uint32_t lines;  /* lines answered, all starts together */
     char name[CK_ALLEN_NAME_MAX]; /* the person's name once told, "" before */
     uint32_t nfacts;
+    uint32_t nnotes; /* notes saved, deleted ones included (svc/allen_notes.h) */
     ck_allen_fact fact[CK_ALLEN_FACTS_MAX];
 } ck_allen_memory;
 
@@ -48,6 +50,10 @@ typedef struct {
     int changed;    /* mem changed in a way worth saving (the kernel saves, then clears) */
     unsigned turns; /* lines answered this session */
     int asked_how;  /* Allen just asked "how are you?" */
+    ck_allen_notes *notes; /* the notes (the kernel loads them), NULL: none */
+    int note_dirty; /* index + 1 of a note to write to disk (the kernel writes, then clears) */
+    int lit;        /* index + 1 of the note just saved or handed back, 0: none */
+    int map_changed; /* the notes or the lit one changed: redraw the map */
     char out[160];  /* the last composed answer */
 } ck_allen_mind;
 

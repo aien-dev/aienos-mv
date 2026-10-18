@@ -326,7 +326,7 @@ static void test_teach_restart(void)
     CHECK(m.mem.nfacts == 2);
     CHECK(says(ck_allen_answer(&m, "what do you remember", 6),
                "I remember 3 things: your name is Drake; your favorite color is green; the dogs are rex and max."));
-    CHECK(says(ck_allen_answer(&m, "remember", 6), "I keep it on this iMac's own disk."));
+    CHECK(says(ck_allen_answer(&m, "remember", 6), "I keep it on this computer's own disk."));
     CHECK(says(ck_allen_answer(&m, "remember blue", 6), "Teach me like this"));
     CHECK(says(ck_allen_answer(&m, "what is 2 plus 2", 6), "2 plus 2 is 4."));
 
@@ -352,7 +352,7 @@ static void test_teach_restart(void)
 
     /* without a disk Allen says it only lasts until power off */
     ck_allen_mind_init(&m, 0);
-    CHECK(says(ck_allen_answer(&m, "remember my car is red", 1), "until this iMac turns off"));
+    CHECK(says(ck_allen_answer(&m, "remember my car is red", 1), "until this computer turns off"));
     /* a full memory says so and keeps what it has */
     for (unsigned i = 0; i < CK_ALLEN_FACTS_MAX + 2; i++) {
         char line[64];
@@ -371,6 +371,108 @@ static void test_teach_restart(void)
     CHECK(m.mem.nfacts == 0);
 }
 
+
+/* Notes: saved as typed, handed back when asked, linked, deleted, and kept
+ * on disk one sealed unit each. */
+static void test_notes(void)
+{
+    static ck_allen_mind m, m2;
+    static ck_allen_notes ns, back;
+    static uint8_t u[CK_ALLEN_MEM_UNIT];
+    ck_allen_mind_init(&m, 0);
+    memset(&ns, 0, sizeof ns);
+    m.notes = &ns;
+    m.lasting = 1;
+    CHECK(says(ck_allen_answer(&m, "save the gate code is 4471", 1), "Saved. It's your first note."));
+    CHECK(m.changed == 1 && m.note_dirty == 1 && m.lit == 1 && m.mem.nnotes == 1 && ns.n == 1);
+    m.changed = m.note_dirty = 0;
+    CHECK(says(ck_allen_answer(&m, "Note: the wifi password is Blue-Fox-88", 1),
+               "Saved. It doesn't link to any other note yet."));
+    CHECK(strcmp(ns.note[1].text, "the wifi password is Blue-Fox-88") == 0 && m.note_dirty == 2);
+    CHECK(says(ck_allen_answer(&m, "save the garage codes are 9012", 1), "Saved. It links to 1 other note."));
+    CHECK(says(ck_allen_answer(&m, "What's the gate code?", 1), "From your notes: the gate code is 4471."));
+    CHECK(m.lit == 1 && m.map_changed == 1);
+    CHECK(says(ck_allen_answer(&m, "what is the wifi password", 1),
+               "From your notes: the wifi password is Blue-Fox-88."));
+    CHECK(says(ck_allen_answer(&m, "find code", 1),
+               "From your notes: the garage codes are 9012. I have 1 more on that."));
+    CHECK(says(ck_allen_answer(&m, "find the electrician", 1), "I have nothing saved about the electrician."));
+    m.changed = m.note_dirty = 0;
+    CHECK(says(ck_allen_answer(&m, "save the gate code is 4471.", 1), "I already have that saved."));
+    CHECK(ns.n == 3 && m.changed == 0 && m.note_dirty == 0);
+    CHECK(says(ck_allen_answer(&m, "how many notes", 1), "You have 3 notes. The newest: the garage codes are 9012."));
+    CHECK(says(ck_allen_answer(&m, "show me my notes", 1), "You have 3 notes."));
+    CHECK(says(ck_allen_answer(&m, "save", 1), "Tell me what to save"));
+    CHECK(says(ck_allen_answer(&m, "help", 1), "keep notes"));
+    CHECK(says(ck_allen_answer(&m, "delete the note about the garage", 1),
+               "Deleted the note: the garage codes are 9012."));
+    CHECK(ns.note[2].gone && m.note_dirty == 3 && ns.n == 3);
+    CHECK(strstr(ck_allen_answer(&m, "what's the garage code", 1), "From your notes") == NULL);
+    CHECK(says(ck_allen_answer(&m, "delete the note about the boat", 1), "I have no note about the boat."));
+    /* taught facts still answer their own questions; machine questions too */
+    CHECK(says(ck_allen_answer(&m, "remember my car is red", 1), "Got it: your car is red."));
+    CHECK(says(ck_allen_answer(&m, "what is my car", 1), "Your car is red."));
+    CHECK(says(ck_allen_answer(&m, "what is your name", 1), "Allen"));
+    CHECK(ck_allen_notes_live(&ns) == 2 && ck_allen_note_degree(&ns, 0) == 0);
+
+    /* on disk: three notes, a reload, a damaged unit, a cut write */
+    disk_file f;
+    disk_dev d;
+    uint32_t damaged = 9;
+    CHECK(disk_file_open(&f, &d, g_path, 512, (CK_ALLEN_DISK_UNITS + 2) * 8, 1) == 0);
+    for (uint32_t i = 0; i < ns.n; i++)
+        CHECK(ck_allen_note_write(&d, &ns, i) == CK_ALLEN_MEM_OK);
+    CHECK(ck_allen_notes_load(&d, 3, &back, &damaged) == CK_ALLEN_MEM_OK && damaged == 0 && back.n == 3);
+    CHECK(strcmp(back.note[1].text, ns.note[1].text) == 0 && back.note[2].gone == 1 && back.note[0].gone == 0);
+    CHECK(back.note[0].nword == ns.note[0].nword && back.note[0].word[0] == ns.note[0].word[0]);
+    /* a cut while writing note 3 leaves the three saved notes as they were */
+    CHECK(ck_allen_note_set(&ns.note[3], "the boat is in slip 12", 1) == 0);
+    disk_file_arm_cut(&f, 3);
+    CHECK(ck_allen_note_write(&d, &ns, 3) != CK_ALLEN_MEM_OK);
+    disk_file_disarm(&f);
+    CHECK(ck_allen_notes_load(&d, 3, &back, &damaged) == CK_ALLEN_MEM_OK && damaged == 0);
+    /* one spoiled byte: that note loads as gone and is counted */
+    disk_file_close(&f);
+    FILE *fp = fopen(g_path, "r+b");
+    CHECK(fp && fseek(fp, (long)((CK_ALLEN_NOTES_FIRST + 1) * 4096 + 70), SEEK_SET) == 0 && fputc('X', fp) != EOF);
+    if (fp)
+        fclose(fp);
+    CHECK(disk_file_open(&f, &d, g_path, 512, 0, 0) == 0);
+    CHECK(ck_allen_notes_load(&d, 3, &back, &damaged) == CK_ALLEN_MEM_OK && damaged == 1 && back.note[1].gone);
+    CHECK(ck_allen_notes_load(&d, CK_ALLEN_NOTES_MAX + 1, &back, &damaged) == CK_ALLEN_MEM_EGEOM);
+    disk_file_close(&f);
+    /* a unit is valid only in its own slot, and only printable text */
+    ck_allen_note_encode(&ns.note[0], 0, u);
+    CHECK(ck_allen_note_decode(u, 0, &back.note[0]) == 0 && ck_allen_note_decode(u, 1, &back.note[0]) != 0);
+    u[64] = 0x07;
+    CHECK(ck_allen_note_decode(u, 0, &back.note[0]) != 0);
+    CHECK(ck_allen_note_set(&back.note[0], "bad \x01 byte", 1) != 0 && ck_allen_note_set(&back.note[0], "   ", 1) != 0);
+
+    /* the note count travels in the memory copies; a restart says so */
+    uint64_t gen = 0;
+    m.mem.starts = 1;
+    ck_allen_mem_encode(&m.mem, 7, u);
+    ck_allen_mind_init(&m2, 0);
+    CHECK(ck_allen_mem_decode(u, &m2.mem, &gen) == 0 && m2.mem.nnotes == 3);
+    m2.notes = &ns;
+    ns.n = 3;
+    CHECK(says(ck_allen_welcome(&m2), "Welcome back. I still remember 1 thing you taught me, and your 2 notes."));
+    m2.mem.nfacts = 0;
+    CHECK(says(ck_allen_welcome(&m2), "Welcome back. I still have your 2 notes."));
+    m.mem.nnotes = CK_ALLEN_NOTES_MAX + 1;
+    ck_allen_mem_encode(&m.mem, 8, u);
+    CHECK(ck_allen_mem_decode(u, &m2.mem, &gen) != 0);
+    /* a full notebook says so */
+    ck_allen_mind_init(&m, 0);
+    memset(&ns, 0, sizeof ns);
+    m.notes = &ns;
+    ns.n = CK_ALLEN_NOTES_MAX;
+    CHECK(says(ck_allen_answer(&m, "save one more thing", 1), "My notebook is full."));
+    /* without a disk, notes last until power off and Allen says so */
+    ns.n = 0;
+    CHECK(says(ck_allen_answer(&m, "save the dentist is on friday", 1), "Only until this computer turns off"));
+}
+
 int main(int argc, char **argv)
 {
     snprintf(g_path, sizeof g_path, "%s/disk.img", argc > 1 ? argv[1] : ".");
@@ -379,6 +481,7 @@ int main(int argc, char **argv)
     test_gpt_add(512);
     test_gpt_add(4096);
     test_teach_restart();
+    test_notes();
     printf("allen memory: %d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;
 }

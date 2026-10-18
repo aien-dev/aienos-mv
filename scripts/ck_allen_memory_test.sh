@@ -15,7 +15,7 @@ trap 'rm -rf "$W"' EXIT
 fail() { echo "AIENOS_ALLEN_MEMORY: FAIL $*"; exit 1; }
 CC=${HOSTCC:-cc}
 $CC -std=c11 -D_DEFAULT_SOURCE -O2 -Wall -Wextra -Werror -I$K/svc -I$K/dev -I$K/tools -I$N/disk -I$N/argus \
-    -o "$W/test" $K/svc/tests/allen_memory_test.c $K/svc/allen_memory.c $K/svc/allen_reply.c \
+    -o "$W/test" $K/svc/tests/allen_memory_test.c $K/svc/allen_memory.c $K/svc/allen_reply.c $K/svc/allen_notes.c \
     $K/dev/gpt_add.c $K/dev/disk_part.c $K/tools/gpt_write.c $N/disk/disk.c $N/disk/disk_file.c \
     $N/argus/sha256.c || fail "test does not build"
 "$W/test" "$W" || fail "memory checks"
