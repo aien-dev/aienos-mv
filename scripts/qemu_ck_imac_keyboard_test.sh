@@ -7,11 +7,11 @@
 # with OVMF and a qemu-xhci controller:
 #   hub     a usb-kbd behind a usb-hub (the shape of Apple's wired keyboards, which
 #           carry their own hub); keys are typed from OUTSIDE the guest through the
-#           QEMU monitor ("sendkey"): "Hello Allen" Enter, "xy" Backspace "z" Enter, then
+#           QEMU monitor ("sendkey"): "Hello Allen" Enter, "xy" Backspace "z?!," Enter, then
 #           after 70 s "goodbye" Enter.
 #           The kernel must find the keyboard behind the hub (QEMU numbers its USB 2
 #           ports after the USB 3 ones, so "port=1.1" shows as e.g. 5.1), echo both lines as
-#           "keyboard_line: Hello Allen" and "keyboard_line: xz", have Allen answer them
+#           "keyboard_line: Hello Allen" and "keyboard_line: xz?!,", have Allen answer them
 #           ("allen: Hello Humanity.", "allen: I don't know that yet.", plus the
 #           content-free "screen: Allen answered (11 characters in, 15 out)"), switch the
 #           screen to Allen's window (a QEMU screendump of it is kept as
@@ -117,7 +117,7 @@ if wait_for hub 300 '^keyboard: type a line and press Enter'; then
         sleep 1
         [[ -s "${work}/hub.png" ]] && cp "${work}/hub.png" "${out}/allen-qemu.png"
     fi
-    for k in x y backspace z ret; do echo "sendkey ${k}" >&3; sleep 0.15; done
+    for k in x y backspace z shift-slash shift-1 comma ret; do echo "sendkey ${k}" >&3; sleep 0.15; done
 fi
 wait_for direct 300 '^power: Allen.s window stays on' || true
 wait_for none 300 '^power: holding the screen' || true
@@ -153,7 +153,7 @@ chk "hub: first line typed" "${work}/hub.txt" '^keyboard_line: Hello Allen$'
 chk "hub: Allen answers Hello Humanity." "${work}/hub.txt" '^allen: Hello Humanity\.$'
 chk "hub: the answer reported by lengths only (11 characters in, 15 out)" "${work}/hub.txt" '^screen: Allen answered \(11 characters in, 15 out\)$'
 [[ -s "${out}/allen-qemu.png" ]] && echo "PASS  hub: screenshot of Allen's window kept (${out}/allen-qemu.png)" || { echo "FAIL  hub: no screenshot"; fails=$((fails + 1)); }
-chk "hub: backspace edits the line" "${work}/hub.txt" '^keyboard_line: xz$'
+chk "hub: backspace edits the line; shifted and plain symbols typed" "${work}/hub.txt" '^keyboard_line: xz\?!,$'
 chk "hub: Allen says what it does not know" "${work}/hub.txt" "^allen: I don't know that yet\."
 [[ ${stayed} == 1 ]] && echo "PASS  hub: still on 70 s after the last key (no idle countdown)" || { echo "FAIL  hub: Allen's window did not stay up"; fails=$((fails + 1)); }
 chk "hub: Allen says goodbye" "${work}/hub.txt" '^allen: Goodbye\. Until next time\.$'

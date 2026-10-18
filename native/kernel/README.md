@@ -377,9 +377,13 @@ What is implemented (NEXT-PHASE-3 cut 1):
   `dev/usb_kbd.c` resets the controller, finds the first connected port with
   a USB HID boot keyboard, addresses it, configures its interrupt IN
   endpoint and polls it. Polled only: no interrupts, no scheduler, no Store.
-- **Key decode** to one small fixed US keymap (`dev/usb_hid.c`): a-z (with
-  Shift: A-Z), 0-9, space, `-`, `.`, `/`, Enter, Backspace, Escape. Every
-  other key is ignored. A held key produces one event, not a repeat.
+- **Key decode** to one fixed US keymap (`dev/usb_hid.c`): every printable
+  character a US keyboard types, with and without Shift (letters, digits and
+  `!@#$%^&*()`, space, and the symbol keys with their shifted pairs, `?`
+  included), plus Enter, Backspace, Escape. Function keys, arrows, Tab and the
+  non-US key are ignored. A held key produces one event, not a repeat. The
+  console's commands match whole words only, so symbols can only make an
+  unknown command; Allen's facts keep letters, digits and spaces.
 - **Line input** with echo and a bound of 64 characters. One key past the
   bound makes the whole line fail closed: at Enter it is refused
   (`keyboard_line: overflow (line refused: N keys typed, limit 64)`) and never
