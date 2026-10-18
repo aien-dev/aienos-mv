@@ -32,6 +32,7 @@
 #include "../svc/allen_reply.h"
 #include "../ui/allen_ui.h"
 #include "x86.h"
+#include "../../boot/netboot_proto.h"
 
 #ifndef AIENOS_COMMIT
 #define AIENOS_COMMIT "unknown"
@@ -410,6 +411,27 @@ static void night_stats(const char *when)
               draw_on ? "a secondary core" : "the boot core");
 }
 
+/* Time since the power button for each step. The TSC counts from power-on
+ * (and from every reset), so its value at a step is the time since then:
+ * firmware until the loader (or this kernel) starts, the loader, this kernel
+ * until Allen's window takes the screen and the keyboard. */
+static void boot_times(void)
+{
+    const struct nb_pass *np = ck_x86_netldr_pass(0);
+    uint64_t per_ms = tsc_hz / 1000u, entry = hand->uefi_entry_ticks;
+    if (!per_ms)
+        return;
+    if (np)
+        ck_printf("boot_time: since power on: firmware until the loader %llu ms, loader %llu ms, kernel %llu ms; "
+                  "Allen's window at %llu ms\n", (unsigned long long)(np->loader_tsc / per_ms),
+                  (unsigned long long)((entry - np->loader_tsc) / per_ms),
+                  (unsigned long long)((allen_woke - entry) / per_ms), (unsigned long long)(allen_woke / per_ms));
+    else
+        ck_printf("boot_time: since power on: firmware until this kernel %llu ms (no loader), kernel %llu ms; "
+                  "Allen's window at %llu ms\n", (unsigned long long)(entry / per_ms),
+                  (unsigned long long)((allen_woke - entry) / per_ms), (unsigned long long)(allen_woke / per_ms));
+}
+
 static void allen_window(void)
 {
     static char footer[64];
@@ -458,6 +480,7 @@ static void allen_window(void)
     ck_x86_kbd_sink(allen_edit, allen_line);
     allen_on = 1;
     allen_woke = ck_rdtsc();
+    boot_times();
     night_stats("before Allen woke");
     allen_map(); /* the notes loaded from disk, before the first word */
     const char *hello = ck_allen_welcome(&allen_mind);
