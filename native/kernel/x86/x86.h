@@ -94,6 +94,14 @@ const char *ck_x86_console_log(size_t *len);
 int ck_x86_console_fb_get(volatile uint32_t **px, uint32_t *width, uint32_t *height, uint32_t *pitch,
                           uint32_t *format);
 void ck_x86_console_fb_off(void);
+/* console_x86.c: the startup picture. hold, before fb_on: the screen is kept
+ * as it is and text stays off it; tick is called after each console write
+ * (never from inside itself) so the picture can move on. show: the text
+ * comes back (screen cleared, everything so far replayed), for anything
+ * that is not Allen's window: a panic, a fault, a machine without a
+ * keyboard. Once Allen's window has the screen (off), show does nothing. */
+void ck_x86_console_fb_hold(void (*tick)(void));
+void ck_x86_console_fb_show(void);
 
 /* pci_x86.c: PCI walk over the MCFG ECAM window; every AHCI and NVMe disk
  * read-only (identify, read, GPT check), a look at the Ethernet chip. */
@@ -133,6 +141,13 @@ int ck_x86_notes_write(const ck_allen_notes *notes, uint32_t index);
  * one has a USB boot keyboard; prints "keyboard: ready (...)" or why none.
  * Call after ck_x86_storage. */
 void ck_x86_usb(struct ck_frames *fr, uint64_t tsc_hz);
+/* pci_x86.c: hands every High Definition Audio controller the walk found to
+ * hda_x86.c for a look ("sound: ..." lines, or "sound: none ..."). Call after
+ * ck_x86_storage. hda_x86.c: stops any DMA the firmware left running, resets
+ * the controller and names each codec; bar = its registers (mapped), memory
+ * decode on. Nothing is played. */
+void ck_x86_sound(uint64_t tsc_hz);
+void ck_x86_hda_look(unsigned ctrl, volatile uint8_t *bar, uint64_t tsc_hz);
 /* xhci_x86.c: the USB keyboard, polled. start: bar0 = the controller's
  * registers (mapped), memory decode and bus master on; 0 when a keyboard is
  * running. hold_poll: handles waiting keys (echo, line editing, a

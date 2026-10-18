@@ -9,7 +9,9 @@
  * ExitBootServices (UEFI ConOut is not used: on a Mac it is invisible unless
  * the firmware is switched to text mode); report_x86.c also sends that copy
  * over the network. '\n' goes to COM1 as CR LF. A fault
- * while drawing turns the screen off for good. */
+ * while drawing turns the screen off for good. While the startup picture
+ * plays (ck_x86_console_fb_hold) the screen is known but the text stays off
+ * it; ck_x86_console_fb_show brings the text back (a panic always does). */
 #include "../core/ck_internal.h"
 #include "../core/fbcon.h"
 #include "x86.h"
@@ -20,6 +22,9 @@
 static int com1_on;
 static struct ck_fbcon fb;
 static int fb_on, fb_busy;
+static int fb_held; /* the screen is known but the text stays off it (the startup picture) */
+static void (*held_tick)(void);
+static int tick_busy;
 static char log_buf[CK_X86_LOG_BYTES];
 static size_t log_len;
 
@@ -60,6 +65,11 @@ static void write_n(const char *s, size_t n)
     memcpy(log_buf + log_len, s, k);
     log_len += k;
     fb_write(s, n);
+    if (fb_held && held_tick && !tick_busy) {
+        tick_busy = 1; /* a fault while drawing prints, and must not draw again */
+        held_tick();
+        tick_busy = 0;
+    }
     if (!com1_on)
         return;
     for (size_t i = 0; i < n; i++) {
@@ -72,10 +82,16 @@ static void write_n(const char *s, size_t n)
 int ck_x86_console_fb_on(volatile void *base, uint32_t width, uint32_t height, uint32_t pitch,
                          uint32_t format, uint32_t *scale, uint32_t *cols, uint32_t *rows)
 {
-    if (ck_fbcon_setup(&fb, base, width, height, pitch, format) != 0)
-        return -1;
-    fb_on = 1;
-    fb_write(log_buf, log_len);
+    if (held_tick) {
+        if (ck_fbcon_attach(&fb, base, width, height, pitch, format) != 0)
+            return -1;
+        fb_held = 1;
+    } else {
+        if (ck_fbcon_setup(&fb, base, width, height, pitch, format) != 0)
+            return -1;
+        fb_on = 1;
+        fb_write(log_buf, log_len);
+    }
     *scale = fb.scale;
     *cols = fb.cols;
     *rows = fb.rows;
@@ -85,7 +101,7 @@ int ck_x86_console_fb_on(volatile void *base, uint32_t width, uint32_t height, u
 int ck_x86_console_fb_get(volatile uint32_t **px, uint32_t *width, uint32_t *height, uint32_t *pitch,
                           uint32_t *format)
 {
-    if (!fb_on || fb_busy)
+    if (!(fb_on || fb_held) || fb_busy)
         return -1;
     *px = fb.px;
     *width = fb.width;
@@ -95,7 +111,26 @@ int ck_x86_console_fb_get(volatile uint32_t **px, uint32_t *width, uint32_t *hei
     return 0;
 }
 
-void ck_x86_console_fb_off(void) { fb_on = 0; /* text keeps going to the RAM copy and COM1 */ }
+void ck_x86_console_fb_off(void)
+{
+    fb_on = fb_held = 0; /* text keeps going to the RAM copy and COM1 */
+    held_tick = 0;
+}
+
+void ck_x86_console_fb_hold(void (*tick)(void)) { held_tick = tick; }
+
+void ck_x86_console_fb_show(void)
+{
+    if (!fb_held || fb_busy)
+        return;
+    fb_held = 0;
+    held_tick = 0;
+    fb_on = 1;
+    fb_busy = 1;
+    ck_fbcon_clear(&fb);
+    fb_busy = 0;
+    fb_write(log_buf, log_len);
+}
 
 const char *ck_x86_console_log(size_t *len)
 {

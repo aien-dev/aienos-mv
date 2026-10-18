@@ -31,6 +31,7 @@
 #include "../mm/heap.h"
 #include "../svc/allen_reply.h"
 #include "../ui/allen_ui.h"
+#include "../ui/whirlpool.h"
 #include "x86.h"
 
 #ifndef AIENOS_COMMIT
@@ -327,6 +328,11 @@ static void allen_line(const char *text)
         allen_bye = ck_rdtsc() | 1;
 }
 
+/* The startup picture (ui/whirlpool.c): its memory, freed once Allen's window
+ * has the screen, and what is said about it once the console is up. */
+static uint64_t whirl_pa, whirl_pages, whirl_t0, whirl_last, whirl_cost;
+static uint32_t whirl_logo, whirl_block, whirl_gone, whirl_frames, whirl_ms, whirl_more;
+
 static void allen_window(void)
 {
     static char footer[64];
@@ -368,6 +374,11 @@ static void allen_window(void)
     }
     ck_x86_console_fb_off();
     ck_x86_kbd_sink(allen_edit, allen_line);
+    if (whirl_pages) {
+        ck_printf("screen: the whirlpool turned %u more frames during startup\n", whirl_more);
+        ck_frames_free(&frames, whirl_pa, whirl_pages);
+        whirl_pages = 0;
+    }
     allen_on = 1;
     ck_printf("screen: Allen's window drawn in %llu ms\n", (unsigned long long)((ck_rdtsc() - t0) * 1000 / tsc_hz));
     allen_map(); /* the notes loaded from disk, before the first word */
@@ -409,6 +420,8 @@ static __attribute__((noreturn)) void finish(void)
             ck_printf("keyboard: type a line and press Enter; the screen stays on until %u s after the last key\n",
                       ck_x86_kbd_idle_s());
     }
+    if (!allen_on)
+        ck_x86_console_fb_show(); /* no Allen's window: the startup text, not the picture */
     if (CK_X86_HOLD_S) {
 #if CK_X86_REPORT
         /* Lab build only (make imac-kernel CK_X86_REPORT=1): sends the
@@ -445,6 +458,7 @@ static __attribute__((noreturn)) void finish(void)
 void ck_panic(const char *fmt, ...)
 {
     ck_cli();
+    ck_x86_console_fb_show(); /* a panic is always readable */
     va_list ap;
     va_start(ap, fmt);
     ck_puts("panic: ");
@@ -1130,10 +1144,60 @@ static void cpu_line(void)
     ck_printf("cpu: %s %s\n", vendor, b);
 }
 
+/* Called after each console write while the text is held off the screen:
+ * the water keeps turning, at most 25 frames a second and with at least
+ * twice a frame's drawing time between frames, so startup is not slowed
+ * by more than a third. */
+static void whirl_tick(void)
+{
+    uint64_t now = ck_rdtsc(), gap = whirl_cost * 2 > tsc_hz / 25 ? whirl_cost * 2 : tsc_hz / 25;
+    if (now - whirl_last < gap)
+        return;
+    ck_whirl_frame((uint32_t)((now - whirl_t0) * 1000 / tsc_hz));
+    whirl_last = ck_rdtsc();
+    whirl_cost = whirl_last - now;
+    whirl_more++;
+}
+
+/* The firmware's picture goes down the whirlpool before anything is said on
+ * the screen; then the text stays off it (still in the RAM copy and on COM1)
+ * until Allen's window takes over, or comes back if anything goes wrong. */
+static void whirl_play(const struct ck_handoff *h)
+{
+    if (h->fb_status != CK_HANDOFF_FB_PRESENT || !mm.fb_ok || !tsc_hz)
+        return;
+    size_t need = ck_whirl_mem_bytes(h->fb_width, h->fb_height);
+    uint64_t pages = (need + CK_PAGE - 1) / CK_PAGE, pa;
+    if (!need || ck_frames_alloc(&frames, pages, CK_PAGE, &pa))
+        return;
+    if (ck_whirl_start((volatile uint32_t *)(uintptr_t)h->fb_base, h->fb_width, h->fb_height, h->fb_pitch,
+                       h->fb_format, (void *)(uintptr_t)pa, pages * CK_PAGE, &whirl_logo, &whirl_block)) {
+        ck_frames_free(&frames, pa, pages);
+        return;
+    }
+    whirl_pa = pa, whirl_pages = pages;
+    whirl_t0 = ck_rdtsc();
+    for (;;) {
+        uint32_t t = (uint32_t)((ck_rdtsc() - whirl_t0) * 1000 / tsc_hz);
+        uint32_t seen = ck_whirl_frame(t);
+        whirl_frames++;
+        if (!whirl_gone && t > CK_WHIRL_LOGO_FROM_MS && !seen)
+            whirl_gone = t;
+        if (t >= CK_WHIRL_MS)
+            break;
+    }
+    whirl_last = ck_rdtsc();
+    whirl_ms = (uint32_t)((whirl_last - whirl_t0) * 1000 / tsc_hz);
+    whirl_cost = (whirl_last - whirl_t0) / whirl_frames;
+    ck_x86_console_fb_hold(whirl_tick);
+}
+
 static __attribute__((noreturn)) void kernel_main(void *arg)
 {
     (void)arg;
     const struct ck_handoff *h = hand;
+    tsc_measure(); /* first: the startup picture runs on this clock */
+    whirl_play(h);
     if (h->fb_status == CK_HANDOFF_FB_PRESENT && mm.fb_ok) {
         uint32_t scale, cols, rows;
         if (ck_x86_console_fb_on((volatile void *)(uintptr_t)h->fb_base, h->fb_width, h->fb_height,
@@ -1143,6 +1207,9 @@ static __attribute__((noreturn)) void kernel_main(void *arg)
                       (unsigned long long)h->fb_base, scale, cols, rows);
         else
             ck_puts("screen: refused (unusable geometry)\n");
+        if (whirl_pages)
+            ck_printf("screen: whirlpool: the firmware's picture had %u pixels, gone at %u ms; %u frames in %u ms, "
+                      "blocks of %u px\n", whirl_logo, whirl_gone, whirl_frames, whirl_ms, whirl_block);
     } else if (h->fb_status == CK_HANDOFF_FB_PRESENT) {
         ck_puts("screen: refused (framebuffer overlaps RAM or lies above the mapped range)\n");
     } else {
@@ -1201,7 +1268,6 @@ static __attribute__((noreturn)) void kernel_main(void *arg)
 
     wx_probes();
 
-    tsc_measure();
     if (!tsc_hz)
         ck_panic("timebase: no HPET and no CPUID leaf 0x16 frequency");
     ck_printf("timebase: %s period_fs=%llu tsc_hz=%llu\n", timebase, (unsigned long long)hpet_period_fs,
@@ -1245,6 +1311,7 @@ static __attribute__((noreturn)) void kernel_main(void *arg)
 
     const struct ck_x86_storage_result *st = ck_x86_storage(h->rsdp, &frames, tsc_hz, mm.top);
     ck_x86_usb(&frames, tsc_hz);
+    ck_x86_sound(tsc_hz);
     allen_facts.cores = sr.started + 1;
     allen_facts.sata_disks = st->ahci_disks;
     allen_facts.nvme_disks = st->nvme_disks;

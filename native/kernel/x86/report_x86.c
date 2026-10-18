@@ -50,7 +50,7 @@ static const char *const allowed_keys[] = {
     "aienos_commit", "allen_memory", "apic", "cpu", "descriptors", "exit_boot_services", "firmware_cpl",
     "firmware_revision", "firmware_vendor", "gop", "guard_page", "handoff", "image", "kernel", "kernel_impl",
     "keyboard", "madt", "net", "net_tg3", "note", "nvme", "nvme_disk", "nvme_gpt", "nvme_read", "paging", "panic",
-    "pci", "power", "ram", "report", "report_kind", "screen", "smp", "stack", "storage", "summary", "timebase",
+    "pci", "power", "ram", "report", "report_kind", "screen", "smp", "sound", "stack", "storage", "summary", "timebase",
     "timer_irq", "timer_stats", "usb", "xhci",
 };
 static const char *const allowed_lines[] = {

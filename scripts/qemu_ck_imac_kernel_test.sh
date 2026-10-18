@@ -75,6 +75,7 @@ run() { # name, -cpu model, expected APIC mode
         -drive if=none,id=esp,format=raw,file="${img}" -device ide-hd,drive=esp,bus=ide.0 \
         -drive if=none,id=data,format=raw,file="${data}" -device ide-hd,drive=data,bus=ide.1 \
         -drive if=none,id=nvm,format=raw,file="${nvm}" -device nvme,drive=nvm,serial=AIENOSQEMU \
+        -audiodev none,id=snd0 -device ich9-intel-hda -device hda-output,audiodev=snd0 \
         -display none -nic none -serial file:"${log}" -no-reboot &
     qpid=$!
     local self_exit=0
@@ -113,6 +114,10 @@ run() { # name, -cpu model, expected APIC mode
     chk "${name}: NVMe controller found" "${txt}" "^pci: nvme [0-9a-f:.]+ id=1b36:0010 "
     chk "${name}: NVMe disk identified" "${txt}" "^nvme_disk: ctrl=0 disk=0 version=1\\.[0-9]+ nsid=1 blocks=65536 block=512 mib=32 access=read-only\$"
     chk "${name}: NVMe AIENOS partition where written" "${txt}" "^nvme_gpt: ctrl=0 disk=0 gpt=valid used=3 aienos first_lba=${n_first} last_lba=${n_last}\$"
+    chk "${name}: whirlpool played" "${txt}" "^screen: whirlpool: the firmware.s picture had [0-9]+ pixels, gone at [0-9]+ ms; [1-9][0-9]* frames in [0-9]+ ms, blocks of [1-9] px\$"
+    chk "${name}: sound controller found" "${txt}" "^pci: sound [0-9a-f:.]+ id=8086:293e class=0403[0-9a-f]{2} "
+    chk "${name}: sound controller looked at" "${txt}" "^sound: ctrl=0 version=1\\.0 streams out=[1-9][0-9]* "
+    chk "${name}: codec named" "${txt}" "^sound: codec=0 id=1af4:[0-9a-f]{4} rev=0x[0-9a-f]{8} function_groups=1 audio_group_node=1\$"
     chk "${name}: no Ethernet in this VM" "${txt}" "^net: no Ethernet controller\$"
     chk "${name}: storage summary" "${txt}" "^storage: pci_functions=[1-9][0-9]* ahci_controllers=1 disks=2 nvme_controllers=1 nvme_disks=1 gpt_valid=2 writes=none\$"
     chk "${name}: one-line summary" "${txt}" "^summary: cores=4/4 timer=ok sata_disks=2 nvme_disks=1 gpt_valid=2 writes=none net=none\$"

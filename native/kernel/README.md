@@ -213,14 +213,35 @@ talk, your name for the session, facts about the machine, how long it has been
 awake and sums said in words ("what is 12 times 4"); anything else gives "I
 don't know that yet." Answers print as `allen: <answer>` on the console. The
 window has no idle countdown: it stays up until "goodbye" (then ACPI S5, or a
-restart in the lab image) or the power button. The conversation stays on the iMac: `keyboard_line:` and `allen:`
+restart in the lab image) or the power button. The conversation stays on the computer: `keyboard_line:` and `allen:`
 are off the lab report's allowlist, which carries only `screen: Allen
 answered (N characters in, M out)`. Without a keyboard or the memory the text
 screen and its 60 s hold stay. Tests: `scripts/ck_allen_ui_test.sh` (host, pictures in
 `target/native-kernel-allen-ui/`) and `scripts/qemu_ck_imac_keyboard_test.sh`
 (QEMU, types "Hello Allen", keeps a screenshot as
-`target/native-kernel-imac-keyboard/allen-qemu.png`). Nothing is remembered
-across a restart yet.
+`target/native-kernel-imac-keyboard/allen-qemu.png`). What Allen learns and the
+notes it keeps are saved in its section of the disk (`svc/allen_memory.c`,
+`x86/memory_x86.c`) and come back after a restart.
+
+**Startup picture and sound.** Before anything is printed, `ui/whirlpool.c`
+copies the middle of the screen as the firmware left it (on most machines the
+maker's logo; AIENOS carries no maker's artwork), pulls it into an orbit
+round a black hole at the centre of a turning whirlpool and spirals it in on
+the inspiral law (distance as t^(1/4), angle as t^(5/8), t the time left)
+until it plunges at 3.0 s and a ripple runs out; the water keeps turning,
+with the startup text held off the screen (`ck_x86_console_fb_hold`), until
+Allen's window takes over; a panic, or no window, brings the text back. The
+kernel line `screen: whirlpool: ...` says how many pixels the firmware's
+picture had, when it was gone and how many frames were drawn.
+`ui/chirp.c` is the matching sound: the gravitational-wave chirp of the same
+inspiral, raised into hearing (150 Hz to 1000 Hz, loudness as pitch^(2/3)),
+peaking at the plunge, worked out from the formula. Nothing plays it yet:
+`x86/hda_x86.c` only looks at the sound controller (stops any DMA the
+firmware left running, resets it, and names each codec in `sound:` lines).
+Tests: `scripts/ck_whirlpool_test.sh` (pictures in
+`target/native-kernel-whirlpool/`), `scripts/ck_chirp_test.sh` (the sound as
+`target/native-kernel-chirp/chirp.wav`); the QEMU kernel test requires the
+whirlpool line and finds QEMU's HD Audio codec.
 
 Output: the GOP framebuffer
 (`core/fbcon.c`, lines from before ExitBootServices replayed onto it) and COM1
