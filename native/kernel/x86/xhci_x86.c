@@ -68,6 +68,7 @@ enum { P_DCBAA = 0, P_CMD, P_EVT, P_ERST, P_INCTX, P_BUF, P_INTR, P_SPARRAY, P_D
 #define PS_PR 0x10u
 #define PS_PP 0x200u
 #define PS_PRC 0x200000u
+#define PS_CSC 0x20000u /* connect status change, RW1C */
 #define PS_CHANGES 0x00fe0000u
 #define PS_KEEP (PS_PP | 0x0e000000u) /* PP and the wake enables: RW, not RW1C */
 #define T_NORMAL 1u
@@ -78,9 +79,11 @@ enum { P_DCBAA = 0, P_CMD, P_EVT, P_ERST, P_INCTX, P_BUF, P_INTR, P_SPARRAY, P_D
 #define T_ENABLE_SLOT 9u
 #define T_ADDRESS 11u
 #define T_CONFIGURE 12u
+#define T_DISABLE_SLOT 10u
 #define T_EVALUATE 13u
 #define T_EV_TRANSFER 32u
 #define T_EV_COMMAND 33u
+#define T_EV_PORT 34u /* Port Status Change Event, xHCI 6.4.2.3 */
 #define TRB_TYPE(t) ((uint32_t)(t) << 10)
 #define TRB_IOC 0x20u
 #define TRB_ISP 0x4u
@@ -126,6 +129,8 @@ static struct {
     ck_boot_kbd kd;
     uint8_t dci;
     int stopped;
+    int rescan;        /* the keyboard's root port changed: look again */
+    uint8_t kbd_port;  /* root port the keyboard (or its hub) sits on */
     const char *why;
     uint32_t last_code;
 } x;
@@ -556,6 +561,38 @@ static int reset_root_port(uint8_t p, uint8_t *speed)
     return 0;
 }
 
+/* Every connected root port in turn: reset it and enumerate what is behind it,
+ * until a boot keyboard answers. Used at start and again after a replug. */
+static int scan_ports(void)
+{
+    for (unsigned p = 1; p <= x.max_ports && p <= 255u && x.ndev < DEV_MAX; p++) {
+        if (!(rd(x.op + OP_PORTSC(p)) & PS_CCS))
+            continue;
+        struct usbdev *d = &x.dev[x.ndev];
+        zero(d, sizeof *d);
+        d->page = P_DEV0 + 2u * x.ndev++;
+        d->root_port = (uint8_t)p;
+        ck_snprintf(d->path, sizeof d->path, "%u", p);
+        if (reset_root_port((uint8_t)p, &d->speed) == 0 && enumerate(d) == 0) {
+            x.kbd_port = (uint8_t)p;
+            return 0;
+        }
+        ck_printf("usb: port %s: %s (completion %u)\n", d->path, x.why, x.last_code);
+    }
+    return fail("no boot keyboard on any port");
+}
+
+/* xHCI 4.6.4: Disable Slot for every device we addressed, so a fresh scan can
+ * enable slots again. Failures are ignored: the device is gone anyway. */
+static void forget_devices(void)
+{
+    for (unsigned i = 0; i < x.ndev; i++)
+        if (x.dev[i].slot)
+            (void)command(0, 0, TRB_TYPE(T_DISABLE_SLOT) | ((uint32_t)x.dev[i].slot << 24), 0, "Disable Slot");
+    x.ndev = 0;
+    x.dci = 0;
+}
+
 static void halt(void)
 {
     wr(x.op + OP_USBCMD, rd(x.op + OP_USBCMD) & ~CMD_RS);
@@ -661,19 +698,7 @@ static int start(void)
                           any_ |= rd(x.op + OP_PORTSC(p_)) & PS_CCS;
                       any_;
                   }));
-    for (unsigned p = 1; p <= x.max_ports && p <= 255u && x.ndev < DEV_MAX; p++) {
-        if (!(rd(x.op + OP_PORTSC(p)) & PS_CCS))
-            continue;
-        struct usbdev *d = &x.dev[x.ndev];
-        zero(d, sizeof *d);
-        d->page = P_DEV0 + 2u * x.ndev++;
-        d->root_port = (uint8_t)p;
-        ck_snprintf(d->path, sizeof d->path, "%u", p);
-        if (reset_root_port((uint8_t)p, &d->speed) == 0 && enumerate(d) == 0)
-            return 0;
-        ck_printf("usb: port %s: %s (completion %u)\n", d->path, x.why, x.last_code);
-    }
-    return fail("no boot keyboard on any port");
+    return scan_ports();
 }
 
 int ck_x86_xhci_start(unsigned ctrl, volatile uint8_t *bar0, struct ck_frames *fr, uint64_t tsc_hz)
@@ -749,12 +774,18 @@ static int poll_keys(void)
     int got = 0;
     uint32_t ev[4];
     while (ev_next(ev)) {
+        if (ev_type(ev) == T_EV_PORT) {
+            if ((ev[0] >> 24) == x.kbd_port)
+                x.rescan = 1; /* the keyboard's own root port changed: it left, or came back */
+            continue;
+        }
         if (ev_type(ev) != T_EV_TRANSFER || (ev[3] >> 24) != x.kbd->slot || ((ev[3] >> 16) & 0x1fu) != x.dci)
             continue;
         uint32_t cc = ev_code(ev);
         if (cc != CC_SUCCESS && cc != CC_SHORT) {
             x.stopped = 1;
-            ck_printf("\nkeyboard: stopped (completion %u; unplugged?)\n", cc);
+            x.rescan = 1;
+            ck_printf("\nkeyboard: unplugged (completion %u); plug it back in\n", cc);
             return got;
         }
         uint8_t rep[CK_HID_REPORT_LEN];
@@ -794,9 +825,54 @@ static int poll_keys(void)
     return got;
 }
 
+/* After a port change on the keyboard's root port: if the port is empty, say so once
+ * and wait; once something is connected again, release the old slots and run the
+ * start-up discovery again. A failed discovery waits for the next port change. */
+static void kbd_rescan(void)
+{
+    uint32_t off = x.op + OP_PORTSC(x.kbd_port);
+    uint32_t s = rd(off);
+    if (!x.stopped && (s & PS_CCS) && !(s & PS_CSC)) {
+        x.rescan = 0; /* still connected, no connect change: nothing to do */
+        return;
+    }
+    if (!x.stopped) {
+        x.stopped = 1;
+        ck_printf("\nkeyboard: unplugged; plug it back in\n");
+    }
+    if (!(s & PS_CCS))
+        return; /* port empty: keep waiting for the next change */
+    wr(off, (s & PS_KEEP) | (s & PS_CHANGES)); /* clear the change bits (RW1C) */
+    forget_devices();
+    x.why = "";
+    x.rescan = 0;
+    if (scan_ports() == 0) {
+        uint32_t ev[4];
+        while (ev_next(ev)) /* port events raised by our own reset */
+            ;
+        ck_hid_decoder z = {{0}};
+        g_dec = z;
+        x.stopped = 0;
+        ck_printf("keyboard: ready (controller %u, port %s, %s speed, slot %u, endpoint 0x%02x)\n", x.ctrl, x.kbd->path,
+                  speed_name(x.kbd->speed), x.kbd->slot, x.kd.endpoint);
+        return;
+    }
+    ck_printf("keyboard: not found after replug (%s, completion %u)\n", x.why, x.last_code);
+}
+
 void ck_x86_kbd_hold_poll(uint64_t *end)
 {
-    if (!ck_x86_kbd_ready() || !poll_keys())
+    if (!x.kbd || !x.kbd_port)
+        return;
+    int got = x.stopped ? 0 : poll_keys();
+    if (!x.rescan && !x.stopped) {
+        uint32_t s = rd(x.op + OP_PORTSC(x.kbd_port));
+        if ((s & PS_CSC) || !(s & PS_CCS))
+            x.rescan = 1; /* missed event, or none sent: the port itself says so */
+    }
+    if (x.rescan)
+        kbd_rescan();
+    if (!got)
         return;
     uint64_t want = ck_rdtsc() + (uint64_t)CK_X86_KBD_IDLE_S * hz;
     if (want > g_cap)

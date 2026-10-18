@@ -269,7 +269,12 @@ talk, your name for the session, facts about the machine, how long it has been
 awake and sums said in words ("what is 12 times 4"); anything else gives "I
 don't know that yet." Answers print as `allen: <answer>` on the console. The
 window has no idle countdown: it stays up until "goodbye" (then ACPI S5, or a
-restart in the lab image) or the power button. The conversation stays on the computer: `keyboard_line:` and `allen:`
+restart in the lab image) or the power button. Unplugging the keyboard and plugging it
+(or another) back in works: the driver watches the keyboard's root port, prints
+`keyboard: unplugged`, releases the old device and runs discovery again, then
+`keyboard: ready` once more (the QEMU test does exactly this from outside the
+guest). A keyboard plugged in for the first time after start-up is not found: the
+controller is halted when no keyboard was there at start. The conversation stays on the computer: `keyboard_line:` and `allen:`
 are off the lab report's allowlist, which carries only `screen: Allen
 answered (N characters in, M out)`. Without a keyboard or the memory the text
 screen and its 60 s hold stay. Tests: `scripts/ck_allen_ui_test.sh` (host) and

@@ -100,7 +100,7 @@ running() { local v="pid_$1"; kill -0 "${!v}" 2>/dev/null; }
 stop() { local v="pid_$1"; kill "${!v}" 2>/dev/null || true; }
 
 start hub -device usb-hub,bus=xhci.0,port=1 -device usb-kbd,bus=xhci.0,port=1.1
-start direct -device usb-kbd,bus=xhci.0,port=1
+start direct -device usb-kbd,bus=xhci.0,port=1,id=kbd0
 start none
 
 # Keys go in through the QEMU monitor (outside the guest), 0.15 s apart.
@@ -118,6 +118,25 @@ if wait_for hub 300 '^keyboard: type a line and press Enter'; then
         [[ -s "${work}/hub.png" ]] && cp "${work}/hub.png" "${out}/allen-qemu.png"
     fi
     for k in x y backspace z shift-slash shift-1 comma ret; do echo "sendkey ${k}" >&3; sleep 0.15; done
+fi
+# direct: unplug the keyboard from outside the guest, plug one back in, type on it.
+replug_ok=0
+if wait_for direct 300 '^keyboard: type a line and press Enter'; then
+    exec 4>"${work}/direct.mon.in"
+    echo "device_del kbd0" >&4
+    if wait_for direct 30 '^keyboard: unplugged'; then
+        sleep 1
+        echo "device_add usb-kbd,bus=xhci.0,port=1,id=kbd1" >&4
+        for _ in $(seq 1 150); do
+            [[ $(txt direct | grep -acE '^keyboard: ready ') -ge 2 ]] && { replug_ok=1; break; }
+            sleep 0.2
+        done
+        if [[ ${replug_ok} == 1 ]]; then
+            sleep 1
+            for k in o k ret; do echo "sendkey ${k}" >&4; sleep 0.15; done
+            wait_for direct 60 '^keyboard_line: ok$' || true
+        fi
+    fi
 fi
 wait_for direct 300 '^power: Allen.s window stays on' || true
 wait_for none 300 '^power: holding the screen' || true
@@ -165,6 +184,9 @@ chk "hub: ACPI S5 power off" "${work}/hub.txt" '^power: off via ACPI S5 '
 echo "== direct: usb-kbd on a root port =="
 chk "direct: keyboard found on a root port" "${work}/direct.txt" '^keyboard: ready \(controller 0, port [0-9]+, (full|high) speed, slot 1, endpoint 0x8[1-9a-f]\)$'
 chk "direct: Allen's window stays on" "${work}/direct.txt" '^power: Allen.s window stays on until goodbye \(or the power button\), then ACPI S5$'
+chk "direct: unplug noticed" "${work}/direct.txt" '^keyboard: unplugged'
+[[ ${replug_ok} == 1 ]] && echo "PASS  direct: keyboard found again after replug" || { echo "FAIL  direct: no second keyboard: ready after replug"; fails=$((fails + 1)); }
+chk "direct: line typed on the replugged keyboard" "${work}/direct.txt" '^keyboard_line: ok$'
 
 echo "== none: controller, no keyboard =="
 chk "none: controller found" "${work}/none.txt" '^pci: xhci [0-9a-f:.]+ id=1b36:000d '
