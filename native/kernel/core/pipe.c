@@ -374,6 +374,43 @@ unsigned ck_pipe_cancel(struct ck_pipe_pool *p, const struct ck_cap_table *t, st
     return OSH_E_OK;
 }
 
+/* A watch is a waiter that is not parked on a stack: it raises the same per-end count park() does, so wake() reaches
+ * the hook for it. A revoked pipe can still be watched (the watcher then learns REVOKED on its next call). */
+static unsigned watch_resolve(struct ck_pipe_pool *p, const struct ck_cap_table *t, struct ck_handle h, unsigned *idx,
+                              unsigned *end)
+{
+    unsigned rights = 0;
+    unsigned e = resolve(p, t, h, 0, -1, 1, idx, end);
+    if (e != OSH_E_OK)
+        return refuse(p, e);
+    ck_cap_rights(t, h, &rights);
+    if (!(rights & data_right(*end)))
+        return refuse(p, OSH_E_DENIED);
+    return OSH_E_OK;
+}
+
+unsigned ck_pipe_watch(struct ck_pipe_pool *p, const struct ck_cap_table *t, struct ck_handle h)
+{
+    unsigned idx, end;
+    unsigned e = watch_resolve(p, t, h, &idx, &end);
+    if (e != OSH_E_OK)
+        return e;
+    p->pipes[idx].waiting[end]++;
+    BUMP(p, &p->pipes[idx], waits, 1);
+    return OSH_E_OK;
+}
+
+unsigned ck_pipe_unwatch(struct ck_pipe_pool *p, const struct ck_cap_table *t, struct ck_handle h)
+{
+    unsigned idx, end;
+    unsigned e = watch_resolve(p, t, h, &idx, &end);
+    if (e != OSH_E_OK)
+        return e;
+    if (p->pipes[idx].waiting[end])
+        p->pipes[idx].waiting[end]--;
+    return OSH_E_OK;
+}
+
 unsigned ck_pipe_release_table(struct ck_pipe_pool *p, struct ck_cap_table *t)
 {
     unsigned closed = 0;

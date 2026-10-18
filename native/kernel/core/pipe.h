@@ -152,6 +152,13 @@ unsigned ck_stream_dup(struct ck_pipe_pool *p, struct ck_cap_table *from, struct
 unsigned ck_pipe_revoke(struct ck_pipe_pool *p, const struct ck_cap_table *t, struct ck_handle h);
 /* Interrupt the end h names (its data right needed). */
 unsigned ck_pipe_cancel(struct ck_pipe_pool *p, const struct ck_cap_table *t, struct ck_handle h);
+/* Watch without blocking (aienos-mv#429, the task scheduler's waits): count the caller as a waiter on the end h names
+ * (its data right needed; a revoked pipe may be watched) so the wake hook fires for that end on bytes, space, close,
+ * revoke or cancel, exactly as for a parked blocking call. Undo with ck_pipe_unwatch on the same handle before closing
+ * it; freeing the pipe clears every count. The hook may fire for a watcher whose condition is already gone (a wake is
+ * a hint: the watcher retries its call and may watch again). */
+unsigned ck_pipe_watch(struct ck_pipe_pool *p, const struct ck_cap_table *t, struct ck_handle h);
+unsigned ck_pipe_unwatch(struct ck_pipe_pool *p, const struct ck_cap_table *t, struct ck_handle h);
 /* Section 12 cleanup: closes every pipe capability in t. Returns how many were closed. */
 unsigned ck_pipe_release_table(struct ck_pipe_pool *p, struct ck_cap_table *t);
 

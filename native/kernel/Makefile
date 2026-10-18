@@ -1361,7 +1361,7 @@ HOST_SRCS := $(KDIR)/core/fmt.c $(KDIR)/core/acpi.c $(KDIR)/core/smmu.c $(KDIR)/
 	$(KDIR)/core/line_rx.c $(KDIR)/core/klog.c $(KDIR)/core/klog_slot.c $(KDIR)/core/cpufeat.c $(KDIR)/core/unlock_req.c $(KDIR)/core/agent_cmd.c $(KDIR)/core/artifact_card.c
 TESTS := test_fmt test_frames test_pt test_acpi test_acpi_dev test_heap test_smmu test_sched test_ipc test_artifact test_osc_unit test_osc_launch test_osc_admit test_osc_receipt test_entropy test_handoff test_fbcon test_osh_op \
 	test_continuity_codec test_continuity_resolve test_continuity_commit test_continuity_recovery test_continuity_geometry \
-	test_continuity_subject test_continuity_subject_provision test_lifecycle test_console_rx test_klog test_klog_slot test_pi5 test_pi5_marker test_pi5_rng test_cpufeat test_dma_window test_pi5_pcie test_pi5_net test_pi5_gem test_unlock_req test_context test_agent_cmd test_artifact_card test_pipe
+	test_continuity_subject test_continuity_subject_provision test_lifecycle test_console_rx test_klog test_klog_slot test_pi5 test_pi5_marker test_pi5_rng test_cpufeat test_dma_window test_pi5_pcie test_pi5_net test_pi5_gem test_unlock_req test_context test_agent_cmd test_artifact_card test_pipe test_task
 HCFLAGS := -std=gnu11 -O1 -g -Wall -Wextra -Werror -I$(KDIR)/core -I$(KDIR)/mm -I$(KDIR)/tests -I$(BOOT)
 SANFLAGS := -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer
 
@@ -1416,6 +1416,35 @@ $(OUT)/host/test_pipe_mutant: $(PIPE_DEPS)
 pipe-mutant: $(OUT)/host/test_pipe_mutant
 	@if $< > $<.log 2>&1; then cat $<.log; echo "test_pipe mutant (write right not checked): PASSED, test does not catch it"; exit 1; \
 	else grep -F "test_pipe: FAIL" $<.log && echo "test_pipe mutant (write right not checked): FAILS as required"; fi
+
+# Native pipeline task lifecycle (core/task.c, aienos-mv#429): TASK_SPAWN / WAIT / STATE / CANCEL and pipelines over
+# the pipe primitive, with C stand-in stages through the same runner seam as the kernel's OSC runner (core/task_osc.c).
+TASK_SRCS := $(KDIR)/core/task.c $(KDIR)/core/pipe.c $(KDIR)/core/ipc.c $(KDIR)/core/sched.c
+TASK_DEPS := $(KDIR)/tests/test_task.c $(TASK_SRCS) $(KDIR)/tests/ck_test.h $(HDRS)
+$(OUT)/host/test_task: $(TASK_DEPS)
+	@mkdir -p $(dir $@)
+	$(HOSTCC) $(HCFLAGS) -o $@ $< $(TASK_SRCS)
+
+$(OUT)/host-san/test_task: $(TASK_DEPS)
+	@mkdir -p $(dir $@)
+	$(HOSTCC) $(HCFLAGS) $(SANFLAGS) -o $@ $< $(TASK_SRCS)
+
+# TEST-ONLY mutants of core/task.c (red before green). Each must make test_task FAIL; "make test" fails if one passes.
+#   FULL_RIGHTS       a stage's stdio ends carry every right the spawner held (least privilege broken)
+#   NO_WAKE           pipe events never wake a blocked task
+#   SKIP_ADMIT        spawn skips the image admission (the kernel's receipt and entry check)
+#   KEEP_SESSION_END  the session keeps its copy of an inner write end (EOF never reaches the next stage)
+#   NO_PARTIAL_REAP   a partial launch leaves its started stages running
+TASK_MUTANTS := FULL_RIGHTS NO_WAKE SKIP_ADMIT KEEP_SESSION_END NO_PARTIAL_REAP
+$(OUT)/host/test_task_mut_%: $(TASK_DEPS)
+	@mkdir -p $(dir $@)
+	$(HOSTCC) $(HCFLAGS) -DCK_TASK_MUTANT_$* -o $@ $< $(TASK_SRCS)
+
+task-mutants: $(addprefix $(OUT)/host/test_task_mut_,$(TASK_MUTANTS))
+	@fail=0; for m in $(TASK_MUTANTS); do b=$(OUT)/host/test_task_mut_$$m; \
+	  if timeout 120 $$b > $$b.log 2>&1; then echo "test_task mutant $$m: PASSED, test does not catch it"; fail=1; \
+	  elif grep -qF "test_task: FAIL" $$b.log; then echo "test_task mutant $$m: FAILS as required ($$(tail -1 $$b.log))"; \
+	  else echo "test_task mutant $$m: did not end with a verdict"; fail=1; fi; done; exit $$fail
 
 # N3 context assembly + approval binding (core/context.c, core/context_proposal.c, aienos#329): pure logic over
 # the argus SHA-256. Own rule (needs sha256.c). The mutant skips the foreign-binding check: test_context must
@@ -1536,8 +1565,8 @@ smmu-l2-mutants: $(OUT)/host/test_smmu
 	else echo "mutant flag refused under CK_HARDWARE_STAGING"; fi; \
 	if [ $$fail = 0 ]; then echo "CK_SMMU_L2_MUTANTS: PASS"; else echo "CK_SMMU_L2_MUTANTS: FAIL"; exit 1; fi
 
-test: $(addprefix $(OUT)/host/,$(TESTS)) osc-receipt-mutants osc-receipt-release handoff-mutant acpi-dev-mutant iort-mutants smmu-l2-mutants osh-op-mutant pipe-mutant context-mutant agent-cmd-mutant artifact-card-mutant artifact-tier-pi5 artifact-tier-mutant test-continuity-subject-restart gsp-fw-inspect-test gsp-cot-test gsp-bindata-test gsp-bootargs-test gsp-rpc-test slot-test slot-free package-test slot-loader-check
-	@fail=0; for t in $(filter-out osc-receipt-mutants osc-receipt-release handoff-mutant acpi-dev-mutant iort-mutants smmu-l2-mutants osh-op-mutant pipe-mutant context-mutant agent-cmd-mutant artifact-card-mutant artifact-tier-pi5 artifact-tier-mutant test-continuity-subject-restart gsp-fw-inspect-test gsp-cot-test gsp-bindata-test gsp-bootargs-test gsp-rpc-test slot-test slot-free package-test slot-loader-check,$^); do $$t || fail=1; done; \
+test: $(addprefix $(OUT)/host/,$(TESTS)) osc-receipt-mutants osc-receipt-release handoff-mutant acpi-dev-mutant iort-mutants smmu-l2-mutants osh-op-mutant pipe-mutant task-mutants context-mutant agent-cmd-mutant artifact-card-mutant artifact-tier-pi5 artifact-tier-mutant test-continuity-subject-restart gsp-fw-inspect-test gsp-cot-test gsp-bindata-test gsp-bootargs-test gsp-rpc-test slot-test slot-free package-test slot-loader-check
+	@fail=0; for t in $(filter-out osc-receipt-mutants osc-receipt-release handoff-mutant acpi-dev-mutant iort-mutants smmu-l2-mutants osh-op-mutant pipe-mutant task-mutants context-mutant agent-cmd-mutant artifact-card-mutant artifact-tier-pi5 artifact-tier-mutant test-continuity-subject-restart gsp-fw-inspect-test gsp-cot-test gsp-bindata-test gsp-bootargs-test gsp-rpc-test slot-test slot-free package-test slot-loader-check,$^); do $$t || fail=1; done; \
 	if [ $$fail = 0 ]; then echo "CK_CORE_HOST: PASS"; else echo "CK_CORE_HOST: FAIL"; exit 1; fi
 
 sanitize: $(addprefix $(OUT)/host-san/,$(TESTS))
@@ -2452,7 +2481,7 @@ $(OUT)/host-san/test_pi5_rng: $(KDIR)/tests/test_pi5_rng.c $(PI5_RNG_SRCS) $(KDI
 FORCE:
 .PHONY: uefi-vars slot-loader slot-loader-check pi5-diag imac-diag imac-kernel
 .PHONY: artifact-tier-pi5 artifact-tier-mutant
-.PHONY: osc-receipt-mutants osc-receipt-release all full pi5 pi5-store pi5-infer pi5-unlock pi5-unlock-card pi5-fact pi5-agent pi5-lifecycle pi5-artifact artifact-card-mutant test sanitize context-mutant agent-cmd-mutant cortex-image handoff-mutant acpi-dev-mutant iort-mutants smmu-l2-mutants acpi-scan clean print-kcflags udp-echo tool store-image gpt-image cont-tool owner-gen fb-check continuity-mutants continuity-resolve-mutants FORCE
+.PHONY: task-mutants osc-receipt-mutants osc-receipt-release all full pi5 pi5-store pi5-infer pi5-unlock pi5-unlock-card pi5-fact pi5-agent pi5-lifecycle pi5-artifact artifact-card-mutant test sanitize context-mutant agent-cmd-mutant cortex-image handoff-mutant acpi-dev-mutant iort-mutants smmu-l2-mutants acpi-scan clean print-kcflags udp-echo tool store-image gpt-image cont-tool owner-gen fb-check continuity-mutants continuity-resolve-mutants FORCE
 
 # AIENOS-PI5 step 3 marker + Pi card GPT test (hosted; a file stands in for the card, QEMU cannot model the Pi SD host).
 PI5_MARKER_SRCS := $(KDIR)/core/pi5_marker.c $(KDIR)/dev/disk_part.c $(NATIVE)/disk/disk.c $(NATIVE)/disk/disk_file.c \
