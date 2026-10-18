@@ -269,6 +269,34 @@ static ck_allen_notes allen_notes; /* loaded from disk at the window, or empty *
 
 static void allen_edit(const char *buf, unsigned len) { ck_allen_ui_input(buf, len, ck_rdtsc()); }
 
+/* The notes map beside the window: the newest live notes (point 0 the newest)
+ * and the links among them; every live note and link is counted. */
+static void allen_map(void)
+{
+    static uint32_t idx[CK_ALLEN_UI_MAP_NODES];
+    static uint8_t ea[CK_ALLEN_UI_MAP_LINKS], eb[CK_ALLEN_UI_MAP_LINKS];
+    unsigned n = 0, ne = 0, total = 0, links = 0;
+    int lit = -1;
+    for (uint32_t i = allen_notes.n; i-- > 0;) {
+        if (allen_notes.note[i].gone)
+            continue;
+        total++;
+        for (uint32_t j = i + 1; j < allen_notes.n; j++)
+            links += !allen_notes.note[j].gone && ck_allen_note_links(&allen_notes.note[i], &allen_notes.note[j]) > 0;
+        if (n == CK_ALLEN_UI_MAP_NODES)
+            continue;
+        if (allen_mind.lit == (int)i + 1)
+            lit = (int)n;
+        for (unsigned k = 0; k < n && ne < CK_ALLEN_UI_MAP_LINKS; k++)
+            if (ck_allen_note_links(&allen_notes.note[i], &allen_notes.note[idx[k]]) > 0) {
+                ea[ne] = (uint8_t)k;
+                eb[ne++] = (uint8_t)n;
+            }
+        idx[n++] = i;
+    }
+    ck_allen_ui_map(n, ea, eb, ne, lit, lit >= 0 ? allen_notes.note[idx[lit]].text : 0, total, links);
+}
+
 static void allen_line(const char *text)
 {
     const char *reply = ck_allen_answer(&allen_mind, text, ck_rdtsc() / tsc_hz);
@@ -287,6 +315,9 @@ static void allen_line(const char *text)
             reply = ck_allen_save_failed;
     }
     allen_mind.changed = 0;
+    if (allen_mind.map_changed || allen_mind.note_dirty)
+        allen_map();
+    allen_mind.map_changed = 0;
     allen_mind.note_dirty = 0;
     ck_printf("allen: %s\n", reply);
     /* the only line about it the lab report may carry: lengths, no words */
@@ -339,6 +370,7 @@ static void allen_window(void)
     ck_x86_kbd_sink(allen_edit, allen_line);
     allen_on = 1;
     ck_printf("screen: Allen's window drawn in %llu ms\n", (unsigned long long)((ck_rdtsc() - t0) * 1000 / tsc_hz));
+    allen_map(); /* the notes loaded from disk, before the first word */
     const char *hello = ck_allen_welcome(&allen_mind);
     if (hello) {
         ck_printf("allen: %s\n", hello);
@@ -1134,6 +1166,15 @@ static __attribute__((noreturn)) void kernel_main(void *arg)
     ck_printf("memory: frame_ranges=%u free_bytes=%llu heap=0x%llx+%u heap_test=ok\n", frames.n,
               (unsigned long long)ck_frames_free_bytes(&frames), (unsigned long long)hp,
               (unsigned)(HEAP_PAGES * CK_PAGE));
+    uint64_t ram = 0;
+    for (uint64_t off = 0; off + hand->desc_size <= hand->map_size; off += hand->desc_size) {
+        const struct ck_efi_desc *d = (const void *)(uintptr_t)(hand->memory_map + off);
+        if (efi_ram(d->type))
+            ram += d->pages * CK_PAGE;
+    }
+    /* the firmware keeps a little for itself, so whole GiB rounded up is what is fitted */
+    ck_printf("ram: %llu MiB in the memory map, about %llu GiB fitted\n", (unsigned long long)(ram >> 20),
+              (unsigned long long)((ram + (1ull << 30) - 1) >> 30));
     ck_printf("stack: 0x%llx-0x%llx guard=0x%llx ist1=0x%llx\n",
               (unsigned long long)(uintptr_t)(kstack + 4096),
               (unsigned long long)(uintptr_t)(kstack + sizeof kstack), (unsigned long long)(uintptr_t)kstack,
