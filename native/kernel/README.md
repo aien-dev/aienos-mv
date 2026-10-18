@@ -200,14 +200,46 @@ and rebuilds each run into `OUTDIR/imac-<run>.unauthenticated.txt`;
 the allowlist (sentinel lines never leave), the frames and reassembly on the
 host.
 
+**Startup: the night sky.** The moment the clock is measured, before anything
+is printed, `ui/allen_ui.c` takes the screen and starts the night
+(`ui/night.c`): a dark sky fades in over about seven seconds, the brightest
+stars first, with the Milky Way, its dust and six galaxies; two black holes
+appear, bending the starlight round them, circle and spiral in on the
+inspiral law (separation as t^(1/4), angle as t^(5/8), t the time left),
+merge at 12 s in a flash, and a ripple runs out across the sky. From the light
+of the merger Allen gathers (`ui/mind.c`): no face and no body, a mind drawn as
+light, about a hundred points on and inside a sphere joined by fine threads,
+turning slowly round a warm heart, with sparks running along the threads.
+The startup text stays off the screen (`ck_x86_console_fb_hold`) until
+Allen's window takes over; a panic, or no window, stops the drawing and
+brings the text back. Every pixel is worked out from its position and the
+time, so a frame redraws only the parts that change, in strips: once the
+secondary cores are up, the first draws the frames and the next two draw
+strips of them (`smp: ... state=drawing helpers=2`); before that the boot core
+draws a frame between console writes. Kernel lines: `screen: night: the sky
+made in ...` and `screen: night: N frames ..., average ... ms, slowest ...
+ms` (when Allen wakes, 20 s later, and at goodbye).
+`ui/chirp.c` is the matching sound: the gravitational-wave chirp of the same
+inspiral, raised into hearing (150 Hz to 1000 Hz, loudness as pitch^(2/3)),
+a steady tone from when the holes appear, rising to its peak at the merger,
+worked out from the formula. Nothing plays it yet: `x86/hda_x86.c` only looks
+at the sound controller (stops any DMA the firmware left running, resets it,
+and names each codec in `sound:` lines). Tests: `scripts/ck_allen_ui_test.sh`
+(host; pictures in `target/native-kernel-allen-ui/`), `scripts/ck_chirp_test.sh`
+(the sound as `target/native-kernel-chirp/chirp.wav`); the QEMU kernel test
+requires the night line and the drawing cores and finds QEMU's HD Audio codec.
+
 **Keyboard and Allen's window.** `x86/xhci_x86.c` drives a wired USB boot
-keyboard (polled xHCI, through USB 2.0 hubs). When one is ready and the frame
-allocator has room for two full-screen layers, the screen switches from the
-boot report to Allen's window (`ui/allen_ui.c`): an aurora background, a glass
-window with Allen's orb (it breathes while waiting, glows while answering),
-the conversation as bubbles and an input field, all in Allen's own stroke
-typeface (`ui/allen_font.c`, every printable ASCII character as pen strokes,
-rasterized with integer math). Each Enter gets a local answer from
+keyboard (polled xHCI, through USB 2.0 hubs). When one is ready, Allen wakes:
+the person is his guest. A quiet glass bar comes up at the bottom for what
+they type; on Enter the line rises from the bar into him, he thinks (he draws
+in, turns faster, sparks cascade), then answers under him word by word while
+the galaxies shimmer with his voice, all in Allen's own stroke typeface
+(`ui/allen_font.c`, every printable ASCII character as pen strokes,
+rasterized with integer math). Nothing else is on the screen unless it is in
+use: the bar fades when the conversation rests (a key brings it back), his
+words fade once read, and the notes map (a small constellation) shows only
+when a note is saved or handed back. Each Enter gets a local answer from
 `svc/allen_reply.c`: "Hello Allen" gives "Hello Humanity."; it also knows small
 talk, your name for the session, facts about the machine, how long it has been
 awake and sums said in words ("what is 12 times 4"); anything else gives "I
@@ -216,32 +248,11 @@ window has no idle countdown: it stays up until "goodbye" (then ACPI S5, or a
 restart in the lab image) or the power button. The conversation stays on the computer: `keyboard_line:` and `allen:`
 are off the lab report's allowlist, which carries only `screen: Allen
 answered (N characters in, M out)`. Without a keyboard or the memory the text
-screen and its 60 s hold stay. Tests: `scripts/ck_allen_ui_test.sh` (host, pictures in
-`target/native-kernel-allen-ui/`) and `scripts/qemu_ck_imac_keyboard_test.sh`
-(QEMU, types "Hello Allen", keeps a screenshot as
-`target/native-kernel-imac-keyboard/allen-qemu.png`). What Allen learns and the
-notes it keeps are saved in its section of the disk (`svc/allen_memory.c`,
-`x86/memory_x86.c`) and come back after a restart.
-
-**Startup picture and sound.** Before anything is printed, `ui/whirlpool.c`
-copies the middle of the screen as the firmware left it (on most machines the
-maker's logo; AIENOS carries no maker's artwork), pulls it into an orbit
-round a black hole at the centre of a turning whirlpool and spirals it in on
-the inspiral law (distance as t^(1/4), angle as t^(5/8), t the time left)
-until it plunges at 3.0 s and a ripple runs out; the water keeps turning,
-with the startup text held off the screen (`ck_x86_console_fb_hold`), until
-Allen's window takes over; a panic, or no window, brings the text back. The
-kernel line `screen: whirlpool: ...` says how many pixels the firmware's
-picture had, when it was gone and how many frames were drawn.
-`ui/chirp.c` is the matching sound: the gravitational-wave chirp of the same
-inspiral, raised into hearing (150 Hz to 1000 Hz, loudness as pitch^(2/3)),
-peaking at the plunge, worked out from the formula. Nothing plays it yet:
-`x86/hda_x86.c` only looks at the sound controller (stops any DMA the
-firmware left running, resets it, and names each codec in `sound:` lines).
-Tests: `scripts/ck_whirlpool_test.sh` (pictures in
-`target/native-kernel-whirlpool/`), `scripts/ck_chirp_test.sh` (the sound as
-`target/native-kernel-chirp/chirp.wav`); the QEMU kernel test requires the
-whirlpool line and finds QEMU's HD Audio codec.
+screen and its 60 s hold stay. Tests: `scripts/ck_allen_ui_test.sh` (host) and
+`scripts/qemu_ck_imac_keyboard_test.sh` (QEMU, types "Hello Allen", keeps a
+screenshot as `target/native-kernel-imac-keyboard/allen-qemu.png`). What Allen
+learns and the notes it keeps are saved in its section of the disk
+(`svc/allen_memory.c`, `x86/memory_x86.c`) and come back after a restart.
 
 Output: the GOP framebuffer
 (`core/fbcon.c`, lines from before ExitBootServices replayed onto it) and COM1

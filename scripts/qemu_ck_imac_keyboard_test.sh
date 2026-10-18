@@ -148,6 +148,7 @@ chk "hub: typing prompt" "${work}/hub.txt" '^keyboard: type a line and press Ent
 chk "hub: no countdown while Allen's window is up" "${work}/hub.txt" '^power: Allen.s window stays on until goodbye \(or the power button\), then ACPI S5$'
 [[ ${typed_ok} == 1 ]] && echo "PASS  hub: keys sent from outside the guest" || { echo "FAIL  hub: keys not sent"; fails=$((fails + 1)); }
 chk "hub: Allen's window took the screen" "${work}/hub.txt" '^screen: Allen.s window \([0-9]+x[0-9]+, [0-9]+ MiB drawing memory\)$'
+chk "hub: the night drawn by the secondary core, frames timed" "${work}/hub.txt" '^screen: night: [1-9][0-9]* frames before Allen woke, average [0-9]+\.[0-9] ms, slowest [0-9]+\.[0-9] ms \(drawn by a secondary core\)$'
 chk "hub: first line typed" "${work}/hub.txt" '^keyboard_line: Hello Allen$'
 chk "hub: Allen answers Hello Humanity." "${work}/hub.txt" '^allen: Hello Humanity\.$'
 chk "hub: the answer reported by lengths only (11 characters in, 15 out)" "${work}/hub.txt" '^screen: Allen answered \(11 characters in, 15 out\)$'

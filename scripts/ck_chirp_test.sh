@@ -1,13 +1,13 @@
 #!/bin/sh
 # ck_chirp_test.sh -- host test of the startup sound (native/kernel/ui/chirp.c),
-# the gravitational-wave chirp timed to the startup picture.
-#  1. Silent while the picture holds still and after the end; both channels
+# the gravitational-wave chirp timed to the night sky of the startup.
+#  1. Silent while the stars come out and after the end; both channels
 #     the same; the loudest sample at the peak level; no step big enough to
 #     click.
-#  2. Loudness comes in as the picture moves out, only rises to the plunge,
+#  2. Loudness comes in as the black holes appear, only rises to the merger,
 #     peaks there and fades in tens of milliseconds.
-#  3. Pitch is steady in the orbit, only rises in the spiral, reaches the top
-#     in the last 20 ms; the pitch heard (zero crossings) matches.
+#  3. Pitch is steady while the holes circle, only rises in the spiral, reaches the top
+#     in the last 60 ms; the pitch heard (zero crossings) matches.
 #  4. Frames worked out in any order give the same sound.
 # The sound lands in target/native-kernel-chirp/chirp.wav for a person to
 # listen to. Hosted only. Ends with "AIENOS_CHIRP: PASS" or

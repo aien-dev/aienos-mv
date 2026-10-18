@@ -8,7 +8,7 @@
 # (two CPU models; the kernel drives the local APIC in xAPIC mode on both). Each run
 # must leave boot services, switch to the kernel's own page tables, prove the guard
 # page, measure the TSC against the HPET, take 20 local APIC timer interrupts, print
-# start the three other cores (-smp 4) and park them, find both SATA disks behind
+# start the three other cores (-smp 4) drawing the night sky of the startup, find both SATA disks behind
 # the q35 AHCI controller and an NVMe disk with its own GPT and read them without
 # writing (the ESP, and a data disk with a GPT whose AIENOS partition the kernel
 # must locate where ck_gpt_image wrote it; the data disk must be byte-identical
@@ -110,11 +110,11 @@ run() { # name, -cpu model, expected APIC mode
     chk "${name}: ESP has no GPT" "${txt}" "^ahci_gpt: ctrl=0 disk=0 refused: no protective MBR\$"
     chk "${name}: data disk identified" "${txt}" "^ahci_disk: ctrl=0 disk=1 port=1 link=gen[0-9] model=\"QEMU HARDDISK\" blocks=131072 block=512 mib=64 access=read-only\$"
     chk "${name}: data disk AIENOS partition where written" "${txt}" "^ahci_gpt: ctrl=0 disk=1 gpt=valid used=3 aienos first_lba=${a_first} last_lba=${a_last}\$"
-    chk "${name}: three secondary cores started" "${txt}" "^smp: cpus=4 started=3 failed=0 bsp_id=0 ap_ids=[0-9]+,[0-9]+,[0-9]+ trampoline=0x[0-9a-f]+ state=halted\$"
+    chk "${name}: three secondary cores started, drawing the night" "${txt}" "^smp: cpus=4 started=3 failed=0 bsp_id=0 ap_ids=[0-9]+,[0-9]+,[0-9]+ trampoline=0x[0-9a-f]+ state=drawing helpers=[0-2]\$"
     chk "${name}: NVMe controller found" "${txt}" "^pci: nvme [0-9a-f:.]+ id=1b36:0010 "
     chk "${name}: NVMe disk identified" "${txt}" "^nvme_disk: ctrl=0 disk=0 version=1\\.[0-9]+ nsid=1 blocks=65536 block=512 mib=32 access=read-only\$"
     chk "${name}: NVMe AIENOS partition where written" "${txt}" "^nvme_gpt: ctrl=0 disk=0 gpt=valid used=3 aienos first_lba=${n_first} last_lba=${n_last}\$"
-    chk "${name}: whirlpool played" "${txt}" "^screen: whirlpool: the firmware.s picture had [0-9]+ pixels, gone at [0-9]+ ms; [1-9][0-9]* frames in [0-9]+ ms, blocks of [1-9] px\$"
+    chk "${name}: the night began at boot" "${txt}" "^screen: night: the sky made in [0-9]+ ms \([0-9]+ MiB drawing memory\); stars, black holes, then Allen\$"
     chk "${name}: sound controller found" "${txt}" "^pci: sound [0-9a-f:.]+ id=8086:293e class=0403[0-9a-f]{2} "
     chk "${name}: sound controller looked at" "${txt}" "^sound: ctrl=0 version=1\\.0 streams out=[1-9][0-9]* "
     chk "${name}: codec named" "${txt}" "^sound: codec=0 id=1af4:[0-9a-f]{4} rev=0x[0-9a-f]{8} function_groups=1 audio_group_node=1\$"

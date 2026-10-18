@@ -1,509 +1,150 @@
-/* allen_ui.c -- Allen's window; see allen_ui.h.
+/* allen_ui.c -- Allen's home; see allen_ui.h.
  *
- * Two RAM layers the size of the screen: `base` holds what never changes
- * (background, window, title, status, footer) and is drawn once; `back` is
- * base plus the live parts (orb, bubbles, input). A redraw copies base into
- * back over a rectangle, draws the live parts clipped to it, and copies that
- * rectangle to the screen. Colors are 0x00RRGGBB in RAM; the copy to the
- * screen swaps red and blue for an RGBX framebuffer. Layout is designed on a
- * 1920 x 1080 grid and scaled to the screen (k, 1/256). */
+ * Layers: the night (ui/night.c) keeps the sky in its own full-screen
+ * buffer; `back` is where a frame is put together: for each changed part of
+ * the screen the sky as it looks now, then the lights in it, Allen, his
+ * words, the bar, all added in order and clipped to that part, which is
+ * then copied to the screen. Colours are 0x00RRGGBB in RAM; the copy swaps
+ * red and blue for an RGBX framebuffer.
+ *
+ * Which parts change is kept on a grid of tiles (64 x 32 px): each frame
+ * marks the tiles under anything that moved, and each row of marked tiles
+ * becomes a strip. Strips never overlap, so they can be drawn by any core in
+ * any order: a frame publishes its strips in one word (count and next index)
+ * that cores claim one at a time.
+ *
+ * Calls from the keyboard side (input, said, map, wake) only leave a note
+ * under a short lock; the next frame picks it up. The layout is designed on
+ * a 1920 x 1080 grid and scaled to the screen (k, 1/256). */
 #include "allen_ui.h"
 #include "allen_font.h"
+#include "mind.h"
+#include "night.h"
+#include "paint.h"
 
-#define MSG_MAX 16
 #define TEXT_MAX 160
-#define LINES_MAX 6
+#define LINES_MAX 5
+#define TW 64
+#define TH 32
+#define TILES_MAX 16384u
+#define JOBS_MAX 1200u
+#define FRAME_MS 16u
 
-struct rect {
-    int32_t x, y, w, h;
-};
+#define BORN_MS (CK_NIGHT_MERGE_MS + 300u) /* Allen starts to gather */
+#define FORMED_MS (BORN_MS + CK_MIND_FORM_MS)
+#define LETTER_MS 35u
+#define BAR_REST_MS 9000u /* the bar fades this long after the last thing happened */
+#define MAP_SHOW_MS 9000u
 
-struct msg {
-    uint8_t allen; /* 0: typed by the person, 1: Allen */
-    uint16_t len;
+struct words {
     char text[TEXT_MAX];
+    unsigned len, lines, st[LINES_MAX], ln[LINES_MAX];
+    int32_t x[LINES_MAX]; /* where each line starts, px */
+    uint32_t from;        /* the first letter's start, ms */
+    uint32_t done;        /* the last letter settled */
+    uint32_t fade;        /* fading from here (0: not yet) */
+    ck_rect box;
 };
 
+/* what the keyboard side has left for the next frame */
 static struct {
-    int on;
-    volatile uint32_t *fb;
-    uint32_t w, h, pitch, format;
-    uint32_t *base, *back;
-    uint32_t k; /* 1/256 px per design px */
-    ck_af_face title, body, small;
-    struct rect win, orb, convo, input, map;
-    int map_on; /* the screen has room for the notes map beside the window */
-    int32_t orb_r, radius;
-    const char *footer;
-    struct msg msgs[MSG_MAX];
-    unsigned nmsg;
-    char input_text[TEXT_MAX];
+    volatile char lock;
+    volatile int refresh;
+    unsigned input_gen, said_gen, map_gen, wake_gen;
+    char input[TEXT_MAX];
     unsigned input_len;
-    unsigned shown;  /* letters of the newest Allen bubble on screen */
-    uint64_t hz, t0, next_letter, next_orb, next_caret, speak_until;
-    int caret;
-} ui;
+    char line[TEXT_MAX], reply[TEXT_MAX];
+    int has_line;
+    const char *footer;
+    unsigned n, ne, total, links;
+    int lit;
+    uint8_t ea[CK_ALLEN_UI_MAP_LINKS], eb[CK_ALLEN_UI_MAP_LINKS];
+    char label[TEXT_MAX];
+} note;
 
-/* ---- scale and colors ---- */
-
-static int32_t S(int32_t v) { return (int32_t)(((int64_t)v * ui.k + 128) / 256); }
-static uint32_t ms(uint64_t now) { return (uint32_t)((now - ui.t0) * 1000u / ui.hz); }
-
-#define RGB(r, g, b) ((uint32_t)(r) << 16 | (uint32_t)(g) << 8 | (uint32_t)(b))
-static uint32_t ch(uint32_t c, int s) { return c >> s & 255u; }
-
-static uint32_t mix(uint32_t d, uint32_t c, uint32_t a) /* a: 0..255 */
-{
-    if (a == 0)
-        return d;
-    if (a >= 255)
-        return c;
-    uint32_t o = 0;
-    for (int s = 0; s <= 16; s += 8) {
-        uint32_t v = (ch(c, s) * a + ch(d, s) * (255 - a) + 128) * 257 >> 16;
-        o |= v << s;
-    }
-    return o;
-}
-
-static uint32_t lerp(uint32_t a, uint32_t b, uint32_t t) /* t: 0..256 */
-{
-    uint32_t o = 0;
-    for (int s = 0; s <= 16; s += 8)
-        o |= ((ch(a, s) * (256 - t) + ch(b, s) * t) >> 8) << s;
-    return o;
-}
-
-static uint32_t add_sat(uint32_t d, uint32_t c, uint32_t a) /* d + c * a / 255 per channel */
-{
-    uint32_t o = 0;
-    for (int s = 0; s <= 16; s += 8) {
-        uint32_t v = ch(d, s) + ch(c, s) * a / 255;
-        o |= (v > 255 ? 255 : v) << s;
-    }
-    return o;
-}
-
-static const uint32_t C_TEXT = RGB(236, 240, 250), C_MUTED = RGB(146, 156, 188), C_ACCENT = RGB(124, 140, 255),
-                      C_USER0 = RGB(84, 118, 255), C_USER1 = RGB(146, 92, 255), C_WHITE = RGB(255, 255, 255),
-                      C_TEAL = RGB(64, 214, 200);
-
-/* ---- clipping ---- */
-
-static int clip(struct rect *r, const struct rect *c)
-{
-    int32_t x0 = r->x > c->x ? r->x : c->x, y0 = r->y > c->y ? r->y : c->y;
-    int32_t x1 = r->x + r->w < c->x + c->w ? r->x + r->w : c->x + c->w;
-    int32_t y1 = r->y + r->h < c->y + c->h ? r->y + r->h : c->y + c->h;
-    if (x1 <= x0 || y1 <= y0)
-        return 0;
-    *r = (struct rect){x0, y0, x1 - x0, y1 - y0};
-    return 1;
-}
-
-static struct rect grow(struct rect r, int32_t m) { return (struct rect){r.x - m, r.y - m, r.w + 2 * m, r.h + 2 * m}; }
-
-/* ---- shapes ---- */
-
-/* Signed distance from pixel (x, y)'s centre to a rounded rectangle, 1/16 px
- * (negative inside). */
-static int32_t sd_rrect(int32_t x, int32_t y, const struct rect *r, int32_t rad)
-{
-    int64_t px = (int64_t)x * 16 + 8, py = (int64_t)y * 16 + 8;
-    int64_t cx = (int64_t)r->x * 16 + (int64_t)r->w * 8, cy = (int64_t)r->y * 16 + (int64_t)r->h * 8;
-    int64_t qx = (px > cx ? px - cx : cx - px) - ((int64_t)r->w * 8 - rad * 16);
-    int64_t qy = (py > cy ? py - cy : cy - py) - ((int64_t)r->h * 8 - rad * 16);
-    int64_t out = qx > 0 && qy > 0 ? (int64_t)ck_af_isqrt((uint64_t)(qx * qx + qy * qy)) : qx > qy ? qx : qy;
-    return (int32_t)(out - rad * 16);
-}
-
-static uint32_t cover(int32_t d16) /* coverage of a pixel at signed distance d (1/16 px) from an edge */
-{
-    int32_t v = 8 - d16;
-    return v <= 0 ? 0 : v >= 16 ? 255 : (uint32_t)(v * 255 / 16);
-}
-
-/* A rounded rectangle filled with color, or a left-to-right gradient c0..c1,
- * at opacity a; border > 0 draws only a ring of that width (px). */
-static void rrect(uint32_t *buf, const struct rect *cl, struct rect r, int32_t rad, uint32_t c0, uint32_t c1,
-                  uint32_t a, int32_t border)
-{
-    struct rect d = r;
-    if (!clip(&d, cl))
-        return;
-    for (int32_t y = d.y; y < d.y + d.h; y++) {
-        uint32_t *row = buf + (size_t)y * ui.w;
-        for (int32_t x = d.x; x < d.x + d.w; x++) {
-            int32_t sd = sd_rrect(x, y, &r, rad);
-            uint32_t cov = cover(sd);
-            if (border > 0) {
-                uint32_t inner = cover(sd + border * 16); /* coverage of the shape shrunk by the border */
-                cov = cov > inner ? cov - inner : 0;
-            }
-            if (!cov)
-                continue;
-            uint32_t c = c0 == c1 ? c0 : lerp(c0, c1, (uint32_t)((x - r.x) * 256 / (r.w ? r.w : 1)));
-            row[x] = mix(row[x], c, cov * a / 255);
-        }
-    }
-}
-
-/* Text at pen (x, baseline y); returns the pen after it. */
-static int32_t text(uint32_t *buf, const struct rect *cl, ck_af_face *f, int32_t x, int32_t y, const char *s, size_t n,
-                    uint32_t color, uint32_t a)
-{
-    uint64_t pen = (uint64_t)x * 256;
-    for (size_t i = 0; i < n && s[i]; i++) {
-        const ck_af_glyph *g = ck_af_glyph_get(f, s[i]);
-        if (g && g->alpha) {
-            int32_t gx = (int32_t)((pen + 128) / 256) + g->ox, gy = y + g->oy;
-            struct rect d = {gx, gy, g->w, g->h};
-            if (clip(&d, cl))
-                for (int32_t yy = d.y; yy < d.y + d.h; yy++) {
-                    uint32_t *row = buf + (size_t)yy * ui.w;
-                    const uint8_t *m = g->alpha + (size_t)(yy - gy) * g->w;
-                    for (int32_t xx = d.x; xx < d.x + d.w; xx++) {
-                        uint32_t cov = m[xx - gx];
-                        if (cov)
-                            row[xx] = mix(row[xx], color, cov * a / 255);
-                    }
-                }
-        }
-        pen += ck_af_advance(f, s[i]);
-    }
-    return (int32_t)((pen + 255) / 256);
-}
-
-/* A soft disc: alpha * (1 - d^2/R^2)^2, added (light) or mixed. */
-static void glow(uint32_t *buf, const struct rect *cl, int32_t cx, int32_t cy, int32_t R, uint32_t color, uint32_t a,
-                 int additive)
-{
-    struct rect d = {cx - R, cy - R, 2 * R + 1, 2 * R + 1};
-    if (R <= 0 || !clip(&d, cl))
-        return;
-    int64_t R2 = (int64_t)R * R;
-    for (int32_t y = d.y; y < d.y + d.h; y++) {
-        uint32_t *row = buf + (size_t)y * ui.w;
-        int64_t dy = y - cy;
-        for (int32_t x = d.x; x < d.x + d.w; x++) {
-            int64_t dx = x - cx, d2 = dx * dx + dy * dy;
-            if (d2 >= R2)
-                continue;
-            int64_t f = 256 - d2 * 256 / R2; /* 0..256 */
-            uint32_t al = (uint32_t)(a * f * f / 65536);
-            row[x] = additive ? add_sat(row[x], color, al) : mix(row[x], color, al);
-        }
-    }
-}
-
-/* ---- the static layer ---- */
-
-/* The aurora: a vertical gradient and three soft lights, worked out in
- * sixteenths of a color step and rounded with a 4 x 4 ordered dither, so the
- * long gradients show no bands. */
-static void background(const struct rect *cl)
-{
-    static const uint8_t bayer[16] = {0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5};
-    static const int32_t top[3] = {9, 12, 26}, bottom[3] = {17, 10, 34};
-    struct {
-        int64_t x, y, r2;
-        int32_t c[3]; /* color times strength, /255 */
-    } light[3] = {
-        {(int64_t)ui.w * 18 / 100, (int64_t)ui.h * 20 / 100, 0, {0, 120 * 90, 140 * 90}},
-        {(int64_t)ui.w * 86 / 100, (int64_t)ui.h * 88 / 100, 0, {110 * 80, 50 * 80, 220 * 80}},
-        {(int64_t)ui.w / 2, (int64_t)ui.h * 30 / 100, 0, {60 * 40, 70 * 40, 160 * 40}},
-    };
-    int64_t radius[3] = {(int64_t)ui.h * 70 / 100, (int64_t)ui.h * 75 / 100, (int64_t)ui.h * 45 / 100};
-    for (int i = 0; i < 3; i++)
-        light[i].r2 = radius[i] * radius[i];
-    for (int32_t y = cl->y; y < cl->y + cl->h; y++) {
-        uint32_t *row = ui.base + (size_t)y * ui.w;
-        int64_t t = (int64_t)y * 256 / ui.h;
-        int32_t g16[3];
-        for (int k = 0; k < 3; k++)
-            g16[k] = (int32_t)((top[k] * (256 - t) + bottom[k] * t) / 16);
-        for (int32_t x = cl->x; x < cl->x + cl->w; x++) {
-            int64_t v[3] = {g16[0], g16[1], g16[2]};
-            for (int i = 0; i < 3; i++) {
-                int64_t dx = x - light[i].x, dy = y - light[i].y, d2 = dx * dx + dy * dy;
-                if (d2 >= light[i].r2)
-                    continue;
-                int64_t f = 256 - d2 * 256 / light[i].r2, f2 = f * f; /* 0..65536 */
-                for (int k = 0; k < 3; k++)
-                    v[k] += light[i].c[k] * f2 / (65536 * 255 / 16);
-            }
-            uint32_t d = bayer[(y & 3) * 4 + (x & 3)], c = 0;
-            for (int k = 0; k < 3; k++) {
-                int64_t q = (v[k] + d) >> 4;
-                c = c << 8 | (uint32_t)(q > 255 ? 255 : q);
-            }
-            row[x] = c;
-        }
-    }
-}
-
-
-static void window(const struct rect *cl)
-{
-    /* shadow: below and around the window, fading over S(56) */
-    struct rect sh = ui.win;
-    sh.y += S(18);
-    int32_t spread = S(56);
-    struct rect d = grow(sh, spread);
-    if (clip(&d, cl))
-        for (int32_t y = d.y; y < d.y + d.h; y++) {
-            uint32_t *row = ui.base + (size_t)y * ui.w;
-            for (int32_t x = d.x; x < d.x + d.w; x++) {
-                int32_t sd = sd_rrect(x, y, &sh, ui.radius);
-                if (sd >= spread * 16)
-                    continue;
-                int32_t f = sd <= 0 ? 256 : 256 - sd * 256 / (spread * 16);
-                row[x] = mix(row[x], RGB(2, 3, 10), (uint32_t)(f * f * 150 / 65536));
-            }
-        }
-    /* glass: a light veil, brighter at the top, and a fine border */
-    d = ui.win;
-    if (clip(&d, cl))
-        for (int32_t y = d.y; y < d.y + d.h; y++) {
-            uint32_t *row = ui.base + (size_t)y * ui.w;
-            uint32_t a = 26 - (uint32_t)((y - ui.win.y) * 12 / ui.win.h);
-            for (int32_t x = d.x; x < d.x + d.w; x++) {
-                uint32_t cov = cover(sd_rrect(x, y, &ui.win, ui.radius));
-                if (cov)
-                    row[x] = mix(mix(row[x], RGB(22, 26, 48), cov * 150 / 255), C_WHITE, cov * a / 255);
-            }
-        }
-    rrect(ui.base, cl, ui.win, ui.radius, C_WHITE, C_WHITE, 40, S(1) > 1 ? S(1) : 1);
-}
-
-static void header_text(const struct rect *cl)
-{
-    int32_t cx = ui.win.x + ui.win.w / 2;
-    const char *name = "Allen";
-    int32_t tw = (int32_t)ck_af_measure(&ui.title, name, 5);
-    text(ui.base, cl, &ui.title, cx - tw / 2, ui.win.y + S(186), name, 5, C_TEXT, 255);
-    /* status: a teal dot, "Running on AIENOS", a separator dot, "All local" */
-    const char *s1 = "Running on AIENOS", *s2 = "All local";
-    int32_t w1 = (int32_t)ck_af_measure(&ui.small, s1, 17), w2 = (int32_t)ck_af_measure(&ui.small, s2, 9);
-    int32_t gap = S(14), dot = S(4), total = dot * 2 + gap + w1 + gap * 2 + w2;
-    int32_t x = cx - total / 2, base = ui.win.y + S(222);
-    int32_t mid = base - S(5);
-    glow(ui.base, cl, x + dot, mid, dot * 3, C_TEAL, 90, 1);
-    rrect(ui.base, cl, (struct rect){x, mid - dot, dot * 2, dot * 2}, dot, C_TEAL, C_TEAL, 255, 0);
-    x = text(ui.base, cl, &ui.small, x + dot * 2 + gap, base, s1, 17, C_MUTED, 255) + gap;
-    rrect(ui.base, cl, (struct rect){x - S(2), mid - S(2), S(4), S(4)}, S(2), C_MUTED, C_MUTED, 160, 0);
-    text(ui.base, cl, &ui.small, x + gap, base, s2, 9, C_MUTED, 255);
-    /* divider */
-    rrect(ui.base, cl, (struct rect){ui.win.x + S(48), ui.win.y + S(250), ui.win.w - S(96), S(1) > 1 ? S(1) : 1}, 0,
-          C_WHITE, C_WHITE, 22, 0);
-    /* footer */
-    if (ui.footer) {
-        size_t n = 0;
-        while (ui.footer[n] && n < 120)
-            n++;
-        int32_t fw = (int32_t)ck_af_measure(&ui.small, ui.footer, n);
-        text(ui.base, cl, &ui.small, cx - fw / 2, ui.win.y + ui.win.h - S(26), ui.footer, n, C_MUTED, 200);
-    }
-}
-
-/* ---- the notes map ---- */
-
-/* What the map shows; kept apart from ui, so it survives ck_allen_ui_start. */
 static struct {
+    int started, on;
+    volatile uint32_t *fb;
+    int32_t w, h;
+    uint32_t pitch, format, k;
+    uint32_t *back;
+    ck_canvas cv;
+    ck_night night;
+    ck_mind mind;
+    ck_af_face voice, body, small;
+    uint64_t hz, t0;
+    uint64_t (*clock)(void);
+    uint32_t t, last; /* this frame's time and the last frame's, ms */
+    int32_t cx, cy;
+    /* the bar */
+    const char *footer;
+    ck_rect bar, bar_box;
+    uint32_t bar_a, bar_was, wake_t, quiet_t; /* bar_a: 0..256; quiet_t: when things last happened */
+    char input[TEXT_MAX];
+    unsigned input_len;
+    uint32_t key_t;
+    unsigned seen_input, seen_said, seen_map, seen_wake;
+    int input_moved;
+    /* the conversation */
+    struct words now, next; /* now: on screen; next: what Allen will say */
+    uint32_t speak_t;       /* when next starts (0: nothing waiting) */
+    char guest[TEXT_MAX];
+    unsigned guest_len;
+    int32_t guest_x;
+    uint32_t guest_t; /* when the guest's line began to rise (0: none) */
+    uint32_t shimmer, shimmer_was, level, word_t; /* level: the voice, 0..256 */
+    ck_rect guest_box, words_was;
+    /* the notes constellation */
     unsigned n, ne, total, links;
     int lit;
     uint8_t ea[CK_ALLEN_UI_MAP_LINKS], eb[CK_ALLEN_UI_MAP_LINKS];
     char label[TEXT_MAX];
     unsigned label_len;
-} map;
+    int32_t mx, my, mr;
+    uint32_t map_t, map_a, map_was; /* map_t: when it was last shown (0: never) */
+    ck_rect map_box;
+    /* the frame */
+    uint8_t tiles[TILES_MAX];
+    int32_t tx, ty;
+    ck_rect jobs[JOBS_MAX];
+    volatile uint64_t ticket; /* count << 16 | next; claimed with compare-and-swap */
+    volatile uint32_t done;
+    unsigned twinkle_turn;
+    ck_rect flash_was, lens_was;
+    int32_t ripple_was;
+    uint32_t frames, slowest, total_ticks;
+} ui;
 
-static int32_t imin(int32_t a, int32_t b) { return a < b ? a : b; }
-static int32_t iabs(int32_t a) { return a < 0 ? -a : a; }
+#define S(v) ((int32_t)(((int64_t)(v) * (int64_t)ui.k + 128) / 256))
 
-/* A line th px wide from (x0, y0) to (x1, y1), anti-aliased, added as light. */
-static void seg(uint32_t *buf, const struct rect *cl, int32_t x0, int32_t y0, int32_t x1, int32_t y1, int32_t th,
-                uint32_t color, uint32_t a)
+static void relax(void)
 {
-    struct rect d = {imin(x0, x1) - th - 1, imin(y0, y1) - th - 1, iabs(x1 - x0) + 2 * th + 3,
-                     iabs(y1 - y0) + 2 * th + 3};
-    if (!clip(&d, cl))
-        return;
-    int64_t ax = (int64_t)x0 * 16 + 8, ay = (int64_t)y0 * 16 + 8;
-    int64_t vx = (int64_t)(x1 - x0) * 16, vy = (int64_t)(y1 - y0) * 16, vv = vx * vx + vy * vy;
-    for (int32_t y = d.y; y < d.y + d.h; y++) {
-        uint32_t *row = buf + (size_t)y * ui.w;
-        for (int32_t x = d.x; x < d.x + d.w; x++) {
-            int64_t wx = (int64_t)x * 16 + 8 - ax, wy = (int64_t)y * 16 + 8 - ay;
-            int64_t t = vv ? wx * vx + wy * vy : 0;
-            t = t < 0 ? 0 : t > vv ? vv : t;
-            int64_t qx = wx - (vv ? vx * t / vv : 0), qy = wy - (vv ? vy * t / vv : 0);
-            uint32_t cov = cover((int32_t)ck_af_isqrt((uint64_t)(qx * qx + qy * qy)) - th * 8);
-            if (cov)
-                row[x] = add_sat(row[x], color, cov * a / 255);
-        }
-    }
+#if defined(__x86_64__)
+    __builtin_ia32_pause();
+#elif defined(__aarch64__)
+    __asm__ volatile("yield");
+#endif
 }
 
-/* Decimal digits of v into s; returns how many. */
-static unsigned put_num(char *s, unsigned v)
+static void lock(void)
 {
-    char t[10];
-    unsigned n = 0, k = 0;
-    do
-        t[n++] = (char)('0' + v % 10);
-    while ((v /= 10) && n < sizeof t);
-    while (n)
-        s[k++] = t[--n];
-    return k;
+    while (__atomic_test_and_set(&note.lock, __ATOMIC_ACQUIRE))
+        relax();
+}
+static void unlock(void) { __atomic_clear(&note.lock, __ATOMIC_RELEASE); }
+
+static uint32_t ms(uint64_t now) { return (uint32_t)((now - ui.t0) * 1000u / ui.hz); }
+
+static unsigned copy(char *d, const char *s, unsigned max)
+{
+    unsigned n = 0;
+    while (s && s[n] && n < max - 1)
+        d[n] = s[n], n++;
+    d[n] = 0;
+    return n;
 }
 
-/* Where point j sits: the newest at the centre, then a golden-angle spiral,
- * spread by the square root of the order so the points cover the disc evenly
- * (a few notes stay nearer the centre). */
-static void map_point(unsigned j, int32_t cx, int32_t cy, int32_t R, int32_t *x, int32_t *y)
-{
-    unsigned spread = map.n > 7 ? map.n - 1 : 6;
-    int32_t rad = (int32_t)((int64_t)R * ck_af_isqrt((uint64_t)j * 65536u / spread) / 256);
-    int32_t ang = (int32_t)(j * 275u / 2u % 360u);
-    *x = cx + (int32_t)((int64_t)rad * ck_af_cos(ang) / 16384);
-    *y = cy + (int32_t)((int64_t)rad * ck_af_sin(ang) / 16384);
-}
-
-static void map_panel(const struct rect *cl)
-{
-    if (!ui.map_on)
-        return;
-    struct rect p = ui.map, c = *cl;
-    if (!clip(&c, &p))
-        return;
-    rrect(ui.base, &c, p, S(26), RGB(22, 26, 48), RGB(22, 26, 48), 120, 0);
-    rrect(ui.base, &c, p, S(26), C_WHITE, C_WHITE, 34, S(1) > 1 ? S(1) : 1);
-    int32_t left = p.x + S(28);
-    text(ui.base, &c, &ui.body, left, p.y + S(50), "Notes", 5, C_TEXT, 255);
-    char line[48];
-    unsigned k = put_num(line, map.total);
-    const char *w1 = map.total == 1 ? " note, " : " notes, ";
-    for (; *w1; w1++)
-        line[k++] = *w1;
-    k += put_num(line + k, map.links);
-    const char *w2 = map.links == 1 ? " link" : " links";
-    for (; *w2; w2++)
-        line[k++] = *w2;
-    text(ui.base, &c, &ui.small, left, p.y + S(78), line, k, C_MUTED, 230);
-    /* the field: between the heading and the label line */
-    int32_t top = p.y + S(100), bottom = p.y + p.h - S(64);
-    int32_t cx = p.x + p.w / 2, cy = (top + bottom) / 2;
-    int32_t R = imin(p.w / 2 - S(34), (bottom - top) / 2 - S(14));
-    if (map.n == 0) {
-        static const char hint[] = "Saved notes appear here";
-        int32_t hw = (int32_t)ck_af_measure(&ui.small, hint, sizeof hint - 1);
-        text(ui.base, &c, &ui.small, cx - hw / 2, cy, hint, sizeof hint - 1, C_MUTED, 170);
-        return;
-    }
-    int32_t px[CK_ALLEN_UI_MAP_NODES], py[CK_ALLEN_UI_MAP_NODES];
-    unsigned deg[CK_ALLEN_UI_MAP_NODES] = {0};
-    for (unsigned j = 0; j < map.n; j++)
-        map_point(j, cx, cy, R, &px[j], &py[j]);
-    int32_t th = S(1) > 1 ? S(1) : 1;
-    for (unsigned i = 0; i < map.ne; i++) {
-        unsigned a = map.ea[i], b = map.eb[i];
-        int hot = (int)a == map.lit || (int)b == map.lit;
-        seg(ui.base, &c, px[a], py[a], px[b], py[b], hot ? th + 1 : th, hot ? C_TEAL : C_ACCENT, hot ? 170 : 70);
-        deg[a]++;
-        deg[b]++;
-    }
-    for (unsigned j = 0; j < map.n; j++) {
-        int32_t r = S(5) + (int32_t)(deg[j] < 6 ? deg[j] : 6) * S(1);
-        int hot = (int)j == map.lit;
-        if (hot)
-            r += S(3);
-        glow(ui.base, &c, px[j], py[j], r * (hot ? 6 : 3), hot ? C_TEAL : RGB(70, 90, 255), hot ? 170 : 80, 1);
-        rrect(ui.base, &c, (struct rect){px[j] - r, py[j] - r, 2 * r, 2 * r}, r, hot ? RGB(220, 255, 250)
-              : RGB(150, 190, 255), hot ? C_TEAL : RGB(110, 70, 230), 255, 0);
-    }
-    if (map.lit >= 0 && map.label_len) {
-        /* the lit note's text on the bottom line, cut with "..." to fit */
-        int32_t avail = p.w - S(56), dots = (int32_t)ck_af_measure(&ui.small, "...", 3);
-        unsigned n = map.label_len;
-        int cut = 0;
-        while (n && (int32_t)ck_af_measure(&ui.small, map.label, n) + (cut ? dots : 0) > avail)
-            n--, cut = 1;
-        int32_t lw = (int32_t)ck_af_measure(&ui.small, map.label, n) + (cut ? dots : 0);
-        int32_t x = text(ui.base, &c, &ui.small, cx - lw / 2, p.y + p.h - S(30), map.label, n, C_TEXT, 255);
-        if (cut)
-            text(ui.base, &c, &ui.small, x, p.y + p.h - S(30), "...", 3, C_TEXT, 255);
-    }
-}
-
-static void draw_base(const struct rect *cl)
-{
-    background(cl);
-    window(cl);
-    header_text(cl);
-    map_panel(cl);
-}
-
-/* ---- the live layer ---- */
-
-/* Allen's orb: a halo that breathes (a 4.2 s cycle) and swells while Allen
- * answers, a comet that circles it, and a lit sphere. */
-static void orb(const struct rect *cl, uint32_t t)
-{
-    int32_t cx = ui.orb.x + ui.orb.w / 2, cy = ui.orb.y + ui.orb.h / 2, r = ui.orb_r;
-    int32_t breath = (ck_af_sin((int32_t)(t % 4200u * 360u / 4200u)) + 16384) / 128; /* 0..256 */
-    int speaking = ui.speak_until && t < ui.speak_until;
-    uint32_t halo = (uint32_t)(70 + breath * 60 / 256 + (speaking ? 90 : 0));
-    glow(ui.back, cl, cx, cy, r * 3, RGB(70, 90, 255), halo, 1);
-    glow(ui.back, cl, cx, cy, r * 2, RGB(60, 200, 255), halo / 2, 1);
-    /* the comet: a ring at 1.5 r, bright ahead of the angle, fading behind it */
-    int32_t rr = r * 3 / 2, th = S(2) > 1 ? S(2) : 1;
-    int32_t ang = (int32_t)(t % (speaking ? 1400u : 3600u) * 360u / (speaking ? 1400u : 3600u));
-    int64_t ux = ck_af_cos(ang), uy = ck_af_sin(ang);
-    struct rect d = {cx - rr - th - 1, cy - rr - th - 1, 2 * (rr + th + 1) + 1, 2 * (rr + th + 1) + 1};
-    if (clip(&d, cl))
-        for (int32_t y = d.y; y < d.y + d.h; y++) {
-            uint32_t *row = ui.back + (size_t)y * ui.w;
-            for (int32_t x = d.x; x < d.x + d.w; x++) {
-                int64_t dx = (int64_t)(x - cx) * 16 + 8, dy = (int64_t)(y - cy) * 16 + 8;
-                int64_t dist = (int64_t)ck_af_isqrt((uint64_t)(dx * dx + dy * dy));
-                int64_t off = dist - rr * 16;
-                if (off < 0)
-                    off = -off;
-                uint32_t cov = cover((int32_t)(off - th * 8));
-                if (!cov || dist == 0)
-                    continue;
-                int64_t dot = (dx * ux + dy * uy) / dist; /* cos of the angle to the comet, 1/16384 */
-                if (dot <= 0)
-                    continue;
-                int64_t f = dot * dot / 16384 * dot / 16384 * dot / 16384; /* cos^4 */
-                uint32_t a = (uint32_t)(cov * f * (speaking ? 255 : 200) / 255 / 16384);
-                row[x] = add_sat(row[x], RGB(170, 220, 255), a);
-            }
-        }
-    /* the sphere: lit from the upper left */
-    d = (struct rect){cx - r - 1, cy - r - 1, 2 * r + 3, 2 * r + 3};
-    int32_t hx = cx - r * 2 / 5, hy = cy - r * 2 / 5;
-    uint32_t lift = (uint32_t)(breath / 8 + (speaking ? 40 : 0));
-    if (clip(&d, cl))
-        for (int32_t y = d.y; y < d.y + d.h; y++) {
-            uint32_t *row = ui.back + (size_t)y * ui.w;
-            for (int32_t x = d.x; x < d.x + d.w; x++) {
-                int64_t dx = (int64_t)(x - cx) * 16 + 8, dy = (int64_t)(y - cy) * 16 + 8;
-                int32_t dist = (int32_t)ck_af_isqrt((uint64_t)(dx * dx + dy * dy));
-                uint32_t cov = cover(dist - r * 16);
-                if (!cov)
-                    continue;
-                int64_t ex = x - hx, ey = y - hy;
-                uint32_t t2 = (uint32_t)(ck_af_isqrt((uint64_t)(ex * ex + ey * ey)) * 256 / (uint64_t)(r * 17 / 10));
-                if (t2 > 256)
-                    t2 = 256;
-                uint32_t c = t2 < 128 ? lerp(RGB(232, 246, 255), RGB(110, 150, 255), t2 * 2)
-                                      : lerp(RGB(110, 150, 255), RGB(72, 40, 190), (t2 - 128) * 2);
-                c = add_sat(c, RGB(60, 80, 120), lift);
-                row[x] = mix(row[x], c, cov);
-            }
-        }
-}
+/* ---- text ---- */
 
 /* Word-wraps s (n letters) to width px with face f: line starts and lengths. */
 static unsigned wrap(ck_af_face *f, const char *s, unsigned n, int32_t width, unsigned *st, unsigned *ln)
@@ -533,110 +174,293 @@ static unsigned wrap(ck_af_face *f, const char *s, unsigned n, int32_t width, un
     return lines;
 }
 
-/* Lays the bubbles out from the bottom of the conversation area up; draws the
- * ones that meet cl (when buf is set) and returns the newest one's rect. */
-static struct rect bubbles(uint32_t *buf, const struct rect *cl)
+static int32_t text(ck_canvas *cv, const ck_rect *cl, ck_af_face *f, int32_t x, int32_t y, const char *s, unsigned n,
+                    uint32_t color, uint32_t a)
 {
-    int32_t pad_x = S(20), pad_y = S(13), line_h = S(28), gap = S(14), avatar = S(10);
-    int32_t maxw = ui.convo.w * 64 / 100;
-    int32_t bottom = ui.convo.y + ui.convo.h;
-    struct rect newest = {0, 0, 0, 0};
-    struct rect area = ui.convo;
-    struct rect c = *cl;
-    if (!clip(&c, &area))
-        return newest;
-    for (unsigned k = ui.nmsg; k-- > 0;) {
-        const struct msg *m = &ui.msgs[k];
-        unsigned st[LINES_MAX], ln[LINES_MAX];
-        unsigned lines = wrap(&ui.body, m->text, m->len, maxw - 2 * pad_x, st, ln);
-        int32_t tw = 0;
-        for (unsigned i = 0; i < lines; i++) {
-            int32_t w = (int32_t)ck_af_measure(&ui.body, m->text + st[i], ln[i]);
-            if (w > tw)
-                tw = w;
-        }
-        int32_t bw = tw + 2 * pad_x, bh = (int32_t)lines * line_h + 2 * pad_y - S(4);
-        int32_t bx = m->allen ? ui.convo.x + avatar * 4 + S(12) : ui.convo.x + ui.convo.w - bw;
-        struct rect b = {bx, bottom - bh, bw, bh};
-        if (k == ui.nmsg - 1)
-            newest = b;
-        if (b.y + b.h < ui.convo.y)
-            break;
-        if (buf) {
-            if (m->allen) {
-                rrect(buf, &c, b, S(20), C_WHITE, C_WHITE, 24, 0);
-                rrect(buf, &c, b, S(20), C_WHITE, C_WHITE, 30, 1);
-                int32_t ax = ui.convo.x + avatar * 2, ay = b.y + b.h - avatar - S(2);
-                glow(buf, &c, ax, ay, avatar * 2, RGB(70, 110, 255), 120, 1);
-                rrect(buf, &c, (struct rect){ax - avatar, ay - avatar, avatar * 2, avatar * 2}, avatar,
-                      RGB(150, 190, 255), RGB(110, 70, 230), 255, 0);
-            } else {
-                rrect(buf, &c, b, S(20), C_USER0, C_USER1, 255, 0);
-            }
-            unsigned limit = m->allen && k == ui.nmsg - 1 ? ui.shown : m->len;
-            for (unsigned i = 0; i < lines; i++) {
-                unsigned n = ln[i];
-                if (st[i] >= limit)
-                    break;
-                if (st[i] + n > limit)
-                    n = limit - st[i];
-                text(buf, &c, &ui.body, b.x + pad_x, b.y + pad_y + S(20) + (int32_t)i * line_h, m->text + st[i], n,
-                     m->allen ? C_TEXT : C_WHITE, 255);
-            }
-        }
-        bottom = b.y - gap;
-    }
-    if (buf && ui.nmsg == 0) {
-        const char *hint = "Say hello to Allen";
-        int32_t hw = (int32_t)ck_af_measure(&ui.body, hint, 18);
-        text(buf, &c, &ui.body, ui.convo.x + (ui.convo.w - hw) / 2, ui.convo.y + ui.convo.h / 2, hint, 18, C_MUTED,
-             170);
-    }
-    return newest;
+    uint64_t pen = (uint64_t)x * 256;
+    for (unsigned i = 0; i < n; i++)
+        pen = ck_letter(cv, cl, f, pen, y, s[i], color, a, 0);
+    return (int32_t)((pen + 255) / 256);
 }
 
-static void input_field(const struct rect *cl)
+static int32_t line_h(void) { return S(40); }
+static int32_t words_top(void) { return ui.cy + S(250); }
+
+static void lay_out(struct words *w)
 {
-    struct rect r = ui.input;
-    int32_t rad = r.h / 2;
-    rrect(ui.back, cl, r, rad, RGB(4, 6, 16), RGB(4, 6, 16), 90, 0);
-    rrect(ui.back, cl, r, rad, C_ACCENT, C_ACCENT, 120, S(1) > 1 ? S(1) + 1 : 2);
-    int32_t pad = S(28), base = r.y + r.h / 2 + S(8);
-    const char *hint = "Enter";
-    int32_t hw = (int32_t)ck_af_measure(&ui.small, hint, 5);
-    int32_t hx = r.x + r.w - pad - hw;
-    rrect(ui.back, cl, (struct rect){hx - S(10), r.y + r.h / 2 - S(14), hw + S(20), S(28)}, S(8), C_WHITE, C_WHITE,
-          18, 0);
-    text(ui.back, cl, &ui.small, hx, base - S(1), hint, 5, C_MUTED, 220);
-    struct rect tc = {r.x + pad, r.y, hx - S(24) - (r.x + pad), r.h};
-    if (!clip(&tc, cl))
+    w->lines = wrap(&ui.voice, w->text, w->len, S(900), w->st, w->ln);
+    int32_t top = words_top(), x0 = ui.w, x1 = 0;
+    for (unsigned i = 0; i < w->lines; i++) {
+        int32_t lw = (int32_t)ck_af_measure(&ui.voice, w->text + w->st[i], w->ln[i]);
+        w->x[i] = (ui.w - lw) / 2;
+        x0 = ck_min(x0, w->x[i]), x1 = ck_max(x1, w->x[i] + lw);
+    }
+    w->box = w->lines ? (ck_rect){x0 - S(8), top - S(34), x1 - x0 + S(16), (int32_t)w->lines * line_h() + S(30)}
+                      : (ck_rect){0, 0, 0, 0};
+    unsigned last = w->lines ? w->st[w->lines - 1] + w->ln[w->lines - 1] : 0;
+    w->done = w->from + last * LETTER_MS + 700;
+}
+
+/* how long words stay once said: time to read them */
+static uint32_t read_ms(const struct words *w) { return 6000u + w->len * 70u; }
+
+static uint32_t words_alpha(const struct words *w, uint32_t t)
+{
+    if (!w->len)
+        return 0;
+    uint32_t out = w->fade ? w->fade : w->done + read_ms(w);
+    return 256 - ck_smooth(ck_prog(t, out, out + 450));
+}
+
+static void draw_words(const struct words *w, const ck_rect *r, uint32_t t)
+{
+    uint32_t all = words_alpha(w, t);
+    if (!all || !ck_meets(w->box, r))
+        return;
+    int32_t top = words_top();
+    for (unsigned li = 0; li < w->lines; li++) {
+        uint64_t pen = (uint64_t)w->x[li] * 256;
+        int32_t y = top + (int32_t)li * line_h();
+        for (unsigned j = 0; j < w->ln[li]; j++) {
+            unsigned i = w->st[li] + j;
+            uint32_t at = w->from + i * LETTER_MS;
+            if (t <= at) /* not yet: but keep the pen moving so the line stays centred */
+                break;
+            uint32_t age = t - at, a = ck_smooth(ck_prog(age, 0, 260));
+            uint32_t c = ck_mix(CK_RGB(255, 212, 150), CK_RGB(234, 238, 252), ck_smooth(ck_prog(age, 0, 900)));
+            int32_t rise = (int32_t)((int64_t)S(6) * (256 - ck_ease_out(ck_prog(age, 0, 360))) >> 8);
+            pen = ck_letter(&ui.cv, r, &ui.voice, pen, y + rise, w->text[i], c, a * all >> 8, 0);
+        }
+    }
+}
+
+/* ---- the bar ---- */
+
+static void draw_bar(const ck_rect *r, uint32_t t)
+{
+    uint32_t A = ui.bar_a;
+    if (!A || !ck_meets(ui.bar_box, r))
+        return;
+    ck_rect b = ui.bar, d = ck_grow(b, S(14));
+    if (!ck_clip(&d, r))
+        d.w = 0;
+    int32_t rad = b.h / 2, typing = ui.input_len > 0;
+    for (int32_t y = d.y; d.w && y < d.y + d.h; y++) {
+        uint32_t *row = ui.back + (size_t)y * (size_t)ui.w;
+        for (int32_t x = d.x; x < d.x + d.w; x++) {
+            int32_t sd = ck_sd_rrect(x, y, &b, rad);
+            uint32_t in = ck_cover(sd);
+            if (in)
+                row[x] = ck_mix(row[x], CK_RGB(6, 8, 18), (in * 150 >> 8) * A >> 8);
+            int32_t edge = ck_abs(sd + 8);
+            if (edge < 16)
+                row[x] = ck_add(row[x], CK_RGB(255, 255, 255), (uint32_t)(16 - edge) * (typing ? 4u : 3u) * A >> 8);
+            if (typing && sd > 0 && sd < S(14) * 16) { /* a soft blue glow round it while typing */
+                uint32_t g = 256 - (uint32_t)(sd * 256 / (S(14) * 16));
+                row[x] = ck_add(row[x], CK_RGB(110, 130, 255), ((g * g >> 8) * 34 >> 8) * A >> 8);
+            }
+        }
+    }
+    int32_t pad = S(30), base = b.y + b.h / 2 + S(7);
+    ck_rect tc = {b.x + pad, b.y, b.w - 2 * pad, b.h};
+    if (!ck_clip(&tc, r))
         tc.w = 0;
-    int32_t x = r.x + pad;
-    if (ui.input_len == 0) {
+    int32_t x = b.x + pad;
+    if (!ui.input_len) {
         if (tc.w)
-            text(ui.back, &tc, &ui.body, x, base, "Type a message", 14, C_MUTED, 150);
+            text(&ui.cv, &tc, &ui.body, x, base, "Speak to Allen", 14, CK_RGB(150, 160, 196), 150 * A >> 8);
     } else {
-        int32_t avail = hx - S(30) - x;
+        int32_t avail = b.w - 2 * pad - S(12);
         unsigned from = 0;
         while (from < ui.input_len &&
-               (int32_t)ck_af_measure(&ui.body, ui.input_text + from, ui.input_len - from) > avail)
+               (int32_t)ck_af_measure(&ui.body, ui.input + from, ui.input_len - from) > avail)
             from++;
         if (tc.w)
-            x = text(ui.back, &tc, &ui.body, x, base, ui.input_text + from, ui.input_len - from, C_TEXT, 255);
+            x = text(&ui.cv, &tc, &ui.body, x, base, ui.input + from, ui.input_len - from, CK_RGB(236, 240, 252),
+                     A);
         else
-            x += (int32_t)ck_af_measure(&ui.body, ui.input_text + from, ui.input_len - from);
+            x += (int32_t)ck_af_measure(&ui.body, ui.input + from, ui.input_len - from);
     }
-    if (ui.caret)
-        rrect(ui.back, cl, (struct rect){x + S(3), r.y + r.h / 2 - S(15), S(2) > 2 ? S(2) : 2, S(30)}, S(1),
-              C_ACCENT, C_ACCENT, 255, 0);
+    /* the caret breathes rather than blinks */
+    uint32_t ca = (uint32_t)(16384 + ck_sin((t - ui.key_t) * 65536u / 1100u + 16384u)) * 200 >> 15;
+    if (t - ui.key_t < 500)
+        ca = 200;
+    ck_rect caret = {x + S(3), b.y + b.h / 2 - S(12), ck_max(S(2), 2), S(24)};
+    if (ck_clip(&caret, r))
+        for (int32_t y = caret.y; y < caret.y + caret.h; y++)
+            for (int32_t xx = caret.x; xx < caret.x + caret.w; xx++) {
+                uint32_t *p = ui.back + (size_t)y * (size_t)ui.w + xx;
+                *p = ck_add(*p, CK_RGB(150, 170, 255), (40 + ca) * A >> 8);
+            }
+    if (ui.footer && !ui.input_len) {
+        unsigned n = 0;
+        while (ui.footer[n])
+            n++;
+        int32_t fw = (int32_t)ck_af_measure(&ui.small, ui.footer, n);
+        text(&ui.cv, r, &ui.small, (ui.w - fw) / 2, b.y + b.h + S(34), ui.footer, n, CK_RGB(130, 140, 176),
+             110 * A >> 8);
+    }
 }
 
-/* ---- redraw ---- */
+/* ---- the guest's line rising into Allen, and the thoughts it becomes ---- */
 
-static void present(const struct rect *r)
+static void curve(unsigned i, uint32_t t, int32_t *x, int32_t *y, uint32_t *a)
+{
+    /* thought i leaves the line at its own place and flies on a curve to the heart */
+    uint32_t start = ui.guest_t + 150 + i * 40, dur = 850 + ck_hash((int32_t)i, 1, 5) % 300;
+    int32_t p = ck_prog(t, start, start + dur);
+    *a = t < start || p >= 256 ? 0 : 230;
+    int32_t gw = (int32_t)ck_af_measure(&ui.body, ui.guest, ui.guest_len);
+    int32_t x0 = (ui.guest_x + gw * (int32_t)(2 * i + 1) / 18) * 16, y0 = (ui.bar.y + ui.bar.h / 2 - S(60)) * 16;
+    int32_t x2 = ui.mind.hx, y2 = ui.mind.hy;
+    int32_t side = (int32_t)(ck_hash((int32_t)i, 2, 5) % 2u) ? 1 : -1;
+    int32_t x1 = (x0 + x2) / 2 + side * S(160 + (int32_t)(ck_hash((int32_t)i, 3, 5) % 140u)) * 16, y1 = (y0 + y2) / 2;
+    uint32_t e = ck_smooth(p), f = 256 - e;
+    *x = (int32_t)(((int64_t)x0 * f * f + 2 * (int64_t)x1 * f * e + (int64_t)x2 * e * e) >> 16);
+    *y = (int32_t)(((int64_t)y0 * f * f + 2 * (int64_t)y1 * f * e + (int64_t)y2 * e * e) >> 16);
+    if (p > 200)
+        *a = *a * (uint32_t)(256 - p) / 56;
+}
+
+static ck_rect guest_area(void)
+{
+    if (!ui.guest_t)
+        return (ck_rect){0, 0, 0, 0};
+    int32_t y0 = ui.cy - S(40), y1 = ui.bar.y + ui.bar.h;
+    return (ck_rect){ui.w / 2 - S(720), y0, S(1440), y1 - y0};
+}
+
+static void draw_guest(const ck_rect *r, uint32_t t)
+{
+    if (!ui.guest_t || t - ui.guest_t > 2400 || !ck_meets(ui.guest_box, r))
+        return;
+    uint32_t p = (uint32_t)ck_prog(t, ui.guest_t, ui.guest_t + 900);
+    if (p < 256) {
+        int32_t y = ui.bar.y + ui.bar.h / 2 + S(7) - (int32_t)((int64_t)S(90) * ck_ease_out((int32_t)p) >> 8);
+        text(&ui.cv, r, &ui.body, ui.guest_x, y, ui.guest, ui.guest_len, CK_RGB(196, 208, 255), (256 - p) * 210 >> 8);
+    }
+    for (unsigned i = 0; i < 9; i++) {
+        int32_t x, y;
+        uint32_t a;
+        curve(i, t, &x, &y, &a);
+        if (!a)
+            continue;
+        ck_glow(&ui.cv, r, x, y, S(9) * 16, CK_RGB(150, 170, 255), a / 4);
+        ck_glow(&ui.cv, r, x, y, S(3) * 16, CK_RGB(255, 236, 210), a);
+    }
+}
+
+/* ---- the notes constellation ---- */
+
+static unsigned put_num(char *s, unsigned v)
+{
+    char t[10];
+    unsigned n = 0, k = 0;
+    do
+        t[n++] = (char)('0' + v % 10);
+    while ((v /= 10) && n < sizeof t);
+    while (n)
+        s[k++] = t[--n];
+    return k;
+}
+
+/* where star j sits, 16ths of a pixel: the newest at the centre, the rest on
+ * a golden-angle spiral spread by the square root of the order */
+static void map_point(unsigned j, int32_t *x, int32_t *y)
+{
+    unsigned spread = ui.n > 7 ? ui.n - 1 : 6;
+    int64_t rad = (int64_t)ui.mr * 16 * (int64_t)ck_isqrt((uint64_t)j * 65536u / spread) / 256;
+    uint32_t ang = j * 25033u;
+    *x = ui.mx * 16 + 8 + (int32_t)(rad * ck_cos(ang) >> 14);
+    *y = ui.my * 16 + 8 + (int32_t)(rad * ck_sin(ang) >> 14);
+}
+
+static void draw_map(const ck_rect *r, uint32_t t)
+{
+    uint32_t A = ui.map_a;
+    if (!A || !ui.n || !ck_meets(ui.map_box, r))
+        return;
+    for (unsigned i = 0; i < ui.ne; i++) {
+        int32_t x0, y0, x1, y1;
+        map_point(ui.ea[i], &x0, &y0);
+        map_point(ui.eb[i], &x1, &y1);
+        ck_thread(&ui.cv, r, x0, y0, x1, y1, CK_RGB(130, 150, 255), 70 * A >> 8, 70 * A >> 8);
+    }
+    for (unsigned j = 0; j < ui.n; j++) {
+        int32_t x, y;
+        map_point(j, &x, &y);
+        int lit = (int)j == ui.lit;
+        uint32_t pulse = lit ? (uint32_t)(16384 + ck_sin((t - ui.map_t) * 65536u / 1400u)) * 60 >> 15 : 0;
+        uint32_t c = lit ? CK_RGB(255, 214, 160) : CK_RGB(206, 220, 255);
+        ck_glow(&ui.cv, r, x, y, S(lit ? 16 : 8) * 16, c, (lit ? 70 + pulse : 30) * A >> 8);
+        ck_glow(&ui.cv, r, x, y, S(lit ? 4 : 3) * 16, c, (lit ? 255 : 190) * A >> 8);
+    }
+    /* the spark that carried the note out from Allen */
+    if (ui.lit >= 0 && t - ui.map_t < 1100) {
+        int32_t lx, ly;
+        map_point((unsigned)ui.lit, &lx, &ly);
+        int32_t p = ck_prog(t, ui.map_t, ui.map_t + 900);
+        for (int k = 0; k < 4 && p < 256; k++) {
+            uint32_t e = ck_smooth(ck_clamp(p - k * 18, 0, 256));
+            int32_t x = ui.mind.hx + (int32_t)((int64_t)(lx - ui.mind.hx) * e >> 8);
+            int32_t y = ui.mind.hy + (int32_t)((int64_t)(ly - ui.mind.hy) * e >> 8) -
+                        (int32_t)((int64_t)S(60) * 16 * (e * (256 - e) >> 6) >> 8);
+            ck_glow(&ui.cv, r, x, y, S(5) * 16, CK_RGB(255, 222, 176), 220u >> k);
+        }
+    }
+    char line[48];
+    unsigned n = put_num(line, ui.total);
+    n += copy(line + n, ui.total == 1 ? " note, " : " notes, ", 16);
+    n += put_num(line + n, ui.links);
+    n += copy(line + n, ui.links == 1 ? " link" : " links", 16);
+    int32_t hw = (int32_t)ck_af_measure(&ui.small, "Notes", 5);
+    text(&ui.cv, r, &ui.small, ui.mx - hw / 2, ui.my - ui.mr - S(34), "Notes", 5, CK_RGB(170, 180, 214), 170 * A >> 8);
+    int32_t lw = (int32_t)ck_af_measure(&ui.small, line, n);
+    text(&ui.cv, r, &ui.small, ui.mx - lw / 2, ui.my + ui.mr + S(40), line, n, CK_RGB(150, 160, 196), 150 * A >> 8);
+    if (ui.lit >= 0 && ui.label_len) {
+        char cut[TEXT_MAX + 4];
+        unsigned m = ui.label_len;
+        int32_t room = S(300);
+        while (m > 0 && (int32_t)ck_af_measure(&ui.small, ui.label, m) + (m < ui.label_len ? S(14) : 0) > room)
+            m--;
+        for (unsigned i = 0; i < m; i++)
+            cut[i] = ui.label[i];
+        if (m < ui.label_len)
+            cut[m++] = '.', cut[m++] = '.', cut[m++] = '.';
+        int32_t cw = (int32_t)ck_af_measure(&ui.small, cut, m);
+        text(&ui.cv, r, &ui.small, ui.mx - cw / 2, ui.my + ui.mr + S(68), cut, m, CK_RGB(255, 222, 180), 200 * A >> 8);
+    }
+}
+
+/* ---- the flash of the merger ---- */
+
+static int flash(uint32_t t, int32_t *rad, uint32_t *a)
+{
+    if (t < CK_NIGHT_MERGE_MS || t >= CK_NIGHT_MERGE_MS + 1600)
+        return 0;
+    uint32_t tm = t - CK_NIGHT_MERGE_MS;
+    *rad = (S(40) + (int32_t)((int64_t)S(220) * ck_ease_out(ck_prog(tm, 0, 1200)) >> 8)) * 16;
+    uint32_t rise = ck_smooth(ck_prog(tm, 0, 120));
+    *a = rise * (ck_exp_neg(tm > 120 ? (tm - 120) * 256 / 450 : 0) >> 8) * 230 >> 16;
+    return *a > 0;
+}
+
+static ck_rect flash_box(uint32_t t)
+{
+    int32_t rad;
+    uint32_t a;
+    if (!flash(t, &rad, &a))
+        return (ck_rect){0, 0, 0, 0};
+    int32_t r = (rad >> 4) + 2;
+    return (ck_rect){ui.cx - r, ui.cy - r, 2 * r + 1, 2 * r + 1};
+}
+
+/* ---- putting a part of the screen together ---- */
+
+static void present(const ck_rect *r)
 {
     for (int32_t y = r->y; y < r->y + r->h; y++) {
-        const uint32_t *src = ui.back + (size_t)y * ui.w + r->x;
+        const uint32_t *src = ui.back + (size_t)y * (size_t)ui.w + r->x;
         volatile uint32_t *dst = ui.fb + (size_t)y * ui.pitch + r->x;
         if (ui.format == 1)
             for (int32_t x = 0; x < r->w; x++)
@@ -649,24 +473,311 @@ static void present(const struct rect *r)
     }
 }
 
-static void redraw(struct rect r, uint32_t t)
+static void compose(const ck_rect *r)
 {
-    struct rect screen = {0, 0, (int32_t)ui.w, (int32_t)ui.h};
-    if (!clip(&r, &screen))
-        return;
-    for (int32_t y = r.y; y < r.y + r.h; y++) {
-        const uint32_t *src = ui.base + (size_t)y * ui.w + r.x;
-        uint32_t *dst = ui.back + (size_t)y * ui.w + r.x;
-        for (int32_t x = 0; x < r.w; x++)
-            dst[x] = src[x];
+    uint32_t t = ui.t;
+    ck_night_base(&ui.night, &ui.cv, r);
+    ck_night_lights(&ui.night, &ui.cv, r, ui.shimmer, ui.level * ui.shimmer >> 9);
+    int32_t rad;
+    uint32_t a;
+    if (flash(t, &rad, &a)) {
+        ck_glow(&ui.cv, r, ui.cx * 16 + 8, ui.cy * 16 + 8, rad, CK_RGB(200, 210, 255), a / 3);
+        ck_glow(&ui.cv, r, ui.cx * 16 + 8, ui.cy * 16 + 8, rad / 3, CK_RGB(255, 240, 224), a);
     }
-    orb(&r, t);
-    (void)bubbles(ui.back, &r);
-    input_field(&r);
-    present(&r);
+    draw_map(r, t);
+    ck_mind_draw(&ui.mind, &ui.cv, r);
+    draw_guest(r, t);
+    draw_words(&ui.now, r, t);
+    draw_bar(r, t);
+    present(r);
 }
 
-static struct rect orb_area(void) { return grow(ui.orb, ui.orb_r * 2 + S(4)); }
+/* ---- the tiles that changed ---- */
+
+static void mark(ck_rect r)
+{
+    ck_rect all = {0, 0, ui.w, ui.h};
+    if (r.w <= 0 || r.h <= 0 || !ck_clip(&r, &all))
+        return;
+    for (int32_t ty = r.y / TH; ty <= (r.y + r.h - 1) / TH; ty++)
+        for (int32_t tx = r.x / TW; tx <= (r.x + r.w - 1) / TW; tx++)
+            ui.tiles[ty * ui.tx + tx] = 1;
+}
+
+static void mark_all(void)
+{
+    for (int32_t i = 0; i < ui.tx * ui.ty; i++)
+        ui.tiles[i] = 1;
+}
+
+/* the tiles the ripple's band crosses, between radius lo and hi */
+static void mark_ring(int32_t lo, int32_t hi)
+{
+    if (hi <= 0)
+        return;
+    lo = ck_max(lo, 0);
+    int64_t lo2 = (int64_t)lo * lo, hi2 = (int64_t)hi * hi;
+    for (int32_t ty = 0; ty < ui.ty; ty++)
+        for (int32_t tx = 0; tx < ui.tx; tx++) {
+            int32_t x0 = tx * TW, y0 = ty * TH, x1 = x0 + TW, y1 = y0 + TH;
+            int64_t nx = ck_clamp(ui.cx, x0, x1) - ui.cx, ny = ck_clamp(ui.cy, y0, y1) - ui.cy;
+            int64_t fx = ck_max(ck_abs(x0 - ui.cx), ck_abs(x1 - ui.cx)),
+                    fy = ck_max(ck_abs(y0 - ui.cy), ck_abs(y1 - ui.cy));
+            if (nx * nx + ny * ny <= hi2 && fx * fx + fy * fy >= lo2)
+                ui.tiles[ty * ui.tx + tx] = 1;
+        }
+}
+
+static unsigned strips(void)
+{
+    unsigned n = 0;
+    for (int32_t ty = 0; ty < ui.ty; ty++) {
+        uint8_t *row = ui.tiles + ty * ui.tx;
+        int32_t runs = 0, first = -1, last = -1;
+        for (int32_t tx = 0; tx < ui.tx; tx++)
+            if (row[tx]) {
+                if (first < 0)
+                    first = tx;
+                if (tx == 0 || !row[tx - 1])
+                    runs++;
+                last = tx;
+            }
+        if (first < 0)
+            continue;
+        int32_t y = ty * TH, h = ck_min(TH, ui.h - y);
+        if (runs > 6 || n + (unsigned)runs > JOBS_MAX) { /* one strip for the row */
+            int32_t x = first * TW;
+            ui.jobs[n++] = (ck_rect){x, y, ck_min((last + 1) * TW, ui.w) - x, h};
+        } else
+            for (int32_t tx = 0; tx < ui.tx; tx++) {
+                if (!row[tx] || (tx > 0 && row[tx - 1]))
+                    continue;
+                int32_t end = tx;
+                while (end + 1 < ui.tx && row[end + 1])
+                    end++;
+                ui.jobs[n++] = (ck_rect){tx * TW, y, ck_min((end + 1) * TW, ui.w) - tx * TW, h};
+            }
+        for (int32_t tx = 0; tx < ui.tx; tx++)
+            row[tx] = 0;
+        if (n >= JOBS_MAX)
+            break;
+    }
+    return n;
+}
+
+int ck_allen_ui_help(void)
+{
+    for (;;) {
+        uint64_t v = __atomic_load_n(&ui.ticket, __ATOMIC_ACQUIRE);
+        uint32_t next = (uint32_t)(v & 0xffffu), count = (uint32_t)(v >> 16 & 0xffffu);
+        if (next >= count)
+            return 0;
+        if (__atomic_compare_exchange_n(&ui.ticket, &v, v + 1, 0, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) {
+            compose(&ui.jobs[next]);
+            __atomic_fetch_add(&ui.done, 1, __ATOMIC_RELEASE);
+            return 1;
+        }
+    }
+}
+
+/* ---- the frame ---- */
+
+/* what the keyboard side left, taken under the lock */
+static void take_notes(uint32_t t)
+{
+    lock();
+    if (note.refresh)
+        note.refresh = 0, mark_all();
+    if (note.wake_gen != ui.seen_wake) {
+        ui.seen_wake = note.wake_gen;
+        ui.footer = note.footer;
+        if (!ui.on)
+            ui.on = 1, ui.wake_t = t, ui.quiet_t = ck_max((int32_t)t, (int32_t)FORMED_MS);
+    }
+    if (note.input_gen != ui.seen_input) {
+        ui.seen_input = note.input_gen;
+        if (note.input_len > ui.input_len)
+            ck_mind_key(&ui.mind, t);
+        ui.input_len = note.input_len;
+        for (unsigned i = 0; i < ui.input_len; i++)
+            ui.input[i] = note.input[i];
+        ui.key_t = t, ui.quiet_t = t, ui.input_moved = 1;
+    }
+    if (note.said_gen != ui.seen_said) {
+        ui.seen_said = note.said_gen;
+        if (note.has_line) {
+            ui.guest_len = copy(ui.guest, note.line, TEXT_MAX);
+            ui.guest_x = ui.bar.x + S(30);
+            ui.guest_t = t;
+        }
+        /* what is on screen fades; Allen thinks, then speaks */
+        if (ui.now.len && !ui.now.fade)
+            ui.now.fade = t;
+        ui.next = (struct words){0};
+        ui.next.len = copy(ui.next.text, note.reply, TEXT_MAX);
+        uint32_t think = note.has_line ? 900u + ck_min((int32_t)ui.next.len * 6, 700) : 500u;
+        ui.speak_t = ck_max((int32_t)(t + think), (int32_t)FORMED_MS + 300);
+        ui.input_len = 0;
+        ui.input_moved = 1;
+        ui.quiet_t = t;
+        ck_mind_mode(&ui.mind, CK_MIND_THINK, t);
+    }
+    if (note.map_gen != ui.seen_map) {
+        ui.seen_map = note.map_gen;
+        ui.n = note.n, ui.ne = note.ne, ui.total = note.total, ui.links = note.links, ui.lit = note.lit;
+        for (unsigned i = 0; i < ui.ne; i++)
+            ui.ea[i] = note.ea[i], ui.eb[i] = note.eb[i];
+        ui.label_len = copy(ui.label, note.label, TEXT_MAX);
+        if (ui.lit >= 0 && ui.n)
+            ui.map_t = t ? t : 1;
+        mark(ui.map_box);
+    }
+    unlock();
+}
+
+static uint32_t toward(uint32_t cur, uint32_t want, uint32_t dt, uint32_t full_ms)
+{
+    uint32_t step = (uint32_t)((uint64_t)256 * dt / full_ms);
+    step = step || !dt ? step : 1;
+    if (cur < want)
+        return cur + step < want ? cur + step : want;
+    return cur > want + step ? cur - step : want;
+}
+
+/* moves everything to t and marks what changed */
+static void advance(uint32_t t)
+{
+    uint32_t prev = ui.last, dt = t - prev;
+    take_notes(t);
+    /* the sky */
+    ck_night_at(&ui.night, t);
+    if (t < CK_NIGHT_FADE_END_MS + FRAME_MS * 2)
+        mark_all();
+    mark(ui.lens_was);
+    mark(ui.night.lens);
+    ui.lens_was = ui.night.lens;
+    if (ui.night.ripple_w || ui.ripple_was >= 0) {
+        int32_t reach = ui.night.ripple_w * 22 / 10 + 2;
+        if (ui.ripple_was >= 0)
+            mark_ring(ui.ripple_was - reach - 8, ui.ripple_was + reach + 8);
+        if (ui.night.ripple_w)
+            mark_ring(ui.night.ripple_r - reach - 8, ui.night.ripple_r + reach + 8);
+        ui.ripple_was = ui.night.ripple_w ? ui.night.ripple_r : -1;
+    }
+    ck_rect fb = flash_box(t);
+    mark(ui.flash_was);
+    mark(fb);
+    ui.flash_was = fb;
+    for (unsigned i = ui.twinkle_turn % 3; i < ui.night.ntw; i += 3)
+        mark(ck_night_star_box(&ui.night, i));
+    ui.twinkle_turn++;
+
+    /* the conversation: speaking starts, words reach the mind and the galaxies */
+    if (ui.speak_t && t >= ui.speak_t) {
+        ui.now = ui.next;
+        ui.now.from = ui.speak_t;
+        lay_out(&ui.now);
+        ui.speak_t = 0;
+        ck_mind_mode(&ui.mind, CK_MIND_SPEAK, t);
+    }
+    struct words *w = &ui.now;
+    if (w->len && t >= w->from && prev < w->done) {
+        for (unsigned i = 0; i < w->len; i++) {
+            uint32_t at = w->from + i * LETTER_MS;
+            if (at > prev && at <= t && w->text[i] != ' ' && (i == 0 || w->text[i - 1] == ' '))
+                ck_mind_word(&ui.mind, t), ui.word_t = t;
+        }
+    }
+    uint32_t last_letter = w->len ? w->from + w->len * LETTER_MS : 0;
+    int speaking = w->len && t >= w->from && t < last_letter + 300;
+    ui.level = speaking ? ck_exp_neg((t - ui.word_t) * 256 / 200) >> 8 : 0;
+    ck_mind_voice(&ui.mind, ui.level);
+    if (!speaking && !ui.speak_t && (ui.mind.mode == CK_MIND_SPEAK || ui.mind.mode == CK_MIND_THINK) &&
+        w->len && t >= w->from) {
+        ck_mind_mode(&ui.mind, CK_MIND_IDLE, t);
+        ui.quiet_t = t;
+    }
+    if (ui.mind.mode != CK_MIND_THINK && ui.mind.mode != CK_MIND_SPEAK)
+        ck_mind_mode(&ui.mind, ui.input_len && t - ui.key_t < 4000 ? CK_MIND_LISTEN : CK_MIND_IDLE, t);
+    uint32_t rise = w->len ? ck_smooth(ck_prog(t, w->from, w->from + 600)) : 0;
+    uint32_t fall = w->len ? 256 - ck_smooth(ck_prog(t, last_letter + 300, last_letter + 2800)) : 0;
+    ui.shimmer = rise < fall ? rise : fall;
+    if (ui.shimmer || ui.shimmer_was)
+        for (unsigned i = 0; i < CK_NIGHT_GALAXIES; i++)
+            mark(ui.night.gal[i].box);
+    ui.shimmer_was = ui.shimmer;
+    if (w->len && (t < w->done + 40 || words_alpha(w, t) != words_alpha(w, prev)))
+        mark(w->box);
+    if (ui.words_was.w && (ui.words_was.x != w->box.x || ui.words_was.w != w->box.w || ui.words_was.h != w->box.h))
+        mark(ui.words_was);
+    ui.words_was = w->box;
+    if (w->len && !words_alpha(w, t) && t > w->from)
+        *w = (struct words){0};
+
+    /* Allen */
+    ck_mind_at(&ui.mind, t);
+    mark(ck_mind_dirty(&ui.mind));
+    if (ui.guest_t) {
+        ck_rect g = guest_area();
+        mark(g);
+        ui.guest_box = g;
+        if (t - ui.guest_t > 2400)
+            ui.guest_t = 0;
+    }
+
+    /* the bar: up once Allen has formed and while in use; down when things rest */
+    int want = ui.on && t >= FORMED_MS && (ui.input_len || t - ui.quiet_t < BAR_REST_MS || speaking || ui.speak_t);
+    ui.bar_a = toward(ui.bar_a, want ? 256 : 0, dt, want ? (t - ui.key_t < 300 ? 250 : 900) : 1400);
+    if (ui.bar_a || ui.bar_was || ui.input_moved)
+        mark(ui.bar_box);
+    ui.bar_was = ui.bar_a;
+    ui.input_moved = 0;
+
+    /* the notes: shown a while after a note is saved or handed back */
+    int show = ui.map_t && t - ui.map_t < MAP_SHOW_MS && ui.n;
+    ui.map_a = toward(ui.map_a, show ? 256 : 0, dt, show ? 700 : 1500);
+    if (ui.map_a || ui.map_was)
+        mark(ui.map_box);
+    ui.map_was = ui.map_a;
+    if (ui.lit >= 0 && ui.map_t && t - ui.map_t < 1200) /* the spark's path, Allen to the star */
+        mark(ck_union(ck_mind_dirty(&ui.mind), ui.map_box));
+}
+
+int ck_allen_ui_tick(uint64_t now)
+{
+    if (!ui.started)
+        return 0;
+    uint32_t t = ms(now);
+    if (ui.frames && t - ui.last < FRAME_MS && !__atomic_load_n(&note.refresh, __ATOMIC_ACQUIRE))
+        return 0;
+    uint64_t c0 = ui.clock ? ui.clock() : 0;
+    ui.t = t;
+    advance(t);
+    unsigned n = strips();
+    ui.done = 0;
+    __atomic_store_n(&ui.ticket, (uint64_t)n << 16, __ATOMIC_RELEASE);
+    while (ck_allen_ui_help())
+        ;
+    while (__atomic_load_n(&ui.done, __ATOMIC_ACQUIRE) < n)
+        relax();
+    ui.last = t;
+    ui.frames++;
+    if (ui.clock) {
+        uint64_t c = ui.clock() - c0;
+        uint32_t us = (uint32_t)(c * 1000000u / ui.hz);
+        ui.total_ticks += us;
+        if (us > ui.slowest)
+            ui.slowest = us;
+    }
+    return 1;
+}
+
+void ck_allen_ui_stats(uint32_t *frames, uint32_t *slowest_us, uint32_t *average_us)
+{
+    *frames = ui.frames;
+    *slowest_us = ui.slowest;
+    *average_us = ui.frames ? ui.total_ticks / ui.frames : 0;
+}
 
 /* ---- the interface ---- */
 
@@ -683,156 +794,125 @@ static uint32_t scale_for(uint32_t w, uint32_t h)
     return kw < kh ? kw : kh;
 }
 
-#define CAP_TITLE 30
+#define CAP_VOICE 19
 #define CAP_BODY 15
 #define CAP_SMALL 11
 
 size_t ck_allen_ui_mem_bytes(uint32_t w, uint32_t h)
 {
     uint32_t k = scale_for(w, h);
-    return (size_t)w * h * 8 + face_bytes(CAP_TITLE * k / 256) + face_bytes(CAP_BODY * k / 256) +
-           face_bytes(CAP_SMALL * k / 256) + 64;
+    return (size_t)w * h * 4 + ck_night_mem_bytes(w, h, k) + face_bytes(CAP_VOICE * k / 256) +
+           face_bytes(CAP_BODY * k / 256) + face_bytes(CAP_SMALL * k / 256) + 64;
 }
 
+int ck_allen_ui_started(void) { return ui.started; }
 int ck_allen_ui_on(void) { return ui.on; }
 
 int ck_allen_ui_start(volatile uint32_t *fb, uint32_t w, uint32_t h, uint32_t pitch, uint32_t format, void *mem,
-                      size_t mem_len, uint64_t hz, uint64_t now, const char *footer)
+                      size_t mem_len, uint64_t hz, uint64_t now, uint64_t (*clock)(void))
 {
     if (!fb || w < 640 || h < 400 || pitch < w || format > 1 || hz == 0 || !mem ||
-        mem_len < ck_allen_ui_mem_bytes(w, h))
+        mem_len < ck_allen_ui_mem_bytes(w, h) || ((w + TW - 1) / TW) * ((h + TH - 1) / TH) > TILES_MAX)
         return -1;
     ui = (__typeof__(ui)){0};
     ui.fb = fb;
-    ui.w = w;
-    ui.h = h;
-    ui.pitch = pitch;
-    ui.format = format;
-    ui.hz = hz;
-    ui.t0 = now;
-    ui.footer = footer;
+    ui.w = (int32_t)w, ui.h = (int32_t)h;
+    ui.pitch = pitch, ui.format = format, ui.hz = hz, ui.t0 = now, ui.clock = clock;
     ui.k = scale_for(w, h);
+    ui.tx = (int32_t)((w + TW - 1) / TW), ui.ty = (int32_t)((h + TH - 1) / TH);
     uint8_t *p = mem;
-    ui.base = (uint32_t *)p;
-    ui.back = (uint32_t *)(p + (size_t)w * h * 4);
-    p += (size_t)w * h * 8;
-    uint32_t caps[3] = {CAP_TITLE * ui.k / 256, CAP_BODY * ui.k / 256, CAP_SMALL * ui.k / 256};
-    ck_af_face *faces[3] = {&ui.title, &ui.body, &ui.small};
-    unsigned weights[3] = {950, 1250, 1300};
+    ui.back = (uint32_t *)p;
+    p += (size_t)w * h * 4;
+    ui.cv = (ck_canvas){ui.back, ui.w, ui.h};
+    ui.cx = ui.w / 2, ui.cy = ui.h * 40 / 100;
+    size_t nb = ck_night_mem_bytes(w, h, ui.k);
+    if (ck_night_init(&ui.night, w, h, ui.k, ui.cx, ui.cy, p, nb, ui.back))
+        return -1;
+    p += nb;
+    uint32_t caps[3] = {CAP_VOICE * ui.k / 256, CAP_BODY * ui.k / 256, CAP_SMALL * ui.k / 256};
+    ck_af_face *faces[3] = {&ui.voice, &ui.body, &ui.small};
+    unsigned weights[3] = {1000, 1150, 1250};
     for (int i = 0; i < 3; i++) {
         size_t n = face_bytes(caps[i]);
         ck_af_face_init(faces[i], caps[i], weights[i], p, n);
         p += n;
+        /* every letter now, so drawing never writes to the face (other cores read it) */
+        for (int c = CK_AF_FIRST; c <= CK_AF_LAST; c++)
+            (void)ck_af_glyph_get(faces[i], (char)c);
     }
+    ck_mind_init(&ui.mind, ui.cx, ui.cy, ui.k, BORN_MS);
     /* layout (design px on 1920 x 1080, centred) */
-    int32_t ww = S(1080), wh = S(800);
-    ui.win = (struct rect){((int32_t)w - ww) / 2, ((int32_t)h - wh) / 2, ww, wh};
-    ui.radius = S(34);
-    ui.orb_r = S(34);
-    ui.orb = (struct rect){ui.win.x + ww / 2 - ui.orb_r, ui.win.y + S(92) - ui.orb_r, 2 * ui.orb_r, 2 * ui.orb_r};
-    ui.input = (struct rect){ui.win.x + S(48), ui.win.y + wh - S(132), ww - S(96), S(66)};
-    ui.convo = (struct rect){ui.win.x + S(48), ui.win.y + S(272), ww - S(96), ui.input.y - S(26) - (ui.win.y + S(272))};
-    /* the notes map: right of the window, when it fits on the screen */
-    ui.map = (struct rect){ui.win.x + ww + S(40), ((int32_t)h - S(560)) / 2, S(340), S(560)};
-    ui.map_on = ui.map.x + ui.map.w <= (int32_t)w - S(8);
-    ui.caret = 1;
-    struct rect all = {0, 0, (int32_t)w, (int32_t)h};
-    draw_base(&all);
-    ui.on = 1;
-    redraw(all, 0);
-    ui.next_orb = now;
-    ui.next_caret = now + hz * 53 / 100;
+    int32_t bw = S(720), bh = S(54);
+    ui.bar = (ck_rect){(ui.w - bw) / 2, ui.h - S(150), bw, bh};
+    ui.bar_box = (ck_rect){ui.bar.x - S(20), ui.bar.y - S(20), bw + S(40), bh + S(80)};
+    ui.bar_box.x = ck_min(ui.bar_box.x, ui.w / 2 - S(360));
+    ui.bar_box.w = ck_max(ui.bar_box.w, S(720));
+    ui.mx = ui.w * 84 / 100, ui.my = ui.h * 42 / 100, ui.mr = S(130);
+    ui.map_box = (ck_rect){ui.mx - S(190), ui.my - ui.mr - S(64), S(380), 2 * ui.mr + S(150)};
+    ui.lit = -1;
+    ui.ripple_was = -1;
+    ui.seen_input = note.input_gen, ui.seen_said = note.said_gen, ui.seen_wake = note.wake_gen;
+    ui.seen_map = note.map_gen - 1; /* the map kept from before is taken by the first frame */
+    ui.started = 1;
+    ui.ticket = 0;
     return 0;
+}
+
+void ck_allen_ui_refresh(void)
+{
+    lock();
+    note.refresh = 1;
+    unlock();
+}
+
+void ck_allen_ui_wake(const char *footer, uint64_t now)
+{
+    (void)now;
+    lock();
+    note.footer = footer;
+    note.wake_gen++;
+    unlock();
 }
 
 void ck_allen_ui_input(const char *buf, unsigned len, uint64_t now)
 {
-    if (!ui.on)
-        return;
-    if (len > TEXT_MAX)
-        len = TEXT_MAX;
+    (void)now;
+    if (len > TEXT_MAX - 1)
+        len = TEXT_MAX - 1;
+    lock();
     for (unsigned i = 0; i < len; i++)
-        ui.input_text[i] = buf[i];
-    ui.input_len = len;
-    ui.caret = 1;
-    ui.next_caret = now + ui.hz * 53 / 100;
-    redraw(ui.input, ms(now));
-}
-
-static void push(int allen, const char *s)
-{
-    if (ui.nmsg == MSG_MAX) {
-        for (unsigned i = 1; i < MSG_MAX; i++)
-            ui.msgs[i - 1] = ui.msgs[i];
-        ui.nmsg--;
-    }
-    struct msg *m = &ui.msgs[ui.nmsg++];
-    unsigned n = 0;
-    while (s[n] && n < TEXT_MAX)
-        n++;
-    for (unsigned i = 0; i < n; i++)
-        m->text[i] = s[i];
-    m->len = (uint16_t)n;
-    m->allen = (uint8_t)allen;
+        note.input[i] = buf[i];
+    note.input_len = len;
+    note.input_gen++;
+    unlock();
 }
 
 void ck_allen_ui_said(const char *line, const char *reply, uint64_t now)
 {
-    if (!ui.on)
-        return;
-    if (line)
-        push(0, line);
-    push(1, reply);
-    ui.shown = 0;
-    ui.input_len = 0;
-    ui.next_letter = now + ui.hz * 35 / 100; /* a short pause, as if thinking */
-    ui.speak_until = ms(now) + 1200u + (uint32_t)ui.msgs[ui.nmsg - 1].len * 40u;
-    redraw(ui.convo, ms(now));
-    redraw(ui.input, ms(now));
-}
-
-void ck_allen_ui_tick(uint64_t now)
-{
-    if (!ui.on)
-        return;
-    uint32_t t = ms(now);
-    if (ui.nmsg && ui.msgs[ui.nmsg - 1].allen && ui.shown < ui.msgs[ui.nmsg - 1].len && now >= ui.next_letter) {
-        ui.shown++;
-        ui.next_letter = now + ui.hz * 32 / 1000;
-        struct rect b = bubbles(0, &ui.convo);
-        redraw(b, t);
-    }
-    if (now >= ui.next_caret) {
-        ui.caret ^= 1;
-        ui.next_caret = now + ui.hz * 53 / 100;
-        redraw(ui.input, t);
-    }
-    if (now >= ui.next_orb) {
-        ui.next_orb = now + ui.hz / 30;
-        redraw(orb_area(), t);
-    }
+    (void)now;
+    lock();
+    note.has_line = line != 0;
+    copy(note.line, line, TEXT_MAX);
+    copy(note.reply, reply, TEXT_MAX);
+    note.said_gen++;
+    unlock();
 }
 
 void ck_allen_ui_map(unsigned n, const uint8_t *ea, const uint8_t *eb, unsigned ne, int lit, const char *label,
                      unsigned total, unsigned links)
 {
-    map.n = n < CK_ALLEN_UI_MAP_NODES ? n : CK_ALLEN_UI_MAP_NODES;
-    map.ne = 0;
-    for (unsigned i = 0; i < ne && map.ne < CK_ALLEN_UI_MAP_LINKS; i++)
-        if (ea[i] < map.n && eb[i] < map.n && ea[i] != eb[i]) {
-            map.ea[map.ne] = ea[i];
-            map.eb[map.ne++] = eb[i];
+    lock();
+    note.n = n < CK_ALLEN_UI_MAP_NODES ? n : CK_ALLEN_UI_MAP_NODES;
+    note.ne = 0;
+    for (unsigned i = 0; i < ne && note.ne < CK_ALLEN_UI_MAP_LINKS; i++)
+        if (ea[i] < note.n && eb[i] < note.n && ea[i] != eb[i]) {
+            note.ea[note.ne] = ea[i];
+            note.eb[note.ne++] = eb[i];
         }
-    map.lit = lit >= 0 && (unsigned)lit < map.n ? lit : -1;
-    map.label_len = 0;
-    while (label && label[map.label_len] && map.label_len < TEXT_MAX)
-        map.label_len++;
-    for (unsigned i = 0; i < map.label_len; i++)
-        map.label[i] = label[i];
-    map.total = total;
-    map.links = links;
-    if (!ui.on || !ui.map_on)
-        return;
-    draw_base(&ui.map);
-    redraw(ui.map, 0);
+    note.lit = lit >= 0 && (unsigned)lit < note.n ? lit : -1;
+    copy(note.label, label, TEXT_MAX);
+    note.total = total;
+    note.links = links;
+    note.map_gen++;
+    unlock();
 }

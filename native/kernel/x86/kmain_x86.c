@@ -31,7 +31,6 @@
 #include "../mm/heap.h"
 #include "../svc/allen_reply.h"
 #include "../ui/allen_ui.h"
-#include "../ui/whirlpool.h"
 #include "x86.h"
 
 #ifndef AIENOS_COMMIT
@@ -264,6 +263,8 @@ static void acpi_reset(void)
  * held. Without either, the text screen and its timed hold stay as they were. */
 static int allen_on;
 static uint64_t allen_bye; /* TSC when Allen said goodbye; 0 = still talking */
+static uint64_t allen_woke; /* TSC when Allen's window took the screen */
+static void night_stats(const char *when);
 static ck_allen_facts allen_facts; /* filled at the summary line */
 static ck_allen_mind allen_mind;
 static ck_allen_notes allen_notes; /* loaded from disk at the window, or empty */
@@ -326,12 +327,86 @@ static void allen_line(const char *text)
     ck_allen_ui_said(text, reply, ck_rdtsc());
     if (reply == ck_allen_goodbye && !allen_bye)
         allen_bye = ck_rdtsc() | 1;
+    if (reply == ck_allen_goodbye)
+        night_stats("by goodbye");
 }
 
-/* The startup picture (ui/whirlpool.c): its memory, freed once Allen's window
- * has the screen, and what is said about it once the console is up. */
-static uint64_t whirl_pa, whirl_pages, whirl_t0, whirl_last, whirl_cost;
-static uint32_t whirl_logo, whirl_block, whirl_gone, whirl_frames, whirl_ms, whirl_more;
+/* The startup screen (ui/allen_ui.c): the night sky from the moment the clock
+ * is measured, Allen formed in it by the time the keyboard is ready. Until
+ * the secondary cores are up the boot core draws a frame between console
+ * writes (night_tick); then the first secondary core draws the frames
+ * (draw_loop) and the next two draw strips of them (help_loop). draw_lock
+ * keeps to one frame at a time whoever draws it. */
+static uint32_t night_ms, night_mib;                     /* what is said about it once the console is up */
+static uint64_t night_last, night_cost;                  /* the boot core's last frame and what it took */
+static volatile uint32_t draw_run, draw_on, draw_helpers; /* drawing allowed; a core draws frames; cores helping */
+static volatile uint8_t draw_lock;
+
+static uint64_t night_clock(void) { return ck_rdtsc(); }
+
+/* After each console write, while no secondary core draws: a frame when one
+ * is due, with at least twice a frame's drawing time between frames, so
+ * startup is not slowed by more than a third. */
+static void night_tick(void)
+{
+    uint64_t now = ck_rdtsc();
+    if (__atomic_load_n(&draw_on, __ATOMIC_ACQUIRE) || now - night_last < night_cost * 2 ||
+        __atomic_test_and_set(&draw_lock, __ATOMIC_ACQUIRE))
+        return;
+    if (ck_allen_ui_tick(now)) {
+        night_last = ck_rdtsc();
+        night_cost = night_last - now;
+    }
+    __atomic_clear(&draw_lock, __ATOMIC_RELEASE);
+}
+
+/* The secondary cores' work while the night is up; each returns to its halt
+ * once draw_stop clears draw_run. */
+static void draw_loop(void)
+{
+    __atomic_store_n(&draw_on, 1, __ATOMIC_RELEASE);
+    while (__atomic_load_n(&draw_run, __ATOMIC_ACQUIRE)) {
+        while (__atomic_test_and_set(&draw_lock, __ATOMIC_ACQUIRE))
+            ck_pause();
+        int drew = ck_allen_ui_tick(ck_rdtsc());
+        __atomic_clear(&draw_lock, __ATOMIC_RELEASE);
+        if (!drew)
+            ck_pause();
+    }
+    __atomic_store_n(&draw_on, 0, __ATOMIC_RELEASE);
+}
+static void help_loop(void)
+{
+    __atomic_fetch_add(&draw_helpers, 1, __ATOMIC_ACQ_REL);
+    while (__atomic_load_n(&draw_run, __ATOMIC_ACQUIRE))
+        if (!ck_allen_ui_help())
+            ck_pause();
+    __atomic_fetch_sub(&draw_helpers, 1, __ATOMIC_ACQ_REL);
+}
+
+/* Before text goes back on the screen: the drawing cores finish the frame in
+ * hand and stop. Waits at most 200 ms (a panic never hangs here); then the
+ * frame lock is held for good, so nothing draws over the text. */
+static void draw_stop(void)
+{
+    __atomic_store_n(&draw_run, 0, __ATOMIC_RELEASE);
+    if (!tsc_hz)
+        return;
+    uint64_t t0 = ck_rdtsc();
+    while ((draw_on || draw_helpers) && ck_rdtsc() - t0 < tsc_hz / 5)
+        ck_pause();
+    while (__atomic_test_and_set(&draw_lock, __ATOMIC_ACQUIRE) && ck_rdtsc() - t0 < tsc_hz / 5)
+        ck_pause();
+}
+
+static void night_stats(const char *when)
+{
+    uint32_t n, slowest, average;
+    ck_allen_ui_stats(&n, &slowest, &average);
+    ck_printf("screen: night: %u frames %s, average %u.%u ms, slowest %u.%u ms (drawn by %s)\n", n, when,
+              average / 1000, average / 100 % 10, slowest / 1000, slowest / 100 % 10,
+              draw_on ? "a secondary core" : "the boot core");
+}
 
 static void allen_window(void)
 {
@@ -358,29 +433,30 @@ static void allen_window(void)
     allen_facts.screen_w = w;
     allen_facts.screen_h = h;
     allen_mind.facts = allen_facts;
-    size_t need = ck_allen_ui_mem_bytes(w, h);
-    uint64_t pages = (need + CK_PAGE - 1) / CK_PAGE;
-    if (ck_frames_alloc(&frames, pages, CK_PAGE, &pa)) {
-        ck_printf("screen: text only (no %llu MiB for Allen's window)\n", (unsigned long long)(need >> 20));
-        return;
+    if (!ck_allen_ui_started()) { /* the night could not start at boot: Allen's home starts here */
+        size_t need = ck_allen_ui_mem_bytes(w, h);
+        uint64_t pages = (need + CK_PAGE - 1) / CK_PAGE;
+        if (ck_frames_alloc(&frames, pages, CK_PAGE, &pa)) {
+            ck_printf("screen: text only (no %llu MiB for Allen's window)\n", (unsigned long long)(need >> 20));
+            return;
+        }
+        if (ck_allen_ui_start(px, w, h, pitch, format, (void *)(uintptr_t)pa, pages * CK_PAGE, tsc_hz, ck_rdtsc(),
+                              night_clock)) {
+            ck_puts("screen: text only (Allen's window refused the screen)\n");
+            ck_frames_free(&frames, pa, pages);
+            return;
+        }
+        night_mib = (uint32_t)(need >> 20);
     }
     ck_snprintf(footer, sizeof footer, "Type goodbye to %s this computer", CK_X86_REPORT ? "restart" : "turn off");
-    ck_printf("screen: Allen's window (%ux%u, %llu MiB drawing memory)\n", w, h, (unsigned long long)(need >> 20));
-    uint64_t t0 = ck_rdtsc();
-    if (ck_allen_ui_start(px, w, h, pitch, format, (void *)(uintptr_t)pa, pages * CK_PAGE, tsc_hz, t0, footer)) {
-        ck_puts("screen: text only (Allen's window refused the screen)\n");
-        ck_frames_free(&frames, pa, pages);
-        return;
-    }
+    ck_printf("screen: Allen's window (%ux%u, %u MiB drawing memory)\n", w, h, night_mib);
     ck_x86_console_fb_off();
+    ck_allen_ui_refresh(); /* whatever else was on the screen goes */
+    ck_allen_ui_wake(footer, ck_rdtsc());
     ck_x86_kbd_sink(allen_edit, allen_line);
-    if (whirl_pages) {
-        ck_printf("screen: the whirlpool turned %u more frames during startup\n", whirl_more);
-        ck_frames_free(&frames, whirl_pa, whirl_pages);
-        whirl_pages = 0;
-    }
     allen_on = 1;
-    ck_printf("screen: Allen's window drawn in %llu ms\n", (unsigned long long)((ck_rdtsc() - t0) * 1000 / tsc_hz));
+    allen_woke = ck_rdtsc();
+    night_stats("before Allen woke");
     allen_map(); /* the notes loaded from disk, before the first word */
     const char *hello = ck_allen_welcome(&allen_mind);
     if (hello) {
@@ -394,7 +470,15 @@ void ck_x86_hold_step(uint64_t *end)
     ck_x86_kbd_hold_poll(end);
     if (!allen_on)
         return;
-    ck_allen_ui_tick(ck_rdtsc());
+    if (!__atomic_load_n(&draw_on, __ATOMIC_ACQUIRE) && !__atomic_test_and_set(&draw_lock, __ATOMIC_ACQUIRE)) {
+        ck_allen_ui_tick(ck_rdtsc()); /* no secondary core draws: this one does */
+        __atomic_clear(&draw_lock, __ATOMIC_RELEASE);
+    }
+    static int told;
+    if (!told && ck_rdtsc() - allen_woke > 20 * tsc_hz) {
+        told = 1;
+        night_stats("by 20 s after Allen woke");
+    }
     /* No countdown while Allen's window is up; after goodbye, 4 s for the
      * answer to appear, then the hold ends. */
     *end = allen_bye ? allen_bye + 4 * tsc_hz : ~0ull;
@@ -420,8 +504,10 @@ static __attribute__((noreturn)) void finish(void)
             ck_printf("keyboard: type a line and press Enter; the screen stays on until %u s after the last key\n",
                       ck_x86_kbd_idle_s());
     }
-    if (!allen_on)
-        ck_x86_console_fb_show(); /* no Allen's window: the startup text, not the picture */
+    if (!allen_on) { /* no Allen's window: the startup text, not the night */
+        draw_stop();
+        ck_x86_console_fb_show();
+    }
     if (CK_X86_HOLD_S) {
 #if CK_X86_REPORT
         /* Lab build only (make imac-kernel CK_X86_REPORT=1): sends the
@@ -458,6 +544,7 @@ static __attribute__((noreturn)) void finish(void)
 void ck_panic(const char *fmt, ...)
 {
     ck_cli();
+    draw_stop();
     ck_x86_console_fb_show(); /* a panic is always readable */
     va_list ap;
     va_start(ap, fmt);
@@ -973,6 +1060,10 @@ static void ap_entry(void *arg)
     apic_wr(APIC_SVR, 0x100 | VEC_SPURIOUS);
     ap_ids[idx] = apic_rd(APIC_ID) >> 24;
     __atomic_fetch_add(&ap_up, 1, __ATOMIC_SEQ_CST);
+    if (idx == 0) /* the first one draws the night's frames, the next two help */
+        draw_loop();
+    else if (idx < 3)
+        help_loop();
     for (;;)
         __asm__ volatile("cli; hlt");
 }
@@ -1144,60 +1235,35 @@ static void cpu_line(void)
     ck_printf("cpu: %s %s\n", vendor, b);
 }
 
-/* Called after each console write while the text is held off the screen:
- * the water keeps turning, at most 25 frames a second and with at least
- * twice a frame's drawing time between frames, so startup is not slowed
- * by more than a third. */
-static void whirl_tick(void)
-{
-    uint64_t now = ck_rdtsc(), gap = whirl_cost * 2 > tsc_hz / 25 ? whirl_cost * 2 : tsc_hz / 25;
-    if (now - whirl_last < gap)
-        return;
-    ck_whirl_frame((uint32_t)((now - whirl_t0) * 1000 / tsc_hz));
-    whirl_last = ck_rdtsc();
-    whirl_cost = whirl_last - now;
-    whirl_more++;
-}
-
-/* The firmware's picture goes down the whirlpool before anything is said on
- * the screen; then the text stays off it (still in the RAM copy and on COM1)
- * until Allen's window takes over, or comes back if anything goes wrong. */
-static void whirl_play(const struct ck_handoff *h)
+/* The night begins before anything is said on the screen; the text stays
+ * off it (still in the RAM copy and on COM1) until Allen's window takes
+ * over, or comes back if anything goes wrong. */
+static void night_start(const struct ck_handoff *h)
 {
     if (h->fb_status != CK_HANDOFF_FB_PRESENT || !mm.fb_ok || !tsc_hz)
         return;
-    size_t need = ck_whirl_mem_bytes(h->fb_width, h->fb_height);
+    size_t need = ck_allen_ui_mem_bytes(h->fb_width, h->fb_height);
     uint64_t pages = (need + CK_PAGE - 1) / CK_PAGE, pa;
-    if (!need || ck_frames_alloc(&frames, pages, CK_PAGE, &pa))
+    if (ck_frames_alloc(&frames, pages, CK_PAGE, &pa))
         return;
-    if (ck_whirl_start((volatile uint32_t *)(uintptr_t)h->fb_base, h->fb_width, h->fb_height, h->fb_pitch,
-                       h->fb_format, (void *)(uintptr_t)pa, pages * CK_PAGE, &whirl_logo, &whirl_block)) {
+    uint64_t t0 = ck_rdtsc();
+    if (ck_allen_ui_start((volatile uint32_t *)(uintptr_t)h->fb_base, h->fb_width, h->fb_height, h->fb_pitch,
+                          h->fb_format, (void *)(uintptr_t)pa, pages * CK_PAGE, tsc_hz, t0, night_clock)) {
         ck_frames_free(&frames, pa, pages);
         return;
     }
-    whirl_pa = pa, whirl_pages = pages;
-    whirl_t0 = ck_rdtsc();
-    for (;;) {
-        uint32_t t = (uint32_t)((ck_rdtsc() - whirl_t0) * 1000 / tsc_hz);
-        uint32_t seen = ck_whirl_frame(t);
-        whirl_frames++;
-        if (!whirl_gone && t > CK_WHIRL_LOGO_FROM_MS && !seen)
-            whirl_gone = t;
-        if (t >= CK_WHIRL_MS)
-            break;
-    }
-    whirl_last = ck_rdtsc();
-    whirl_ms = (uint32_t)((whirl_last - whirl_t0) * 1000 / tsc_hz);
-    whirl_cost = (whirl_last - whirl_t0) / whirl_frames;
-    ck_x86_console_fb_hold(whirl_tick);
+    night_ms = (uint32_t)((ck_rdtsc() - t0) * 1000 / tsc_hz);
+    night_mib = (uint32_t)(need >> 20);
+    draw_run = 1;
+    ck_x86_console_fb_hold(night_tick);
 }
 
 static __attribute__((noreturn)) void kernel_main(void *arg)
 {
     (void)arg;
     const struct ck_handoff *h = hand;
-    tsc_measure(); /* first: the startup picture runs on this clock */
-    whirl_play(h);
+    tsc_measure(); /* first: the night runs on this clock */
+    night_start(h);
     if (h->fb_status == CK_HANDOFF_FB_PRESENT && mm.fb_ok) {
         uint32_t scale, cols, rows;
         if (ck_x86_console_fb_on((volatile void *)(uintptr_t)h->fb_base, h->fb_width, h->fb_height,
@@ -1207,9 +1273,9 @@ static __attribute__((noreturn)) void kernel_main(void *arg)
                       (unsigned long long)h->fb_base, scale, cols, rows);
         else
             ck_puts("screen: refused (unusable geometry)\n");
-        if (whirl_pages)
-            ck_printf("screen: whirlpool: the firmware's picture had %u pixels, gone at %u ms; %u frames in %u ms, "
-                      "blocks of %u px\n", whirl_logo, whirl_gone, whirl_frames, whirl_ms, whirl_block);
+        if (draw_run)
+            ck_printf("screen: night: the sky made in %u ms (%u MiB drawing memory); stars, black holes, then Allen\n",
+                      night_ms, night_mib);
     } else if (h->fb_status == CK_HANDOFF_FB_PRESENT) {
         ck_puts("screen: refused (framebuffer overlaps RAM or lies above the mapped range)\n");
     } else {
@@ -1304,9 +1370,9 @@ static __attribute__((noreturn)) void kernel_main(void *arg)
         for (unsigned k = 0; k < sr.started; k++)
             n += (unsigned)ck_snprintf(ids + n, sizeof ids - n, k ? ",%u" : "%u", sr.up_ids[k]);
         ids[n] = 0;
-        ck_printf("smp: cpus=%u started=%u failed=%u bsp_id=%u ap_ids=%s trampoline=0x%llx state=halted\n",
+        ck_printf("smp: cpus=%u started=%u failed=%u bsp_id=%u ap_ids=%s trampoline=0x%llx state=%s helpers=%u\n",
                   sr.listed, sr.started, sr.failed, ar.id, sr.started ? ids : "none",
-                  (unsigned long long)tramp_pa);
+                  (unsigned long long)tramp_pa, draw_on ? "drawing" : "halted", draw_helpers);
     }
 
     const struct ck_x86_storage_result *st = ck_x86_storage(h->rsdp, &frames, tsc_hz, mm.top);

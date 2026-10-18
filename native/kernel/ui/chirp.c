@@ -1,19 +1,19 @@
 /* chirp.c -- the startup sound; see chirp.h.
  *
- * Every frame is worked out from where it sits on the picture's timeline.
- * With L the share of the inspiral left (1 at CK_WHIRL_ORBIT_MS, 0 at the
- * plunge), the picture's angle goes as 1 - L^(5/8); so does the sound's
+ * Every frame is worked out from where it sits on the night's timeline.
+ * With L the share of the inspiral left (1 at CK_NIGHT_SPIRAL_MS, 0 at the
+ * merger), the holes' orbit goes as 1 - L^(5/8); so does the sound's
  * phase, scaled so it starts at CK_CHIRP_FROM_HZ, which makes its pitch go
  * as L^(-3/8). Once the pitch reaches CK_CHIRP_TO_HZ (the last few
- * milliseconds) it holds there through the plunge and the fade. Loudness
+ * milliseconds) it holds there through the merger and the fade. Loudness
  * goes as L^(-1/4), which is pitch^(2/3), reaching CK_CHIRP_PEAK where the
  * pitch stops rising. Phases are in 2^32ths of a cycle; L and its powers in
  * Q30. */
 #include "chirp.h"
 
-#define F0_FRAME (CK_CHIRP_RATE / 1000u * CK_WHIRL_LOGO_FROM_MS) /* the tone begins */
-#define F1_FRAME (CK_CHIRP_RATE / 1000u * CK_WHIRL_ORBIT_MS)     /* the inspiral begins */
-#define F2_FRAME (CK_CHIRP_RATE / 1000u * CK_WHIRL_MERGE_MS)     /* the plunge */
+#define F0_FRAME (CK_CHIRP_RATE / 1000u * CK_NIGHT_HOLES_MS)  /* the tone begins */
+#define F1_FRAME (CK_CHIRP_RATE / 1000u * CK_NIGHT_SPIRAL_MS) /* the inspiral begins */
+#define F2_FRAME (CK_CHIRP_RATE / 1000u * CK_NIGHT_MERGE_MS)  /* the merger */
 #define Q30 (1ull << 30)
 #define DECAY 1073369062ull /* exp(-1 / (60 ms * 48 kHz)) in Q30: the fade's time constant is 60 ms */
 
@@ -64,7 +64,7 @@ static uint64_t inspiral_phase(uint32_t f)
 
 static void setup(void)
 {
-    const int64_t C = 1073740561, S = 1647099; /* cos, sin of a 4096th of a turn, Q30 (as ui/whirlpool.c) */
+    const int64_t C = 1073740561, S = 1647099; /* cos, sin of a 4096th of a turn, Q30 */
     int64_t c = 1ll << 30, s = 0;
     for (unsigned k = 0; k <= 1024; k++) {
         int16_t v = k == 1024 ? 16384 : (int16_t)((s + (1 << 15)) >> 16);
@@ -122,7 +122,7 @@ uint32_t ck_chirp_level(uint32_t f)
     if (f < F0_FRAME || f >= CK_CHIRP_FRAMES)
         return 0;
     uint64_t steady = (uint64_t)CK_CHIRP_PEAK * cap_l14 >> 30; /* the level at L = 1 */
-    if (f < F1_FRAME) { /* comes in smoothly (smoothstep) as the picture moves out */
+    if (f < F1_FRAME) { /* comes in smoothly (smoothstep) as the holes appear */
         uint64_t x = ((uint64_t)(f - F0_FRAME) << 16) / (F1_FRAME - F0_FRAME), s = x * x * (3ull * 65536 - 2 * x);
         return (uint32_t)(steady * s >> 48);
     }
