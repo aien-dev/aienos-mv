@@ -445,6 +445,31 @@ static int flash(uint32_t t, int32_t *rad, uint32_t *a)
     return *a > 0;
 }
 
+/* The flash fills everything at its height; then the remaining hole's shadow
+ * takes its black back (within 300 ms), so the light rings it instead of
+ * filling it. */
+static void unflash(const ck_rect *r, uint32_t t)
+{
+    uint32_t tm = t - CK_NIGHT_MERGE_MS;
+    if (ui.night.holes != 1 || tm < 100)
+        return;
+    uint32_t keep = 256 - ck_smooth(ck_prog(tm, 100, 400)); /* of the flash, inside the shadow */
+    int32_t hx = ui.night.hole[0].x, hy = ui.night.hole[0].y, rs = ui.night.hole[0].rs;
+    ck_rect box = {(hx - rs) >> 4, (hy - rs) >> 4, (2 * rs >> 4) + 2, (2 * rs >> 4) + 2};
+    if (rs <= 16 || !ck_clip(&box, r))
+        return;
+    for (int32_t y = box.y; y < box.y + box.h; y++)
+        for (int32_t x = box.x; x < box.x + box.w; x++) {
+            int32_t dx = x * 16 + 8 - hx, dy = y * 16 + 8 - hy;
+            uint32_t d = ck_isqrt((uint32_t)(dx * dx + dy * dy)); /* 16ths of a pixel */
+            if (d >= (uint32_t)rs)
+                continue;
+            uint32_t in = (uint32_t)rs - d >= 16 ? 256 : ((uint32_t)rs - d) * 16; /* a pixel's soft edge */
+            uint32_t k = 256 - (in * (256 - keep) >> 8);
+            ui.back[(size_t)y * (size_t)ui.w + x] = ck_scale(ui.back[(size_t)y * (size_t)ui.w + x], k);
+        }
+}
+
 static ck_rect flash_box(uint32_t t)
 {
     int32_t rad;
@@ -483,6 +508,7 @@ static void compose(const ck_rect *r)
     if (flash(t, &rad, &a)) {
         ck_glow(&ui.cv, r, ui.cx * 16 + 8, ui.cy * 16 + 8, rad, CK_RGB(200, 210, 255), a / 3);
         ck_glow(&ui.cv, r, ui.cx * 16 + 8, ui.cy * 16 + 8, rad / 3, CK_RGB(255, 240, 224), a);
+        unflash(r, t);
     }
     draw_map(r, t);
     ck_mind_draw(&ui.mind, &ui.cv, r);
