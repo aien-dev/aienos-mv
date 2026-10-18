@@ -108,7 +108,7 @@ void ck_x86_console_fb_show(void);
 struct ck_frames;
 struct ck_x86_storage_result {
     unsigned pci_functions, ahci_ctrls, ahci_disks, nvme_ctrls, nvme_disks, gpt_valid;
-    unsigned net_found, net_link; /* net_link: 0 not read, 1 up, 2 down */
+    unsigned net_found, net_link; /* net_link: 0 not read, 1 up, 2 down, 3 not up yet (driver running) */
     unsigned net_driver;          /* 0 not tried, 1 running, 2 failed */
 };
 const struct ck_x86_storage_result *ck_x86_storage(uint64_t rsdp, struct ck_frames *fr, uint64_t tsc_hz,

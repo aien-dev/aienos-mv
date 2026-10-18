@@ -1447,6 +1447,7 @@ static __attribute__((noreturn)) void kernel_main(void *arg)
               : st->net_driver == 2   ? "driver-failed"
               : st->net_link == 1     ? "link-up"
               : st->net_link == 2     ? "link-down"
+              : st->net_link == 3     ? "link-pending"
                                       : "seen");
     ck_puts("AIENOS-KERNEL-0 DONE\n");
     ck_puts("note: QEMU qualifies nothing physical\n");
@@ -1455,7 +1456,6 @@ static __attribute__((noreturn)) void kernel_main(void *arg)
 
 void ck_x86_kernel_entry(struct ck_handoff *h)
 {
-    ck_x86_step("efi");
     ck_cli();
     hand = h;
     tables_load();

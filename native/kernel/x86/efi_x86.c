@@ -82,6 +82,7 @@ EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE *st)
     for (uint64_t i = 0; i < st->NumberOfTableEntries; i++)
         if (guid_eq(&st->ConfigurationTable[i].VendorGuid, &acpi20))
             h->rsdp = (uint64_t)(uintptr_t)st->ConfigurationTable[i].VendorTable;
+    ck_x86_step("start");
 
     ck_puts("AIENOS-KERNEL-0\n");
     ck_printf("report_kind: pre_exit\naienos_commit: %s\n", ck_commit());
@@ -94,6 +95,7 @@ EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE *st)
     ck_printf("firmware_vendor: %s\nfirmware_revision: 0x%x\n", v, st->FirmwareRevision);
     ck_printf("firmware_cpl: %u\n", h->firmware_el);
     ck_boot_gop_find(st, h);
+    ck_x86_step("gop");
     ck_printf("acpi_rsdp: 0x%llx\n", (unsigned long long)h->rsdp);
     ck_printf("image: 0x%llx-0x%llx\n", (unsigned long long)h->image_base, (unsigned long long)h->image_end);
     ck_puts("exiting firmware boot services\n");
@@ -122,6 +124,7 @@ EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE *st)
                   EXIT_TRIES);
         return s;
     }
+    ck_x86_step("exit");
     if (pass_state && pass.object && !in_loader_data(h, pass.object, pass.object_len)) {
         pass.object = pass.object_len = 0;
         pass_state = 2;

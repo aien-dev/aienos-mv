@@ -186,6 +186,22 @@ int main(int argc, char **argv)
               !strcmp(st.where, "EFI") && st.at == boot_entry && st.got == 1 && st.want == 0);
         CHECK(poke(&p, efi, boot_entry, 0x01) == 0 && driver_marks(&p, rsv, fatsz) == 0); /* back as written */
         CHECK(ck_fatb_state_read(&p.dev, serial, &st) == CK_FATB_OK && st.ours && st.slot == 0);
+        /* Apple sets ATTR_ARCHIVE on the root's EFI directory during boot. */
+        CHECK(poke(&p, efi - 1u, 32u + 11u, 0x20) == 0);
+        CHECK(ck_fatb_state_read(&p.dev, serial, &st) == CK_FATB_OK && st.ours && st.slot == 0);
+        /* The directory type is still structural, even with ARCHIVE set. */
+        CHECK(poke(&p, efi - 1u, 32u + 11u, 0x10) == 0);
+        CHECK(ck_fatb_state_read(&p.dev, serial, &st) == CK_FATB_OK && !st.ours && st.where &&
+              !strcmp(st.where, "root") && st.at == 43u);
+        CHECK(poke(&p, efi - 1u, 32u + 11u, 0x10) == 0);
+        /* Do not ignore archive bits in the volume label or unused entries. */
+        CHECK(poke(&p, efi - 1u, 11u, 0x20) == 0);
+        CHECK(ck_fatb_state_read(&p.dev, serial, &st) == CK_FATB_OK && !st.ours);
+        CHECK(poke(&p, efi - 1u, 11u, 0x20) == 0);
+        CHECK(poke(&p, efi - 1u, 64u + 11u, 0x20) == 0);
+        CHECK(ck_fatb_state_read(&p.dev, serial, &st) == CK_FATB_OK && !st.ours);
+        CHECK(poke(&p, efi - 1u, 64u + 11u, 0x20) == 0);
+        CHECK(ck_fatb_state_read(&p.dev, serial, &st) == CK_FATB_OK && st.ours && st.slot == 0);
     }
     CHECK(export_part(&p, "part1.img") == 0 && spill("img1.bin", img1, len1) == 0);
     CHECK(install(&f, &p, 0, man1, img1, len1, &r, &wrote) == CK_FATB_OK && !r.written && r.slot == 0 && wrote == 0);

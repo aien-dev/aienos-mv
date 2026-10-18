@@ -264,8 +264,14 @@ static int as_written(uint8_t *got, const uint8_t *want, uint32_t n, int kind, c
     } else if (kind == FAT_SEC) {
         got[7] = (uint8_t)((got[7] & ~0x0cu) | (want[7] & 0x0cu)); /* FAT[1] bits 27, 26 */
     } else {
-        for (uint32_t e = 0; e + 32u <= n; e += 32u)
+        for (uint32_t e = 0; e + 32u <= n; e += 32u) {
             got[e + 18] = want[e + 18], got[e + 19] = want[e + 19]; /* DIR_LstAccDate */
+            /* Firmware may mark an existing directory for backup. Only
+             * normalize ARCHIVE on expected directories, never their type,
+             * volume labels, or unused entries (FAT32 spec DIR_Attr). */
+            if (want[e] && (want[e + 11] & 0x10))
+                got[e + 11] = (uint8_t)((got[e + 11] & ~0x20u) | (want[e + 11] & 0x20u));
+        }
     }
     for (uint32_t i = 0; i < n; i++)
         if (got[i] != want[i]) {
