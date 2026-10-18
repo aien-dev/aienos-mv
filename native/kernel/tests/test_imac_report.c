@@ -1,5 +1,6 @@
 /* test_imac_report.c -- host test for the iMac kernel's network report
- * frames (x86/report_x86.c, built with -DCK_X86_REPORT_HOST).
+ * frames and allowlist filter (x86/report_x86.c, built with
+ * -DCK_X86_REPORT_HOST).
  *
  *   test_imac_report                    unit checks on the frames
  *   test_imac_report send PORT LOGFILE  also writes a sample report to
@@ -47,8 +48,52 @@ static const uint8_t *unwrap(const uint8_t *f, size_t n, size_t *plen)
     return pl;
 }
 
+/* Filter checks: allowlisted kernel lines pass unchanged, everything else
+ * (sentinel chat, key and memory values, control bytes, overlong or
+ * unfinished lines, a tag that only starts like an allowed one) is dropped. */
+static void filter_checks(void)
+{
+    static const char screen[] = "cpu: GenuineIntel\n"
+                                 "chat: SENTINEL-CHAT-7f3a hello\n"
+                                 "pci: nvme 02:00.0 id=144d:a806\n"
+                                 "key=SENTINEL-KEY-91c2\n"
+                                 "memory_dump: SENTINEL-MEM-44e0\n"
+                                 "netx: SENTINEL-NETX\n"
+                                 " kernel: SENTINEL-INDENT\n"
+                                 "kernel: alive\x1b[2J SENTINEL-CTRL\n"
+                                 "\n"
+                                 "summary: cores=4/4 writes=none\n"
+                                 "AIENOS-IMAC-KERNEL-0 DONE\n"
+                                 "power: SENTINEL-UNFINISHED";
+    static const char want[] = "cpu: GenuineIntel\n"
+                               "pci: nvme 02:00.0 id=144d:a806\n"
+                               "summary: cores=4/4 writes=none\n"
+                               "AIENOS-IMAC-KERNEL-0 DONE\n";
+    char out[sizeof screen];
+    unsigned dropped = 0;
+    size_t n = ck_x86_report_filter(screen, sizeof screen - 1, out, sizeof out, &dropped);
+    CHECK(n == sizeof want - 1 && memcmp(out, want, n) == 0);
+    CHECK(dropped == 8);
+    for (size_t i = 0; i + 8 <= n; i++)
+        CHECK(memcmp(out + i, "SENTINEL", 8) != 0);
+
+    char longl[CK_X86_REPORT_LINE_MAX + 2];
+    memset(longl, 'x', sizeof longl);
+    memcpy(longl, "kernel: ", 8);
+    longl[CK_X86_REPORT_LINE_MAX] = '\n'; /* exactly LINE_MAX bytes: kept */
+    CHECK(ck_x86_report_filter(longl, CK_X86_REPORT_LINE_MAX + 1, out, sizeof out, &dropped) ==
+              CK_X86_REPORT_LINE_MAX + 1 &&
+          dropped == 0);
+    longl[CK_X86_REPORT_LINE_MAX] = 'x';
+    longl[CK_X86_REPORT_LINE_MAX + 1] = '\n'; /* one byte over: dropped */
+    CHECK(ck_x86_report_filter(longl, sizeof longl, out, sizeof out, &dropped) == 0 && dropped == 1);
+    CHECK(ck_x86_report_filter(want, sizeof want - 1, out, 10, &dropped) == 0 && dropped == 4);
+    CHECK(ck_x86_report_filter(0, 5, out, sizeof out, &dropped) == 0 && dropped == 0);
+}
+
 int main(int argc, char **argv)
 {
+    filter_checks();
     for (size_t i = 0; i < sizeof log_text; i++)
         log_text[i] = (i % 61 == 60) ? '\n' : (char)('A' + i % 26);
     size_t len = sizeof log_text;

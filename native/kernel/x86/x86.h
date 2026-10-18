@@ -111,8 +111,9 @@ int ck_x86_tg3_link(void);
 void ck_x86_tg3_mac(uint8_t mac[6]);
 int ck_x86_tg3_send(const uint8_t *frame, size_t len);
 int ck_x86_tg3_drain(unsigned ms);
-/* report_x86.c: holds `seconds`, sending the console's RAM copy over the
- * network every 2 s while the link is up; returns the rounds sent. */
+/* report_x86.c: holds `seconds`; in a laboratory build (IMAC_LAB_REPORT=1)
+ * also sends the allowlisted console lines over the network every 2 s while
+ * the link is up. Returns the rounds sent (always 0 in the default image). */
 unsigned ck_x86_report_hold(uint64_t tsc_hz, unsigned seconds);
 
 /* smp_x86.S: the secondary-core trampoline, copied below 1 MiB and patched. */

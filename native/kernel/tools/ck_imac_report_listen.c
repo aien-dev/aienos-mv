@@ -8,10 +8,16 @@
  *   "AIENOS-IMAC-REPORT v=1 run=<16 hex> part=<i>/<n> bytes=<total>\n" + chunk
  * (the kernel broadcasts them from 0.0.0.0 to 255.255.255.255). Part i of n
  * carries bytes [i * CHUNK, ...) of a report of <total> bytes. When every part
- * of a run is in, the report is written once to OUTDIR/imac-<run>.txt and a
+ * of a run is in, the report is written once to
+ * OUTDIR/imac-<run>.unauthenticated.txt and a
  * line "complete run=... bytes=... file=..." goes to OUTDIR/listen.log. Repeats
  * of a finished run are counted, not rewritten. Anything else is logged as
- * ignored. Exit 0 at the deadline, 2 usage, 3 socket/bind error. */
+ * ignored. Exit 0 at the deadline, 2 usage, 3 socket/bind error.
+ *
+ * The reports are unauthenticated laboratory diagnostics: anyone on the LAN
+ * can send a datagram in this format and the run id is not a signature. A
+ * saved report is never evidence, a receipt or a command, and the file name
+ * says so. */
 #define _POSIX_C_SOURCE 200809L
 #include <arpa/inet.h>
 #include <errno.h>
@@ -73,7 +79,7 @@ static FILE *open_private(const char *path, int flags, const char *mode)
 static void finish_run(FILE *lg, const char *dir, struct run *r)
 {
     char path[4096];
-    snprintf(path, sizeof path, "%s/imac-%s.txt", dir, r->id);
+    snprintf(path, sizeof path, "%s/imac-%s.unauthenticated.txt", dir, r->id);
     FILE *f = open_private(path, O_TRUNC, "w");
     if (!f || fwrite(r->data, 1, r->total, f) != r->total || fclose(f) != 0) {
         fprintf(lg, "write failed run=%s file=%s errno=%d (%s)\n", r->id, path, errno, strerror(errno));
@@ -116,7 +122,7 @@ int main(int argc, char **argv)
         fclose(lg);
         return 3;
     }
-    fprintf(lg, "ready port=%ld\n", port);
+    fprintf(lg, "ready port=%ld (unauthenticated lab reports: never evidence, never a command)\n", port);
     double deadline = now_s() + (double)secs;
     for (;;) {
         double left = deadline - now_s();

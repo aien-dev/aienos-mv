@@ -2242,13 +2242,19 @@ imac-diag: $(IMACDIAG_EFI)
 # + x86/pci_x86.c (PCI walk; AHCI via x86/ahci_x86.c and NVMe via ../disk/disk_nvme.c, both
 # read-only, GPT checked by dev/disk_part.c; a look at the Ethernet chip) + x86/smp_x86.S
 # (secondary cores started and parked) + x86/tg3_x86.c (BCM57766 Ethernet, transmit only) and
-# x86/report_x86.c with ../../net/aienos_net.c (the screen sent as UDP broadcasts during the hold;
-# host test scripts/ck_imac_report_test.sh, receiver tools/ck_imac_report_listen.c)
+# x86/report_x86.c with ../../net/aienos_net.c (laboratory builds only, IMAC_LAB_REPORT=1: the
+# allowlisted screen lines sent as unauthenticated UDP broadcasts during the hold; host test
+# scripts/ck_imac_report_test.sh, receiver tools/ck_imac_report_listen.c; default 0 sends nothing)
 # + x86/trap.S + x86/console_x86.c (COM1 when present, GOP framebuffer), on the
 # arch-neutral core: fbcon, fmt, acpi, handoff_check, frames, heap. Same toolchain and PE
 # header as IMACDIAG. Copy to a FAT stick as EFI/BOOT/BOOTX64.EFI.
 #   make imac-kernel  -> $(OUT)/IMACKERN.EFI     QEMU test: scripts/qemu_ck_imac_kernel_test.sh
+#   make imac-kernel IMAC_LAB_REPORT=1           laboratory diagnostic build with the network report
 X86K := $(KDIR)/x86
+IMAC_LAB_REPORT ?= 0
+ifneq ($(filter-out 0 1,$(IMAC_LAB_REPORT)),)
+$(error IMAC_LAB_REPORT must be 0 or 1)
+endif
 IMACKERN_DIR := $(OUT)/imackern
 IMACKERN_ELF := $(IMACKERN_DIR)/imackern.elf
 IMACKERN_EFI := $(OUT)/IMACKERN.EFI
@@ -2281,7 +2287,12 @@ $(IMACKERN_DIR)/pci_x86.o: $(X86K)/pci_x86.c $(IMACKERN_HDRS) $(KDIR)/mm/frames.
 $(IMACKERN_DIR)/smp_x86.o: $(X86K)/smp_x86.S
 $(IMACKERN_DIR)/disk_nvme.o: $(NATIVE)/disk/disk_nvme.c $(NATIVE)/disk/disk_nvme.h $(NATIVE)/disk/disk.h
 $(IMACKERN_DIR)/tg3_x86.o: $(X86K)/tg3_x86.c $(IMACKERN_HDRS) $(KDIR)/mm/frames.h
-$(IMACKERN_DIR)/report_x86.o: $(X86K)/report_x86.c $(X86K)/report_x86.h $(IMACKERN_HDRS) $(NATIVE)/net/aienos_net.h
+$(IMACKERN_DIR)/report_x86.o: $(X86K)/report_x86.c $(X86K)/report_x86.h $(IMACKERN_HDRS) $(NATIVE)/net/aienos_net.h \
+	$(IMACKERN_DIR)/lab_report.stamp
+$(IMACKERN_DIR)/report_x86.o: IMACKERN_CFLAGS += -DCK_X86_LAB_REPORT=$(IMAC_LAB_REPORT)
+$(IMACKERN_DIR)/lab_report.stamp: FORCE
+	@mkdir -p $(dir $@)
+	@echo '$(IMAC_LAB_REPORT)' | cmp -s - $@ || echo '$(IMAC_LAB_REPORT)' > $@
 $(IMACKERN_DIR)/aienos_net.o: $(NATIVE)/net/aienos_net.c $(NATIVE)/net/aienos_net.h
 $(IMACKERN_OBJS):
 	@mkdir -p $(dir $@)
@@ -2297,6 +2308,9 @@ $(IMACKERN_ELF): $(IMACKERN_OBJS) $(BOOT)/image_x86_64.ld
 	$(X86LD) $(X86LDFLAGS) -o $@ $(IMACKERN_OBJS)
 	@u=$$($(X86NM) -u $@ | grep -v ' w ' || true); \
 	if [ -n "$$u" ]; then echo "image has undefined symbols: $$u"; rm -f $@; exit 1; fi
+	@f=$$($(X86NM) $@ | grep -cE ' [Tt] ck_x86_report_(frame|filter)$$' || true); \
+	if [ "$$f" != "$$(( $(IMAC_LAB_REPORT) * 2 ))" ]; then \
+	  echo "IMAC_LAB_REPORT=$(IMAC_LAB_REPORT) but the image has $$f of the 2 report builder symbols"; rm -f $@; exit 1; fi
 	@bad=$$($(X86READELF) -rW $@ | grep -E '^[0-9a-f]+ ' | grep -v R_X86_64_RELATIVE || true); \
 	if [ -n "$$bad" ]; then echo "image has non-RELATIVE relocations:"; echo "$$bad"; rm -f $@; exit 1; fi
 	@n=$$($(X86NM) $@ | grep -c ' t isr_common$$' || true); s=$$($(X86NM) $@ | grep ' T ck_x86_isr_stubs$$' | cut -c1-16); \

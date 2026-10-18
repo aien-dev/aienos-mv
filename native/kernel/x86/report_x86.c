@@ -1,8 +1,13 @@
 /* report_x86.c -- sends the iMac kernel's report over Ethernet, so the
- * owner no longer has to photograph the screen.
+ * owner no longer has to photograph the screen. Laboratory diagnostic builds
+ * only: without IMAC_LAB_REPORT=1 (CK_X86_LAB_REPORT) the hold just waits,
+ * no frame is built and the image does not contain the frame builder (the
+ * Makefile checks the symbol). The resident ALLEN service never links it.
  *
- * The report is the console's RAM copy (console_x86.c: everything printed,
- * the first 16 KiB). It is cut into parts of CK_X86_REPORT_CHUNK bytes; each
+ * The report is not the raw console: ck_x86_report_filter keeps only the
+ * complete lines of the console's RAM copy (console_x86.c, the first 16 KiB)
+ * that start with a tag from `allowed` below, so a line printed by anything
+ * else (chat, memory, keys, tokens) cannot be sent. It is cut into parts of CK_X86_REPORT_CHUNK bytes; each
  * part is one UDP datagram from 0.0.0.0:PORT to 255.255.255.255:PORT in an
  * Ethernet broadcast frame (no address to configure, no ARP, nothing to
  * answer), with a one-line header the receiver checks:
@@ -11,8 +16,12 @@
  * screen hold the whole report is sent again every 2 s while the link is up,
  * so a receiver that missed a datagram gets it on the next round.
  *
- * ck_x86_report_frame is a pure function of its arguments (no device, no
- * clock) and is host-tested by scripts/ck_imac_report_test.sh. */
+ * The report is unauthenticated: the run id is not a signature, anyone on the
+ * LAN can send or read these datagrams, and TTL 1 limits routing, not who
+ * sees them. A received report is never evidence and never a command.
+ *
+ * ck_x86_report_filter and ck_x86_report_frame are pure functions of their
+ * arguments (no device, no clock), host-tested by scripts/ck_imac_report_test.sh. */
 #ifdef CK_X86_REPORT_HOST
 #include <string.h>
 #else
@@ -21,6 +30,65 @@
 #endif
 #include "aienos_net.h"
 #include "report_x86.h"
+
+#ifndef CK_X86_LAB_REPORT
+#define CK_X86_LAB_REPORT 0
+#endif
+
+#if defined(CK_X86_REPORT_HOST) || CK_X86_LAB_REPORT
+/* Line tags the iMac kernel prints (kmain_x86.c, pci_x86.c, ahci_x86.c,
+ * tg3_x86.c, ../disk/disk_nvme.c and the shared core). A new tag is sent
+ * only once it is added here. */
+static const char *const allowed[] = {
+    "AIENOS-IMAC-KERNEL-", "acpi_rsdp:", "ahci:", "ahci_disk:", "ahci_gpt:", "ahci_port:", "ahci_read:",
+    "apic:", "cpu:", "descriptors:", "exit_boot_services:", "firmware_cpl:", "firmware_vendor:",
+    "guard_page:", "handoff:", "image:", "kernel:", "kernel_impl:", "madt:", "memory:", "net:", "net_tg3:",
+    "note:", "nvme:", "nvme_disk:", "nvme_gpt:", "nvme_read:", "paging:", "panic:", "pci:", "power:",
+    "report:", "report_kind:", "screen:", "smp:", "stack:", "storage:", "summary:", "timebase:",
+    "timer_irq:", "timer_stats:",
+};
+
+static int line_allowed(const char *l, size_t n)
+{
+    if (n > CK_X86_REPORT_LINE_MAX)
+        return 0;
+    for (size_t i = 0; i < n; i++)
+        if (l[i] < 0x20 || l[i] > 0x7e)
+            return 0;
+    for (size_t t = 0; t < sizeof allowed / sizeof allowed[0]; t++) {
+        size_t k = strlen(allowed[t]);
+        if (n >= k && !memcmp(l, allowed[t], k))
+            return 1;
+    }
+    return 0;
+}
+
+size_t ck_x86_report_filter(const char *log, size_t len, char *out, size_t cap, unsigned *dropped)
+{
+    size_t w = 0;
+    unsigned d = 0;
+    if (!log || !out)
+        len = 0;
+    for (size_t i = 0; i < len;) {
+        size_t n = 0;
+        while (i + n < len && log[i + n] != '\n')
+            n++;
+        if (i + n == len) { /* an unfinished last line is never sent */
+            d++;
+            break;
+        }
+        if (line_allowed(log + i, n) && w + n + 1 <= cap) {
+            memcpy(out + w, log + i, n + 1);
+            w += n + 1;
+        } else {
+            d++;
+        }
+        i += n + 1;
+    }
+    if (dropped)
+        *dropped = d;
+    return w;
+}
 
 #define REPORT_HDR "AIENOS-IMAC-REPORT v=1 "
 
@@ -98,13 +166,26 @@ size_t ck_x86_report_frame(const uint8_t mac[6], uint64_t run, const char *log, 
         return 0;
     return ew;
 }
+#endif
 
 #ifndef CK_X86_REPORT_HOST
+#if !CK_X86_LAB_REPORT
+/* Default image: no network report. Holds for `seconds` and returns 0. */
+unsigned ck_x86_report_hold(uint64_t tsc_hz, unsigned seconds)
+{
+    uint64_t end = ck_rdtsc() + (uint64_t)seconds * tsc_hz;
+    ck_puts("report: network report off (laboratory builds only: make imac-kernel IMAC_LAB_REPORT=1)\n");
+    while (ck_rdtsc() < end)
+        ck_pause();
+    return 0;
+}
+#else
 /* Holds for `seconds`, sending the report every 2 s while the link is up.
  * Without a working network it only waits. Returns the rounds sent. */
 unsigned ck_x86_report_hold(uint64_t tsc_hz, unsigned seconds)
 {
     static uint8_t frame[1600];
+    static char kept[CK_X86_REPORT_MAX];
     static int busy; /* a fault while sending ends up here again: only wait */
     uint64_t t0 = ck_rdtsc(), end = t0 + (uint64_t)seconds * tsc_hz, next = t0;
     if (busy++ || !ck_x86_tg3_ready()) {
@@ -112,10 +193,14 @@ unsigned ck_x86_report_hold(uint64_t tsc_hz, unsigned seconds)
             ck_pause();
         return 0;
     }
-    ck_printf("report: sending this screen to UDP port %u (broadcast) every 2 s during the hold\n",
+    ck_printf("report: LAB BUILD sending allowlisted lines of this screen to UDP port %u (broadcast, "
+              "unauthenticated) every 2 s during the hold\n",
               (unsigned)CK_X86_REPORT_PORT);
-    size_t len;
-    const char *log = ck_x86_console_log(&len);
+    size_t raw;
+    unsigned dropped;
+    const char *screen = ck_x86_console_log(&raw);
+    size_t len = ck_x86_report_filter(screen, raw, kept, sizeof kept, &dropped);
+    const char *log = kept;
     unsigned parts = ck_x86_report_parts(len), rounds = 0, failed = 0;
     uint8_t mac[6];
     ck_x86_tg3_mac(mac);
@@ -138,7 +223,9 @@ unsigned ck_x86_report_hold(uint64_t tsc_hz, unsigned seconds)
         rounds++;
     }
     /* Printed after the snapshot, so only the screen shows it. */
-    ck_printf("report: rounds=%u parts=%u bytes=%u send_failures=%u\n", rounds, parts, (unsigned)len, failed);
+    ck_printf("report: rounds=%u parts=%u bytes=%u lines_dropped=%u send_failures=%u\n", rounds, parts,
+              (unsigned)len, dropped, failed);
     return rounds;
 }
+#endif
 #endif

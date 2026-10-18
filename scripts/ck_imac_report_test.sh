@@ -1,7 +1,8 @@
 #!/bin/sh
 # ck_imac_report_test.sh -- host test of the iMac kernel's network report:
 # the frames x86/report_x86.c builds (Ethernet broadcast, IPv4, UDP with a
-# checksum, part headers) and the receiver tools/ck_imac_report_listen.c,
+# checksum, part headers), the allowlist filter (sentinel chat/key/memory
+# lines never reach a frame) and the receiver tools/ck_imac_report_listen.c,
 # which must rebuild the report byte for byte from parts sent out of order
 # and repeated. Hosted only; the BCM57766 itself cannot be emulated.
 # Ends with "AIENOS_IMAC_REPORT: PASS" or "AIENOS_IMAC_REPORT: FAIL <why>".
@@ -33,7 +34,7 @@ until grep -q "^complete run=0123456789abcdef " "$W/out/listen.log"; do
     i=$((i + 1)); [ $i -gt 50 ] && fail "report not completed: $(cat "$W/out/listen.log")"
     sleep 0.1
 done
-cmp -s "$W/sent.txt" "$W/out/imac-0123456789abcdef.txt" || fail "rebuilt report differs"
+cmp -s "$W/sent.txt" "$W/out/imac-0123456789abcdef.unauthenticated.txt" || fail "rebuilt report differs"
 [ "$(grep -c '^complete ' "$W/out/listen.log")" = 1 ] || fail "report written more than once"
 grep -q '^ignored' "$W/out/listen.log" && fail "listener ignored a valid part"
 echo "AIENOS_IMAC_REPORT: PASS"

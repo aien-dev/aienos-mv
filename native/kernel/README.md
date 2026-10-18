@@ -173,13 +173,18 @@ driver (`x86/tg3_x86.c`: core reset, bootcode handshake, rings in one DMA block
 below 4 GiB, PHY autonegotiation; it never receives and the MAC address is
 never printed). The last line before the hold is a one-line `summary:`. It
 prints `kernel: alive`, holds the screen 60 s and powers off through ACPI S5.
-During the hold `x86/report_x86.c` sends the RAM copy of the console (first
-16 KiB) every 2 s while the link is up, as UDP broadcast from 0.0.0.0 to
+In a laboratory diagnostic build only (`make imac-kernel IMAC_LAB_REPORT=1`;
+the default image sends nothing and the link step checks it holds no report
+builder) `x86/report_x86.c` sends, during the hold, the lines of the console's
+RAM copy (first 16 KiB) that start with an allowlisted kernel tag (any other
+line, such as chat, memory or keys, is dropped) every 2 s while the link is
+up, as unauthenticated UDP broadcast from 0.0.0.0 to
 255.255.255.255 port 47031 (TTL 1), in 1 KiB parts that each start with
 `AIENOS-IMAC-REPORT v=1 run=<id> part=<i>/<n> bytes=<total>`.
 `tools/ck_imac_report_listen.c` (`make -C native/kernel imac-report-listen`,
 run as `ck_imac_report_listen 47031 OUTDIR SECONDS`) rebuilds each run into
-`OUTDIR/imac-<run>.txt`; `scripts/ck_imac_report_test.sh` checks frames and
+`OUTDIR/imac-<run>.unauthenticated.txt` (never evidence, a receipt or a
+command: anyone on the LAN can send that format); `scripts/ck_imac_report_test.sh` checks the filter, frames and
 reassembly on the host, so a wired iMac no longer needs a photo of its screen. Output: the GOP framebuffer
 (`core/fbcon.c`, lines from before ExitBootServices replayed onto it) and COM1
 when a 16550 answers there (QEMU; the iMac has none). Shared, unchanged:
