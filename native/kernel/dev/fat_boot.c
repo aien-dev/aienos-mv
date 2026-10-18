@@ -266,11 +266,15 @@ static int as_written(uint8_t *got, const uint8_t *want, uint32_t n, int kind, c
     } else {
         for (uint32_t e = 0; e + 32u <= n; e += 32u) {
             got[e + 18] = want[e + 18], got[e + 19] = want[e + 19]; /* DIR_LstAccDate */
-            /* Firmware may mark an existing directory for backup. Only
-             * normalize ARCHIVE on expected directories, never their type,
-             * volume labels, or unused entries (FAT32 spec DIR_Attr). */
-            if (want[e] && (want[e + 11] & 0x10))
+            /* Firmware may mark an existing directory for backup and stamp
+             * it as written (Apple's does both to \EFI when it starts the
+             * kernel). Only normalize ARCHIVE, DIR_WrtTime and DIR_WrtDate
+             * on expected directories, never their type, volume labels, or
+             * unused entries (FAT32 spec DIR_Attr). */
+            if (want[e] && (want[e + 11] & 0x10)) {
                 got[e + 11] = (uint8_t)((got[e + 11] & ~0x20u) | (want[e + 11] & 0x20u));
+                copy(got + e + 22, want + e + 22, 4);
+            }
         }
     }
     for (uint32_t i = 0; i < n; i++)

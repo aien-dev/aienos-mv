@@ -189,6 +189,14 @@ int main(int argc, char **argv)
         /* Apple sets ATTR_ARCHIVE on the root's EFI directory during boot. */
         CHECK(poke(&p, efi - 1u, 32u + 11u, 0x20) == 0);
         CHECK(ck_fatb_state_read(&p.dev, serial, &st) == CK_FATB_OK && st.ours && st.slot == 0);
+        /* ... and stamps it written (real machine: root byte 54 = 0x82); a
+         * file entry's stamp is not taken over */
+        CHECK(poke(&p, efi - 1u, 32u + 22u, 0x82) == 0 && poke(&p, efi - 1u, 32u + 25u, 0x5a) == 0);
+        CHECK(ck_fatb_state_read(&p.dev, serial, &st) == CK_FATB_OK && st.ours && st.slot == 0);
+        CHECK(poke(&p, efi - 1u, 32u + 22u, 0x82) == 0 && poke(&p, efi - 1u, 32u + 25u, 0x5a) == 0);
+        CHECK(poke(&p, efi - 1u, 22u, 0x01) == 0); /* the volume label entry: strict */
+        CHECK(ck_fatb_state_read(&p.dev, serial, &st) == CK_FATB_OK && !st.ours && st.at == 22u);
+        CHECK(poke(&p, efi - 1u, 22u, 0x01) == 0);
         /* The directory type is still structural, even with ARCHIVE set. */
         CHECK(poke(&p, efi - 1u, 32u + 11u, 0x10) == 0);
         CHECK(ck_fatb_state_read(&p.dev, serial, &st) == CK_FATB_OK && !st.ours && st.where &&

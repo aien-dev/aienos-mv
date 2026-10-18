@@ -53,6 +53,26 @@ static int guid_eq(const EFI_GUID *a, const EFI_GUID *b)
     return memcmp(a, b, sizeof *a) == 0;
 }
 
+/* The night's empty sky (ui/night.c, no stars yet: about 2, 2, 6) over the
+ * whole screen, before ExitBootServices: the firmware's own shutdown takes
+ * about 1.2 s on the real machine, and the firmware's picture should not be
+ * what is seen meanwhile. Eight bytes at a time, two pixels per store. */
+static void night_ground(const struct ck_handoff *h)
+{
+    if (h->fb_status != CK_HANDOFF_FB_PRESENT || !h->fb_base || h->fb_pitch < h->fb_width ||
+        (uint64_t)h->fb_pitch * h->fb_height * 4u > h->fb_size)
+        return;
+    uint64_t px = h->fb_format == CK_HANDOFF_FB_BGRX ? 0x00020206u : 0x00060202u;
+    px |= px << 32;
+    for (uint32_t y = 0; y < h->fb_height; y++) {
+        volatile uint64_t *row = (volatile uint64_t *)(uintptr_t)(h->fb_base + (uint64_t)y * h->fb_pitch * 4u);
+        for (uint32_t x = 0; x + 1u < h->fb_width; x += 2u)
+            row[x / 2u] = px;
+        if (h->fb_width & 1u)
+            ((volatile uint32_t *)row)[h->fb_width - 1u] = (uint32_t)px;
+    }
+}
+
 EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE *st)
 {
     struct ck_handoff *h = &handoff;
@@ -96,6 +116,8 @@ EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE *st)
     ck_printf("firmware_cpl: %u\n", h->firmware_el);
     ck_boot_gop_find(st, h);
     ck_x86_step("gop");
+    night_ground(h);
+    ck_x86_step("paint");
     ck_printf("acpi_rsdp: 0x%llx\n", (unsigned long long)h->rsdp);
     ck_printf("image: 0x%llx-0x%llx\n", (unsigned long long)h->image_base, (unsigned long long)h->image_end);
     ck_puts("exiting firmware boot services\n");

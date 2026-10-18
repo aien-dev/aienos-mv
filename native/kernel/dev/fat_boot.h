@@ -71,8 +71,9 @@ typedef struct {
  * end-of-chain mark). Reads only. Fields that FAT drivers change in normal use
  * are not compared: the boot sector's BS_Reserved1 (the NT dirty flag),
  * FAT[1]'s ClnShutBitMask and HrdErrBitMask, each directory entry's
- * DIR_LstAccDate, and ATTR_ARCHIVE on the expected directory entries (Apple's
- * firmware sets it on the EFI directory when it starts the kernel).
+ * DIR_LstAccDate, and ATTR_ARCHIVE, DIR_WrtTime and DIR_WrtDate on the
+ * expected directory entries (Apple's firmware sets them on the EFI directory
+ * when it starts the kernel).
  * CK_FATB_OK (also for "not ours") or CK_FATB_EGEOM / CK_FATB_EIO. */
 int ck_fatb_state_read(const disk_dev *p, uint32_t serial, ck_fatb_state *st);
 
