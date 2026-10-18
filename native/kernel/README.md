@@ -296,8 +296,16 @@ when a note is saved or handed back. Each Enter gets a local answer from
 talk, your name for the session, facts about the machine, how long it has been
 awake and sums said in words ("what is 12 times 4"); anything else gives "I
 don't know that yet." Answers print as `allen: <answer>` on the console. The
-window has no idle countdown: it stays up until "goodbye" (then ACPI S5, or a
-restart in the lab image) or the power button. Unplugging the keyboard and plugging it
+window has no countdown to power-off. "goodbye", a tap of the power button, or
+10 minutes without a key (`CK_X86_IDLE_S`, default 600) puts Allen to sleep: the
+screen goes dark and nothing moves, the three drawing cores rest in MWAIT (the
+deepest of C6, C3 and C1 that CPUID lists) until he wakes, and the boot core
+halts between keyboard polls every 20 ms on a one-shot LAPIC timer. Any key (not
+typed) or another tap wakes him; holding the button 4 s is the chipset's hard
+off. On the iMac the processor's own energy counter (RAPL) gives
+`power: processor X.Y W on average over N s awake|asleep` at each sleep and wake
+(never under a hypervisor). The display's backlight stays lit while he sleeps:
+the kernel has no driver for the iMac panel's backlight yet. Unplugging the keyboard and plugging it
 (or another) back in works: the driver watches the keyboard's root port, prints
 `keyboard: unplugged`, releases the old device and runs discovery again, then
 `keyboard: ready` once more (the QEMU test does exactly this from outside the

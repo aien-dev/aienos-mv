@@ -2377,6 +2377,11 @@ CK_X86_WX_MUTATE ?= 0
 ifneq ($(CK_X86_WX_MUTATE),0)
 IMACKERN_CFLAGS += -DCK_X86_WX_MUTATE=$(CK_X86_WX_MUTATE)
 endif
+# CK_X86_IDLE_S: seconds without a key before Allen's screen sleeps (kmain_x86.c default 600, 0 never).
+# Set only for test builds (scripts/qemu_ck_imac_keyboard_test.sh uses 25), into their own OUT directory.
+ifdef CK_X86_IDLE_S
+IMACKERN_CFLAGS += -DCK_X86_IDLE_S=$(CK_X86_IDLE_S)u
+endif
 
 # ---- NETLDR.EFI: the lab network loader for the 2017 iMac (x86_64) ----
 # native/boot/net_loader.c + netboot_proto.c (wire spec netboot_proto.h). Stays on the stick as

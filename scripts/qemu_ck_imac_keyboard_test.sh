@@ -4,7 +4,8 @@
 # about a 2017 iMac, its USB controller or any real keyboard.
 #
 # Builds IMACKERN.EFI (the default image) and boots it three times at once in QEMU q35
-# with OVMF and a qemu-xhci controller:
+# with OVMF and a qemu-xhci controller, plus a fourth machine on the same kernel built
+# with a 25 s idle time (CK_X86_IDLE_S=25, own object directory):
 #   hub     a usb-kbd behind a usb-hub (the shape of Apple's wired keyboards, which
 #           carry their own hub); keys are typed from OUTSIDE the guest through the
 #           QEMU monitor ("sendkey"): "Hello Allen" Enter, "xy" Backspace "z?!," Enter, then
@@ -16,11 +17,18 @@
 #           ("allen: Hello Humanity.", "allen: I don't know that yet.", plus the
 #           content-free "screen: Allen answered (11 characters in, 15 out)"), switch the
 #           screen to Allen's window (a QEMU screendump of it is kept as
-#           $out/allen-qemu.png), keep it up with no idle countdown (still on 70 s
-#           after the last key), sleep on "goodbye", wake on the power button or a key;
+#           $out/allen-qemu.png), keep it up with no countdown to power-off (still on and
+#           awake 70 s after the last key, the default idle time being 600 s), sleep on
+#           "goodbye", wake on the power button or a key;
 #   direct  a usb-kbd on a root port: found on that port;
 #   none    the controller with nothing on it: "keyboard: none (no USB keyboard
-#           found)" and the normal boot otherwise.
+#           found)" and the normal boot otherwise;
+#   idle    a usb-kbd on a root port and no key typed: 25 s after Allen's window
+#           opens the screen sleeps by itself ("power: no key for 25 s; the screen
+#           sleeps"), the cores rest (the startup line says how; QEMU's MWAIT does not
+#           really wait with more than one CPU, so nothing is measured here, and the
+#           processor meter stays off under a hypervisor), a key wakes him without
+#           being typed, a line typed after that is taken.
 # The kernel's lines reach the serial log through COM1, which QEMU has and the iMac
 # does not. Needs qemu-system-x86_64, OVMF, mtools and an x86_64 gcc. Final line:
 #     AIENOS_IMAC_KEYBOARD: PASS|FAIL|NOT_RUN [(...)]   exit 0 / 1 / 2 (tools) / 3 (NOT_RUN)
@@ -39,6 +47,7 @@ done
 out="${IMACKERN_OUT:-${repo_root}/target/native-kernel-imac-keyboard}"
 commit="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
 make -s -C native/kernel X86_CROSS="${cross}" OUT="${out}" AIENOS_COMMIT="${commit}" imac-kernel >/dev/null
+make -s -C native/kernel X86_CROSS="${cross}" OUT="${out}/idle" AIENOS_COMMIT="${commit}" CK_X86_IDLE_S=25 imac-kernel >/dev/null
 
 . "${repo_root}/scripts/lib_gate_hold.sh"
 if ! gh_quiet_check || ! gh_lock_take qemu_ck_imac_keyboard_test "${AIENOS_GATE_MINUTES:-30}"; then
@@ -61,6 +70,11 @@ truncate -s 64M "${img}"
 mformat -i "${img}" -F ::
 mmd -i "${img}" ::/EFI ::/EFI/BOOT
 mcopy -i "${img}" "${out}/IMACKERN.EFI" ::/EFI/BOOT/BOOTX64.EFI
+idle_img="${work}/idle-esp.img"
+truncate -s 64M "${idle_img}"
+mformat -i "${idle_img}" -F ::
+mmd -i "${idle_img}" ::/EFI ::/EFI/BOOT
+mcopy -i "${idle_img}" "${out}/idle/IMACKERN.EFI" ::/EFI/BOOT/BOOTX64.EFI
 
 fails=0
 chk() { # description, file, pattern
@@ -78,11 +92,12 @@ wait_for() {
     return 1
 }
 
-# start name usb-devices...: one QEMU in the background, monitor on a pipe.
+# start name usb-devices...: one QEMU in the background, monitor on a pipe
+# (START_IMG: another ESP image than the default kernel's).
 start() {
     local name="$1"; shift
     cp "${vars_fd}" "${work}/${name}.vars"
-    cp "${img}" "${work}/${name}.esp"
+    cp "${START_IMG:-${img}}" "${work}/${name}.esp"
     mkfifo "${work}/${name}.mon.in" "${work}/${name}.mon.out"
     : >"${work}/${name}.log"
     qemu-system-x86_64 -M q35 -accel tcg -cpu max -smp 2 -m 1024 \
@@ -103,6 +118,7 @@ stop() { local v="pid_$1"; kill "${!v}" 2>/dev/null || true; }
 start hub -device usb-hub,bus=xhci.0,port=1 -device usb-kbd,bus=xhci.0,port=1.1
 start direct -device usb-kbd,bus=xhci.0,port=1,id=kbd0
 start none
+START_IMG="${idle_img}" start idle -device usb-kbd,bus=xhci.0,port=1
 
 # Keys go in through the QEMU monitor (outside the guest), 0.15 s apart.
 typed_ok=0
@@ -143,15 +159,32 @@ wait_for direct 300 '^power: Allen.s window stays on' || true
 wait_for none 300 '^power: holding the screen' || true
 stop direct
 stop none
-# Allen's window has no idle countdown: 70 s after the last key (the text
-# screen's hold is 60 s) the hub run must still be up. Then "goodbye" puts
+# idle: nobody types; the screen must sleep by itself 25 s after the window
+# opens, then a key wakes him (not typed) and a line typed after it is taken.
+idle_slept=0; idle_woke=0
+if wait_for idle 300 '^keyboard: type a line and press Enter' && wait_for idle 120 '^power: Allen asleep'; then
+    idle_slept=1
+    exec 5>"${work}/idle.mon.in"
+    sleep 2
+    echo "sendkey x" >&5
+    if wait_for idle 30 '^power: Allen awake'; then
+        idle_woke=1
+        sleep 2
+        for k in o k ret; do echo "sendkey ${k}" >&5; sleep 0.15; done
+        wait_for idle 60 '^keyboard_line: ok$' || true
+    fi
+fi
+stop idle
+# Allen's window has no countdown to power-off, and the default idle time is
+# 600 s: 70 s after the last key (the text screen's hold is 60 s) the hub run
+# must still be up and awake. Then "goodbye" puts
 # Allen to sleep; QEMU's power button (monitor system_powerdown) wakes him,
 # taps him back to sleep, and a key wakes him without being typed.
 stayed=0
 slept=0; tap_woke=0; tap_slept=0; key_woke=0
 if [[ ${typed_ok} == 1 ]] && wait_for hub 60 "^allen: I don't know that yet\."; then
     sleep 70
-    running hub && ! has hub '^power: off' && stayed=1
+    running hub && ! has hub '^power: off' && ! has hub '^power: (no key|Allen asleep)' && stayed=1
     for k in g o o d b y e ret; do echo "sendkey ${k}" >&3; sleep 0.15; done
     if wait_for hub 60 '^power: Allen asleep'; then
         slept=1
@@ -181,7 +214,7 @@ if [[ ${typed_ok} == 1 ]] && wait_for hub 60 "^allen: I don't know that yet\."; 
 fi
 stop hub
 
-for r in hub direct none; do txt "${r}" >"${work}/${r}.txt"; done
+for r in hub direct none idle; do txt "${r}" >"${work}/${r}.txt"; done
 
 echo "== hub: usb-kbd behind usb-hub =="
 chk "hub: controller running" "${work}/hub.txt" '^xhci: ctrl=0 running version=[0-9a-f]+ ports=[1-9][0-9]* slots=[1-8] context_bytes=(32|64) scratchpads=[0-9]+$'
@@ -190,6 +223,7 @@ chk "hub: keyboard found behind the hub" "${work}/hub.txt" '^keyboard: ready \(c
 chk "hub: typing prompt" "${work}/hub.txt" '^keyboard: type a line and press Enter; goodbye puts Allen to sleep, any key wakes him, holding the power button 4 s turns the computer off$'
 chk "hub: no countdown while Allen's window is up" "${work}/hub.txt" '^power: Allen.s window stays on; goodbye or a power-button tap puts him to sleep, hold the button 4 s to turn off$'
 chk "hub: power button watched" "${work}/hub.txt" '^power: button watched at PM1 status port 0x[0-9a-f]+ '
+chk "hub: default idle time 600 s" "${work}/hub.txt" '^power: the screen sleeps after 600 s without a key$'
 
 [[ ${typed_ok} == 1 ]] && echo "PASS  hub: keys sent from outside the guest" || { echo "FAIL  hub: keys not sent"; fails=$((fails + 1)); }
 chk "hub: Allen's window took the screen" "${work}/hub.txt" '^screen: Allen.s window \([0-9]+x[0-9]+, [0-9]+ MiB drawing memory\)$'
@@ -200,7 +234,7 @@ chk "hub: the answer reported by lengths only (11 characters in, 15 out)" "${wor
 [[ -s "${out}/allen-qemu.png" ]] && echo "PASS  hub: screenshot of Allen's window kept (${out}/allen-qemu.png)" || { echo "FAIL  hub: no screenshot"; fails=$((fails + 1)); }
 chk "hub: backspace edits the line; shifted and plain symbols typed" "${work}/hub.txt" '^keyboard_line: xz\?!,$'
 chk "hub: Allen says what it does not know" "${work}/hub.txt" "^allen: I don't know that yet\."
-[[ ${stayed} == 1 ]] && echo "PASS  hub: still on 70 s after the last key (no idle countdown)" || { echo "FAIL  hub: Allen's window did not stay up"; fails=$((fails + 1)); }
+[[ ${stayed} == 1 ]] && echo "PASS  hub: still on and awake 70 s after the last key (idle time 600 s)" || { echo "FAIL  hub: Allen's window did not stay up and awake"; fails=$((fails + 1)); }
 chk "hub: Allen says goodbye" "${work}/hub.txt" '^allen: Goodbye\. Until next time\.$'
 chk "hub: kernel alive" "${work}/hub.txt" '^kernel: alive$'
 # Goodbye sleeps instead of powering off; a 4 s hold is the chipset's own hard off and QEMU cannot hold the button.
@@ -236,14 +270,27 @@ else
     echo "PASS  none: text screen kept without a keyboard"
 fi
 
-for r in hub direct none; do
+echo "== idle: nobody types, idle time 25 s =="
+chk "idle: keyboard found" "${work}/idle.txt" '^keyboard: ready \(controller 0, port [0-9]+, (full|high) speed, slot 1, endpoint 0x8[1-9a-f]\)$'
+chk "idle: idle time 25 s" "${work}/idle.txt" '^power: the screen sleeps after 25 s without a key$'
+# Either way of resting is accepted: whether QEMU's -cpu max lists MONITOR/MWAIT is QEMU's choice.
+chk "idle: how the cores rest, meter off under a hypervisor" "${work}/idle.txt" '^power: asleep, the drawing cores (rest in mwait \(hint 0x[0-9a-f]+\) and the boot core in mwait|spin \(no MONITOR/MWAIT\) and the boot core halts) between keyboard polls every 20 ms; meter: none \(under a hypervisor\)$'
+chk "idle: the screen slept by itself" "${work}/idle.txt" '^power: no key for 25 s; the screen sleeps$'
+[[ ${idle_slept} == 1 ]] && echo "PASS  idle: Allen asleep with no key typed" || { echo "FAIL  idle: Allen did not fall asleep by himself"; fails=$((fails + 1)); }
+[[ ${idle_woke} == 1 ]] && echo "PASS  idle: a key woke Allen" || { echo "FAIL  idle: key did not wake Allen"; fails=$((fails + 1)); }
+if grep -aqE '^keyboard_line: xok$' "${work}/idle.txt"; then echo "FAIL  idle: the waking key was typed"; fails=$((fails + 1)); else echo "PASS  idle: the waking key was not typed"; fi
+chk "idle: typing works again after waking" "${work}/idle.txt" '^keyboard_line: ok$'
+if grep -aqE '^power: processor ' "${work}/idle.txt"; then echo "FAIL  idle: processor meter read under a hypervisor"; fails=$((fails + 1)); else echo "PASS  idle: no processor meter under a hypervisor"; fi
+chk "idle: kernel alive" "${work}/idle.txt" '^kernel: alive$'
+
+for r in hub direct none idle; do
     if grep -aqE '^(panic|power: still running|power: halted)' "${work}/${r}.txt"; then
         echo "FAIL  ${r}: panic or failed power off"; fails=$((fails + 1))
     else
         echo "PASS  ${r}: no panic"
     fi
 done
-for r in hub direct none; do echo "---- ${r} serial (keyboard lines) ----"; grep -aE '^(pci: xhci|xhci|usb|keyboard)' "${work}/${r}.txt" || true; done
+for r in hub direct none idle; do echo "---- ${r} serial (keyboard and power lines) ----"; grep -aE '^(pci: xhci|xhci|usb|keyboard|power)' "${work}/${r}.txt" || true; done
 if [[ ${fails} == 0 ]]; then
     echo "${tag}: PASS"
     exit 0

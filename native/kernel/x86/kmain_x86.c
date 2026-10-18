@@ -45,6 +45,9 @@
 #ifndef CK_X86_HOLD_S
 #define CK_X86_HOLD_S 60u
 #endif
+#ifndef CK_X86_IDLE_S
+#define CK_X86_IDLE_S 600u /* Allen's window: the screen sleeps after this long without a key (0: never) */
+#endif
 
 #define SEL_CODE 0x08
 #define SEL_DATA 0x10
@@ -262,12 +265,14 @@ static void acpi_reset(void)
  * (svc/allen_reply.c). Every Enter gets an answer on the console
  * ("allen: ..."); when a keyboard is ready and the RAM for drawing is there,
  * the screen switches from the boot report to Allen's window, which stays
- * up (no idle countdown); "goodbye" or a tap of the power button puts Allen to
- * sleep (dark screen), a key or another tap wakes him; holding the button 4 s
+ * up (no countdown to power-off); "goodbye", a tap of the power button or
+ * CK_X86_IDLE_S without a key puts Allen to sleep (dark screen, the cores
+ * resting), a key or another tap wakes him; holding the button 4 s
  * is the hardware power-off. Without either, the text screen and its timed hold stay as they were. */
 static int allen_on;
 static uint64_t allen_bye; /* TSC when Allen said goodbye; 0 = still talking */
 static uint64_t allen_woke; /* TSC when Allen's window took the screen */
+static uint64_t allen_key;  /* TSC of the last key, or of waking; the idle timer counts from it */
 static int allen_asleep;  /* the screen is dark; a key or the power button wakes him */
 static uint16_t pm1_sts;  /* PM1a status port (FADT), 0 = no power-button watch */
 static uint64_t pwr_last; /* TSC of the last power-button tap taken */
@@ -318,15 +323,123 @@ static int power_button_tapped(void)
     pwr_last = now;
     return 1;
 }
+/* Resting while Allen sleeps. Nothing on the screen moves then, so the
+ * drawing cores wait in MWAIT on park.gen until a write to it (Allen waking,
+ * or draw_stop) instead of spinning; the boot core, which still polls the
+ * keyboard and the power button, halts between polls until a one-shot LAPIC
+ * timer interrupt REST_MS later. The MWAIT hint is the deepest of C6, C3 and
+ * C1 that CPUID leaf 5 lists (an MWAIT C-state the firmware limits is entered
+ * as a shallower one). Without MONITOR/MWAIT the drawing cores spin as before
+ * and the boot core uses HLT. */
+#define REST_MS 20u
+static struct {
+    volatile uint32_t gen;
+    uint8_t pad[60]; /* alone on its 64-byte line: only a wake writes it */
+} park __attribute__((aligned(64)));
+static int rest_mwait;
+static uint32_t rest_hint, lapic_per_ms;
+
+static void rest_probe(uint32_t lapic_hz)
+{
+    uint32_t r[4];
+    lapic_per_ms = lapic_hz / 1000u;
+    ck_cpuid(0, 0, r);
+    uint32_t max = r[0];
+    ck_cpuid(1, 0, r);
+    if (max < 5 || !(r[2] & 1u << 3))
+        return;
+    ck_cpuid(5, 0, r); /* EDX: 4 bits of sub-states per MWAIT C-state, C0 first; hint (n - 1) << 4 for Cn */
+    rest_mwait = 1;
+    rest_hint = (r[3] >> 12 & 0xfu) ? 0x20u : (r[3] >> 8 & 0xfu) ? 0x10u : 0x00u;
+}
+
+/* A drawing core while the screen is dark: waits until park.gen is no longer g. */
+static void rest_wait(uint32_t g)
+{
+    if (!rest_mwait) {
+        ck_pause();
+        return;
+    }
+    __asm__ volatile("sfence" ::: "memory"); /* the last strips leave the write-combining buffers first */
+    __asm__ volatile("monitor" ::"a"(&park.gen), "c"(0), "d"(0));
+    if (__atomic_load_n(&park.gen, __ATOMIC_ACQUIRE) == g)
+        __asm__ volatile("mwait" ::"a"(rest_hint), "c"(0) : "memory");
+}
+static void rest_wake(void) { __atomic_fetch_add(&park.gen, 1, __ATOMIC_RELEASE); }
+static void rest_boot(void); /* after the LAPIC registers, below */
+
+/* The processor's own energy counter (RAPL MSR_PKG_ENERGY_STATUS 0x611, units
+ * in MSR_RAPL_POWER_UNIT 0x606 bits 12:8): read only on Intel client cores from
+ * Skylake on (the iMac's i5-7500 is model 0x9e) and never under a hypervisor,
+ * where the MSR may not exist and reading it would fault. 32 bits that wrap in
+ * about an hour at 65 W, so sampled each second into microjoules. */
+static struct {
+    int on;
+    uint32_t esu, last;
+    uint64_t uj, t0, next;
+} meter;
+
+static const char *meter_start(void)
+{
+    static const uint8_t models[] = {0x4e, 0x5e, 0x8e, 0x9e, 0xa5, 0xa6};
+    uint32_t r[4];
+    ck_cpuid(0, 0, r);
+    if (r[1] != 0x756e6547u) /* "Genu" */
+        return "none (not an Intel processor)";
+    ck_cpuid(1, 0, r);
+    if (r[2] >> 31 & 1)
+        return "none (under a hypervisor)";
+    uint32_t family = r[0] >> 8 & 0xfu, model = (r[0] >> 4 & 0xfu) | (r[0] >> 12 & 0xf0u);
+    int known = 0;
+    for (unsigned i = 0; i < sizeof models; i++)
+        known |= family == 6 && model == models[i];
+    if (!known)
+        return "none (not an Intel client core from Skylake on)";
+    meter.esu = (uint32_t)(ck_rdmsr(0x606) >> 8 & 0x1fu);
+    meter.last = (uint32_t)ck_rdmsr(0x611);
+    meter.t0 = meter.next = ck_rdtsc();
+    meter.on = 1;
+    return "rapl package";
+}
+static void meter_step(uint64_t now)
+{
+    if (!meter.on || now < meter.next)
+        return;
+    uint32_t e = (uint32_t)ck_rdmsr(0x611);
+    meter.uj += ((uint64_t)(uint32_t)(e - meter.last) * 1000000u) >> meter.esu;
+    meter.last = e;
+    meter.next = now + tsc_hz;
+}
+/* The processor's average since the last line, then the count starts again. */
+static void meter_line(const char *when)
+{
+    if (!meter.on)
+        return;
+    uint64_t now = ck_rdtsc();
+    meter.next = 0;
+    meter_step(now);
+    uint64_t ms = (now - meter.t0) * 1000u / tsc_hz;
+    if (ms >= 1000) {
+        uint64_t mw = meter.uj / ms;
+        ck_printf("power: processor %llu.%llu W on average over %llu s %s\n", (unsigned long long)(mw / 1000),
+                  (unsigned long long)(mw / 100 % 10), (unsigned long long)(ms / 1000), when);
+    }
+    meter.uj = 0;
+    meter.t0 = now;
+}
+
 static void allen_sleep(int on)
 {
     if (allen_asleep == on)
         return;
-    allen_asleep = on;
+    meter_line(on ? "awake" : "asleep");
+    __atomic_store_n(&allen_asleep, on, __ATOMIC_RELEASE);
     ck_allen_ui_sleep(on, ck_rdtsc());
     if (on)
         ck_puts("power: Allen asleep (any key or a tap of the power button wakes him)\n");
     else {
+        rest_wake(); /* after the UI has the news: a woken core draws the sky again */
+        allen_key = ck_rdtsc();
         ck_x86_kbd_discard();
         ck_puts("power: Allen awake\n");
     }
@@ -351,6 +464,7 @@ static ck_allen_notes allen_notes; /* loaded from disk at the window, or empty *
 
 static void allen_edit(const char *buf, unsigned len)
 {
+    allen_key = ck_rdtsc();
     if (allen_asleep) { /* the key only wakes him */
         allen_sleep(0);
         return;
@@ -388,6 +502,7 @@ static void allen_map(void)
 
 static void allen_line(const char *text)
 {
+    allen_key = ck_rdtsc();
     if (allen_asleep) {
         allen_sleep(0);
         return;
@@ -454,16 +569,23 @@ static void night_tick(void)
 }
 
 /* The secondary cores' work while the night is up; each returns to its halt
- * once draw_stop clears draw_run. */
+ * once draw_stop clears draw_run. While Allen sleeps they rest (rest_wait):
+ * the frame core once its frame has put the dark screen up, the helpers at
+ * once (the frame core draws any strip they leave). park.gen is read before
+ * the state it guards, so a wake between the two is never missed. */
 static void draw_loop(void)
 {
     __atomic_store_n(&draw_on, 1, __ATOMIC_RELEASE);
     while (__atomic_load_n(&draw_run, __ATOMIC_ACQUIRE)) {
+        uint32_t g = __atomic_load_n(&park.gen, __ATOMIC_ACQUIRE);
         while (__atomic_test_and_set(&draw_lock, __ATOMIC_ACQUIRE))
             ck_pause();
         int drew = ck_allen_ui_tick(ck_rdtsc());
+        int dark = ck_allen_ui_asleep();
         __atomic_clear(&draw_lock, __ATOMIC_RELEASE);
-        if (!drew)
+        if (dark)
+            rest_wait(g);
+        else if (!drew)
             ck_pause();
     }
     __atomic_store_n(&draw_on, 0, __ATOMIC_RELEASE);
@@ -471,9 +593,15 @@ static void draw_loop(void)
 static void help_loop(void)
 {
     __atomic_fetch_add(&draw_helpers, 1, __ATOMIC_ACQ_REL);
-    while (__atomic_load_n(&draw_run, __ATOMIC_ACQUIRE))
-        if (!ck_allen_ui_help())
+    while (__atomic_load_n(&draw_run, __ATOMIC_ACQUIRE)) {
+        uint32_t g = __atomic_load_n(&park.gen, __ATOMIC_ACQUIRE);
+        if (ck_allen_ui_help())
+            continue;
+        if (__atomic_load_n(&allen_asleep, __ATOMIC_ACQUIRE))
+            rest_wait(g);
+        else
             ck_pause();
+    }
     __atomic_fetch_sub(&draw_helpers, 1, __ATOMIC_ACQ_REL);
 }
 
@@ -483,6 +611,7 @@ static void help_loop(void)
 static void draw_stop(void)
 {
     __atomic_store_n(&draw_run, 0, __ATOMIC_RELEASE);
+    rest_wake(); /* resting cores see draw_run cleared */
     if (!tsc_hz)
         return;
     uint64_t t0 = ck_rdtsc();
@@ -582,8 +711,19 @@ static void allen_window(void)
     ck_allen_ui_wake(footer, ck_rdtsc());
     ck_x86_kbd_sink(allen_edit, allen_line);
     allen_on = 1;
-    allen_woke = ck_rdtsc();
+    allen_woke = allen_key = ck_rdtsc();
     power_button_watch();
+    const char *meter_how = meter_start();
+    if (CK_X86_IDLE_S)
+        ck_printf("power: the screen sleeps after %u s without a key\n", (unsigned)CK_X86_IDLE_S);
+    else
+        ck_puts("power: the screen does not sleep by itself\n");
+    if (rest_mwait)
+        ck_printf("power: asleep, the drawing cores rest in mwait (hint 0x%x) and the boot core in mwait between "
+                  "keyboard polls every %u ms; meter: %s\n", rest_hint, REST_MS, meter_how);
+    else
+        ck_printf("power: asleep, the drawing cores spin (no MONITOR/MWAIT) and the boot core halts between "
+                  "keyboard polls every %u ms; meter: %s\n", REST_MS, meter_how);
     boot_times();
     night_stats("before Allen woke");
     allen_map(); /* the notes loaded from disk, before the first word */
@@ -609,15 +749,23 @@ void ck_x86_hold_step(uint64_t *end)
         told = 1;
         night_stats("by 20 s after Allen woke");
     }
-    /* No countdown while Allen's window is up. After goodbye, 4 s for the answer
-     * to appear, then Allen sleeps; a power-button tap sleeps or wakes him. */
+    /* No countdown to power-off while Allen's window is up. After goodbye, 4 s
+     * for the answer to appear, then Allen sleeps; CK_X86_IDLE_S without a key
+     * also sleeps him; a power-button tap sleeps or wakes him. */
     if (allen_bye && ck_rdtsc() - allen_bye > 4 * tsc_hz) {
         allen_bye = 0;
         allen_sleep(1);
     }
+    if (CK_X86_IDLE_S && !allen_asleep && ck_rdtsc() - allen_key > (uint64_t)CK_X86_IDLE_S * tsc_hz) {
+        ck_printf("power: no key for %u s; the screen sleeps\n", (unsigned)CK_X86_IDLE_S);
+        allen_sleep(1);
+    }
     if (power_button_tapped())
         allen_sleep(!allen_asleep);
+    meter_step(ck_rdtsc());
     *end = ~0ull;
+    if (allen_asleep)
+        rest_boot();
 }
 
 static __attribute__((noreturn)) void finish(void)
@@ -724,6 +872,26 @@ static uint32_t apic_rd(unsigned reg)
 #define APIC_TIMER_INIT 0x380
 #define APIC_TIMER_CUR 0x390
 #define APIC_TIMER_DIV 0x3e0
+
+/* The boot core between keyboard polls while Allen sleeps: a one-shot LAPIC
+ * timer REST_MS out, then STI;MWAIT (or STI;HLT) until its interrupt, which
+ * STI's one-instruction shadow cannot let slip in before the wait begins. The
+ * timer was proven at boot (apic_start: 20 ticks or a panic), every other
+ * interrupt line is masked, and a stray vector is only counted. */
+static void rest_boot(void)
+{
+    if (!lapic_per_ms)
+        return;
+    apic_wr(APIC_LVT_TIMER, VEC_TIMER); /* one shot, unmasked; divide 16 as measured */
+    apic_wr(APIC_TIMER_INIT, lapic_per_ms * REST_MS);
+    if (rest_mwait) {
+        __asm__ volatile("monitor" ::"a"(&park.gen), "c"(0), "d"(0));
+        __asm__ volatile("sti; mwait; cli" ::"a"(rest_hint), "c"(0) : "memory");
+    } else
+        __asm__ volatile("sti; hlt; cli" ::: "memory");
+    apic_wr(APIC_TIMER_INIT, 0);
+    apic_wr(APIC_LVT_TIMER, 1u << 16 | VEC_TIMER);
+}
 
 void ck_x86_trap(struct ck_x86_frame *f)
 {
@@ -1491,6 +1659,7 @@ static __attribute__((noreturn)) void kernel_main(void *arg)
               (unsigned long long)ar.max_us, (unsigned long long)stray_irqs);
     if (ar.ticks < 20)
         ck_panic("timer: only %llu ticks", (unsigned long long)ar.ticks);
+    rest_probe(ar.lapic_hz);
 
     struct smp_report sr = {0};
     smp_start(&ar, &sr);
