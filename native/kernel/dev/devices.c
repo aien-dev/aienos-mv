@@ -160,6 +160,10 @@ void ck_stage_quiesce(void)
     if (xhci_live) ck_printf("devices: quiesce before reset xhci=released-now\n");
 }
 
+#if defined(CK_ALLEN) && CK_ALLEN
+#include "../svc/allen_reply.h"
+void ck_allen_session_begin(const ck_allen_facts *facts);
+#endif
 #if defined(CK_CONSOLE_SESSION) && CK_CONSOLE_SESSION
 /* Final boot stage "console" (C3-1a, TEST-ONLY QEMU image built with
  * CK_CONSOLE_SESSION=1): runs after every other boot step. Serial (PL011) and
@@ -174,6 +178,12 @@ int ck_stage_console_session(void)
               "QEMU gate self-test only, never a PASS)\n");
 #endif
     ck_printf("console_session: begin (TEST-ONLY QEMU image, CK_CONSOLE_SESSION=1; QEMU only, hardware NOT_RUN)\n");
+#if defined(CK_ALLEN) && CK_ALLEN
+    {
+        ck_allen_facts facts = {0, 0, g_nvme.pf ? 1u : 0u, 0, 0};
+        ck_allen_session_begin(&facts);
+    }
+#endif
     int xrc = ck_xhci_session(&g_pci);
     ck_printf("console_session: xhci fence returned rc=%d state=%s\n", xrc, ck_xhci_state());
     ck_console_session_serial_only(); /* no-op once the exit came inside the fence */

@@ -942,6 +942,17 @@ FULL_NAME := full-test-console-mutation
 STAGE_DMA_FLAGS += -DCK_TEST_CONSOLE_MUTATION=1
 endif
 endif
+# CK_ALLEN=1 (with CK_CONSOLE_SESSION=1): the console session hands each line
+# to Allen (svc/allen_session.c) instead of the shell; own OUT full-allen/.
+ifneq ($(strip $(CK_ALLEN)),)
+ifneq ($(strip $(CK_CONSOLE_SESSION)),1)
+$(error CK_ALLEN needs CK_CONSOLE_SESSION=1)
+endif
+FULL_NAME := full-allen
+STAGE_DMA_FLAGS += -DCK_ALLEN=1
+STAGE_SRCS += $(KDIR)/svc/allen_reply.c $(KDIR)/svc/allen_notes.c $(KDIR)/svc/allen_memory.c \
+  $(KDIR)/svc/allen_session.c $(KDIR)/dev/disk_extent.c
+endif
 ifneq ($(strip $(CK_HARDWARE_STAGING)),)
 # Own OUT subdirectory: stage objects built with these flags never mix with
 # the default full image's objects.

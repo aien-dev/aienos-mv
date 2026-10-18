@@ -601,6 +601,13 @@ void ck_recovery_console_stub(void)
  * the existing ones. */
 /* Most bytes the start-of-session drain reads before it gives up. */
 #define CK_SESSION_DRAIN_MAX 4096u
+#if defined(CK_ALLEN) && CK_ALLEN
+#include "../svc/allen_reply.h"
+int ck_allen_session_line(const char *line);
+#define CK_SESSION_PROMPT "you> "
+#else
+#define CK_SESSION_PROMPT "console> "
+#endif
 static ck_line s_line;
 static ck_src_gate s_gate;
 static ck_hid_decoder s_dec;
@@ -638,7 +645,7 @@ static void sess_begin(const char *usb)
     ck_src_gate_reset(&s_gate);
     s_np = s_ip = 0;
     s_t0 = ck_time_us();
-    ck_puts("console> ");
+    ck_puts(CK_SESSION_PROMPT);
 }
 
 static void sess_drops(int owner, unsigned dropped)
@@ -666,12 +673,16 @@ static int sess_key(int src, ck_key_event ev)
     sess_drops(owner, ck_src_gate_release(&s_gate));
     int ex = 0;
     if (r == CK_LINE_DONE) {
+#if defined(CK_ALLEN) && CK_ALLEN
+        ex = ck_allen_session_line(s_line.buf); /* svc/allen_session.c: Allen answers, goodbye ends */
+#else
         ck_shell_ctx ctx = {ck_conventional_memory_kb(), ck_exception_level(), (ck_time_us() - s_t0) / 1000u, ck_commit()};
         ex = ck_shell_run(s_line.buf, &ctx, shell_out);
+#endif
         if (ex) ck_printf("console_session: exit (source=%s)\n", src_name(owner));
     }
     ck_line_reset(&s_line);
-    if (!ex) ck_puts("console> ");
+    if (!ex) ck_puts(CK_SESSION_PROMPT);
     return ex;
 }
 
