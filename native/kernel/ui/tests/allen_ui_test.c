@@ -499,7 +499,7 @@ int main(int argc, char **argv)
         for (uint32_t y = 0; y < H; y += 4)
             for (uint32_t x = 0; x < W; x += 4)
                 lit += (fb[(size_t)y * W + x] & 0xffffffu) != 0;
-        CHECK(lit > 0 && lit < 4000, "sleep: the screen is dark but for a faint mark");
+        CHECK(lit > 3 && lit < 4000, "sleep: the screen is dark but for a faint mark (more than one pixel)");
         memcpy(copy, fb, (size_t)W * H * 4);
         run_to(s0 + 2000);
         CHECK(differ(fb, copy, W, W, H, 0) == 0, "sleep: nothing moves while asleep");

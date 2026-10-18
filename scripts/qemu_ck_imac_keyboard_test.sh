@@ -187,7 +187,7 @@ echo "== hub: usb-kbd behind usb-hub =="
 chk "hub: controller running" "${work}/hub.txt" '^xhci: ctrl=0 running version=[0-9a-f]+ ports=[1-9][0-9]* slots=[1-8] context_bytes=(32|64) scratchpads=[0-9]+$'
 chk "hub: hub walked" "${work}/hub.txt" '^usb: port [0-9]+: hub, [1-9][0-9]* ports, (full|high) speed$'
 chk "hub: keyboard found behind the hub" "${work}/hub.txt" '^keyboard: ready \(controller 0, port [0-9]+\.1, full speed, slot [1-8], endpoint 0x8[1-9a-f]\)$'
-chk "hub: typing prompt" "${work}/hub.txt" '^keyboard: type a line and press Enter; Allen.s window stays on until you type goodbye$'
+chk "hub: typing prompt" "${work}/hub.txt" '^keyboard: type a line and press Enter; goodbye puts Allen to sleep, any key wakes him, holding the power button 4 s turns the computer off$'
 chk "hub: no countdown while Allen's window is up" "${work}/hub.txt" '^power: Allen.s window stays on; goodbye or a power-button tap puts him to sleep, hold the button 4 s to turn off$'
 chk "hub: power button watched" "${work}/hub.txt" '^power: button watched at PM1 status port 0x[0-9a-f]+ '
 

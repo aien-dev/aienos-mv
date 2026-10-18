@@ -130,6 +130,8 @@ static struct {
     uint8_t dci;
     int stopped;
     int rescan;        /* the keyboard's root port changed: look again */
+    unsigned errors;   /* failed reports or rediscoveries since the last good report or real (un)plug */
+    int gave_up;       /* KBD_ERR_MAX passed: waits for a real connect change */
     uint8_t kbd_port;  /* root port the keyboard (or its hub) sits on */
     const char *why;
     uint32_t last_code;
@@ -563,6 +565,7 @@ static int reset_root_port(uint8_t p, uint8_t *speed)
 
 /* Every connected root port in turn: reset it and enumerate what is behind it,
  * until a boot keyboard answers. Used at start and again after a replug. */
+static void kbd_ready(void);
 static int scan_ports(void)
 {
     for (unsigned p = 1; p <= x.max_ports && p <= 255u && x.ndev < DEV_MAX; p++) {
@@ -735,11 +738,8 @@ int ck_x86_xhci_start(unsigned ctrl, volatile uint8_t *bar0, struct ck_frames *f
     x.why = "";
     if (start() == 0) {
         g_cap = ck_rdtsc() + (uint64_t)CK_X86_KBD_MAX_S * hz;
-        ck_hid_decoder z = {{0}};
-        g_dec = z;
         ck_line_reset(&g_line);
-        ck_printf("keyboard: ready (controller %u, port %s, %s speed, slot %u, endpoint 0x%02x)\n", ctrl,
-                  x.kbd->path, speed_name(x.kbd->speed), x.kbd->slot, x.kd.endpoint);
+        kbd_ready();
         return 0;
     }
     ck_printf("xhci: ctrl=%u no keyboard (%s, completion %u)\n", ctrl, x.why, x.last_code);
@@ -778,6 +778,16 @@ static void echo(char c)
         ck_printf("%c", c);
 }
 
+/* The keyboard found (at start or after a replug): fresh decoder, one line for the log. */
+static void kbd_ready(void)
+{
+    ck_hid_decoder z = {{0}};
+    g_dec = z;
+    x.stopped = 0;
+    ck_printf("keyboard: ready (controller %u, port %s, %s speed, slot %u, endpoint 0x%02x)\n", x.ctrl, x.kbd->path,
+              speed_name(x.kbd->speed), x.kbd->slot, x.kd.endpoint);
+}
+
 /* Handles every key report that is waiting; 1 when at least one arrived. */
 static int poll_keys(void)
 {
@@ -785,19 +795,25 @@ static int poll_keys(void)
     uint32_t ev[4];
     while (ev_next(ev)) {
         if (ev_type(ev) == T_EV_PORT) {
-            if ((ev[0] >> 24) == x.kbd_port)
-                x.rescan = 1; /* the keyboard's own root port changed: it left, or came back */
+            unsigned p = ev[0] >> 24;
+            /* the keyboard's own root port changed: it left, or came back; while it is gone,
+             * a connect change on any port may be it in another socket */
+            if (p == x.kbd_port || (x.stopped && p >= 1 && p <= x.max_ports && (rd(x.op + OP_PORTSC(p)) & PS_CSC)))
+                x.rescan = 1;
             continue;
         }
-        if (ev_type(ev) != T_EV_TRANSFER || (ev[3] >> 24) != x.kbd->slot || ((ev[3] >> 16) & 0x1fu) != x.dci)
+        if (x.stopped || ev_type(ev) != T_EV_TRANSFER || (ev[3] >> 24) != x.kbd->slot ||
+            ((ev[3] >> 16) & 0x1fu) != x.dci)
             continue;
         uint32_t cc = ev_code(ev);
         if (cc != CC_SUCCESS && cc != CC_SHORT) {
             x.stopped = 1;
             x.rescan = 1;
+            x.errors++;
             ck_printf("\nkeyboard: unplugged (completion %u); plug it back in\n", cc);
             return got;
         }
+        x.errors = 0;
         uint8_t rep[CK_HID_REPORT_LEN];
         uint32_t n = CK_HID_REPORT_LEN - (ev[2] & 0xffffffu);
         const volatile uint8_t *b = page(P_BUF) + BUF_REPORT;
@@ -837,49 +853,78 @@ static int poll_keys(void)
 
 /* After a port change on the keyboard's root port: if the port is empty, say so once
  * and wait; once something is connected again, release the old slots and run the
- * start-up discovery again. A failed discovery waits for the next port change. */
+ * start-up discovery again on every occupied root port, so a keyboard moved to
+ * another socket is found too. A failed discovery, or a failed report from a
+ * keyboard that stays plugged in, is retried up to KBD_ERR_MAX times; after that
+ * only a real connect change (unplug, plug back in) starts discovery again, so a
+ * faulty keyboard cannot keep every port in reset. */
+#define KBD_ERR_MAX 3u
+/* 1 when any root port reports a connect status change (left set until kbd_rescan clears it). */
+static int any_connect_change(void)
+{
+    for (unsigned p = 1; p <= x.max_ports && p <= 255u; p++)
+        if (rd(x.op + OP_PORTSC(p)) & PS_CSC)
+            return 1;
+    return 0;
+}
 static void kbd_rescan(void)
 {
-    uint32_t off = x.op + OP_PORTSC(x.kbd_port);
-    uint32_t s = rd(off);
-    if (!x.stopped && (s & PS_CCS) && !(s & PS_CSC)) {
-        x.rescan = 0; /* still connected, no connect change: nothing to do */
-        return;
-    }
+    x.rescan = 0;
+    uint32_t s = rd(x.op + OP_PORTSC(x.kbd_port));
     if (!x.stopped) {
+        if ((s & PS_CCS) && !(s & PS_CSC))
+            return; /* still connected, no connect change: nothing to do */
         x.stopped = 1;
         ck_printf("\nkeyboard: unplugged; plug it back in\n");
     }
-    if (!(s & PS_CCS))
-        return; /* port empty: keep waiting for the next change */
-    wr(off, (s & PS_KEEP) | (s & PS_CHANGES)); /* clear the change bits (RW1C) */
-    forget_devices();
-    x.why = "";
-    x.rescan = 0;
-    if (scan_ports() == 0) {
-        uint32_t ev[4];
-        while (ev_next(ev)) /* port events raised by our own reset */
-            ;
-        ck_hid_decoder z = {{0}};
-        g_dec = z;
-        x.stopped = 0;
-        ck_printf("keyboard: ready (controller %u, port %s, %s speed, slot %u, endpoint 0x%02x)\n", x.ctrl, x.kbd->path,
-                  speed_name(x.kbd->speed), x.kbd->slot, x.kd.endpoint);
+    int any = 0;
+    for (unsigned p = 1; p <= x.max_ports && p <= 255u; p++) {
+        uint32_t off = x.op + OP_PORTSC(p), ps = rd(off);
+        if (ps & PS_CSC) {
+            x.errors = 0; /* a real plug or unplug: start counting afresh */
+            x.gave_up = 0;
+            wr(off, (ps & PS_KEEP) | (ps & PS_CHANGES)); /* clear the change bits (RW1C) */
+        }
+        if (ps & PS_CCS)
+            any = 1;
+    }
+    if (!any)
+        return; /* every port empty: keep waiting for the next change */
+    if (x.errors > KBD_ERR_MAX) {
+        if (!x.gave_up) {
+            x.gave_up = 1;
+            ck_printf("keyboard: gave up after %u tries; unplug it and plug it back in\n", x.errors);
+        }
         return;
     }
-    ck_printf("keyboard: not found after replug (%s, completion %u)\n", x.why, x.last_code);
+    forget_devices();
+    x.why = "";
+    int ok = scan_ports() == 0;
+    uint32_t ev[4];
+    while (ev_next(ev)) /* events raised by our own resets; a report that already came back is re-armed */
+        if (ok && ev_type(ev) == T_EV_TRANSFER && (ev[3] >> 24) == x.kbd->slot && ((ev[3] >> 16) & 0x1fu) == x.dci)
+            arm();
+    if (ok) {
+        kbd_ready();
+        return;
+    }
+    x.errors++;
+    x.rescan = x.errors <= KBD_ERR_MAX; /* try again on the next poll, up to the limit */
+    ck_printf("keyboard: not found after replug (%s, completion %u; try %u of %u)\n", x.why, x.last_code, x.errors,
+              KBD_ERR_MAX + 1u);
 }
 
 void ck_x86_kbd_hold_poll(uint64_t *end)
 {
     if (!x.kbd || !x.kbd_port)
         return;
-    int got = x.stopped ? 0 : poll_keys();
+    int got = poll_keys(); /* while stopped this only drains events and watches the ports */
     if (!x.rescan && !x.stopped) {
         uint32_t s = rd(x.op + OP_PORTSC(x.kbd_port));
         if ((s & PS_CSC) || !(s & PS_CCS))
             x.rescan = 1; /* missed event, or none sent: the port itself says so */
-    }
+    } else if (!x.rescan && any_connect_change())
+        x.rescan = 1; /* stopped: something was plugged in or pulled somewhere */
     if (x.rescan)
         kbd_rescan();
     if (!got)

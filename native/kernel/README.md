@@ -253,6 +253,21 @@ night line, the drawing cores, the codec mapped through the command rings,
 the chirp stream running and its stop. `AIENOS_IMAC_KERNEL_KEEP_DIR=<dir>`
 keeps each run's serial log and a `.wav` recording of its sound.
 
+**Microphone (first cut, 2026-10-18).** On the same controller the first input stream records
+1 s from the microphone right after the chirp starts, then `ck_x86_hda_step` stops it and prints
+what arrived: `sound: microphone recorded 1000 ms: N samples, P% nonzero (first at i), peak,
+rms, dc`. Behind a CS8409 on an Apple board the built-in microphone is a digital microphone
+wired into the bridge (iMac boards: pin 0x45 to converter 0x23, DMIC2; MacBook Pro boards: 0x44
+to 0x22, DMIC1; source: davidjo/snd_hda_macbookpro `patch_cirrus_real84.h`, which replays what
+macOS sends): coefficient 0x09 selects it, 0x82 turns on its clock, the pin gets In Enable
+(HDA 7.3.3.13) and the converter the stream tag, 44.1 kHz 24-bit. Any other codec gets its
+first analogue input converter fed by a microphone or line-in pin. The QEMU kernel test uses
+`hda-duplex` (line-in pin 0x05 to converter 0x04) and requires the path, the stream running
+and the summary; QEMU feeds silence, so 0% nonzero there is expected. On the iMac the summary
+line in the lab report is the receipt for whether any sound comes through; the mainline Linux
+driver never got this microphone working, so a silent first run is a real possibility and the
+next step is then the bridge's coefficient dump against the macOS replay.
+
 **Device inventory.** The PCI walk prints one `pci: fn bus:dev.fn id=vendor:device class=...` line
 for every function it finds, before the drivers claim theirs. On the real machine these lines are
 the ground truth for which drivers are still missing (lab report allowlist: `pci:`).

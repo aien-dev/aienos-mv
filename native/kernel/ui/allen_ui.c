@@ -509,7 +509,7 @@ static void dark(const ck_rect *r)
     for (int32_t y = r->y; y < r->y + r->h; y++)
         for (int32_t x = 0; x < r->w; x++)
             ui.back[(size_t)y * (size_t)ui.w + r->x + x] = 0;
-    ck_glow(&ui.cv, r, ui.cx * 16 + 8, ui.cy * 16 + 8, S(6), CK_RGB(120, 130, 160), 40);
+    ck_glow(&ui.cv, r, ui.cx * 16 + 8, ui.cy * 16 + 8, S(6) * 16, CK_RGB(120, 130, 160), 40); /* radius in 1/16 px */
     present(r);
 }
 

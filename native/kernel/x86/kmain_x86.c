@@ -635,7 +635,7 @@ static __attribute__((noreturn)) void finish(void)
     if (CK_X86_HOLD_S && ck_x86_kbd_ready()) {
         allen_window();
         if (allen_on)
-            ck_puts("keyboard: type a line and press Enter; Allen's window stays on until you type goodbye\n");
+            ck_puts("keyboard: type a line and press Enter; goodbye puts Allen to sleep, any key wakes him, holding the power button 4 s turns the computer off\n");
         else
             ck_printf("keyboard: type a line and press Enter; the screen stays on until %u s after the last key\n",
                       ck_x86_kbd_idle_s());
