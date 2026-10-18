@@ -22,7 +22,7 @@
       "children": [
         {
           "digest": "b5ced6fea583b485206b73ec08b91de68a5cfd2672ac448191831754c9e0907d",
-          "last_commit": "4bd49ca",
+          "last_commit": "7db773a",
           "name": "crates",
           "purpose": "Directory crates. Purpose not yet described by a human."
         },
@@ -33,8 +33,8 @@
           "purpose": "Directory docs. Purpose not yet described by a human."
         },
         {
-          "digest": "64cc87f8507bb580e1788d335c5a76039f3e3a016552595526718448ab5aa098",
-          "last_commit": "3037967",
+          "digest": "cde07448e4193cc2e67960f7e03037f2e801ef95de1ddfaee02bbf899af8ede8",
+          "last_commit": "f21b548",
           "name": "native",
           "purpose": "Directory native. Purpose not yet described by a human."
         },
@@ -45,15 +45,15 @@
           "purpose": "Directory scripts. Purpose not yet described by a human."
         }
       ],
-      "children_root": "sha256:19cc8f21ac13e49018f60836bdaf7c4c23477cf558624048754f1e83c6d88cac",
-      "compiled_at": "2026-10-17T01:49:45Z",
+      "children_root": "sha256:63bc135c8e17a05704a0bbc590e5a2a9a210ad82785b254611f9514f64b38f9a",
+      "compiled_at": "2026-10-18T13:23:41Z",
       "compiler": "crumb-compile/1",
-      "digest": "sha256:1b7f96caef28425fc1a0751dd671452aa26ef3561f79f663480e083341950199",
+      "digest": "sha256:dbffe47a8d849f4e42b6c15e7a96e2469baa66fd0b4ee7d074b3e68b73b560d3",
       "evidence_files": 211,
       "evidence_root": "sha256:3a8f56415109a697e4beb6048c85805c50c9c6c4089629057f4e8b3e76863981",
-      "files": 3501,
-      "generated_at_commit": "30379678add587e388db4e11713d6bca8d159b08",
-      "source_tree": "sha256:4fa99ea1d4144da8067bb5d01898dc38984898b2c5d5fb06b0e19033c824b265"
+      "files": 3504,
+      "generated_at_commit": "39707aa6b748b58247499b6fb3b356bee8344b0e",
+      "source_tree": "sha256:8d4e321b1e3bcbb0954329bcbab10fcf103c4ab3f78d705537067f9e66b50a4d"
     },
     "owner_lane": "",
     "provenance": {
