@@ -256,19 +256,25 @@ static void acpi_reset(void)
 /* Allen on the screen (ui/allen_ui.c) with its first local answers
  * (svc/allen_reply.c). Every Enter gets an answer on the console
  * ("allen: ..."); when a keyboard is ready and the RAM for drawing is there,
- * the screen switches from the boot report to Allen's window for the hold.
- * Without either, the text screen stays as it was. */
+ * the screen switches from the boot report to Allen's window, which stays
+ * up (no idle countdown) until "goodbye" is typed or the power button is
+ * held. Without either, the text screen and its timed hold stay as they were. */
 static int allen_on;
+static uint64_t allen_bye; /* TSC when Allen said goodbye; 0 = still talking */
+static ck_allen_facts allen_facts; /* filled at the summary line */
+static ck_allen_mind allen_mind;
 
 static void allen_edit(const char *buf, unsigned len) { ck_allen_ui_input(buf, len, ck_rdtsc()); }
 
 static void allen_line(const char *text)
 {
-    const char *reply = ck_allen_reply(text);
+    const char *reply = ck_allen_answer(&allen_mind, text, ck_rdtsc() / tsc_hz);
     ck_printf("allen: %s\n", reply);
     /* the only line about it the lab report may carry: lengths, no words */
     ck_printf("screen: Allen answered (%u characters in, %u out)\n", (unsigned)strlen(text), (unsigned)strlen(reply));
     ck_allen_ui_said(text, reply, ck_rdtsc());
+    if (reply == ck_allen_goodbye && !allen_bye)
+        allen_bye = ck_rdtsc() | 1;
 }
 
 static void allen_window(void)
@@ -277,19 +283,22 @@ static void allen_window(void)
     volatile uint32_t *px;
     uint32_t w, h, pitch, format;
     uint64_t pa;
+    ck_allen_mind_init(&allen_mind, &allen_facts);
     ck_x86_kbd_sink(0, allen_line);
     if (ck_x86_console_fb_get(&px, &w, &h, &pitch, &format)) {
         ck_puts("screen: text only (no framebuffer for Allen's window)\n");
         return;
     }
+    allen_facts.screen_w = w;
+    allen_facts.screen_h = h;
+    allen_mind.facts = allen_facts;
     size_t need = ck_allen_ui_mem_bytes(w, h);
     uint64_t pages = (need + CK_PAGE - 1) / CK_PAGE;
     if (ck_frames_alloc(&frames, pages, CK_PAGE, &pa)) {
         ck_printf("screen: text only (no %llu MiB for Allen's window)\n", (unsigned long long)(need >> 20));
         return;
     }
-    ck_snprintf(footer, sizeof footer, "This iMac %s %u s after the last key", CK_X86_REPORT ? "restarts" : "turns off",
-                ck_x86_kbd_idle_s());
+    ck_snprintf(footer, sizeof footer, "Type goodbye to %s this iMac", CK_X86_REPORT ? "restart" : "turn off");
     ck_printf("screen: Allen's window (%ux%u, %llu MiB drawing memory)\n", w, h, (unsigned long long)(need >> 20));
     uint64_t t0 = ck_rdtsc();
     if (ck_allen_ui_start(px, w, h, pitch, format, (void *)(uintptr_t)pa, pages * CK_PAGE, tsc_hz, t0, footer)) {
@@ -306,8 +315,12 @@ static void allen_window(void)
 void ck_x86_hold_step(uint64_t *end)
 {
     ck_x86_kbd_hold_poll(end);
-    if (allen_on)
-        ck_allen_ui_tick(ck_rdtsc());
+    if (!allen_on)
+        return;
+    ck_allen_ui_tick(ck_rdtsc());
+    /* No countdown while Allen's window is up; after goodbye, 4 s for the
+     * answer to appear, then the hold ends. */
+    *end = allen_bye ? allen_bye + 4 * tsc_hz : ~0ull;
 }
 
 static __attribute__((noreturn)) void finish(void)
@@ -322,21 +335,30 @@ static __attribute__((noreturn)) void finish(void)
         for (;;)
             __asm__ volatile("hlt");
     }
-    if (CK_X86_HOLD_S && ck_x86_kbd_ready())
-        ck_printf("keyboard: type a line and press Enter; the screen stays on until %u s after the last key\n",
-                  ck_x86_kbd_idle_s());
-    if (CK_X86_HOLD_S && ck_x86_kbd_ready())
+    if (CK_X86_HOLD_S && ck_x86_kbd_ready()) {
         allen_window();
+        if (allen_on)
+            ck_puts("keyboard: type a line and press Enter; Allen's window stays on until you type goodbye\n");
+        else
+            ck_printf("keyboard: type a line and press Enter; the screen stays on until %u s after the last key\n",
+                      ck_x86_kbd_idle_s());
+    }
     if (CK_X86_HOLD_S) {
 #if CK_X86_REPORT
         /* Lab build only (make imac-kernel CK_X86_REPORT=1): sends the
          * allowlisted, unauthenticated report if the network is up. */
-        ck_printf("power: holding the screen %u s, then restart\n", (unsigned)CK_X86_HOLD_S);
+        if (allen_on)
+            ck_puts("power: Allen's window stays on until goodbye (or the power button), then restart\n");
+        else
+            ck_printf("power: holding the screen %u s, then restart\n", (unsigned)CK_X86_HOLD_S);
         ck_x86_report_hold(tsc_hz, CK_X86_HOLD_S);
         ck_x86_kbd_done();
 #else
         /* Default and resident builds: no report code is linked; nothing is sent. */
-        ck_printf("power: holding the screen %u s, then ACPI S5\n", (unsigned)CK_X86_HOLD_S);
+        if (allen_on)
+            ck_puts("power: Allen's window stays on until goodbye (or the power button), then ACPI S5\n");
+        else
+            ck_printf("power: holding the screen %u s, then ACPI S5\n", (unsigned)CK_X86_HOLD_S);
         uint64_t end = ck_rdtsc() + (uint64_t)CK_X86_HOLD_S * tsc_hz; /* typing moves it out */
         while (ck_rdtsc() < end) {
             ck_x86_hold_step(&end);
@@ -1148,6 +1170,9 @@ static __attribute__((noreturn)) void kernel_main(void *arg)
 
     const struct ck_x86_storage_result *st = ck_x86_storage(h->rsdp, &frames, tsc_hz, mm.top);
     ck_x86_usb(&frames, tsc_hz);
+    allen_facts.cores = sr.started + 1;
+    allen_facts.sata_disks = st->ahci_disks;
+    allen_facts.nvme_disks = st->nvme_disks;
     ck_puts("kernel: alive\n");
     ck_printf("summary: cores=%u/%u timer=ok sata_disks=%u nvme_disks=%u gpt_valid=%u writes=none net=%s\n",
               sr.started + 1, sr.listed, st->ahci_disks, st->nvme_disks, st->gpt_valid,
