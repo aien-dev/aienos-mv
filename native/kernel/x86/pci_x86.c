@@ -11,7 +11,7 @@
  * functions the kernel drives, and the BCM57766's own register-access and
  * PCIe settings (tg3_x86.c). Afterwards, ck_x86_usb offers each xHCI
  * controller to the keyboard driver (xhci_x86.c), and ck_x86_sound hands
- * each sound controller to hda_x86.c for a look.
+ * each sound controller to hda_x86.c, which plays the startup chirp.
  *
  * Disks are read-only here. The NVMe driver resets and enables the controller
  * and creates its queues (no media is touched by that); the kernel then reads
@@ -45,6 +45,7 @@ static struct ck_x86_storage_result res;
 static uint32_t cr32(volatile uint8_t *cfg, unsigned off) { return *(volatile uint32_t *)(cfg + off); }
 static uint16_t cr16(volatile uint8_t *cfg, unsigned off) { return *(volatile uint16_t *)(cfg + off); }
 static void cw16(volatile uint8_t *cfg, unsigned off, uint16_t v) { *(volatile uint16_t *)(cfg + off) = v; }
+static void cw32(volatile uint8_t *cfg, unsigned off, uint32_t v) { *(volatile uint32_t *)(cfg + off) = v; }
 
 void ck_x86_disk_report(const char *tag, unsigned ctrl, unsigned index, const disk_dev *dev)
 {
@@ -283,13 +284,28 @@ void ck_x86_usb(struct ck_frames *fr, uint64_t tsc_hz)
         ck_puts("keyboard: none (no USB keyboard found)\n");
 }
 
-/* ---- Sound: a first look ----
+/* ---- Sound ----
  * Every High Definition Audio function (class 0x0403) in walk order, brought
- * to D0 with memory decode on (no bus mastering), is handed to hda_x86.c for
- * a look. */
-void ck_x86_sound(uint64_t tsc_hz)
+ * to D0 with memory decode and bus mastering on, is handed to hda_x86.c; the
+ * first with a speaker path plays the chirp. Intel's controllers first get
+ * Linux's PCI settings (sound/hda/controllers/intel.c, docs-read record):
+ * TCSEL (0x44, bits 0-2) cleared, which ends playback static on some codecs;
+ * on the PCH ones from Sunrise Point on (the Skylake family) snooped DMA
+ * (DEVC 0x78, NOSNOOP bit 11 cleared) and the misc backbone clock gate
+ * (CGCTL 0x48, MISCBDCGE bit 6) off while the controller resets, on after. */
+static int intel_skl(const struct pfn *f)
+{
+    static const uint16_t ids[] = {0xa170, 0x9d70, 0xa171, 0x9d71, 0xa2f0};
+    for (unsigned k = 0; k < sizeof ids / sizeof ids[0]; k++)
+        if (f->vendor == 0x8086 && f->device == ids[k])
+            return 1;
+    return 0;
+}
+
+void ck_x86_sound(struct ck_frames *fr, uint64_t tsc_hz, uint64_t night_t0)
 {
     unsigned n = 0;
+    int playing = 0;
     for (unsigned i = 0; i < nfound; i++) {
         const struct pfn *f = &found[i];
         if ((f->cls >> 8) != 0x0403 || (f->ht & 0x7f) != 0)
@@ -304,8 +320,18 @@ void ck_x86_sound(uint64_t tsc_hz)
             continue;
         }
         to_d0(f, tsc_hz);
-        cw16(f->cfg, 4, (uint16_t)(cr16(f->cfg, 4) | 0x2)); /* memory decode */
-        ck_x86_hda_look(ctrl, (volatile uint8_t *)(uintptr_t)bar, tsc_hz);
+        cw16(f->cfg, 4, (uint16_t)(cr16(f->cfg, 4) | 0x6)); /* memory decode, bus master */
+        int skl = intel_skl(f);
+        if (f->vendor == 0x8086)
+            cw32(f->cfg, 0x44, cr32(f->cfg, 0x44) & ~7u);
+        if (skl) {
+            cw16(f->cfg, 0x78, (uint16_t)(cr16(f->cfg, 0x78) & ~0x800u));
+            cw32(f->cfg, 0x48, cr32(f->cfg, 0x48) & ~0x40u);
+        }
+        int r = ck_x86_hda_start(ctrl, (volatile uint8_t *)(uintptr_t)bar, fr, tsc_hz, night_t0, !playing);
+        if (skl)
+            cw32(f->cfg, 0x48, cr32(f->cfg, 0x48) | 0x40u);
+        playing |= r > 0;
     }
     if (!n)
         ck_puts("sound: none (no High Definition Audio controller)\n");

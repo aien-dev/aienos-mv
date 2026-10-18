@@ -142,12 +142,18 @@ int ck_x86_notes_write(const ck_allen_notes *notes, uint32_t index);
  * Call after ck_x86_storage. */
 void ck_x86_usb(struct ck_frames *fr, uint64_t tsc_hz);
 /* pci_x86.c: hands every High Definition Audio controller the walk found to
- * hda_x86.c for a look ("sound: ..." lines, or "sound: none ..."). Call after
- * ck_x86_storage. hda_x86.c: stops any DMA the firmware left running, resets
- * the controller and names each codec; bar = its registers (mapped), memory
- * decode on. Nothing is played. */
-void ck_x86_sound(uint64_t tsc_hz);
-void ck_x86_hda_look(unsigned ctrl, volatile uint8_t *bar, uint64_t tsc_hz);
+ * hda_x86.c (Intel PCI settings first); the first with a speaker path plays
+ * the startup chirp from the moment the night (begun at TSC night_t0; 0 for
+ * no night) has reached. Call after ck_x86_storage. hda_x86.c start: stops
+ * any DMA the firmware left running, resets the controller, maps each codec
+ * onto the report, opens every output path; with play set, also runs the
+ * chirp. bar = its registers (mapped), memory decode and bus master on. 1 when
+ * playing, 0 when ready but not playing, -1 when not ready. step: stops the
+ * stream once the chirp is over; cheap, call it often. */
+void ck_x86_sound(struct ck_frames *fr, uint64_t tsc_hz, uint64_t night_t0);
+int ck_x86_hda_start(unsigned ctrl, volatile uint8_t *bar, struct ck_frames *fr, uint64_t tsc_hz, uint64_t night_t0,
+                     int play);
+void ck_x86_hda_step(void);
 /* xhci_x86.c: the USB keyboard, polled. start: bar0 = the controller's
  * registers (mapped), memory decode and bus master on; 0 when a keyboard is
  * running. hold_poll: handles waiting keys (echo, line editing, a

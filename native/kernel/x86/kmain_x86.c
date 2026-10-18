@@ -338,6 +338,7 @@ static void allen_line(const char *text)
  * (draw_loop) and the next two draw strips of them (help_loop). draw_lock
  * keeps to one frame at a time whoever draws it. */
 static uint32_t night_ms, night_mib;                     /* what is said about it once the console is up */
+static uint64_t night_t0;                                /* when the night began (TSC); the chirp keeps time with it */
 static uint64_t night_last, night_cost;                  /* the boot core's last frame and what it took */
 static volatile uint32_t draw_run, draw_on, draw_helpers; /* drawing allowed; a core draws frames; cores helping */
 static volatile uint8_t draw_lock;
@@ -349,6 +350,7 @@ static uint64_t night_clock(void) { return ck_rdtsc(); }
  * startup is not slowed by more than a third. */
 static void night_tick(void)
 {
+    ck_x86_hda_step();
     uint64_t now = ck_rdtsc();
     if (__atomic_load_n(&draw_on, __ATOMIC_ACQUIRE) || now - night_last < night_cost * 2 ||
         __atomic_test_and_set(&draw_lock, __ATOMIC_ACQUIRE))
@@ -467,6 +469,7 @@ static void allen_window(void)
 
 void ck_x86_hold_step(uint64_t *end)
 {
+    ck_x86_hda_step();
     ck_x86_kbd_hold_poll(end);
     if (!allen_on)
         return;
@@ -1252,6 +1255,7 @@ static void night_start(const struct ck_handoff *h)
         ck_frames_free(&frames, pa, pages);
         return;
     }
+    night_t0 = t0;
     night_ms = (uint32_t)((ck_rdtsc() - t0) * 1000 / tsc_hz);
     night_mib = (uint32_t)(need >> 20);
     draw_run = 1;
@@ -1376,8 +1380,8 @@ static __attribute__((noreturn)) void kernel_main(void *arg)
     }
 
     const struct ck_x86_storage_result *st = ck_x86_storage(h->rsdp, &frames, tsc_hz, mm.top);
+    ck_x86_sound(&frames, tsc_hz, night_t0); /* before the keyboard: the chirp is already under way */
     ck_x86_usb(&frames, tsc_hz);
-    ck_x86_sound(tsc_hz);
     allen_facts.cores = sr.started + 1;
     allen_facts.sata_disks = st->ahci_disks;
     allen_facts.nvme_disks = st->nvme_disks;

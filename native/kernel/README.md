@@ -222,12 +222,27 @@ ms` (when Allen wakes, 20 s later, and at goodbye).
 `ui/chirp.c` is the matching sound: the gravitational-wave chirp of the same
 inspiral, raised into hearing (150 Hz to 1000 Hz, loudness as pitch^(2/3)),
 a steady tone from when the holes appear, rising to its peak at the merger,
-worked out from the formula. Nothing plays it yet: `x86/hda_x86.c` only looks
-at the sound controller (stops any DMA the firmware left running, resets it,
-and names each codec in `sound:` lines). Tests: `scripts/ck_allen_ui_test.sh`
-(host; pictures in `target/native-kernel-allen-ui/`), `scripts/ck_chirp_test.sh`
-(the sound as `target/native-kernel-chirp/chirp.wav`); the QEMU kernel test
-requires the night line and the drawing cores and finds QEMU's HD Audio codec.
+worked out from the formula. `x86/hda_x86.c` plays it: on each HD Audio
+controller it stops any DMA the firmware left running, resets the link with
+the settle times Linux uses, talks to the codecs through the command rings
+(CORB/RIRB, polled), maps every widget of each codec onto the report
+(`sound: codec=N w=0x.. ...`), opens every speaker, line-out and headphone
+path back to a converter (power, routing, 0 dB, pin drive, EAPD; on Apple
+boards the codec GPIOs), and on the first controller with a path runs one
+output stream: the chirp from the moment the night has reached, then 8 s of
+silence; the stream is stopped once the chirp is over. Intel controllers get
+Linux's PCI settings first (`pci_x86.c`). In QEMU the recording of what the
+guest played matches the chirp sample for sample, starting at the night's
+moment. **Not yet on real hardware:** the desktop test computer's codec is a
+Cirrus CS8409 bridge whose speaker amplifiers sit behind it on I2C and need
+their own set-up, which this driver does not do yet, so its speakers are
+expected to stay silent; its next report carries the codec's map.
+Tests: `scripts/ck_allen_ui_test.sh` (host; pictures in
+`target/native-kernel-allen-ui/`), `scripts/ck_chirp_test.sh` (the sound as
+`target/native-kernel-chirp/chirp.wav`); the QEMU kernel test requires the
+night line, the drawing cores, the codec mapped through the command rings,
+the chirp stream running and its stop. `AIENOS_IMAC_KERNEL_KEEP_DIR=<dir>`
+keeps each run's serial log and a `.wav` recording of its sound.
 
 **Keyboard and Allen's window.** `x86/xhci_x86.c` drives a wired USB boot
 keyboard (polled xHCI, through USB 2.0 hubs). When one is ready, Allen wakes:
