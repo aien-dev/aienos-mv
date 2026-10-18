@@ -58,7 +58,7 @@
         },
         {
           "digest": "4fdea0b53dc8df033f72cd71b308e330a0ed680641e53a40788e303a143fb8ff",
-          "last_commit": "02186cf",
+          "last_commit": "be246b3",
           "name": "core",
           "purpose": "Directory native/kernel/core. Purpose not yet described by a human."
         },
@@ -82,32 +82,32 @@
         },
         {
           "digest": "951588129b3797951b2c138ed8568bc82b733b159aae85c265b4651a2450540e",
-          "last_commit": "02186cf",
+          "last_commit": "be246b3",
           "name": "svc",
           "purpose": "Directory native/kernel/svc. Purpose not yet described by a human."
         },
         {
-          "digest": "39082c496ae95192fcfc9d8c4b3dc99fbff16df0f868e7ffd0a9af98e30a7fca",
+          "digest": "0f3d28a645346382567a7a279a3e02a095c8e7f298967db175944c0a58ca9c5d",
           "last_commit": "6ad9190",
           "name": "tests",
           "purpose": "Directory native/kernel/tests. Purpose not yet described by a human."
         },
         {
-          "digest": "7401295fd08e099981dc9ba422ffdd442e1d409c81ce9de071f20d3731901e7c",
-          "last_commit": "02186cf",
+          "digest": "125036cd39b66a0135542aeceab95982eb1bc052f01e455c2b71746ad608ee48",
+          "last_commit": "be246b3",
           "name": "tools",
           "purpose": "Hosted (Linux-built) checkers for the native kernel, run by `make -C native/kernel test`; nothin"
         }
       ],
-      "children_root": "sha256:8788c171fc3cdcf5f2415d7145b3363c1f25ea05fb9a347f89091a17271933f2",
-      "compiled_at": "2026-10-16T02:16:17Z",
+      "children_root": "sha256:8306e2ae45d0ad1cad4ba44228cdb4a59845d3eca745d1a3a137985a2872f2ce",
+      "compiled_at": "2026-10-18T12:30:09Z",
       "compiler": "crumb-compile/1",
-      "digest": "sha256:f695968d916e241589c583315c2c610e3203601ce7e9fe64d5d50be8b7a44251",
+      "digest": "sha256:9b67f817c478155eaf81a0c8ace083fe233c3fa9dd3c33108fa029571fc58693",
       "evidence_files": 0,
       "evidence_root": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "files": 408,
-      "generated_at_commit": "02186cf8b8306383ee6eef40d0447c21d3ca20ab",
-      "source_tree": "sha256:30fa2b2121bdcc03aa76f64f60e53cf273a171398a467efd57cb2548b6949d61"
+      "files": 421,
+      "generated_at_commit": "32b8edb82f70b8ee8848d7e8a8040572d8d6ef59",
+      "source_tree": "sha256:da408bf54dbcce3f52ea520ae759f18445aecd66390adb7673888ed7ff42d5a6"
     },
     "owner_lane": "",
     "provenance": {

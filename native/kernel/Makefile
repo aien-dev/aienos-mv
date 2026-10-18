@@ -1525,6 +1525,12 @@ $(OUT)/host/ck_udp_echo: $(KDIR)/tools/ck_udp_echo.c
 	@mkdir -p $(dir $@)
 	$(HOSTCC) -std=gnu11 -O2 -Wall -Wextra -Werror -o $@ $<
 
+# ---- receiver for the iMac kernel's network report (run on a machine on the iMac's network) ----
+imac-report-listen: $(OUT)/host/ck_imac_report_listen
+$(OUT)/host/ck_imac_report_listen: $(KDIR)/tools/ck_imac_report_listen.c
+	@mkdir -p $(dir $@)
+	$(HOSTCC) -std=gnu11 -O2 -Wall -Wextra -Werror -o $@ $<
+
 # Artifact library host test and the in-tree C artifact tool (pack, sign with
 # TEST keys, negative corpus, bundle, receipt check) used by the QEMU gate.
 ART_HOST_SRCS := $(KDIR)/artifact/format.c $(KDIR)/artifact/admission.c $(KDIR)/artifact/receipt.c $(KDIR)/artifact/osc_unit.c $(KDIR)/artifact/osc_receipt.c $(KDIR)/artifact/osc_launch.c \
@@ -2173,7 +2179,7 @@ PI5DIAG_DIR := $(OUT)/pi5diag
 PI5DIAG_ELF := $(PI5DIAG_DIR)/pi5diag.elf
 PI5DIAG_EFI := $(OUT)/PI5DIAG.EFI
 PI5DIAG_OBJS := $(PI5DIAG_DIR)/diag_main.o $(PI5DIAG_DIR)/efi_entry.o $(PI5DIAG_DIR)/fmt.o $(PI5DIAG_DIR)/libc_min.o
-$(PI5DIAG_DIR)/diag_main.o: $(BOOT)/diag_main.c $(BOOT)/efi.h $(KDIR)/core/fmt.h
+$(PI5DIAG_DIR)/diag_main.o: $(BOOT)/diag_main.c $(BOOT)/diag.h $(BOOT)/efi.h $(KDIR)/core/fmt.h
 	@mkdir -p $(dir $@)
 	$(KCC) $(KCFLAGS) -c -o $@ $<
 $(PI5DIAG_DIR)/efi_entry.o: $(BOOT)/efi_entry.S
@@ -2194,6 +2200,137 @@ $(PI5DIAG_ELF): $(PI5DIAG_OBJS) $(BOOT)/image.ld
 $(PI5DIAG_EFI): $(PI5DIAG_ELF)
 	$(call pe_image,$<,$@)
 pi5-diag: $(PI5DIAG_EFI)
+
+# ---- IMACDIAG.EFI: AIENOS-IMAC-BOOT-0, the same diagnostic for x86_64 (2017 iMac) ----
+# diag_main.c + diag_x86.c (CPUID, SMBIOS identity, PCI, GOP, disks), report in
+# \EFI\AIENOS\IMACBOOT.TXT, then power off. The only x86_64 image in this tree: its own
+# cross toolchain and flags (-mabi=ms: every function uses the UEFI x64 convention),
+# its own entry (efi_entry_x86_64.S) and PE header (image_x86_64.ld, Machine 0x8664).
+# Copy to a FAT stick as EFI/BOOT/BOOTX64.EFI.
+#   make imac-diag    -> $(OUT)/IMACDIAG.EFI     QEMU test: scripts/qemu_ck_imac_diag_test.sh
+ifeq ($(HOST_ARCH),x86_64)
+X86_CROSS ?=
+else
+X86_CROSS ?= x86_64-linux-gnu-
+endif
+X86CC := $(X86_CROSS)gcc
+X86LD := $(X86_CROSS)ld
+X86OBJCOPY := $(X86_CROSS)objcopy
+X86NM := $(X86_CROSS)nm
+X86READELF := $(X86_CROSS)readelf
+X86CFLAGS := -std=gnu11 -O2 -Wall -Wextra -Werror -ffreestanding -nostdlib -fno-builtin \
+	-fno-stack-protector -fno-tree-loop-distribute-patterns -mgeneral-regs-only -mno-red-zone \
+	-mabi=ms -fcf-protection=none -fno-asynchronous-unwind-tables -fpie -fvisibility=hidden -fno-plt \
+	-I$(KDIR)/core -I$(BOOT)
+X86LDFLAGS := -nostdlib -pie --no-dynamic-linker -z norelro -z noexecstack -z max-page-size=4096 \
+	--no-warn-rwx-segments -T $(BOOT)/image_x86_64.ld
+IMACDIAG_DIR := $(OUT)/imacdiag
+IMACDIAG_ELF := $(IMACDIAG_DIR)/imacdiag.elf
+IMACDIAG_EFI := $(OUT)/IMACDIAG.EFI
+IMACDIAG_OBJS := $(IMACDIAG_DIR)/diag_main.o $(IMACDIAG_DIR)/diag_x86.o $(IMACDIAG_DIR)/efi_entry_x86_64.o \
+	$(IMACDIAG_DIR)/fmt.o $(IMACDIAG_DIR)/libc_min.o
+$(IMACDIAG_DIR)/diag_main.o: $(BOOT)/diag_main.c $(BOOT)/diag.h $(BOOT)/efi.h $(KDIR)/core/fmt.h
+$(IMACDIAG_DIR)/diag_x86.o: $(BOOT)/diag_x86.c $(BOOT)/diag.h $(BOOT)/efi.h
+$(IMACDIAG_DIR)/efi_entry_x86_64.o: $(BOOT)/efi_entry_x86_64.S
+$(IMACDIAG_DIR)/fmt.o: $(KDIR)/core/fmt.c $(KDIR)/core/fmt.h
+$(IMACDIAG_DIR)/libc_min.o: $(KDIR)/core/libc_min.c
+$(IMACDIAG_OBJS):
+	@mkdir -p $(dir $@)
+	$(X86CC) $(X86CFLAGS) -c -o $@ $<
+$(IMACDIAG_ELF): $(IMACDIAG_OBJS) $(BOOT)/image_x86_64.ld
+	@if grep -nE -- '->ExitBootServices' $(BOOT)/diag_main.c $(BOOT)/diag_x86.c || grep -nE -- 'rt->' $(BOOT)/diag_main.c $(BOOT)/diag_x86.c | grep -vE -- 'rt->ResetSystem'; then \
+	  echo "the diagnostic calls a service it must never call (only ResetSystem is allowed)"; exit 1; fi
+	@mkdir -p $(dir $@)
+	$(X86LD) $(X86LDFLAGS) -o $@ $(IMACDIAG_OBJS)
+	@u=$$($(X86NM) -u $@ | grep -v ' w ' || true); \
+	if [ -n "$$u" ]; then echo "image has undefined symbols: $$u"; rm -f $@; exit 1; fi
+	@bad=$$($(X86READELF) -rW $@ | grep -E '^[0-9a-f]+ ' | grep -v R_X86_64_RELATIVE || true); \
+	if [ -n "$$bad" ]; then echo "image has non-RELATIVE relocations:"; echo "$$bad"; rm -f $@; exit 1; fi
+	@k=$$($(X86NM) $@ | grep -E ' [TtDdBbRr] (ck_kernel_entry|kmain|ck_boot_model_load|ck_printf)$$' || true); \
+	if [ -n "$$k" ]; then echo "IMACDIAG links kernel objects: $$k"; rm -f $@; exit 1; fi
+$(IMACDIAG_EFI): $(IMACDIAG_ELF)
+	$(X86OBJCOPY) -O binary $< $@
+	@sz=$$(stat -c %s $@); pad=$$(( (4096 - sz % 4096) % 4096 )); \
+	if [ $$pad -gt 0 ]; then head -c $$pad /dev/zero >> $@; fi
+	@[ "$$(head -c 2 $@)" = "MZ" ] || { echo "not a PE image"; rm -f $@; exit 1; }
+	@[ "$$(od -An -tx1 -j68 -N2 $@ | tr -d ' ')" = "6486" ] || { echo "PE Machine is not x86_64 (0x8664)"; rm -f $@; exit 1; }
+	@echo "built $@ (commit $(AIENOS_COMMIT))"
+imac-diag: $(IMACDIAG_EFI)
+
+# ---- IMACKERN.EFI: AIENOS-IMAC-KERNEL-0, the C kernel core on x86_64 (2017 iMac) ----
+# x86/efi_x86.c (stub: GOP, RSDP, memory map, ExitBootServices, CHANDOF3) + x86/kmain_x86.c
+# (GDT/TSS/IDT, own page tables, guard page, HPET-timed TSC, local APIC timer, ACPI S5)
+# + x86/pci_x86.c (PCI walk; AHCI via x86/ahci_x86.c and NVMe via ../disk/disk_nvme.c, both
+# read-only, GPT checked by dev/disk_part.c; a look at the Ethernet chip) + x86/smp_x86.S
+# (secondary cores started and parked) + x86/tg3_x86.c (BCM57766 Ethernet, transmit only) and
+# x86/report_x86.c with ../../net/aienos_net.c (the screen sent as UDP broadcasts during the hold;
+# host test scripts/ck_imac_report_test.sh, receiver tools/ck_imac_report_listen.c)
+# + x86/trap.S + x86/console_x86.c (COM1 when present, GOP framebuffer), on the
+# arch-neutral core: fbcon, fmt, acpi, handoff_check, frames, heap. Same toolchain and PE
+# header as IMACDIAG. Copy to a FAT stick as EFI/BOOT/BOOTX64.EFI.
+#   make imac-kernel  -> $(OUT)/IMACKERN.EFI     QEMU test: scripts/qemu_ck_imac_kernel_test.sh
+X86K := $(KDIR)/x86
+IMACKERN_DIR := $(OUT)/imackern
+IMACKERN_ELF := $(IMACKERN_DIR)/imackern.elf
+IMACKERN_EFI := $(OUT)/IMACKERN.EFI
+IMACKERN_CFLAGS := $(X86CFLAGS) -I$(KDIR)/include -I$(KDIR)/mm -I$(KDIR)/dev -I$(NATIVE)/disk -I$(NATIVE)/net
+IMACKERN_OBJS := $(IMACKERN_DIR)/efi_entry_x86_64.o $(IMACKERN_DIR)/efi_x86.o $(IMACKERN_DIR)/efi_gop.o \
+	$(IMACKERN_DIR)/kmain_x86.o $(IMACKERN_DIR)/console_x86.o $(IMACKERN_DIR)/trap.o \
+	$(IMACKERN_DIR)/fbcon.o $(IMACKERN_DIR)/fmt.o $(IMACKERN_DIR)/acpi.o $(IMACKERN_DIR)/handoff_check.o \
+	$(IMACKERN_DIR)/frames.o $(IMACKERN_DIR)/heap.o $(IMACKERN_DIR)/libc_min.o \
+	$(IMACKERN_DIR)/ahci_x86.o $(IMACKERN_DIR)/disk_part.o $(IMACKERN_DIR)/disk.o \
+	$(IMACKERN_DIR)/pci_x86.o $(IMACKERN_DIR)/smp_x86.o $(IMACKERN_DIR)/disk_nvme.o \
+	$(IMACKERN_DIR)/tg3_x86.o $(IMACKERN_DIR)/report_x86.o $(IMACKERN_DIR)/aienos_net.o
+IMACKERN_HDRS := $(X86K)/x86.h $(BOOT)/handoff.h $(BOOT)/efi.h $(KDIR)/core/ck_internal.h $(KDIR)/include/ck.h
+$(IMACKERN_DIR)/efi_entry_x86_64.o: $(BOOT)/efi_entry_x86_64.S
+$(IMACKERN_DIR)/efi_x86.o: $(X86K)/efi_x86.c $(IMACKERN_HDRS)
+$(IMACKERN_DIR)/efi_gop.o: $(BOOT)/efi_gop.c $(IMACKERN_HDRS)
+$(IMACKERN_DIR)/kmain_x86.o: $(X86K)/kmain_x86.c $(IMACKERN_HDRS) $(KDIR)/core/handoff_check.h $(KDIR)/mm/frames.h $(KDIR)/mm/heap.h $(OUT)/commit.stamp
+$(IMACKERN_DIR)/console_x86.o: $(X86K)/console_x86.c $(IMACKERN_HDRS) $(KDIR)/core/fbcon.h
+$(IMACKERN_DIR)/trap.o: $(X86K)/trap.S
+$(IMACKERN_DIR)/fbcon.o: $(KDIR)/core/fbcon.c $(KDIR)/core/fbcon.h $(KDIR)/core/font8x8.h
+$(IMACKERN_DIR)/fmt.o: $(KDIR)/core/fmt.c $(KDIR)/core/fmt.h
+$(IMACKERN_DIR)/acpi.o: $(KDIR)/core/acpi.c $(KDIR)/core/acpi.h
+$(IMACKERN_DIR)/handoff_check.o: $(KDIR)/core/handoff_check.c $(KDIR)/core/handoff_check.h $(BOOT)/handoff.h
+$(IMACKERN_DIR)/frames.o: $(KDIR)/mm/frames.c $(KDIR)/mm/frames.h
+$(IMACKERN_DIR)/heap.o: $(KDIR)/mm/heap.c $(KDIR)/mm/heap.h
+$(IMACKERN_DIR)/libc_min.o: $(KDIR)/core/libc_min.c
+$(IMACKERN_DIR)/ahci_x86.o: $(X86K)/ahci_x86.c $(IMACKERN_HDRS) $(KDIR)/mm/frames.h $(KDIR)/dev/disk_part.h $(NATIVE)/disk/disk.h
+$(IMACKERN_DIR)/disk_part.o: $(KDIR)/dev/disk_part.c $(KDIR)/dev/disk_part.h $(NATIVE)/disk/disk.h
+$(IMACKERN_DIR)/disk.o: $(NATIVE)/disk/disk.c $(NATIVE)/disk/disk.h
+$(IMACKERN_DIR)/pci_x86.o: $(X86K)/pci_x86.c $(IMACKERN_HDRS) $(KDIR)/mm/frames.h $(KDIR)/dev/disk_part.h $(NATIVE)/disk/disk.h $(NATIVE)/disk/disk_nvme.h
+$(IMACKERN_DIR)/smp_x86.o: $(X86K)/smp_x86.S
+$(IMACKERN_DIR)/disk_nvme.o: $(NATIVE)/disk/disk_nvme.c $(NATIVE)/disk/disk_nvme.h $(NATIVE)/disk/disk.h
+$(IMACKERN_DIR)/tg3_x86.o: $(X86K)/tg3_x86.c $(IMACKERN_HDRS) $(KDIR)/mm/frames.h
+$(IMACKERN_DIR)/report_x86.o: $(X86K)/report_x86.c $(X86K)/report_x86.h $(IMACKERN_HDRS) $(NATIVE)/net/aienos_net.h
+$(IMACKERN_DIR)/aienos_net.o: $(NATIVE)/net/aienos_net.c $(NATIVE)/net/aienos_net.h
+$(IMACKERN_OBJS):
+	@mkdir -p $(dir $@)
+	$(X86CC) $(IMACKERN_CFLAGS) -DAIENOS_COMMIT='"$(AIENOS_COMMIT)"' -c -o $@ $<
+$(IMACKERN_ELF): $(IMACKERN_OBJS) $(BOOT)/image_x86_64.ld
+	@if grep -nE -- 'rt->|RuntimeServices' $(X86K)/*.c; then \
+	  echo "the x86 kernel calls a UEFI runtime service; it must never call one"; exit 1; fi
+	@if grep -nE "define ATA_" $(X86K)/ahci_x86.c | grep -vE "ATA_(IDENTIFY 0xec|READ_DMA_EXT 0x25)$$"; then \
+	  echo "ahci_x86.c defines an ATA command other than IDENTIFY and READ DMA EXT; the driver is read-only"; exit 1; fi
+	@if grep -nE "nvme_(write|flush)\(" $(X86K)/*.c; then \
+	  echo "the x86 kernel calls nvme_write or nvme_flush; its disks are read-only"; exit 1; fi
+	@mkdir -p $(dir $@)
+	$(X86LD) $(X86LDFLAGS) -o $@ $(IMACKERN_OBJS)
+	@u=$$($(X86NM) -u $@ | grep -v ' w ' || true); \
+	if [ -n "$$u" ]; then echo "image has undefined symbols: $$u"; rm -f $@; exit 1; fi
+	@bad=$$($(X86READELF) -rW $@ | grep -E '^[0-9a-f]+ ' | grep -v R_X86_64_RELATIVE || true); \
+	if [ -n "$$bad" ]; then echo "image has non-RELATIVE relocations:"; echo "$$bad"; rm -f $@; exit 1; fi
+	@n=$$($(X86NM) $@ | grep -c ' t isr_common$$' || true); s=$$($(X86NM) $@ | grep ' T ck_x86_isr_stubs$$' | cut -c1-16); \
+	e=$$($(X86NM) $@ | grep ' t isr_common$$' | cut -c1-16); \
+	if [ "$$n" != 1 ] || [ $$((0x$$e - 0x$$s)) != 4096 ]; then echo "interrupt stubs are not 256 x 16 bytes"; rm -f $@; exit 1; fi
+$(IMACKERN_EFI): $(IMACKERN_ELF)
+	$(X86OBJCOPY) -O binary $< $@
+	@sz=$$(stat -c %s $@); pad=$$(( (4096 - sz % 4096) % 4096 )); \
+	if [ $$pad -gt 0 ]; then head -c $$pad /dev/zero >> $@; fi
+	@[ "$$(head -c 2 $@)" = "MZ" ] || { echo "not a PE image"; rm -f $@; exit 1; }
+	@[ "$$(od -An -tx1 -j68 -N2 $@ | tr -d ' ')" = "6486" ] || { echo "PE Machine is not x86_64 (0x8664)"; rm -f $@; exit 1; }
+	@echo "built $@ (commit $(AIENOS_COMMIT))"
+imac-kernel: $(IMACKERN_EFI)
 
 # Raspberry Pi 5 board image (see CK_PI5 above): target/native-kernel-pi5/BOOTAA64.EFI
 pi5-store:
@@ -2282,7 +2419,7 @@ $(OUT)/host-san/test_pi5_rng: $(KDIR)/tests/test_pi5_rng.c $(PI5_RNG_SRCS) $(KDI
 	$(HOSTCC) $(HCFLAGS) $(SANFLAGS) -DCK_RNG200_SPINS=1000 -I$(KDIR)/dev -o $@ $< $(PI5_RNG_SRCS)
 
 FORCE:
-.PHONY: uefi-vars slot-loader slot-loader-check pi5-diag
+.PHONY: uefi-vars slot-loader slot-loader-check pi5-diag imac-diag imac-kernel
 .PHONY: artifact-tier-pi5 artifact-tier-mutant
 .PHONY: osc-receipt-mutants osc-receipt-release all full pi5 pi5-store pi5-infer pi5-unlock pi5-unlock-card pi5-fact pi5-agent pi5-lifecycle pi5-artifact artifact-card-mutant test sanitize context-mutant agent-cmd-mutant cortex-image handoff-mutant acpi-dev-mutant iort-mutants smmu-l2-mutants acpi-scan clean print-kcflags udp-echo tool store-image gpt-image cont-tool owner-gen fb-check continuity-mutants continuity-resolve-mutants FORCE
 
