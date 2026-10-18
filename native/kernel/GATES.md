@@ -885,6 +885,39 @@ below the draft's "3 standard streams plus 16 open streams" per session; a sessi
 |---|---|---|---|
 | 221 | `CK_PIPE_TEST=1` image: 11 `pipe_check` lines PASS with `tables_empty=1`, `pipe_test: done checks=11 failed=0 capacity=65536 pool_pipes=4`, payload detail `bytes=163840 ... mismatches=0 would_block>0`, revoked write `n=0 ... bytes_delivered=0`, boot report reached, no panic, QEMU exit 0 | PIPE | QEMU PASS (2026-10-18, base ee34c7d plus this change, QEMU 8.2.2, AIENOS_CK_PIPE PASS; hardware NOT_RUN) |
 
+## TASK: native pipeline task lifecycle (aienos-mv#429) -> CK `TASK` (scripts/qemu_ck_task_test.sh)
+
+Label: **QEMU (aarch64 virt), TEST signer, TEST build, not physical.** Host and QEMU evidence qualify nothing physical;
+nothing here ran on a Spark, a Pi or the iMac. Contract: OSH_PLATFORM_ABI sections 4.4, 7.2, 8.4, 8.5, 8.6, 9, 10, 12 read at
+aien-protocols-mv `fb5fca98e667` (v1 DRAFT, unfrozen). The image is `make CK_SEED0B_TEST_ANCHOR=1 CK_TASK_TEST=1 full` (own OUT
+`target/native-kernel-test-task`; refused with `CK_HARDWARE_STAGING`, `CK_SERVICE`, without the TEST anchor and together with
+the other launch or pipe self-tests; default images are checked to carry no trace of it). The boot disk Store carries three
+admitted Omega stages (`tests/fixtures/task`: tgen, txform, tsink; real oscc output, TEST signer, each with its own checker2
+receipt). `core/task_test.c` runs pipelines of them with `core/task.c` over `core/pipe.c`, every step one `ck_osc_launch`
+through `core/task_osc.c` (receipt verified, code re-hashed, EL0, own address space, torn down). Checks, one boot, every one
+also requiring no task, pipe or capability left over, no blocked task ever picked and every EL0 slot torn down: two stages alive
+at once with bytes in flight and the producer blocked on the full pipe (slow consumer, 512-byte reads); 163840 bytes with NULs
+arriving exact (count and FNV-1a) over one 64 KiB pipe, never more than the capacity buffered; gen | xform | sink; a last stage
+exiting 3 early while an endless producer is stopped by BROKEN_PIPE (141); a middle stage trapping (real OSC BOUNDS trap, 134);
+a deadline passing on an endless pipeline, then interrupt with grace (130); a partial spawn (third receipt missing:
+PARTIAL_LAUNCH, two started stages reaped, no step run); spawn refused before any effect (another program's receipt, unknown
+entry, wrong principal, hosted domain); stage ends holding exactly READ / WRITE. Host test `test_task` (204 checks, also under
+ASan+UBSan) and five mutants that must fail it (`make task-mutants`: full rights, no wake, admission skipped, session keeps an
+inner end, partial launch not reaped).
+Limits: (1) Scheduling is cooperative at step granularity on one CPU: one bounded EL0 step of one stage at a time, round robin;
+a step is never preempted and resumed (a step over its tick budget is ended, and the task with it). "Simultaneously" means both
+stages alive with interleaved progress, not parallel execution. (2) The stage ABI v1 (workspace header cells, MORE / DONE,
+parameters in place of argv), the task id layout, the op ids 6..9, the frame layout, the spawn capability resource, class and
+operation numbers, the status mapping (134, 137, 139, 126, 141, 130, 143), the interrupt grace of 4 steps and the dropped output
+on interrupt are this kernel's choices, UNVERIFIED against a frozen contract. (3) argv and env slices are not passed; stderr is
+held but stage ABI v1 has no stderr output. (4) Pipelines are limited to 5 stages by the 4-pipe pool (LIMIT above that).
+(5) Intent and outcome records (section 10) are not written. (6) The red-before-green controls are the host mutants; the QEMU
+control is a log with one wrong byte count that the gate's checks must reject.
+
+| # | Check | CK gate | Status |
+|---|---|---|---|
+| 222 | `CK_TASK_TEST=1` image: 9 `task_check` lines PASS (8 with `clean=1`, the mid-run snapshot `clean=alive`), `task_test: done checks=9 failed=0 launches>0 not_torn_down=0 scheduling=cooperative-step`, three units ACCEPT and three receipts STORED, QEMU exit 0 | TASK | QEMU PASS (2026-10-18, branch feat/native-task-429 on feat/native-pipe-1, QEMU 8.2.2, AIENOS_CK_TASK PASS 31/31; hardware NOT_RUN) |
+
 
 ## LIFECYCLE: resident production lifecycle (native v1 plan P03, P04 cuts 1-2b, P05 cut 1, P06 cuts 2-4; C-only) -> CK `LIFECYCLE` (scripts/qemu_ck_lifecycle_test.sh)
 

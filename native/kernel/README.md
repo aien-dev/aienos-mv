@@ -566,8 +566,32 @@ message ring of `core/ipc.h`; it reuses only the ipc.h capability tables.
   producer / consumer transfers through `core/sched.c`) and `pipe-mutant` (the write-right check removed: the test must
   fail); `make sanitize` runs it under ASan+UBSan. `scripts/qemu_ck_pipe_test.sh` builds the TEST-ONLY `CK_PIPE_TEST=1`
   image and checks the in-kernel run (GATES.md, PIPE). Host and QEMU evidence qualify nothing physical.
-- **Not yet.** Task execution and shell dispatch over pipes are separate issues; the kernel's blocking hook yields
-  cooperatively inside one kernel thread, it does not switch M3 threads.
+- **Not yet.** Shell dispatch over pipes is a separate issue (task execution: Native pipeline tasks below);
+  the kernel's blocking hook yields cooperatively inside one kernel thread, it does not switch M3 threads.
+
+## Native pipeline tasks (aienos-mv#429)
+
+`core/task.c` / `core/task.h` run pipelines of admitted Omega stages connected by native pipes: TASK_SPAWN, TASK_WAIT,
+TASK_STATE, TASK_CANCEL (OSH_PLATFORM_ABI 8.4, read at `fb5fca98e667`, v1 DRAFT) and pipeline spawn / wait / cancel.
+
+- **What a stage is.** A bounded, resumable step `fn X(inp: bytes, w: cells) -> u64` of an admitted OSC unit (stage ABI v1
+  in `task.h`, UNVERIFIED own contract). The kernel reads the stage's stdin pipe into the step's read-only input window and
+  writes the output cells the step left in its workspace to its stdout pipe; the stage never holds a handle. Every step is
+  one `ck_osc_launch` (`core/task_osc.c`): receipt verified, code re-hashed, EL0 in its own address space, torn down.
+- **How stages progress.** One CPU, cooperative at step granularity: round robin over READY tasks (`core/sched.c`), one
+  step at a time, so stages are alive together and progress interleaved with bytes in flight; a step is never preempted
+  and resumed. A task that would wait leaves the run queue and watches the pipe end (`ck_pipe_watch`); readable,
+  writable, closed, revoked and cancel wake it. With nothing READY, run and wait return at once instead of polling.
+- **Authority.** Spawn checks the section 9 binding (domain, generation width, principal, class and operation, a live
+  spawn capability with WRITE) and the image's receipt and entry before any effect. Each task's own capability table
+  holds only its stdio ends with exactly READ or WRITE.
+- **Endings.** Exit status from the stage, or 134 trap, 137 tick overrun / limit / stdio revoked, 139 fault or protocol
+  violation (including a step that makes no progress), 126 refused, 141 broken pipe, 130 interrupted (after a grace of
+  4 steps), 143 terminated. A partial launch terminates and reaps the started stages, closes every end and returns
+  PARTIAL_LAUNCH. The pipeline status is the last stage's.
+- **Tests.** `make test` runs `test_task` and `task-mutants`; `make sanitize` runs it under ASan+UBSan;
+  `scripts/qemu_ck_task_test.sh` builds the TEST-ONLY `CK_TASK_TEST=1` image and checks the in-kernel run (GATES.md, TASK).
+  Host and QEMU evidence qualify nothing physical.
 
 ## Notes for stage code
 
