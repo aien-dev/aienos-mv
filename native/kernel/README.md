@@ -253,6 +253,10 @@ night line, the drawing cores, the codec mapped through the command rings,
 the chirp stream running and its stop. `AIENOS_IMAC_KERNEL_KEEP_DIR=<dir>`
 keeps each run's serial log and a `.wav` recording of its sound.
 
+**Device inventory.** The PCI walk prints one `pci: fn bus:dev.fn id=vendor:device class=...` line
+for every function it finds, before the drivers claim theirs. On the real machine these lines are
+the ground truth for which drivers are still missing (lab report allowlist: `pci:`).
+
 **Keyboard and Allen's window.** `x86/xhci_x86.c` drives a wired USB boot
 keyboard (polled xHCI, through USB 2.0 hubs). When one is ready, Allen wakes:
 the person is his guest. A quiet glass bar comes up at the bottom for what
