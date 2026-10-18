@@ -10,6 +10,7 @@
  * ui/tests/allen_ui_test.c. */
 #ifndef AIENOS_ALLEN_REPLY_H
 #define AIENOS_ALLEN_REPLY_H
+#include <stddef.h>
 #include <stdint.h>
 #include "allen_notes.h"
 
@@ -37,6 +38,7 @@ typedef struct {
     uint32_t starts; /* times Allen has woken up with this memory */
     uint32_t lines;  /* lines answered, all starts together */
     char name[CK_ALLEN_NAME_MAX]; /* the person's name once told, "" before */
+    char self[CK_ALLEN_NAME_MAX]; /* the name the person gave Allen, "" until the first meeting names him */
     uint32_t nfacts;
     uint32_t nnotes; /* notes saved, deleted ones included (svc/allen_notes.h) */
     ck_allen_fact fact[CK_ALLEN_FACTS_MAX];
@@ -50,6 +52,7 @@ typedef struct {
     int changed;    /* mem changed in a way worth saving (the kernel saves, then clears) */
     unsigned turns; /* lines answered this session */
     int asked_how;  /* Allen just asked "how are you?" */
+    int naming;     /* Allen just asked "What will you call me?" (a first meeting) */
     ck_allen_notes *notes; /* the notes (the kernel loads them), NULL: none */
     int note_dirty; /* index + 1 of a note to write to disk (the kernel writes, then clears) */
     int lit;        /* index + 1 of the note just saved or handed back, 0: none */
@@ -62,8 +65,13 @@ void ck_allen_mind_init(ck_allen_mind *m, const ck_allen_facts *facts);
  * awake_s: seconds since the machine started. */
 const char *ck_allen_answer(ck_allen_mind *m, const char *line, uint64_t awake_s);
 /* What Allen says first when the window opens: a welcome back by name when
- * it remembers someone, NULL for a first meeting. */
+ * it remembers someone; on a first meeting (nothing remembered, no name of
+ * his own yet) he asks what to call him, and the next single word typed
+ * becomes his name ("call yourself Nova" or "your name is Nova" renames him
+ * any time). Never NULL. */
 const char *ck_allen_welcome(ck_allen_mind *m);
+/* The name Allen goes by: the one he was given, else "Allen". */
+const char *ck_allen_self(const ck_allen_mind *m);
 /* Stateless: the answer of a fresh conversation at 0 s awake. */
 const char *ck_allen_reply(const char *line);
 /* The answer to "goodbye" (and "bye", with or without "allen"); the caller
@@ -71,5 +79,11 @@ const char *ck_allen_reply(const char *line);
 extern const char ck_allen_goodbye[];
 /* What Allen says instead when a save to disk failed. */
 extern const char ck_allen_save_failed[];
+/* The honest "not yet" for a line nothing here can answer; the kernel compares
+ * the pointer to know a far-off worker may be asked (svc/allen_intent.h). */
+extern const char ck_allen_not_yet[];
+/* Folds a line for matching: lowercase letters and digits, single spaces,
+ * NUL-terminated in out (cap bytes); returns the length. */
+size_t ck_allen_fold(const char *s, char *out, size_t cap);
 
 #endif

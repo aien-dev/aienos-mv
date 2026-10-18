@@ -5,7 +5,8 @@
 
 const char ck_allen_goodbye[] = "Goodbye. Until next time.";
 const char ck_allen_save_failed[] = "I couldn't save that to my disk, so I'll only remember it until this computer turns off.";
-static const char not_yet[] = "I don't know that yet. Type help to see what I can talk about.";
+const char ck_allen_not_yet[] = "I don't know that yet. Type help to see what I can talk about.";
+#define not_yet ck_allen_not_yet
 
 /* Lowercases letters, keeps digits, turns every other run into one space,
  * trims. Returns the folded length (at most cap - 1). */
@@ -222,22 +223,54 @@ static int is_state(const char *w)
     return 0;
 }
 
-/* Takes the first word of rest as the person's name: 1, or 0 if none fits. */
-static int learn_name(ck_allen_mind *m, const char *rest)
+/* Takes rest, when it is one folded word, as a name into out (first letter
+ * capital): 1, or 0 if none fits. */
+static int one_name(const char *rest, char out[CK_ALLEN_NAME_MAX])
 {
     size_t n = 0;
-    char w[24];
+    char w[CK_ALLEN_NAME_MAX];
     while (rest[n] && rest[n] != ' ' && n < sizeof w - 1)
         w[n] = rest[n], n++;
     w[n] = 0;
-    if (!n || rest[n] == ' ' || is_state(w) || eq(w, "allen"))
+    if (!n || rest[n] == ' ' || is_state(w))
         return 0;
     for (size_t i = 0; i <= n; i++)
-        m->mem.name[i] = w[i];
-    if (m->mem.name[0] >= 'a' && m->mem.name[0] <= 'z')
-        m->mem.name[0] = (char)(m->mem.name[0] - 'a' + 'A');
+        out[i] = w[i];
+    if (out[0] >= 'a' && out[0] <= 'z')
+        out[0] = (char)(out[0] - 'a' + 'A');
+    return 1;
+}
+
+const char *ck_allen_self(const ck_allen_mind *m) { return m->mem.self[0] ? m->mem.self : "Allen"; }
+
+/* The person's name from rest: 1, or 0 if none fits (Allen's own name never does). */
+static int learn_name(ck_allen_mind *m, const char *rest)
+{
+    char self[CK_ALLEN_NAME_MAX];
+    fold(ck_allen_self(m), self, sizeof self);
+    if (eq(rest, self) || !one_name(rest, m->mem.name))
+        return 0;
     m->changed = 1;
     return 1;
+}
+
+/* Allen's own name from rest: 1, or 0 if none fits. */
+static int learn_self(ck_allen_mind *m, const char *rest)
+{
+    if (!one_name(rest, m->mem.self))
+        return 0;
+    m->changed = 1;
+    m->naming = 0;
+    return 1;
+}
+
+/* f is a greeting to Allen by his own name: "hello nova", "hi nova", "hey nova". */
+static int greets_self(const char *f, const ck_allen_mind *m)
+{
+    char self[CK_ALLEN_NAME_MAX];
+    const char *rest;
+    fold(ck_allen_self(m), self, sizeof self);
+    return ((rest = after(f, "hello")) || (rest = after(f, "hi")) || (rest = after(f, "hey"))) && eq(rest, self);
 }
 
 /* ---- What Allen is taught ---- */
@@ -699,8 +732,16 @@ const char *ck_allen_welcome(ck_allen_mind *m)
     struct say s = {m->out, 0, sizeof m->out};
     m->out[0] = 0;
     unsigned notes = m->notes ? ck_allen_notes_live(m->notes) : 0;
-    if (!m->mem.name[0] && !m->mem.nfacts && !notes)
-        return 0;
+    if (!m->mem.name[0] && !m->mem.nfacts && !notes) {
+        if (m->mem.self[0]) {
+            put(&s, "Hello. I'm ");
+            put(&s, m->mem.self);
+            put(&s, ".");
+            return m->out;
+        }
+        m->naming = 1;
+        return "Hello. I'm new here, and I have no name yet. What will you call me?";
+    }
     put(&s, "Welcome back");
     put_name(&s, m);
     put(&s, ".");
@@ -732,10 +773,35 @@ const char *ck_allen_answer(ck_allen_mind *m, const char *line, uint64_t awake_s
     if (eq(f, "goodbye") || eq(f, "goodbye allen") || eq(f, "bye") || eq(f, "bye allen") || eq(f, "good bye"))
         return ck_allen_goodbye;
     /* The first words ever typed to Allen. */
-    if (eq(f, "hello allen") || eq(f, "hi allen") || eq(f, "hey allen") || eq(f, "hello world"))
+    if (eq(f, "hello allen") || eq(f, "hi allen") || eq(f, "hey allen") || eq(f, "hello world") || greets_self(f, m)) {
+        m->naming = 0; /* greeted by name, he is called that */
         return "Hello Humanity.";
+    }
     if (!f[0])
         return not_yet;
+    /* His own name: given at the first meeting, changed whenever asked. */
+    int naming = m->naming;
+    m->naming = 0;
+    if ((rest = after(f, "call yourself")) || (rest = after(f, "your name is")) || (rest = after(f, "i will call you")) ||
+        (rest = after(f, "i ll call you")) || (rest = after(f, "ill call you")) || (rest = after(f, "i name you")) ||
+        (rest = after(f, "you are called")) || (rest = after(f, "your name will be")) ||
+        (rest = after(f, "i call you"))) {
+        if (learn_self(m, rest)) {
+            put(&s, naming ? "Then I'm " : "I'm ");
+            put(&s, m->mem.self);
+            put(&s, naming ? ". Hello Humanity." : " now.");
+            return m->out;
+        }
+        return "One word, please, like: call yourself Nova.";
+    }
+    if (naming && !any(f, (const char *const[]){"help", "allen", 0}) && learn_self(m, f)) {
+        put(&s, "Then I'm ");
+        put(&s, m->mem.self);
+        put(&s, ". Hello Humanity.");
+        return m->out;
+    }
+    if (naming && eq(f, "allen"))
+        return "Allen it is. Hello Humanity.";
     /* Notes, then what Allen has been taught, before anything else can claim the line. */
     if (note_forget(m, &s, f) || note_save(m, &s, f, line ? line : "") || note_find(m, &s, f))
         return m->out;
@@ -805,8 +871,12 @@ const char *ck_allen_answer(ck_allen_mind *m, const char *line, uint64_t awake_s
                "then hand them back when you ask. Goodbye puts me to sleep.";
     static const char *const your_name[] = {"what is your name", "whats your name", "what s your name",
                                             "your name", 0};
-    if (any(f, your_name))
-        return "My name is Allen.";
+    if (any(f, your_name)) {
+        put(&s, "My name is ");
+        put(&s, ck_allen_self(m));
+        put(&s, m->mem.self[0] ? "." : ". You can give me another: call yourself, then a name.");
+        return m->out;
+    }
     static const char *const maker[] = {"who made you", "who built you", "who created you", "who wrote you",
                                         "who programmed you", "who is your creator", "who owns you", 0};
     if (any(f, maker))
@@ -817,8 +887,12 @@ const char *ck_allen_answer(ck_allen_mind *m, const char *line, uint64_t awake_s
     if (any(f, what_are))
         return "I'm a small program living inside AIENOS. For now I answer from what I was taught by heart, but I'm "
                "meant to grow.";
-    if (find(f, "who are you"))
-        return "I am Allen. I live in AIENOS.";
+    if (find(f, "who are you")) {
+        put(&s, "I am ");
+        put(&s, ck_allen_self(m));
+        put(&s, ". I live in AIENOS.");
+        return m->out;
+    }
     if (find(f, "where are you"))
         return "Right here, on this computer. Everything I know stays on it.";
     if (find(f, "aienos"))
@@ -939,3 +1013,5 @@ const char *ck_allen_reply(const char *line)
     ck_allen_mind_init(&m, 0);
     return ck_allen_answer(&m, line, 0);
 }
+
+size_t ck_allen_fold(const char *s, char *out, size_t cap) { return fold(s, out, cap); }

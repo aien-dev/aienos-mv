@@ -293,9 +293,11 @@ use: the bar fades when the conversation rests (a key brings it back), his
 words fade once read, and the notes map (a small constellation) shows only
 when a note is saved or handed back. Each Enter gets a local answer from
 `svc/allen_reply.c`: "Hello Allen" gives "Hello Humanity."; it also knows small
-talk, your name for the session, facts about the machine, how long it has been
-awake and sums said in words ("what is 12 times 4"); anything else gives "I
-don't know that yet." Answers print as `allen: <answer>` on the console. The
+talk, your name and his own (both kept in his memory, below), facts about the
+machine, how long it has been awake and sums said in words ("what is 12 times
+4"); anything else goes to the far-off worker when a courier is ready (below)
+and otherwise gives "I don't know that yet." Answers print as `allen: <answer>`
+on the console. The
 window has no countdown to power-off. "goodbye", a tap of the power button, or
 10 minutes without a key (`CK_X86_IDLE_S`, default 600) puts Allen to sleep: the
 screen goes dark and nothing moves, the three drawing cores rest in MWAIT (the
@@ -312,12 +314,65 @@ the kernel has no driver for the iMac panel's backlight yet. Unplugging the keyb
 guest). A keyboard plugged in for the first time after start-up is not found: the
 controller is halted when no keyboard was there at start. The conversation stays on the computer: `keyboard_line:` and `allen:`
 are off the lab report's allowlist, which carries only `screen: Allen
-answered (N characters in, M out)`. Without a keyboard or the memory the text
+answered (N characters in, M out)` and the far side's length lines (below).
+Without a keyboard or the memory the text
 screen and its 60 s hold stay. Tests: `scripts/ck_allen_ui_test.sh` (host) and
 `scripts/qemu_ck_imac_keyboard_test.sh` (QEMU, types "Hello Allen", keeps a
 screenshot as `target/native-kernel-imac-keyboard/allen-qemu.png`). What Allen
 learns and the notes it keeps are saved in its section of the disk
 (`svc/allen_memory.c`, `x86/memory_x86.c`) and come back after a restart.
+
+**The water.** Under the sky, round Allen, there is water: a fluid simulation
+(`ui/flow.c`, Jos Stam's stable fluids as in his GDC 2003 paper, in 16.16 fixed
+point on a 64 by 36 grid, stepped every 16 ms) carrying ink that is lit where it
+moves, cool blue when still and warm white when fast. Idle, it turns slowly and
+breathes; while a line is typed a current runs from the bar up to him; while he
+thinks a vortex deepens over four seconds and ink wells up in a ring round him;
+each word he says pushes a ring out; asleep it stills and clears. Every change
+of state is a blend of eased weights over 0.7 s, dusk takes 1.4 s and dawn
+0.9 s, so nothing on the screen cuts. Cost, measured by the host window test:
+a 3840 by 2160 frame takes 18.1 ms on average on one host core (9.2 ms before
+the water, run of 2026-10-18); the kernel draws with three cores in strips.
+
+**His name and yours.** The first time Allen meets someone he says he has no
+name yet and asks what they will call him; the next word typed becomes his
+name (greeting him as Allen settles it as Allen). "call yourself Nova" or
+"your name is Nova" renames him any time; "what is your name" and "who are
+you" answer with it; the bar's hint reads "Speak to Nova". "my name is Drake"
+tells him the person's name. Both are kept in his memory unit
+(`svc/allen_memory.c`, format version 3; a version 2 unit still reads, with no
+name of his own) and come back after a restart. "forget everything" keeps his
+own name. Host test: `scripts/ck_allen_ui_test.sh` (the "self:" checks) and
+`scripts/ck_allen_memory_test.sh`.
+
+**Asking a far-off worker.** Allen is not a language model and does not become
+one. When a line is beyond what he knows by heart and a courier is ready, he
+writes the job himself (`svc/allen_intent.c`): what is wanted (make, explain,
+do or chat, read off the line's first words), who he is, whose computer it is,
+and the shape the answer must take (a few short plain sentences in his voice,
+no lists, no headings), then keeps thinking until the answer comes back and
+says it as his own; after 30 s without one he says no answer came. The courier
+is one line each way on a wire (`svc/courier.h`). On this kernel the wire is
+the second serial port (`x86/courier_x86.c`: COM2 at 0x2f8, a polled 16550 at
+115200 8N1; a `HELLO` call is answered with `HI`, so it does not matter which
+side was up first), found at start or not (`courier: a
+second serial port answers ...` or `courier: no second serial port; Allen
+answers from this computer alone`), then `courier: ready, the far side said
+hello`. The far end is `crates/allen-courier`, a Rust relay with no
+dependencies beyond the standard library: it carries each job to a chat server
+(the OpenAI chat shape, `127.0.0.1:18091` by default), keeps the whole answer
+in a work folder and hands Allen at most 150 characters cut at a sentence end,
+in plain letters (typographic dashes and quotes become plain ones, accented
+letters lose their accents, anything else the typeface cannot draw is dropped;
+the kernel drops any stray byte too); it prints lengths and timings, never the
+words. Ethernet replaces the serial
+wire once the card may receive (#411). The lab report sees `screen: Allen asked
+the far side (N characters in, M in the job)` and `screen: the far side
+answered job N (M characters out)` or `... did not answer job N`: lengths only.
+Test: `scripts/qemu_ck_allen_courier_test.sh` (QEMU with COM2 on a Unix socket,
+the relay on it and the model server on this machine; NOT_RUN without one;
+screenshot `target/native-kernel-allen-courier/allen-far-side.png`). A machine
+without a second serial port gets Allen as before, answering alone.
 
 **Starting from its own disk.** When the network loader (`../boot/net_loader.c`)
 starts a kernel it hands it a `struct nb_pass` (`../boot/netboot_proto.h`) as

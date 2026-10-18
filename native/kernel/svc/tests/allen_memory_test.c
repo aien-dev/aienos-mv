@@ -15,6 +15,7 @@
 #include "allen_memory.h"
 #include "allen_reply.h"
 #include "disk_file.h"
+#include "sha256.h"
 #include "disk_part.h"
 #include "gpt_add.h"
 #include "gpt_write.h"
@@ -124,6 +125,34 @@ static void test_codec(void)
     }
     ck_allen_mem_encode(&full, 9, u);
     CHECK(ck_allen_mem_decode(u, &b, &gen) == 0 && !memcmp(&full, &b, sizeof full));
+    /* Allen's own name rides along (version 3), and a version 2 unit written
+     * before he had one still reads, with no name. */
+    ck_allen_memory named = a;
+    strcpy(named.self, "Nova");
+    ck_allen_mem_encode(&named, 11, u);
+    CHECK(ck_allen_mem_decode(u, &b, &gen) == 0 && gen == 11 && !strcmp(b.self, "Nova") && !strcmp(b.name, "Drake"));
+    strcpy(named.self, "nova");
+    ck_allen_mem_encode(&named, 11, v);
+    CHECK(ck_allen_mem_decode(v, &b, &gen) != 0); /* a name starts with a capital, like the person's */
+    ck_allen_mem_encode(&a, 5, v);
+    {
+        /* the same memory as version 2: no self field, shorter payload, resealed */
+        uint32_t plen = 0;
+        for (int i = 3; i >= 0; i--)
+            plen = plen << 8 | v[12 + i];
+        plen -= CK_ALLEN_NAME_MAX;
+        v[8] = 2, v[9] = v[10] = v[11] = 0;
+        for (int i = 0; i < 4; i++)
+            v[12 + i] = (uint8_t)(plen >> (8 * i));
+        sha256_ctx h;
+        sha256_init(&h);
+        sha256_update(&h, v, 32);
+        sha256_update(&h, v + 64, plen);
+        sha256_final(&h, v + 32);
+    }
+    CHECK(ck_allen_mem_decode(v, &b, &gen) == 0 && gen == 5 && !b.self[0] && !memcmp(&a, &b, sizeof a));
+    v[8] = 4; /* a version from the future is refused */
+    CHECK(ck_allen_mem_decode(v, &b, &gen) != 0);
 }
 
 /* A memory large enough that one copy spans all 8 blocks of its unit, so a
@@ -311,7 +340,7 @@ static void test_teach_restart(void)
     static uint8_t u[CK_ALLEN_MEM_UNIT];
     ck_allen_mind_init(&m, 0);
     m.lasting = 1;
-    CHECK(ck_allen_welcome(&m) == NULL);
+    CHECK(says(ck_allen_welcome(&m), "What will you call me?"));
     CHECK(says(ck_allen_answer(&m, "My name is Drake", 1), "Nice to meet you, Drake. I'll remember that."));
     CHECK(m.changed == 1);
     m.changed = 0;
@@ -347,7 +376,7 @@ static void test_teach_restart(void)
     CHECK(m2.changed == 1 && m2.mem.nfacts == 1);
     CHECK(says(ck_allen_answer(&m2, "forget the cat", 1), "I don't remember anything about the cat."));
     CHECK(says(ck_allen_answer(&m2, "forget everything", 1), "forgotten everything"));
-    CHECK(m2.mem.nfacts == 0 && !m2.mem.name[0] && ck_allen_welcome(&m2) == NULL);
+    CHECK(m2.mem.nfacts == 0 && !m2.mem.name[0] && says(ck_allen_welcome(&m2), "What will you call me?"));
     CHECK(says(ck_allen_answer(&m2, "what do you remember", 1), "Nothing yet."));
 
     /* without a disk Allen says it only lasts until power off */

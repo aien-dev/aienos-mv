@@ -2279,8 +2279,8 @@ IMACKERN_OBJS := $(IMACKERN_DIR)/efi_entry_x86_64.o $(IMACKERN_DIR)/efi_x86.o $(
 	$(IMACKERN_DIR)/ahci_x86.o $(IMACKERN_DIR)/disk_part.o $(IMACKERN_DIR)/disk.o \
 	$(IMACKERN_DIR)/pci_x86.o $(IMACKERN_DIR)/smp_x86.o $(IMACKERN_DIR)/disk_nvme.o \
 	$(IMACKERN_DIR)/tg3_x86.o $(IMACKERN_DIR)/xhci_x86.o $(IMACKERN_DIR)/hda_x86.o $(IMACKERN_DIR)/usb_hid.o $(IMACKERN_DIR)/sha256.o \
-	$(IMACKERN_DIR)/allen_ui.o $(IMACKERN_DIR)/allen_font.o $(IMACKERN_DIR)/allen_reply.o \
-	$(IMACKERN_DIR)/paint.o $(IMACKERN_DIR)/night.o $(IMACKERN_DIR)/mind.o $(IMACKERN_DIR)/chirp.o \
+	$(IMACKERN_DIR)/allen_ui.o $(IMACKERN_DIR)/allen_font.o $(IMACKERN_DIR)/allen_reply.o $(IMACKERN_DIR)/allen_intent.o $(IMACKERN_DIR)/courier_x86.o \
+	$(IMACKERN_DIR)/paint.o $(IMACKERN_DIR)/night.o $(IMACKERN_DIR)/mind.o $(IMACKERN_DIR)/flow.o $(IMACKERN_DIR)/chirp.o \
 	$(IMACKERN_DIR)/allen_memory.o $(IMACKERN_DIR)/allen_notes.o $(IMACKERN_DIR)/gpt_add.o $(IMACKERN_DIR)/memory_x86.o \
 	$(IMACKERN_DIR)/fat_boot.o $(IMACKERN_DIR)/sha512.o $(IMACKERN_DIR)/ct.o
 IMACKERN_REPORT_OBJS := $(IMACKERN_DIR)/report_x86.o $(IMACKERN_DIR)/aienos_net.o
@@ -2294,7 +2294,7 @@ IMACKERN_HDRS := $(X86K)/x86.h $(BOOT)/handoff.h $(BOOT)/efi.h $(KDIR)/core/ck_i
 $(IMACKERN_DIR)/efi_entry_x86_64.o: $(BOOT)/efi_entry_x86_64.S
 $(IMACKERN_DIR)/efi_x86.o: $(X86K)/efi_x86.c $(IMACKERN_HDRS) $(BOOT)/netboot_proto.h
 $(IMACKERN_DIR)/efi_gop.o: $(BOOT)/efi_gop.c $(IMACKERN_HDRS)
-$(IMACKERN_DIR)/kmain_x86.o: $(X86K)/kmain_x86.c $(IMACKERN_HDRS) $(KDIR)/core/handoff_check.h $(KDIR)/mm/frames.h $(KDIR)/mm/heap.h $(KDIR)/ui/allen_ui.h $(KDIR)/svc/allen_reply.h $(OUT)/commit.stamp
+$(IMACKERN_DIR)/kmain_x86.o: $(X86K)/kmain_x86.c $(IMACKERN_HDRS) $(KDIR)/core/handoff_check.h $(KDIR)/mm/frames.h $(KDIR)/mm/heap.h $(KDIR)/ui/allen_ui.h $(KDIR)/svc/allen_reply.h $(KDIR)/svc/allen_intent.h $(KDIR)/svc/courier.h $(OUT)/commit.stamp
 $(IMACKERN_DIR)/console_x86.o: $(X86K)/console_x86.c $(IMACKERN_HDRS) $(KDIR)/core/fbcon.h
 $(IMACKERN_DIR)/trap.o: $(X86K)/trap.S
 $(IMACKERN_DIR)/fbcon.o: $(KDIR)/core/fbcon.c $(KDIR)/core/fbcon.h $(KDIR)/core/font8x8.h
@@ -2315,13 +2315,16 @@ $(IMACKERN_DIR)/xhci_x86.o: $(X86K)/xhci_x86.c $(IMACKERN_HDRS) $(KDIR)/mm/frame
 $(IMACKERN_DIR)/hda_x86.o: $(X86K)/hda_x86.c $(IMACKERN_HDRS) $(KDIR)/mm/frames.h $(KDIR)/ui/chirp.h $(KDIR)/ui/night.h
 $(IMACKERN_DIR)/usb_hid.o: $(KDIR)/dev/usb_hid.c $(KDIR)/dev/usb_hid.h $(NATIVE)/argus/sha256.h
 $(IMACKERN_DIR)/sha256.o: $(NATIVE)/argus/sha256.c $(NATIVE)/argus/sha256.h
-$(IMACKERN_DIR)/allen_ui.o: $(KDIR)/ui/allen_ui.c $(KDIR)/ui/allen_ui.h $(KDIR)/ui/allen_font.h $(KDIR)/ui/night.h $(KDIR)/ui/mind.h $(KDIR)/ui/paint.h
+$(IMACKERN_DIR)/allen_ui.o: $(KDIR)/ui/allen_ui.c $(KDIR)/ui/allen_ui.h $(KDIR)/ui/allen_font.h $(KDIR)/ui/night.h $(KDIR)/ui/mind.h $(KDIR)/ui/flow.h $(KDIR)/ui/paint.h
 $(IMACKERN_DIR)/allen_font.o: $(KDIR)/ui/allen_font.c $(KDIR)/ui/allen_font.h
 $(IMACKERN_DIR)/paint.o: $(KDIR)/ui/paint.c $(KDIR)/ui/paint.h $(KDIR)/ui/allen_font.h
 $(IMACKERN_DIR)/night.o: $(KDIR)/ui/night.c $(KDIR)/ui/night.h $(KDIR)/ui/paint.h
 $(IMACKERN_DIR)/chirp.o: $(KDIR)/ui/chirp.c $(KDIR)/ui/chirp.h $(KDIR)/ui/night.h
 $(IMACKERN_DIR)/mind.o: $(KDIR)/ui/mind.c $(KDIR)/ui/mind.h $(KDIR)/ui/paint.h
+$(IMACKERN_DIR)/flow.o: $(KDIR)/ui/flow.c $(KDIR)/ui/flow.h $(KDIR)/ui/paint.h
 $(IMACKERN_DIR)/allen_reply.o: $(KDIR)/svc/allen_reply.c $(KDIR)/svc/allen_reply.h $(KDIR)/svc/allen_notes.h
+$(IMACKERN_DIR)/allen_intent.o: $(KDIR)/svc/allen_intent.c $(KDIR)/svc/allen_intent.h $(KDIR)/svc/allen_reply.h
+$(IMACKERN_DIR)/courier_x86.o: $(X86K)/courier_x86.c $(IMACKERN_HDRS) $(KDIR)/svc/courier.h
 $(IMACKERN_DIR)/allen_notes.o: $(KDIR)/svc/allen_notes.c $(KDIR)/svc/allen_notes.h
 $(IMACKERN_DIR)/allen_memory.o: $(KDIR)/svc/allen_memory.c $(KDIR)/svc/allen_memory.h $(KDIR)/svc/allen_reply.h $(KDIR)/svc/allen_notes.h $(NATIVE)/disk/disk.h $(NATIVE)/argus/sha256.h
 $(IMACKERN_DIR)/gpt_add.o: $(KDIR)/dev/gpt_add.c $(KDIR)/dev/gpt_add.h $(KDIR)/dev/disk_part.h $(NATIVE)/disk/disk.h $(NATIVE)/argus/sha256.h

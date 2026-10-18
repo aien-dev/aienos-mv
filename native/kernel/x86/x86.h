@@ -81,6 +81,9 @@ void ck_x86_trap(struct ck_x86_frame *f); /* kmain.c, called by every stub */
  * the kernel turned it on, and a RAM copy of everything written so far that
  * is replayed onto the screen when it comes on. */
 int ck_x86_com1_probe(void);
+/* Allen's courier on the second serial port (x86/courier_x86.c): NULL when no 16550 answers at COM2. */
+struct ck_courier;
+const struct ck_courier *ck_x86_courier_init(void);
 int ck_x86_console_fb_on(volatile void *base, uint32_t width, uint32_t height, uint32_t pitch,
                          uint32_t format, uint32_t *scale, uint32_t *cols, uint32_t *rows);
 

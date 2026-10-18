@@ -31,7 +31,9 @@
 #include "../core/handoff_check.h"
 #include "../mm/frames.h"
 #include "../mm/heap.h"
+#include "../svc/allen_intent.h"
 #include "../svc/allen_reply.h"
+#include "../svc/courier.h"
 #include "../ui/allen_ui.h"
 #include "x86.h"
 #include "../../boot/netboot_proto.h"
@@ -462,6 +464,10 @@ void ck_x86_step(const char *name)
 static void night_stats(const char *when);
 static ck_allen_facts allen_facts; /* filled at the summary line */
 static ck_allen_mind allen_mind;
+static const ck_courier *courier; /* to a far-off worker (NULL: no wire on this machine) */
+static uint32_t job_seq;          /* the last job sent down it */
+static uint64_t job_t;            /* TSC when that job went (0: nothing out) */
+static char job_buf[1024];
 static ck_allen_notes allen_notes; /* loaded from disk at the window, or empty */
 
 static void allen_edit(const char *buf, unsigned len)
@@ -524,11 +530,26 @@ static void allen_line(const char *text)
         if (allen_mind.changed)
             reply = ck_allen_save_failed;
     }
+    if (allen_mind.changed)
+        ck_allen_ui_named(ck_allen_self(&allen_mind));
     allen_mind.changed = 0;
     if (allen_mind.map_changed || allen_mind.note_dirty)
         allen_map();
     allen_mind.map_changed = 0;
     allen_mind.note_dirty = 0;
+    /* Nothing here could answer: when a courier is ready, Allen writes the job
+     * himself and keeps thinking until the far side answers (courier_step). */
+    if (reply == ck_allen_not_yet && courier && courier->ready() && !job_t) {
+        unsigned n = ck_allen_job(&allen_mind, job_seq + 1, text, job_buf, sizeof job_buf);
+        if (n && courier->send(job_buf, n) == 0) {
+            job_seq++;
+            job_t = ck_rdtsc() | 1;
+            ck_printf("allen: (asking the far side, job %u)\n", (unsigned)job_seq);
+            ck_printf("screen: Allen asked the far side (%u characters in, %u in the job)\n", (unsigned)strlen(text), n);
+            ck_allen_ui_think(text, ck_rdtsc());
+            return;
+        }
+    }
     ck_printf("allen: %s\n", reply);
     /* the only line about it the lab report may carry: lengths, no words */
     ck_printf("screen: Allen answered (%u characters in, %u out)\n", (unsigned)strlen(text), (unsigned)strlen(reply));
@@ -683,6 +704,10 @@ static void allen_window(void)
         allen_mind.mem.nnotes = 0;
     }
     ck_x86_step("memory");
+    courier = ck_x86_courier_init();
+    ck_printf(courier ? "courier: a second serial port answers; Allen can ask a far-off worker once it says hello\n"
+                      : "courier: no second serial port; Allen answers from this computer alone\n");
+    ck_allen_ui_named(ck_allen_self(&allen_mind)); /* the bar says who to speak to */
     ck_x86_kbd_sink(0, allen_line);
     if (ck_x86_console_fb_get(&px, &w, &h, &pitch, &format)) {
         ck_puts("screen: text only (no framebuffer for Allen's window)\n");
@@ -736,10 +761,46 @@ static void allen_window(void)
     }
 }
 
+/* Answers from the far side, taken in the hold loop: the one Allen is waiting
+ * for is said; anything else is dropped. A job unanswered for 30 s is given
+ * up out loud. The console gets Allen's words (COM1); the lab report carries
+ * lengths only. */
+static void courier_step(void)
+{
+    static int said_ready;
+    static char text[160]; /* what the window can show at once (ui TEXT_MAX) */
+    char line[1024];
+    uint32_t seq;
+    if (!courier)
+        return;
+    if (!said_ready && courier->ready()) {
+        said_ready = 1;
+        ck_printf("courier: ready, the far side said hello\n");
+    }
+    while (courier->take(line, sizeof line)) {
+        if (!ck_allen_answer_line(line, &seq, text, sizeof text) || !job_t || seq != job_seq)
+            continue;
+        job_t = 0;
+        if (!text[0])
+            ck_snprintf(text, sizeof text, "The far side had nothing to say.");
+        ck_printf("allen: %s\n", text);
+        ck_printf("screen: the far side answered job %u (%u characters out)\n", (unsigned)seq, (unsigned)strlen(text));
+        ck_allen_ui_said(0, text, ck_rdtsc());
+    }
+    if (job_t && ck_rdtsc() - job_t > 30 * tsc_hz) {
+        job_t = 0;
+        const char *late = "No answer came back from the far side. Ask me again in a moment.";
+        ck_printf("allen: %s\n", late);
+        ck_printf("screen: the far side did not answer job %u\n", (unsigned)job_seq);
+        ck_allen_ui_said(0, late, ck_rdtsc());
+    }
+}
+
 void ck_x86_hold_step(uint64_t *end)
 {
     ck_x86_hda_step();
     ck_x86_kbd_hold_poll(end);
+    courier_step(); /* before the window too: the wire's FIFO is 16 bytes, the far side's hello 14 */
     if (!allen_on)
         return;
     if (!__atomic_load_n(&draw_on, __ATOMIC_ACQUIRE) && !__atomic_test_and_set(&draw_lock, __ATOMIC_ACQUIRE)) {

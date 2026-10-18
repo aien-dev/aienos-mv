@@ -15,6 +15,7 @@
 #include <string.h>
 #include <time.h>
 
+#include "../../svc/allen_intent.h"
 #include "../../svc/allen_reply.h"
 #include "../allen_font.h"
 #include "../allen_ui.h"
@@ -296,6 +297,113 @@ int main(int argc, char **argv)
         }
         CHECK(ok, "reply: a whole conversation (name, how are you, sums, machine facts, awake time, help)");
     }
+    {
+        /* His own name: asked for at the first meeting, kept, changed on request. */
+        ck_allen_mind m;
+        ck_allen_mind_init(&m, 0);
+        CHECK(!strcmp(ck_allen_welcome(&m), "Hello. I'm new here, and I have no name yet. What will you call me?"),
+              "self: a first meeting asks for his name");
+        CHECK(!strcmp(ck_allen_answer(&m, "Nova", 2), "Then I'm Nova. Hello Humanity.") && !strcmp(m.mem.self, "Nova") &&
+                  m.changed && !m.naming,
+              "self: the next word is his name, saved");
+        m.changed = 0;
+        CHECK(!strcmp(ck_allen_answer(&m, "hello nova", 3), "Hello Humanity."), "self: greeted by his new name");
+        CHECK(!strcmp(ck_allen_answer(&m, "what is your name?", 4), "My name is Nova."), "self: says his name");
+        CHECK(!strcmp(ck_allen_answer(&m, "who are you", 5), "I am Nova. I live in AIENOS."), "self: who are you");
+        CHECK(!strcmp(ck_allen_answer(&m, "call yourself Sky", 6), "I'm Sky now.") && !strcmp(m.mem.self, "Sky") &&
+                  m.changed,
+              "self: renamed on request");
+        CHECK(!strncmp(ck_allen_answer(&m, "your name is the best", 7), "One word, please", 16) &&
+                  !strcmp(m.mem.self, "Sky"),
+              "self: a rename needs one word");
+        CHECK(!strncmp(ck_allen_answer(&m, "my name is sky", 8), "You haven't told me yet", 23) && !m.mem.name[0],
+              "self: the person cannot take his name");
+        CHECK(!strcmp(ck_allen_welcome(&m), "Hello. I'm Sky."), "self: the next window opening says who he is");
+        CHECK(!strcmp(ck_allen_answer(&m, "forget everything", 9),
+                      "Done. I've forgotten everything you taught me, and your name.") &&
+                  !strcmp(m.mem.self, "Sky"),
+              "self: forgetting what he was taught keeps his name");
+        ck_allen_mind_init(&m, 0);
+        ck_allen_welcome(&m);
+        CHECK(!strncmp(ck_allen_answer(&m, "what can you do", 1), "I learn what you teach me", 25) && !m.naming &&
+                  !m.mem.self[0],
+              "self: any other line drops the question, he stays Allen");
+        CHECK(!strcmp(ck_allen_answer(&m, "what's your name", 2),
+                      "My name is Allen. You can give me another: call yourself, then a name."),
+              "self: Allen by default, and how to change it");
+        ck_allen_mind_init(&m, 0);
+        ck_allen_welcome(&m);
+        CHECK(!strcmp(ck_allen_answer(&m, "allen", 1), "Allen it is. Hello Humanity.") && !m.mem.self[0] && !m.naming,
+              "self: Allen chosen stays the default");
+        ck_allen_mind_init(&m, 0);
+        ck_allen_welcome(&m);
+        CHECK(!strcmp(ck_allen_answer(&m, "Hello Allen", 1), "Hello Humanity.") && !m.naming,
+              "self: greeting him as Allen settles it");
+        CHECK(!strncmp(ck_allen_answer(&m, "xz", 2), "I don't know that yet.", 22) && !m.mem.self[0],
+              "self: after that a stray word is not a name");
+    }
+    {
+        /* What a line wants, and the job Allen writes for the far side. */
+        static const struct {
+            const char *say;
+            ck_allen_want want;
+        } wants[] = {
+            {"write a haiku about rain", CK_WANT_MAKE},
+            {"please make me a list of three birds", CK_WANT_MAKE},
+            {"can you code a function that adds two numbers", CK_WANT_MAKE},
+            {"i need a name for my boat", CK_WANT_MAKE},
+            {"explain how rain forms", CK_WANT_EXPLAIN},
+            {"what is a prime number", CK_WANT_EXPLAIN},
+            {"why is the sky blue", CK_WANT_EXPLAIN},
+            {"allen tell me about the moon", CK_WANT_EXPLAIN},
+            {"what does ephemeral mean", CK_WANT_EXPLAIN},
+            {"find my keys", CK_WANT_DO},
+            {"could you translate good morning to french", CK_WANT_DO},
+            {"summarize the news", CK_WANT_DO},
+            {"i had a long day", CK_WANT_CHAT},
+            {"tell me a joke", CK_WANT_CHAT},
+            {"", CK_WANT_CHAT},
+        };
+        int ok = 1;
+        for (size_t i = 0; i < sizeof wants / sizeof wants[0]; i++) {
+            char f[96];
+            ck_allen_fold(wants[i].say, f, sizeof f);
+            ck_allen_want got = ck_allen_want_of(f);
+            if (got != wants[i].want) {
+                printf("  want of \"%s\": %s, wanted %s\n", wants[i].say, ck_allen_want_name(got),
+                       ck_allen_want_name(wants[i].want));
+                ok = 0;
+            }
+        }
+        CHECK(ok, "intent: make, explain, do and chat told apart");
+        ck_allen_mind m;
+        ck_allen_mind_init(&m, 0);
+        char job[1024];
+        unsigned n = ck_allen_job(&m, 7, "Write a haiku\tabout\nrain", job, sizeof job);
+        CHECK(n && n == strlen(job) && !strncmp(job, "JOB 7 make You are the far hands of Allen, a quiet presence", 59),
+              "intent: the job names the seq, the want and who he is");
+        CHECK(strstr(job, "the person's computer") && strstr(job, "Begin with one short sentence") &&
+                  !strchr(job, '\n') && strstr(job, "\tWrite a haiku about rain") == job + n - 25,
+              "intent: the instruction fits the want; the line follows a tab, cleaned");
+        strcpy(m.mem.name, "Drake");
+        strcpy(m.mem.self, "Nova");
+        n = ck_allen_job(&m, 8, "why is the sky blue?", job, sizeof job);
+        CHECK(n && !strncmp(job, "JOB 8 explain You are the far hands of Nova", 43) && strstr(job, "on Drake's computer") &&
+                  strstr(job, "three plain sentences"),
+              "intent: his name and the person's name go into the instruction");
+        CHECK(ck_allen_job(&m, 9, "hello", job, 100) == 0, "intent: too small a buffer is refused, not cut");
+        uint32_t seq = 0;
+        char text[160];
+        CHECK(ck_allen_answer_line("SAY 8 Sunlight scatters\\nin the air,  blue most of all.  ", &seq, text, sizeof text) &&
+                  seq == 8 && !strcmp(text, "Sunlight scatters in the air, blue most of all."),
+              "intent: an answer line is read back, newlines and runs of blanks folded");
+        CHECK(!ck_allen_answer_line("HELLO courier", &seq, text, sizeof text) &&
+                  !ck_allen_answer_line("SAY x nope", &seq, text, sizeof text) &&
+                  !ck_allen_answer_line("SAYING 3 no", &seq, text, sizeof text),
+              "intent: other lines are not answers");
+        CHECK(ck_allen_answer_line("SAY 12 0123456789abcdef0123456789abcdef", &seq, text, 10) && !strcmp(text, "012345678"),
+              "intent: a long answer is cut to the buffer");
+    }
 
     /* ---- typeface ---- */
     CHECK(ck_af_isqrt(0) == 0 && ck_af_isqrt(15) == 3 && ck_af_isqrt(16) == 4 &&
@@ -493,8 +601,19 @@ int main(int argc, char **argv)
     {
         ck_allen_ui_sleep(1, now_us);
         uint32_t s0 = (uint32_t)(now_us / 1000);
-        run_to(s0 + 200);
-        CHECK(ck_allen_ui_asleep(), "sleep: asleep after ck_allen_ui_sleep(1)");
+        run_to(s0 + 700); /* halfway into the dusk: the sky is still there, dimmed, and he is not yet asleep */
+        CHECK(!ck_allen_ui_asleep(), "sleep: dusk first, not a cut to black");
+        unsigned dusk_lit = 0;
+        for (uint32_t y = 0; y < H; y += 4)
+            for (uint32_t x = 0; x < W; x += 4)
+                dusk_lit += (fb[(size_t)y * W + x] & 0xffffffu) != 0;
+        CHECK(dusk_lit > 4000, "sleep: the sky is still on screen halfway into the dusk");
+        if (dir) {
+            snprintf(path, sizeof path, "%s/allen-7-dusk.png", dir);
+            png(path, fb, W, 1, 0, 0, W, H, 2);
+        }
+        run_to(s0 + 1700);
+        CHECK(ck_allen_ui_asleep(), "sleep: asleep once the dusk is done");
         unsigned lit = 0;
         for (uint32_t y = 0; y < H; y += 4)
             for (uint32_t x = 0; x < W; x += 4)

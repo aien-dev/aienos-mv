@@ -6,7 +6,8 @@
 #define HDR 64u
 #define FACT_BYTES (CK_ALLEN_KEY_MAX + CK_ALLEN_VAL_MAX + 1u)
 #define PAYLOAD_FIXED (4u + 4u + CK_ALLEN_NAME_MAX + 4u + 4u)
-#define VERSION 2u
+#define VERSION 3u /* 3 adds Allen's own name after the facts; a version 2 unit still reads (no name yet) */
+#define SELF_BYTES CK_ALLEN_NAME_MAX
 
 _Static_assert(HDR + PAYLOAD_FIXED + CK_ALLEN_FACTS_MAX * FACT_BYTES <= CK_ALLEN_MEM_UNIT, "memory fits one unit");
 
@@ -89,7 +90,7 @@ static int text_ok(const uint8_t *t, uint32_t cap, int name)
 void ck_allen_mem_encode(const ck_allen_memory *mem, uint64_t gen, uint8_t unit[CK_ALLEN_MEM_UNIT])
 {
     uint32_t n = mem->nfacts > CK_ALLEN_FACTS_MAX ? CK_ALLEN_FACTS_MAX : mem->nfacts;
-    uint32_t plen = PAYLOAD_FIXED + n * FACT_BYTES;
+    uint32_t plen = PAYLOAD_FIXED + n * FACT_BYTES + SELF_BYTES;
     zero(unit, CK_ALLEN_MEM_UNIT);
     copy(unit, magic, 8);
     put32(unit + 8, VERSION);
@@ -110,17 +111,21 @@ void ck_allen_mem_encode(const ck_allen_memory *mem, uint64_t gen, uint8_t unit[
         p[CK_ALLEN_KEY_MAX + CK_ALLEN_VAL_MAX - 1] = 0;
         p[CK_ALLEN_KEY_MAX + CK_ALLEN_VAL_MAX] = mem->fact[i].are ? 1 : 0;
     }
+    copy(p, mem->self, SELF_BYTES);
+    p[SELF_BYTES - 1] = 0;
     seal(unit, plen);
 }
 
 int ck_allen_mem_decode(const uint8_t unit[CK_ALLEN_MEM_UNIT], ck_allen_memory *mem, uint64_t *gen)
 {
-    if (!same(unit, magic, 8) || get32(unit + 8) != VERSION)
+    uint32_t version = get32(unit + 8);
+    if (!same(unit, magic, 8) || (version != 2 && version != VERSION))
         return -1;
     const uint8_t *p = unit + HDR;
     uint32_t plen = get32(unit + 12), n = get32(p + 8 + CK_ALLEN_NAME_MAX);
+    uint32_t self_bytes = version >= 3 ? SELF_BYTES : 0;
     if (n > CK_ALLEN_FACTS_MAX || get32(p + 12 + CK_ALLEN_NAME_MAX) > CK_ALLEN_NOTES_MAX ||
-        plen != PAYLOAD_FIXED + n * FACT_BYTES || get64(unit + 16) == 0)
+        plen != PAYLOAD_FIXED + n * FACT_BYTES + self_bytes || get64(unit + 16) == 0)
         return -1;
     for (uint32_t i = 24; i < 32; i++)
         if (unit[i])
@@ -143,6 +148,8 @@ int ck_allen_mem_decode(const uint8_t unit[CK_ALLEN_MEM_UNIT], ck_allen_memory *
         if (!text_ok(f, CK_ALLEN_KEY_MAX, 0) || !f[0] || !text_ok(f + CK_ALLEN_KEY_MAX, CK_ALLEN_VAL_MAX, 0) ||
             !f[CK_ALLEN_KEY_MAX] || f[CK_ALLEN_KEY_MAX + CK_ALLEN_VAL_MAX] > 1)
             return -1;
+    if (self_bytes && !text_ok(f, SELF_BYTES, 1))
+        return -1;
     zero(mem, sizeof *mem);
     mem->starts = get32(p);
     mem->lines = get32(p + 4);
@@ -155,6 +162,8 @@ int ck_allen_mem_decode(const uint8_t unit[CK_ALLEN_MEM_UNIT], ck_allen_memory *
         copy(mem->fact[i].val, f + CK_ALLEN_KEY_MAX, CK_ALLEN_VAL_MAX);
         mem->fact[i].are = f[CK_ALLEN_KEY_MAX + CK_ALLEN_VAL_MAX];
     }
+    if (self_bytes)
+        copy(mem->self, f, SELF_BYTES);
     *gen = get64(unit + 16);
     return 0;
 }

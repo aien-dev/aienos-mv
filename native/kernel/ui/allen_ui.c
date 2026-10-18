@@ -18,6 +18,7 @@
  * a 1920 x 1080 grid and scaled to the screen (k, 1/256). */
 #include "allen_ui.h"
 #include "allen_font.h"
+#include "flow.h"
 #include "mind.h"
 #include "night.h"
 #include "paint.h"
@@ -57,6 +58,7 @@ static struct {
     unsigned input_len;
     char line[TEXT_MAX], reply[TEXT_MAX];
     int has_line;
+    int think; /* the line went in but the answer is still coming: he thinks until it does */
     const char *footer;
     unsigned n, ne, total, links;
     int lit;
@@ -73,6 +75,9 @@ static struct {
     ck_canvas cv;
     ck_night night;
     ck_mind mind;
+    ck_flow flow;     /* the water and the ink round him */
+    uint32_t dim;     /* dusk: 0 the sky, DIM_FULL dark (1/256 steps of 1/256); eased, so sleep and waking are never a cut */
+    int thinking;     /* an answer is on its way from further off; he thinks until it arrives */
     ck_af_face voice, body, small;
     uint64_t hz, t0;
     uint64_t (*clock)(void);
@@ -94,6 +99,8 @@ static struct {
     uint32_t speak_t;       /* when next starts (0: nothing waiting) */
     char guest[TEXT_MAX];
     unsigned guest_len;
+    char hint[40]; /* "Speak to Allen", or whatever he is called now */
+    unsigned hint_len;
     int32_t guest_x;
     uint32_t guest_t; /* when the guest's line began to rise (0: none) */
     uint32_t shimmer, shimmer_was, level, word_t; /* level: the voice, 0..256 */
@@ -120,6 +127,7 @@ static struct {
 } ui;
 
 #define S(v) ((int32_t)(((int64_t)(v) * (int64_t)ui.k + 128) / 256))
+#define DIM_FULL (256u << 8)
 
 static void relax(void)
 {
@@ -272,7 +280,7 @@ static void draw_bar(const ck_rect *r, uint32_t t)
     int32_t x = b.x + pad;
     if (!ui.input_len) {
         if (tc.w)
-            text(&ui.cv, &tc, &ui.body, x, base, "Speak to Allen", 14, CK_RGB(150, 160, 196), 150 * A >> 8);
+            text(&ui.cv, &tc, &ui.body, x, base, ui.hint, ui.hint_len, CK_RGB(150, 160, 196), 150 * A >> 8);
     } else {
         int32_t avail = b.w - 2 * pad - S(12);
         unsigned from = 0;
@@ -513,15 +521,29 @@ static void dark(const ck_rect *r)
     present(r);
 }
 
+/* Dusk: the picture dims toward black while the faint mark of the dark room
+ * comes up, so falling asleep and waking are one movement each. */
+static void dusk(const ck_rect *r)
+{
+    uint32_t keep = 256 - (ui.dim >> 8);
+    for (int32_t y = r->y; y < r->y + r->h; y++) {
+        uint32_t *px = ui.back + (size_t)y * (size_t)ui.w + r->x;
+        for (int32_t x = 0; x < r->w; x++)
+            px[x] = ck_scale(px[x], keep);
+    }
+    ck_glow(&ui.cv, r, ui.cx * 16 + 8, ui.cy * 16 + 8, S(6) * 16, CK_RGB(120, 130, 160), 40 * ui.dim >> 16);
+}
+
 static void compose(const ck_rect *r)
 {
     uint32_t t = ui.t;
-    if (ui.asleep) {
+    if (ui.asleep && ui.dim == DIM_FULL) {
         dark(r);
         return;
     }
     ck_night_base(&ui.night, &ui.cv, r);
     ck_night_lights(&ui.night, &ui.cv, r, ui.shimmer, ui.level * ui.shimmer >> 9);
+    ck_flow_draw(&ui.flow, &ui.cv, r, 256);
     int32_t rad;
     uint32_t a;
     if (flash(t, &rad, &a)) {
@@ -534,6 +556,8 @@ static void compose(const ck_rect *r)
     draw_guest(r, t);
     draw_words(&ui.now, r, t);
     draw_bar(r, t);
+    if (ui.dim)
+        dusk(r);
     present(r);
 }
 
@@ -647,7 +671,7 @@ static void take_notes(uint32_t t)
     if (note.input_gen != ui.seen_input) {
         ui.seen_input = note.input_gen;
         if (note.input_len > ui.input_len)
-            ck_mind_key(&ui.mind, t);
+            ck_mind_key(&ui.mind, t), ck_flow_key(&ui.flow, t);
         ui.input_len = note.input_len;
         for (unsigned i = 0; i < ui.input_len; i++)
             ui.input[i] = note.input[i];
@@ -660,13 +684,20 @@ static void take_notes(uint32_t t)
             ui.guest_x = ui.bar.x + S(30);
             ui.guest_t = t;
         }
-        /* what is on screen fades; Allen thinks, then speaks */
+        /* what is on screen fades; Allen thinks, then speaks. With no reply
+         * yet he keeps thinking (the water turns) until it comes. */
         if (ui.now.len && !ui.now.fade)
             ui.now.fade = t;
         ui.next = (struct words){0};
-        ui.next.len = copy(ui.next.text, note.reply, TEXT_MAX);
-        uint32_t think = note.has_line ? 900u + ck_min((int32_t)ui.next.len * 6, 700) : 500u;
-        ui.speak_t = ck_max((int32_t)(t + think), (int32_t)FORMED_MS + 300);
+        if (note.think) {
+            ui.speak_t = 0;
+            ui.thinking = 1;
+        } else {
+            ui.next.len = copy(ui.next.text, note.reply, TEXT_MAX);
+            uint32_t think = ui.thinking ? 400u : note.has_line ? 900u + ck_min((int32_t)ui.next.len * 6, 700) : 500u;
+            ui.speak_t = ck_max((int32_t)(t + think), (int32_t)FORMED_MS + 300);
+            ui.thinking = 0;
+        }
         ui.input_len = 0;
         ui.input_moved = 1;
         ui.quiet_t = t;
@@ -699,8 +730,21 @@ static void advance(uint32_t t)
 {
     uint32_t prev = ui.last, dt = t - prev;
     take_notes(t);
-    if (ui.asleep)
+    /* dusk and dawn: the whole picture dims or returns over a moment, everything still moving */
+    uint32_t dim_was = ui.dim;
+    uint32_t dim_step = (uint32_t)((uint64_t)DIM_FULL * dt / (ui.asleep ? 1400u : 900u)); /* toward() moves in 256ths */
+    ui.dim = ui.asleep ? (ui.dim + dim_step < DIM_FULL ? ui.dim + dim_step : DIM_FULL) : (ui.dim > dim_step ? ui.dim - dim_step : 0);
+    if (ui.dim != dim_was || (ui.dim && ui.dim < DIM_FULL))
+        mark_all();
+    if (ui.asleep && ui.dim == DIM_FULL)
         return; /* nothing moves while Allen sleeps; the tiles marked on the way in are drawn once */
+    ck_flow_mode(&ui.flow,
+                 ui.asleep || !ui.on || t < FORMED_MS ? CK_FLOW_SLEEP
+                 : ui.mind.mode == CK_MIND_THINK      ? CK_FLOW_THINK
+                 : ui.mind.mode == CK_MIND_SPEAK      ? CK_FLOW_SPEAK
+                 : ui.mind.mode == CK_MIND_LISTEN     ? CK_FLOW_LISTEN
+                                                      : CK_FLOW_IDLE,
+                 t);
     /* the sky */
     ck_night_at(&ui.night, t);
     if (t < CK_NIGHT_FADE_END_MS + FRAME_MS * 2)
@@ -737,7 +781,7 @@ static void advance(uint32_t t)
         for (unsigned i = 0; i < w->len; i++) {
             uint32_t at = w->from + i * LETTER_MS;
             if (at > prev && at <= t && w->text[i] != ' ' && (i == 0 || w->text[i - 1] == ' '))
-                ck_mind_word(&ui.mind, t), ui.word_t = t;
+                ck_mind_word(&ui.mind, t), ck_flow_word(&ui.flow, t), ui.word_t = t;
         }
     }
     uint32_t last_letter = w->len ? w->from + w->len * LETTER_MS : 0;
@@ -766,6 +810,13 @@ static void advance(uint32_t t)
     if (w->len && !words_alpha(w, t) && t > w->from)
         *w = (struct words){0};
 
+    /* the water, and Allen floating on it: he sways a little with the current under him */
+    ck_flow_at(&ui.flow, t);
+    ck_flow_mark(&ui.flow, mark);
+    int32_t vx, vy;
+    ck_flow_velocity(&ui.flow, ui.cx, ui.cy, &vx, &vy);
+    ui.mind.cx = ui.cx + ck_clamp(vx * S(10) / 1000, -S(10), S(10));
+    ui.mind.cy = ui.cy + ck_clamp(vy * S(10) / 1000, -S(10), S(10));
     /* Allen */
     ck_mind_at(&ui.mind, t);
     mark(ck_mind_dirty(&ui.mind));
@@ -866,7 +917,11 @@ int ck_allen_ui_start(volatile uint32_t *fb, uint32_t w, uint32_t h, uint32_t pi
     if (!fb || w < 640 || h < 400 || pitch < w || format > 1 || hz == 0 || !mem ||
         mem_len < ck_allen_ui_mem_bytes(w, h) || ((w + TW - 1) / TW) * ((h + TH - 1) / TH) > TILES_MAX)
         return -1;
+    char hint[sizeof ui.hint];
+    for (unsigned i = 0; i < sizeof hint; i++)
+        hint[i] = ui.hint[i];
     ui = (__typeof__(ui)){0};
+    ck_allen_ui_named(hint[9] ? hint + 9 : "Allen"); /* keeps a name given before the window opened */
     ui.fb = fb;
     ui.w = (int32_t)w, ui.h = (int32_t)h;
     ui.pitch = pitch, ui.format = format, ui.hz = hz, ui.t0 = now, ui.clock = clock;
@@ -903,6 +958,8 @@ int ck_allen_ui_start(volatile uint32_t *fb, uint32_t w, uint32_t h, uint32_t pi
     ui.map_box = (ck_rect){ui.mx - S(190), ui.my - ui.mr - S(64), S(380), 2 * ui.mr + S(150)};
     ui.lit = -1;
     ui.ripple_was = -1;
+    /* the typed line's ink leaves from just above the bar, so the hint under it stays clear */
+    ck_flow_init(&ui.flow, ui.w, ui.h, ui.cx, ui.cy, ui.mind.R, ui.bar.x + ui.bar.w / 2, ui.bar.y - ui.bar.h / 2, 0);
     ui.seen_input = note.input_gen, ui.seen_said = note.said_gen, ui.seen_wake = note.wake_gen;
     ui.seen_map = note.map_gen - 1; /* the map kept from before is taken by the first frame */
     ui.started = 1;
@@ -925,7 +982,7 @@ void ck_allen_ui_sleep(int asleep, uint64_t now)
     note.sleep_gen++;
     unlock();
 }
-int ck_allen_ui_asleep(void) { return ui.asleep; }
+int ck_allen_ui_asleep(void) { return ui.asleep && ui.dim == DIM_FULL; }
 
 void ck_allen_ui_wake(const char *footer, uint64_t now)
 {
@@ -954,11 +1011,14 @@ void ck_allen_ui_said(const char *line, const char *reply, uint64_t now)
     (void)now;
     lock();
     note.has_line = line != 0;
+    note.think = reply == 0;
     copy(note.line, line, TEXT_MAX);
-    copy(note.reply, reply, TEXT_MAX);
+    copy(note.reply, reply ? reply : "", TEXT_MAX);
     note.said_gen++;
     unlock();
 }
+
+void ck_allen_ui_think(const char *line, uint64_t now) { ck_allen_ui_said(line, 0, now); }
 
 void ck_allen_ui_map(unsigned n, const uint8_t *ea, const uint8_t *eb, unsigned ne, int lit, const char *label,
                      unsigned total, unsigned links)
@@ -977,4 +1037,18 @@ void ck_allen_ui_map(unsigned n, const uint8_t *ea, const uint8_t *eb, unsigned 
     note.links = links;
     note.map_gen++;
     unlock();
+}
+
+void ck_allen_ui_named(const char *name)
+{
+    static const char lead[] = "Speak to ";
+    unsigned n = 0;
+    for (; lead[n]; n++)
+        ui.hint[n] = lead[n];
+    for (unsigned i = 0; name && name[i] && n + 1 < sizeof ui.hint; i++)
+        ui.hint[n++] = name[i];
+    ui.hint[n] = 0;
+    ui.hint_len = n;
+    if (ui.started)
+        mark(ui.bar);
 }

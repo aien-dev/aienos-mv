@@ -42,6 +42,12 @@ void ck_allen_ui_input(const char *buf, unsigned len, uint64_t now);
  * him, he thinks, then speaks the answer. line NULL: Allen speaks first (the
  * welcome after a restart). */
 void ck_allen_ui_said(const char *line, const char *reply, uint64_t now);
+/* A line was entered and the answer is coming from further off: the line
+ * rises into him and he keeps thinking (the water round him turns, deeper
+ * the longer it takes) until ck_allen_ui_said(NULL, reply) brings the words. */
+void ck_allen_ui_think(const char *line, uint64_t now);
+/* The name Allen goes by, for the bar's "Speak to ..." hint ("Allen" until called). */
+void ck_allen_ui_named(const char *name);
 /* Draws a frame when one is due (at most 60 a second) and returns 1, else
  * 0. One caller at a time; ck_allen_ui_help may run on other cores. */
 int ck_allen_ui_tick(uint64_t now);
