@@ -410,14 +410,15 @@ static const uint16_t cs4208_words[][3] = {
  * its TDM slots and clocks, the amplifiers configured and switched on, and
  * the converters synchronised. That driver plays only 44.1 kHz 24-bit
  * (cirrus_apple.h:1300), so the chirp goes out in that format here. The
- * amplifiers' digital volume is CS_AMP_VOLUME, 12 dB under the 0 dB (0xcf,
- * 0.5 dB a step) macOS uses, until the level has been heard. */
+ * amplifiers' digital volume is CS_AMP_VOLUME, 24 dB under the 0 dB (0xcf,
+ * 0.5 dB a step) macOS uses: 12 dB under was very loud on the test computer;
+ * 0x9f is the reduction the reference driver also lists. */
 #define CS_VENDOR 0x47u        /* the vendor widget holding the coefficients */
 #define CS_I2C_ADDR 0x59u      /* coefficient: the chip spoken to */
 #define CS_I2C_STS 0x5cu       /* bits 3 and 4 both set: the transfer is done */
 #define CS_I2C_WRITE 0x5du     /* register << 8 | value */
 #define CS_I2C_READ 0x5eu
-#define CS_AMP_VOLUME 0xb7u
+#define CS_AMP_VOLUME 0x9fu
 #define FMT_441_24_STEREO 0x4031u
 #define V_GET_COEF 0xc00
 #define V_VENDOR_7F0 0x7f0
