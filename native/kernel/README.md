@@ -219,11 +219,11 @@ strips of them (`smp: ... state=drawing helpers=2`); before that the boot core
 draws a frame between console writes. Kernel lines: `screen: night: the sky
 made in ...` and `screen: night: N frames ..., average ... ms, slowest ...
 ms` (when Allen wakes, 20 s later, and at goodbye).
-`ui/chirp.c` is the matching sound: the gravitational-wave chirp of the same
-inspiral, raised into hearing (150 Hz to 1000 Hz, loudness as pitch^(2/3)),
-a steady tone from when the holes appear, rising to its peak at the merger,
-worked out from the formula. `x86/hda_x86.c` plays it: on each HD Audio
-controller it stops any DMA the firmware left running, resets the link with
+`ui/chirp.c` is the matching sound: a quick "blirp", the last 0.6 s of the
+gravitational-wave chirp of the same inspiral, raised into hearing (200 Hz
+sweeping to 1000 Hz, loudness as pitch^(2/3)), peaking at the merger and
+ringing out within 0.3 s: under a second in all, worked out from the formula. `x86/hda_x86.c` plays
+it: on each HD Audio controller it stops any DMA the firmware left running, resets the link with
 the settle times Linux uses, talks to the codecs through the command rings
 (CORB/RIRB, polled), maps every widget of each codec onto the report
 (`sound: codec=N w=0x.. ...`), opens every speaker, line-out and headphone
@@ -241,10 +241,11 @@ and switches on each amplifier and synchronises the two converters, following
 the sequence davidjo/snd_hda_macbookpro replays from macOS. That sequence only
 plays 44.1 kHz 24-bit, so behind a CS8409 the chirp is resampled to that
 (`ck_chirp_fill_441`, host tested against the 48 kHz sound). The amplifiers
-run 12 dB under the level macOS uses until the sound has been heard.
-**Not yet heard on real hardware:** QEMU has no CS8409, so this path has not
-run anywhere yet; the test computer's next report says whether the bridge was
-set up and how many I2C transfers went unconfirmed.
+run 24 dB under the level macOS uses. **Heard on the test computer
+(2026-10-18):** all four amplifiers answered (no I2C transfer unconfirmed)
+and the chirp played; at 12 dB under it was very loud and the old ten-second
+chirp too long, hence the quieter level and the short blirp. QEMU has no
+CS8409, so this path is checked only on that machine.
 Tests: `scripts/ck_allen_ui_test.sh` (host; pictures in
 `target/native-kernel-allen-ui/`), `scripts/ck_chirp_test.sh` (the sound as
 `target/native-kernel-chirp/chirp.wav`); the QEMU kernel test requires the

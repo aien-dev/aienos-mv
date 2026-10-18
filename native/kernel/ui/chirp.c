@@ -1,7 +1,7 @@
 /* chirp.c -- the startup sound; see chirp.h.
  *
  * Every frame is worked out from where it sits on the night's timeline.
- * With L the share of the inspiral left (1 at CK_NIGHT_SPIRAL_MS, 0 at the
+ * With L the share of the inspiral left (1 at CK_CHIRP_START_MS, 0 at the
  * merger), the holes' orbit goes as 1 - L^(5/8); so does the sound's
  * phase, scaled so it starts at CK_CHIRP_FROM_HZ, which makes its pitch go
  * as L^(-3/8). Once the pitch reaches CK_CHIRP_TO_HZ (the last few
@@ -11,11 +11,11 @@
  * Q30. */
 #include "chirp.h"
 
-#define F0_FRAME (CK_CHIRP_RATE / 1000u * CK_NIGHT_HOLES_MS)  /* the tone begins */
-#define F1_FRAME (CK_CHIRP_RATE / 1000u * CK_NIGHT_SPIRAL_MS) /* the inspiral begins */
+#define F0_FRAME (CK_CHIRP_RATE / 1000u * (CK_CHIRP_START_MS - CK_CHIRP_IN_MS)) /* the sound comes in */
+#define F1_FRAME (CK_CHIRP_RATE / 1000u * CK_CHIRP_START_MS)                    /* the sweep begins */
 #define F2_FRAME (CK_CHIRP_RATE / 1000u * CK_NIGHT_MERGE_MS)  /* the merger */
 #define Q30 (1ull << 30)
-#define DECAY 1073369062ull /* exp(-1 / (60 ms * 48 kHz)) in Q30: the fade's time constant is 60 ms */
+#define DECAY 1072996429ull /* exp(-1 / (30 ms * 48 kHz)) in Q30: the fade's time constant is 30 ms */
 
 static int16_t sin_t[4096]; /* Q14 */
 static uint32_t cap_frame;  /* the pitch stops rising here */
@@ -122,7 +122,7 @@ uint32_t ck_chirp_level(uint32_t f)
     if (f < F0_FRAME || f >= CK_CHIRP_FRAMES)
         return 0;
     uint64_t steady = (uint64_t)CK_CHIRP_PEAK * cap_l14 >> 30; /* the level at L = 1 */
-    if (f < F1_FRAME) { /* comes in smoothly (smoothstep) as the holes appear */
+    if (f < F1_FRAME) { /* comes in smoothly (smoothstep) */
         uint64_t x = ((uint64_t)(f - F0_FRAME) << 16) / (F1_FRAME - F0_FRAME), s = x * x * (3ull * 65536 - 2 * x);
         return (uint32_t)(steady * s >> 48);
     }

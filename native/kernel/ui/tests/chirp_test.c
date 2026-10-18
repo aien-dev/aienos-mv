@@ -80,9 +80,18 @@ int main(int argc, char **argv)
 
     /* silence while the stars come out, and after the end */
     int quiet = 1;
-    for (uint32_t f = 0; f < ms(CK_NIGHT_HOLES_MS); f++)
+    for (uint32_t f = 0; f < ms(CK_CHIRP_START_MS - CK_CHIRP_IN_MS); f++)
         quiet &= s[2 * f] == 0 && s[2 * f + 1] == 0;
-    check(quiet, "silent before the black holes appear");
+    check(quiet, "silent until just before the sweep");
+    uint32_t first = 0, last = 0;
+    for (uint32_t f = 0; f < N; f++)
+        if (s[2 * f]) {
+            first = first ? first : f;
+            last = f;
+        }
+    printf("note: sound from %u ms to %u ms (%u ms)\n", first * 1000 / CK_CHIRP_RATE, last * 1000 / CK_CHIRP_RATE,
+           (last - first) * 1000 / CK_CHIRP_RATE);
+    check(first && last - first < ms(1000), "a quick blirp: under a second from first sound to last");
     quiet = 1;
     for (uint32_t f = N; f < N + extra; f++)
         quiet &= s[2 * f] == 0;
@@ -110,11 +119,11 @@ int main(int argc, char **argv)
     check(jump <= (int)(6.2832 * CK_CHIRP_TO_HZ / CK_CHIRP_RATE * CK_CHIRP_PEAK) + 64, "no clicks");
 
     /* loudness: comes in, then only rises to the merger, then falls */
-    uint32_t a = ck_chirp_level(ms(CK_NIGHT_HOLES_MS)), b = ck_chirp_level(ms(CK_NIGHT_SPIRAL_MS) - 1);
-    check(a < 4 && b > 1000, "the tone comes in as the holes appear");
-    check(ck_chirp_level(ms(CK_NIGHT_SPIRAL_MS)) - b < 8, "no step in loudness when the spiral starts");
+    uint32_t a = ck_chirp_level(ms(CK_CHIRP_START_MS - CK_CHIRP_IN_MS)), b = ck_chirp_level(ms(CK_CHIRP_START_MS) - 1);
+    check(a < 4 && b > 1000, "the sound comes in over CK_CHIRP_IN_MS");
+    check(ck_chirp_level(ms(CK_CHIRP_START_MS)) - b < 8, "no step in loudness when the sweep starts");
     int up = 1, down = 1;
-    for (uint32_t f = ms(CK_NIGHT_HOLES_MS) + 1; f < ms(CK_NIGHT_MERGE_MS); f++)
+    for (uint32_t f = ms(CK_CHIRP_START_MS - CK_CHIRP_IN_MS) + 1; f < ms(CK_NIGHT_MERGE_MS); f++)
         up &= ck_chirp_level(f) >= ck_chirp_level(f - 1);
     for (uint32_t f = ms(CK_NIGHT_MERGE_MS) + 1; f < N; f++)
         down &= ck_chirp_level(f) <= ck_chirp_level(f - 1);
@@ -124,27 +133,30 @@ int main(int argc, char **argv)
     check(ck_chirp_level(ms(CK_NIGHT_MERGE_MS) + ms(60)) < CK_CHIRP_PEAK * 40 / 100, "the ring fades in tens of ms");
 
     /* pitch: steady, then only rises, reaching TO_HZ in the last moments */
-    check(ck_chirp_hz(ms(4000)) == CK_CHIRP_FROM_HZ && ck_chirp_hz(ms(CK_NIGHT_SPIRAL_MS)) == CK_CHIRP_FROM_HZ,
-          "steady tone while the holes circle");
+    check(ck_chirp_hz(ms(CK_CHIRP_START_MS - CK_CHIRP_IN_MS)) == CK_CHIRP_FROM_HZ &&
+              ck_chirp_hz(ms(CK_CHIRP_START_MS)) == CK_CHIRP_FROM_HZ,
+          "steady pitch while it comes in");
     up = 1;
     uint32_t reach = 0;
-    for (uint32_t f = ms(CK_NIGHT_SPIRAL_MS) + 1; f < ms(CK_NIGHT_MERGE_MS); f++) {
+    for (uint32_t f = ms(CK_CHIRP_START_MS) + 1; f < ms(CK_NIGHT_MERGE_MS); f++) {
         up &= ck_chirp_hz(f) >= ck_chirp_hz(f - 1);
         if (!reach && ck_chirp_hz(f) == CK_CHIRP_TO_HZ)
             reach = f;
     }
-    check(up, "pitch only rises in the spiral");
-    printf("note: pitch at 10000 ms %u Hz, 11800 ms %u Hz; the top reached %u ms before the merger\n",
-           ck_chirp_hz(ms(10000)), ck_chirp_hz(ms(11800)), (ms(CK_NIGHT_MERGE_MS) - reach) * 1000 / CK_CHIRP_RATE);
+    check(up, "pitch only rises in the sweep");
+    printf("note: pitch mid-sweep %u Hz, 100 ms before the merger %u Hz; the top reached %u ms before it\n",
+           ck_chirp_hz(ms(CK_CHIRP_START_MS + CK_CHIRP_RISE_MS / 2)), ck_chirp_hz(ms(CK_NIGHT_MERGE_MS - 100)), (ms(CK_NIGHT_MERGE_MS) - reach) * 1000 / CK_CHIRP_RATE);
     check(reach && ms(CK_NIGHT_MERGE_MS) - reach < ms(60), "the top pitch only in the last 60 ms");
 
     /* what is heard matches: zero crossings */
-    double h0 = heard_hz(s, ms(4000), ms(5000)), h1 = heard_hz(s, ms(9950), ms(10050)),
+    const uint32_t mid = CK_CHIRP_START_MS + CK_CHIRP_RISE_MS / 2;
+    double h0 = heard_hz(s, ms(CK_CHIRP_START_MS - CK_CHIRP_IN_MS / 2), ms(CK_CHIRP_START_MS)),
+           h1 = heard_hz(s, ms(mid - 50), ms(mid + 50)),
            h2 = heard_hz(s, ms(CK_NIGHT_MERGE_MS), ms(CK_NIGHT_MERGE_MS) + ms(100));
-    printf("note: heard %.1f Hz while the holes circle, %.1f Hz at 10000 ms (asked %u), %.1f Hz in the ring\n", h0, h1,
-           ck_chirp_hz(ms(10000)), h2);
-    check(h0 > CK_CHIRP_FROM_HZ - 1.0 && h0 < CK_CHIRP_FROM_HZ + 1.0, "heard pitch while the holes circle");
-    check(h1 > ck_chirp_hz(ms(9950)) - 2.0 && h1 < ck_chirp_hz(ms(10050)) + 2.0, "heard pitch in the spiral");
+    printf("note: heard %.1f Hz as it comes in, %.1f Hz mid-sweep (asked %u), %.1f Hz in the ring\n", h0, h1,
+           ck_chirp_hz(ms(mid)), h2);
+    check(h0 > CK_CHIRP_FROM_HZ - 3.0 && h0 < CK_CHIRP_FROM_HZ + 3.0, "heard pitch as it comes in");
+    check(h1 > ck_chirp_hz(ms(mid - 50)) - 2.0 && h1 < ck_chirp_hz(ms(mid + 50)) + 2.0, "heard pitch in the sweep");
     check(h2 > CK_CHIRP_TO_HZ - 5.0 && h2 < CK_CHIRP_TO_HZ + 5.0, "heard pitch in the ring");
 
     /* any frame in any order: backwards in odd pieces gives the same sound */
