@@ -150,10 +150,58 @@ int main(int argc, char **argv)
     CHECK(!strcmp(ck_allen_reply("Hello Allen"), "Hello Humanity."), "reply: Hello Allen");
     CHECK(!strcmp(ck_allen_reply("  hello   ALLEN!! "), "Hello Humanity."), "reply: case, spaces, punctuation folded");
     CHECK(!strcmp(ck_allen_reply("hello allen."), "Hello Humanity."), "reply: trailing period");
-    CHECK(!strcmp(ck_allen_reply("hello allenx"), "I don't know that yet."), "reply: near miss is not a match");
-    CHECK(!strcmp(ck_allen_reply(""), "I don't know that yet."), "reply: empty line");
-    CHECK(!strcmp(ck_allen_reply(0), "I don't know that yet."), "reply: no line");
+    CHECK(strcmp(ck_allen_reply("hello allenx"), "Hello Humanity."), "reply: near miss is not the first greeting");
+    CHECK(!strncmp(ck_allen_reply(""), "I don't know that yet.", 22), "reply: empty line");
+    CHECK(!strncmp(ck_allen_reply(0), "I don't know that yet.", 22), "reply: no line");
+    CHECK(!strncmp(ck_allen_reply("xz"), "I don't know that yet.", 22), "reply: unknown line");
     CHECK(!strcmp(ck_allen_reply("who are you"), "I am Allen. I live on this iMac."), "reply: who are you");
+    CHECK(ck_allen_reply("Goodbye, Allen!") == ck_allen_goodbye && ck_allen_reply("bye") == ck_allen_goodbye &&
+              ck_allen_reply("good bye") == ck_allen_goodbye && ck_allen_reply("goodbye now") != ck_allen_goodbye,
+          "reply: goodbye ends the session (and only goodbye)");
+    {
+        /* A conversation: what Allen is told stays for the session. */
+        ck_allen_facts facts = {4, 1, 1, 3840, 2160};
+        ck_allen_mind m;
+        ck_allen_mind_init(&m, &facts);
+        static const struct {
+            const char *say, *want; /* want: the answer starts with this */
+            uint64_t awake;
+        } talk[] = {
+            {"Hello Allen", "Hello Humanity.", 5},
+            {"what's my name?", "You haven't told me yet.", 6},
+            {"My name is drake", "Nice to meet you, Drake.", 7},
+            {"hi", "Hello, Drake. Good to see you.", 8},
+            {"what is my name", "You're Drake.", 9},
+            {"how are you?", "I'm running well, Drake. 4 cores awake", 10},
+            {"good thanks", "Glad to hear it.", 11},
+            {"i am tired", "Sorry to hear that.", 12},
+            {"what is 12 times 4", "12 times 4 is 48.", 13},
+            {"nine divided by two", "9 divided by 2 is 4 remainder 1.", 14},
+            {"3 minus 10", "3 minus 10 is minus 7.", 15},
+            {"what is 5 divided by zero", "Nobody can divide by zero", 16},
+            {"tell me about this computer", "This iMac has 4 cores, a 3840 by 2160 screen, 1 hard drive and 1 SSD.",
+             17},
+            {"how long have you been awake?", "I've been awake for 2 minutes and 5 seconds.", 125},
+            {"what time is it", "I can't read the clock yet. I've been awake for 1 hour and 1 minute.", 3660},
+            {"who made you", "Drake built me", 3661},
+            {"what is aienos", "AIENOS is the operating system I live in", 3662},
+            {"tell me a joke", "", 3663},
+            {"thank you", "You're welcome, Drake.", 3664},
+            {"can you remember things", "I can't keep memories past a restart yet.", 3665},
+            {"help", "I can learn your name", 3666},
+            {"i'm fine", "Glad to hear it.", 3667},
+            {"blorp", "I don't know that yet.", 3668},
+        };
+        int ok = 1;
+        for (size_t i = 0; i < sizeof talk / sizeof talk[0]; i++) {
+            const char *a = ck_allen_answer(&m, talk[i].say, talk[i].awake);
+            if (strncmp(a, talk[i].want, strlen(talk[i].want)) || strlen(a) >= 160) {
+                printf("  conversation line %zu: \"%s\" -> \"%s\"\n", i, talk[i].say, a);
+                ok = 0;
+            }
+        }
+        CHECK(ok, "reply: a whole conversation (name, how are you, sums, machine facts, awake time, help)");
+    }
 
     /* ---- typeface ---- */
     CHECK(ck_af_isqrt(0) == 0 && ck_af_isqrt(15) == 3 && ck_af_isqrt(16) == 4 &&
@@ -201,7 +249,7 @@ int main(int argc, char **argv)
     void *mem = malloc(need);
     CHECK(ck_allen_ui_start(fb, W, H, W, 1, mem, need - 1, 1000, 0, "x") == -1, "ui: short memory refused");
     CHECK(ck_allen_ui_start(fb, W, H, W, 2, mem, need, 1000, 0, "x") == -1, "ui: unknown pixel format refused");
-    CHECK(ck_allen_ui_start(fb, W, H, W, 1, mem, need, 1000, 0, "This iMac restarts 60 s after the last key") == 0,
+    CHECK(ck_allen_ui_start(fb, W, H, W, 1, mem, need, 1000, 0, "Type goodbye to restart this iMac") == 0,
           "ui: starts at 3840x2160");
     CHECK(ck_allen_ui_on(), "ui: on");
     uint32_t corner = fb[0];
@@ -243,6 +291,25 @@ int main(int argc, char **argv)
         png(path, fb, W, 1, 0, 0, 1600, 1000, 1);
         snprintf(path, sizeof path, "%s/allen-answer-detail.png", dir);
         png(path, fb, W, 1, 840, 1100, 2160, 820, 1);
+    }
+    {
+        /* A longer talk: long answers wrap, older bubbles scroll up and out. */
+        static const char *const lines[] = {"my name is drake", "how are you", "good", "what can you do",
+                                            "tell me about this computer", "what is 12 times 4"};
+        ck_allen_facts facts = {4, 1, 1, W, H};
+        ck_allen_mind m;
+        ck_allen_mind_init(&m, &facts);
+        for (size_t i = 0; i < sizeof lines / sizeof lines[0]; i++) {
+            ck_allen_ui_said(lines[i], ck_allen_answer(&m, lines[i], 60 + i), now);
+            for (unsigned j = 0; j < 400; j++, now += 10)
+                ck_allen_ui_tick(now);
+        }
+        unsigned talk = count(fb, W, H, 1, 0);
+        CHECK(talk > user0 + 2000, "ui: a longer conversation scrolls and keeps drawing");
+        if (dir) {
+            snprintf(path, sizeof path, "%s/allen-conversation.png", dir);
+            png(path, fb, W, 1, 0, 0, W, H, 2);
+        }
     }
 
     /* ---- 1280 x 800 RGBX (QEMU's usual mode) ---- */
