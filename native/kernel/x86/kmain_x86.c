@@ -383,12 +383,14 @@ static const char *meter_start(void)
 {
     static const uint8_t models[] = {0x4e, 0x5e, 0x8e, 0x9e, 0xa5, 0xa6};
     uint32_t r[4];
-    ck_cpuid(0, 0, r);
-    if (r[1] != 0x756e6547u) /* "Genu" */
-        return "none (not an Intel processor)";
     ck_cpuid(1, 0, r);
     if (r[2] >> 31 & 1)
         return "none (under a hypervisor)";
+    uint32_t sig = r[0];
+    ck_cpuid(0, 0, r);
+    if (r[1] != 0x756e6547u) /* "Genu" */
+        return "none (not an Intel processor)";
+    r[0] = sig;
     uint32_t family = r[0] >> 8 & 0xfu, model = (r[0] >> 4 & 0xfu) | (r[0] >> 12 & 0xf0u);
     int known = 0;
     for (unsigned i = 0; i < sizeof models; i++)

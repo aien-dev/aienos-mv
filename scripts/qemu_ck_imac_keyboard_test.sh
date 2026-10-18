@@ -278,6 +278,11 @@ chk "idle: how the cores rest, meter off under a hypervisor" "${work}/idle.txt" 
 chk "idle: the screen slept by itself" "${work}/idle.txt" '^power: no key for 25 s; the screen sleeps$'
 [[ ${idle_slept} == 1 ]] && echo "PASS  idle: Allen asleep with no key typed" || { echo "FAIL  idle: Allen did not fall asleep by himself"; fails=$((fails + 1)); }
 [[ ${idle_woke} == 1 ]] && echo "PASS  idle: a key woke Allen" || { echo "FAIL  idle: key did not wake Allen"; fails=$((fails + 1)); }
+n_sl=$(grep -acE '^power: Allen asleep' "${work}/idle.txt" || true); n_aw=$(grep -acE '^power: Allen awake' "${work}/idle.txt" || true)
+if [[ ${n_sl} == 1 && ${n_aw} == 1 ]]; then echo "PASS  idle: one sleep, one wake"; else
+    echo "FAIL  idle: ${n_sl} sleep and ${n_aw} wake lines (one each expected)"; fails=$((fails + 1))
+    echo "---- idle serial (all) ----"; cat "${work}/idle.txt"; echo "----"
+fi
 if grep -aqE '^keyboard_line: xok$' "${work}/idle.txt"; then echo "FAIL  idle: the waking key was typed"; fails=$((fails + 1)); else echo "PASS  idle: the waking key was not typed"; fi
 chk "idle: typing works again after waking" "${work}/idle.txt" '^keyboard_line: ok$'
 if grep -aqE '^power: processor ' "${work}/idle.txt"; then echo "FAIL  idle: processor meter read under a hypervisor"; fails=$((fails + 1)); else echo "PASS  idle: no processor meter under a hypervisor"; fi
