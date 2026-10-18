@@ -63,8 +63,8 @@
           "purpose": "Directory native/kernel/core. Purpose not yet described by a human."
         },
         {
-          "digest": "08d0a0be2c57d04675c81ac1d56729319a6d8f758fb5a456fb58b78db9f10e98",
-          "last_commit": "2eef482",
+          "digest": "524efd6c031d878846195b7f44cf6c1d1c75401ed43fdb1e101b1a59a240ca5a",
+          "last_commit": "02ee7b1",
           "name": "dev",
           "purpose": "Directory native/kernel/dev. Purpose not yet described by a human."
         },
@@ -99,15 +99,15 @@
           "purpose": "Hosted (Linux-built) checkers for the native kernel, run by `make -C native/kernel test`; nothin"
         }
       ],
-      "children_root": "sha256:662c825954daeab3e460deaab9c9fe6d348aff6e51921179eecde7c3bbf911e1",
-      "compiled_at": "2026-10-18T06:34:48Z",
+      "children_root": "sha256:3f446964e3fd753df0148d097d383ed7d46252dbb510e254fc103d83f88fbcda",
+      "compiled_at": "2026-10-18T07:06:47Z",
       "compiler": "crumb-compile/1",
-      "digest": "sha256:1dc3bc5476ee25d1b51cf2bb72080e9e344727303aa87f513ce8aaadee5c3e33",
+      "digest": "sha256:b86b1fe8562adfa3645b91d5b8613cef9f6b1880007b97044f826d7997ef1a02",
       "evidence_files": 0,
       "evidence_root": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "files": 452,
-      "generated_at_commit": "2eef482f83ebc4ccc67fb3f88a5151c347f0497f",
-      "source_tree": "sha256:dfb067fc08977fc8daeea27c0235b2bc433e7fdb945ebab8c75ba400a8aa7888"
+      "generated_at_commit": "02ee7b19fb8fddd1ad102efd2cb9cebd8b48220a",
+      "source_tree": "sha256:8a9bf93f82b2363c203a9215d6504eebe1c05aa99f20e86ab2079268a730258a"
     },
     "owner_lane": "",
     "provenance": {
