@@ -4,6 +4,7 @@
 #include <stddef.h>
 
 const char ck_allen_goodbye[] = "Goodbye. Until next time.";
+const char ck_allen_save_failed[] = "I couldn't save that to my disk, so I'll only remember it until this iMac turns off.";
 static const char not_yet[] = "I don't know that yet. Type help to see what I can talk about.";
 
 /* Lowercases letters, keeps digits, turns every other run into one space,
@@ -118,9 +119,9 @@ static void put_awake(struct say *s, uint64_t t)
 /* ", Name" when Allen knows it. */
 static void put_name(struct say *s, const ck_allen_mind *m)
 {
-    if (m->name[0]) {
+    if (m->mem.name[0]) {
         put(s, ", ");
-        put(s, m->name);
+        put(s, m->mem.name);
     }
 }
 
@@ -232,10 +233,236 @@ static int learn_name(ck_allen_mind *m, const char *rest)
     if (!n || rest[n] == ' ' || is_state(w) || eq(w, "allen"))
         return 0;
     for (size_t i = 0; i <= n; i++)
-        m->name[i] = w[i];
-    if (m->name[0] >= 'a' && m->name[0] <= 'z')
-        m->name[0] = (char)(m->name[0] - 'a' + 'A');
+        m->mem.name[i] = w[i];
+    if (m->mem.name[0] >= 'a' && m->mem.name[0] <= 'z')
+        m->mem.name[0] = (char)(m->mem.name[0] - 'a' + 'A');
+    m->changed = 1;
     return 1;
+}
+
+/* ---- What Allen is taught ---- */
+
+static size_t len_of(const char *s)
+{
+    size_t n = 0;
+    while (s[n])
+        n++;
+    return n;
+}
+static void copy_n(char *d, const char *s, size_t n)
+{
+    for (size_t i = 0; i < n; i++)
+        d[i] = s[i];
+    d[n] = 0;
+}
+
+/* t as Allen says it back: "my" becomes "your" and so on, word by word;
+ * cap: the first letter capitalised. */
+static void put_turned(struct say *s, const char *t, int cap)
+{
+    static const char *const from[] = {"my", "your", "i", "me", "mine", "yours", "myself", "am", 0};
+    static const char *const to[] = {"your", "my", "you", "you", "yours", "mine", "yourself", "are"};
+    while (*t) {
+        char w[CK_ALLEN_VAL_MAX];
+        size_t n = 0;
+        while (t[n] && t[n] != ' ' && n < sizeof w - 1)
+            w[n] = t[n], n++;
+        w[n] = 0;
+        t += n;
+        const char *say = w;
+        for (int i = 0; from[i]; i++)
+            if (eq(w, from[i]))
+                say = to[i];
+        if (cap && say[0] >= 'a' && say[0] <= 'z') {
+            char first[2] = {(char)(say[0] - 'a' + 'A'), 0};
+            put(s, first);
+            say++;
+        }
+        cap = 0;
+        put(s, say);
+        if (*t == ' ') {
+            put(s, " ");
+            t++;
+        }
+    }
+}
+
+static int fact_index(const ck_allen_mind *m, const char *key)
+{
+    for (uint32_t i = 0; i < m->mem.nfacts && i < CK_ALLEN_FACTS_MAX; i++)
+        if (eq(m->mem.fact[i].key, key))
+            return (int)i;
+    return -1;
+}
+
+/* "Your favorite color is blue" (no full stop). */
+static void put_fact(struct say *s, const ck_allen_fact *f, int cap)
+{
+    put_turned(s, f->key, cap);
+    put(s, f->are ? " are " : " is ");
+    put_turned(s, f->val, 0);
+}
+
+static const char *saved_note(const ck_allen_mind *m)
+{
+    return m->lasting ? " I'll remember that." : " I'll remember that until this iMac turns off.";
+}
+
+/* "remember (that) KEY is|are VALUE": stores it (or learns the name for
+ * "my name is"). 1 and the answer composed, or 0 if the line is not one. */
+static int teach(ck_allen_mind *m, struct say *s, const char *f)
+{
+    const char *rest = after(f, "remember that");
+    if (!rest)
+        rest = after(f, "remember");
+    if (!rest)
+        return 0;
+    const char *verb = 0;
+    for (const char *p = rest; *p && !verb; p++)
+        if (*p == ' ' && (after(p + 1, "is") || after(p + 1, "are")))
+            verb = p;
+    if (!verb) {
+        put(s, "Teach me like this: remember my favorite color is blue.");
+        return 1;
+    }
+    int are = verb[1] == 'a';
+    size_t klen = (size_t)(verb - rest);
+    const char *val = verb + (are ? 5 : 4);
+    size_t vlen = len_of(val);
+    if (klen == 7 && after(rest, "my name") == rest + 8 && !are) {
+        if (learn_name(m, val)) {
+            put(s, "Nice to meet you, ");
+            put(s, m->mem.name);
+            put(s, ".");
+            put(s, saved_note(m));
+        } else {
+            put(s, "Tell me your name as one word, like: my name is Drake.");
+        }
+        return 1;
+    }
+    if (klen >= CK_ALLEN_KEY_MAX || vlen >= CK_ALLEN_VAL_MAX) {
+        put(s, "That's longer than I can hold yet. Try something shorter.");
+        return 1;
+    }
+    char key[CK_ALLEN_KEY_MAX];
+    copy_n(key, rest, klen);
+    int i = fact_index(m, key);
+    if (i < 0) {
+        if (m->mem.nfacts >= CK_ALLEN_FACTS_MAX) {
+            put(s, "My memory is full. Type forget and something I know to make room.");
+            return 1;
+        }
+        i = (int)m->mem.nfacts++;
+        copy_n(m->mem.fact[i].key, key, klen);
+    }
+    copy_n(m->mem.fact[i].val, val, vlen);
+    m->mem.fact[i].are = (uint8_t)are;
+    m->changed = 1;
+    put(s, "Got it: ");
+    put_fact(s, &m->mem.fact[i], 0);
+    put(s, ".");
+    put(s, saved_note(m));
+    return 1;
+}
+
+/* "what is KEY" for a taught KEY: 1 and the answer, or 0. *asked_my: the
+ * question was about something of yours ("what is my ..."), for the
+ * not-told-yet answer. */
+static int recall(const ck_allen_mind *m, struct say *s, const char *f, const char **asked_my)
+{
+    static const char *const lead[] = {"what is", "what are", "whats", "what s", "who is", "who are", "where is",
+                                       "where are", "when is", "do you remember", "tell me", 0};
+    for (const char *const *l = lead; *l; l++) {
+        const char *key = after(f, *l);
+        if (!key)
+            continue;
+        int i = fact_index(m, key);
+        if (i >= 0) {
+            put_fact(s, &m->mem.fact[i], 1);
+            put(s, ".");
+            return 1;
+        }
+        if (after(key, "my"))
+            *asked_my = key;
+    }
+    return 0;
+}
+
+static int forget(ck_allen_mind *m, struct say *s, const char *f)
+{
+    const char *rest = after(f, "forget about");
+    if (!rest)
+        rest = after(f, "forget that");
+    if (!rest)
+        rest = after(f, "forget");
+    if (!rest)
+        return 0;
+    if (eq(rest, "everything") || eq(rest, "all") || eq(rest, "it all") || eq(rest, "all of it") ||
+        eq(rest, "me")) {
+        m->mem.nfacts = 0;
+        for (uint32_t i = 0; i < CK_ALLEN_FACTS_MAX; i++)
+            m->mem.fact[i] = (ck_allen_fact){{0}, {0}, 0};
+        for (size_t i = 0; i < sizeof m->mem.name; i++)
+            m->mem.name[i] = 0;
+        m->changed = 1;
+        put(s, "Done. I've forgotten everything you taught me, and your name.");
+        return 1;
+    }
+    if (eq(rest, "my name")) {
+        for (size_t i = 0; i < sizeof m->mem.name; i++)
+            m->mem.name[i] = 0;
+        m->changed = 1;
+        put(s, "Done. I've forgotten your name.");
+        return 1;
+    }
+    int i = fact_index(m, rest);
+    if (i < 0) {
+        put(s, "I don't remember anything about ");
+        put_turned(s, rest, 0);
+        put(s, ".");
+        return 1;
+    }
+    for (uint32_t k = (uint32_t)i; k + 1 < m->mem.nfacts; k++)
+        m->mem.fact[k] = m->mem.fact[k + 1];
+    m->mem.nfacts--;
+    m->mem.fact[m->mem.nfacts] = (ck_allen_fact){{0}, {0}, 0};
+    m->changed = 1;
+    put(s, "Done. I've forgotten ");
+    put_turned(s, rest, 0);
+    put(s, ".");
+    return 1;
+}
+
+/* Everything taught, as many as fit in one answer. */
+static void list_memory(const ck_allen_mind *m, struct say *s)
+{
+    uint32_t n = m->mem.nfacts + (m->mem.name[0] ? 1u : 0u);
+    if (!n) {
+        put(s, "Nothing yet. Teach me like this: remember my favorite color is blue.");
+        return;
+    }
+    put(s, "I remember ");
+    put_count(s, n, "thing", "things");
+    put(s, ":");
+    uint32_t told = 0;
+    if (m->mem.name[0]) {
+        put(s, " your name is ");
+        put(s, m->mem.name);
+        told++;
+    }
+    for (uint32_t i = 0; i < m->mem.nfacts; i++) {
+        char one[CK_ALLEN_KEY_MAX + CK_ALLEN_VAL_MAX + 16];
+        struct say t = {one, 0, sizeof one};
+        put(&t, told ? "; " : " ");
+        put_fact(&t, &m->mem.fact[i], 0);
+        if (s->n + t.n + 12 >= s->cap) {
+            put(s, "; and more");
+            break;
+        }
+        put(s, one);
+        told++;
+    }
+    put(s, ".");
 }
 
 void ck_allen_mind_init(ck_allen_mind *m, const ck_allen_facts *facts)
@@ -247,6 +474,23 @@ void ck_allen_mind_init(ck_allen_mind *m, const ck_allen_facts *facts)
         m->facts = *facts;
 }
 
+const char *ck_allen_welcome(ck_allen_mind *m)
+{
+    struct say s = {m->out, 0, sizeof m->out};
+    m->out[0] = 0;
+    if (!m->mem.name[0] && !m->mem.nfacts)
+        return 0;
+    put(&s, "Welcome back");
+    put_name(&s, m);
+    put(&s, ".");
+    if (m->mem.nfacts) {
+        put(&s, " I still remember ");
+        put_count(&s, m->mem.nfacts, "thing", "things");
+        put(&s, " you taught me.");
+    }
+    return m->out;
+}
+
 const char *ck_allen_answer(ck_allen_mind *m, const char *line, uint64_t awake_s)
 {
     char f[96];
@@ -256,6 +500,7 @@ const char *ck_allen_answer(ck_allen_mind *m, const char *line, uint64_t awake_s
     int asked_how = m->asked_how;
     m->asked_how = 0;
     m->turns++;
+    m->mem.lines++;
     const char *rest, *feel = 0;
 
     /* Ending the session: whole line only, so it never happens by accident. */
@@ -266,6 +511,17 @@ const char *ck_allen_answer(ck_allen_mind *m, const char *line, uint64_t awake_s
         return "Hello Humanity.";
     if (!f[0])
         return not_yet;
+    /* What Allen has been taught, before anything else can claim the line. */
+    const char *asked_my = 0;
+    if (teach(m, &s, f) || forget(m, &s, f) || recall(m, &s, f, &asked_my))
+        return m->out;
+    static const char *const what_known[] = {"what do you remember", "what do you know", "what have you learned",
+                                             "what have you learnt", "what did i teach you", "what did i tell you",
+                                             0};
+    if (any(f, what_known)) {
+        list_memory(m, &s);
+        return m->out;
+    }
     if (arithmetic(&s, f))
         return m->out;
 
@@ -274,8 +530,9 @@ const char *ck_allen_answer(ck_allen_mind *m, const char *line, uint64_t awake_s
         (rest = after(f, "i m")) || (rest = after(f, "im"))) {
         if (learn_name(m, rest)) {
             put(&s, "Nice to meet you, ");
-            put(&s, m->name);
-            put(&s, ". I'll remember your name until this iMac turns off.");
+            put(&s, m->mem.name);
+            put(&s, ".");
+            put(&s, saved_note(m));
             return m->out;
         }
         feel = rest;
@@ -283,10 +540,10 @@ const char *ck_allen_answer(ck_allen_mind *m, const char *line, uint64_t awake_s
     static const char *const ask_name[] = {"what is my name", "whats my name", "what s my name", "who am i",
                                            "do you know my name", "do you remember me", "my name", 0};
     if (any(f, ask_name)) {
-        if (!m->name[0])
+        if (!m->mem.name[0])
             return "You haven't told me yet. Say: my name is, and then your name.";
         put(&s, "You're ");
-        put(&s, m->name);
+        put(&s, m->mem.name);
         put(&s, ".");
         return m->out;
     }
@@ -317,8 +574,8 @@ const char *ck_allen_answer(ck_allen_mind *m, const char *line, uint64_t awake_s
     static const char *const help[] = {"help", "what can you do", "what do you do", "what can i say",
                                        "what can i ask", "commands", 0};
     if (any(f, help))
-        return "I can learn your name, tell you about this iMac and how long I've been awake, do sums like 12 times "
-               "4, and tell a joke. Type goodbye to end.";
+        return "I learn your name and what you teach me, like: remember my car is red. I also do sums, talk about "
+               "this iMac and tell jokes. Type goodbye to end.";
     static const char *const your_name[] = {"what is your name", "whats your name", "what s your name",
                                             "your name", 0};
     if (any(f, your_name))
@@ -364,6 +621,15 @@ const char *ck_allen_answer(ck_allen_mind *m, const char *line, uint64_t awake_s
         put(&s, ".");
         return m->out;
     }
+    static const char *const starts[] = {"how many times", "how many starts", "restarts", "restarted", 0};
+    if (any(f, starts) && m->mem.starts) {
+        put(&s, "This is start number ");
+        putu(&s, m->mem.starts);
+        put(&s, " for me, and I've answered ");
+        put_count(&s, m->mem.lines, "line", "lines");
+        put(&s, " in all.");
+        return m->out;
+    }
     static const char *const awake[] = {"how long", "uptime", "awake", "how old are you", 0};
     static const char *const clock[] = {"what time", "time is it", "what day", "date", "time", 0};
     if (any(f, awake) || any(f, clock)) {
@@ -376,7 +642,10 @@ const char *ck_allen_answer(ck_allen_mind *m, const char *line, uint64_t awake_s
     }
     static const char *const remember[] = {"remember", "learn", "teach", "memory", "forget", 0};
     if (any(f, remember))
-        return "I can't keep memories past a restart yet. Learning to remember is my next step.";
+        return m->lasting ? "Teach me like this: remember my favorite color is blue. Then ask: what is my "
+                            "favorite color. I keep it on this iMac's own disk."
+                          : "Teach me like this: remember my favorite color is blue. Then ask: what is my "
+                            "favorite color. My disk isn't ready, so only until this iMac turns off.";
     static const char *const joke[] = {"joke", "funny", "make me laugh", 0};
     if (any(f, joke)) {
         static const char *const jokes[] = {
@@ -424,7 +693,15 @@ const char *ck_allen_answer(ck_allen_mind *m, const char *line, uint64_t awake_s
     if (any(f, hello)) {
         put(&s, "Hello");
         put_name(&s, m);
-        put(&s, m->name[0] ? ". Good to see you." : ". I am Allen.");
+        put(&s, m->mem.name[0] ? ". Good to see you." : ". I am Allen.");
+        return m->out;
+    }
+    if (asked_my) {
+        put(&s, "You haven't told me ");
+        put_turned(&s, asked_my, 0);
+        put(&s, " yet. Teach me: remember ");
+        put(&s, asked_my);
+        put(&s, " is, and then the answer.");
         return m->out;
     }
     return not_yet;

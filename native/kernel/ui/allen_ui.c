@@ -646,7 +646,8 @@ void ck_allen_ui_said(const char *line, const char *reply, uint64_t now)
 {
     if (!ui.on)
         return;
-    push(0, line);
+    if (line)
+        push(0, line);
     push(1, reply);
     ui.shown = 0;
     ui.input_len = 0;

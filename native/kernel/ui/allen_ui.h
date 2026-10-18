@@ -23,7 +23,8 @@ int ck_allen_ui_on(void);
 /* The line being typed changed (buf holds len characters). */
 void ck_allen_ui_input(const char *buf, unsigned len, uint64_t now);
 /* A line was entered and Allen answered: both become bubbles; the answer
- * appears letter by letter while the orb glows. */
+ * appears letter by letter while the orb glows. line NULL: Allen speaks
+ * first (the welcome after a restart), one bubble. */
 void ck_allen_ui_said(const char *line, const char *reply, uint64_t now);
 /* Animation: call often (every poll); it redraws only what is due. */
 void ck_allen_ui_tick(uint64_t now);

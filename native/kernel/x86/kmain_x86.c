@@ -16,11 +16,13 @@
  * local APIC (xAPIC) with its timer at 100 Hz for 20 ticks, the MADT CPU
  * count, the secondary cores started and parked (smp_x86.S), the AHCI and
  * NVMe disks read-only and a look at the Ethernet chip (pci_x86.c,
- * ahci_x86.c), and the final report. It holds the screen CK_X86_HOLD_S seconds and
+ * ahci_x86.c), and the final report. With a keyboard, Allen's window, whose
+ * memory lives in its own partition of the approved hard disk (memory_x86.c,
+ * the only disk writes). It holds the screen CK_X86_HOLD_S seconds and
  * powers off through ACPI S5 (FADT PM1 control + the DSDT's \_S5 package); the lab image
  * (CK_X86_REPORT=1) restarts through the FADT reset register instead, back
  * into its network loader (native/boot/net_loader.c).
- * Scheduling on the secondary cores, disk writes, the network driver and VT-d
+ * Scheduling on the secondary cores, the network driver and VT-d
  * are later cuts. No runtime service
  * is called. QEMU runs of this path qualify nothing physical. */
 #include "../core/ck_internal.h"
@@ -269,6 +271,15 @@ static void allen_edit(const char *buf, unsigned len) { ck_allen_ui_input(buf, l
 static void allen_line(const char *text)
 {
     const char *reply = ck_allen_answer(&allen_mind, text, ck_rdtsc() / tsc_hz);
+    /* What was taught goes to disk before Allen says it will remember it;
+     * goodbye saves the line count. A failed save is said out loud. */
+    if (allen_mind.lasting && (allen_mind.changed || reply == ck_allen_goodbye) &&
+        ck_x86_memory_save(&allen_mind.mem)) {
+        allen_mind.lasting = 0;
+        if (allen_mind.changed)
+            reply = ck_allen_save_failed;
+    }
+    allen_mind.changed = 0;
     ck_printf("allen: %s\n", reply);
     /* the only line about it the lab report may carry: lengths, no words */
     ck_printf("screen: Allen answered (%u characters in, %u out)\n", (unsigned)strlen(text), (unsigned)strlen(reply));
@@ -284,6 +295,12 @@ static void allen_window(void)
     uint32_t w, h, pitch, format;
     uint64_t pa;
     ck_allen_mind_init(&allen_mind, &allen_facts);
+    if (ck_x86_memory_open(&allen_mind.mem, tsc_hz)) {
+        allen_mind.lasting = 1;
+        allen_mind.mem.starts++;
+        if (ck_x86_memory_save(&allen_mind.mem))
+            allen_mind.lasting = 0;
+    }
     ck_x86_kbd_sink(0, allen_line);
     if (ck_x86_console_fb_get(&px, &w, &h, &pitch, &format)) {
         ck_puts("screen: text only (no framebuffer for Allen's window)\n");
@@ -310,6 +327,11 @@ static void allen_window(void)
     ck_x86_kbd_sink(allen_edit, allen_line);
     allen_on = 1;
     ck_printf("screen: Allen's window drawn in %llu ms\n", (unsigned long long)((ck_rdtsc() - t0) * 1000 / tsc_hz));
+    const char *hello = ck_allen_welcome(&allen_mind);
+    if (hello) {
+        ck_printf("allen: %s\n", hello);
+        ck_allen_ui_said(0, hello, ck_rdtsc());
+    }
 }
 
 void ck_x86_hold_step(uint64_t *end)
