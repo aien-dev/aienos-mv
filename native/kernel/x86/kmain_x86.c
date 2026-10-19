@@ -796,11 +796,28 @@ static void courier_step(void)
     }
 }
 
+/* One step of the hold loop. The devices (keyboard controller, the courier's
+ * serial port, the power button's PM1 port, the sound controller) are polled
+ * at most once every POLL_US by the TSC; between polls the loop only spins
+ * on the clock. Polling them on every pass hit them about a million times a
+ * second, which under QEMU starved the emulator's main loop of its big lock
+ * after a keyboard replug (handoff 2026-10-18: the replugged keyboard's keys
+ * never arrived). 0.5 ms keeps a key under a millisecond late and the
+ * courier's 16-byte FIFO safe (1.4 ms to fill at 115200 baud). The picture's
+ * frame (when this core draws it) and the sleep bookkeeping run every pass. */
+#define POLL_US 500u
+static uint64_t poll_next; /* TSC of the next device poll */
+
 void ck_x86_hold_step(uint64_t *end)
 {
-    ck_x86_hda_step();
-    ck_x86_kbd_hold_poll(end);
-    courier_step(); /* before the window too: the wire's FIFO is 16 bytes, the far side's hello 14 */
+    uint64_t now = ck_rdtsc();
+    int poll = (int64_t)(now - poll_next) >= 0;
+    if (poll) {
+        poll_next = now + tsc_hz / 1000000 * POLL_US;
+        ck_x86_hda_step();
+        ck_x86_kbd_hold_poll(end);
+        courier_step(); /* before the window too: the wire's FIFO is 16 bytes, the far side's hello 14 */
+    }
     if (!allen_on)
         return;
     if (!__atomic_load_n(&draw_on, __ATOMIC_ACQUIRE) && !__atomic_test_and_set(&draw_lock, __ATOMIC_ACQUIRE)) {
@@ -823,7 +840,7 @@ void ck_x86_hold_step(uint64_t *end)
         ck_printf("power: no key for %u s; the screen sleeps\n", (unsigned)CK_X86_IDLE_S);
         allen_sleep(1);
     }
-    if (power_button_tapped())
+    if (poll && power_button_tapped())
         allen_sleep(!allen_asleep);
     meter_step(ck_rdtsc());
     *end = ~0ull;
