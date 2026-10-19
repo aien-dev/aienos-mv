@@ -52,6 +52,7 @@ typedef struct {
     int32_t x, y, w, h; /* its own area, px */
     int32_t rx, ry, rr; /* a ring (timer, person) or the picture's place (rx, ry, w x rr), px; rr 0: none */
     ck_rect box;        /* all it may light, px */
+    ck_rect spark_was;  /* where its spark was drawn last frame */
     int32_t ax, ay;     /* where its spark lands, 16ths of a pixel */
     uint32_t born, gone; /* ms; gone 0 while it stays */
     uint32_t dur;        /* a timer's length, ms (0: a clock time, shown as written) */

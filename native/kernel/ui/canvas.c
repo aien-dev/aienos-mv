@@ -292,12 +292,25 @@ static int timer_runs(const ck_canvas_item *it, uint32_t t)
     return it->kind == CK_THING_TIMER && it->dur && t < opens(it) + it->dur + 10000u;
 }
 
-static ck_rect spark_box(const ck_allen_canvas *c, const ck_canvas_item *it)
+/* where the spark is at t (16ths of a pixel), k steps back along its trail */
+static void spark_at(const ck_allen_canvas *c, const ck_canvas_item *it, int32_t p, int32_t *sx, int32_t *sy)
 {
-    int32_t x0 = ck_min(c->hx, it->ax) / 16, x1 = ck_max(c->hx, it->ax) / 16;
-    int32_t y0 = ck_min(c->hy, it->ay) / 16, y1 = ck_max(c->hy, it->ay) / 16;
-    int32_t m = S(40);
-    return (ck_rect){x0 - m, y0 - m - S(80), x1 - x0 + 2 * m, y1 - y0 + 2 * m + S(80)};
+    uint32_t e = ck_smooth(ck_clamp(p, 0, 256));
+    *sx = c->hx + (int32_t)((int64_t)(it->ax - c->hx) * e >> 8);
+    *sy = c->hy + (int32_t)((int64_t)(it->ay - c->hy) * e >> 8) - (int32_t)((int64_t)S(70) * 16 * (e * (256 - e) >> 6) >> 8);
+}
+
+/* the part of the screen the spark lights at t: its head and trail with the halo round them */
+static ck_rect spark_box(const ck_allen_canvas *c, const ck_canvas_item *it, uint32_t t)
+{
+    if (t < it->born || t >= it->born + SPARK_MS + 40)
+        return (ck_rect){0, 0, 0, 0};
+    int32_t p = ck_prog(t, it->born, it->born + SPARK_MS), x0, y0, x1, y1, m = S(36) + 2;
+    spark_at(c, it, p, &x0, &y0);
+    spark_at(c, it, p - 5 * 14, &x1, &y1);
+    ck_rect a = {ck_min(x0, x1) / 16 - m, ck_min(y0, y1) / 16 - m, 0, 0};
+    a.w = ck_max(x0, x1) / 16 + m - a.x, a.h = ck_max(y0, y1) / 16 + m - a.y;
+    return a;
 }
 
 static ck_rect ring_box(const ck_allen_canvas *c, const ck_canvas_item *it)
@@ -459,8 +472,12 @@ void ck_allen_canvas_at(ck_allen_canvas *c, uint32_t t, int32_t hx, int32_t hy, 
         }
         if ((t + 40 >= it->born && t <= arrived_by(it)) || it->gone)
             mark(it->box);
-        if (it->arrive == CK_ARRIVE_BLOOM && t + 40 >= it->born && t <= it->born + SPARK_MS + 60)
-            mark(spark_box(c, it));
+        if (it->arrive == CK_ARRIVE_BLOOM && t + 40 >= it->born && t <= it->born + SPARK_MS + 80) {
+            ck_rect sb = spark_box(c, it, t); /* only where the spark is and was: the sky between is left alone */
+            mark(sb);
+            mark(it->spark_was);
+            it->spark_was = sb;
+        }
         if (flow && it->arrive == CK_ARRIVE_BLOOM && !it->landed && t >= it->born + SPARK_MS) {
             it->landed = 1; /* the spark lands on the water */
             ck_flow_touch(flow, it->ax / 16, it->ay / 16, 0, -50, 9000, S(36));
@@ -517,28 +534,27 @@ static void draw_tone(const ck_allen_canvas *c, ck_canvas *cv, const ck_rect *r)
     }
 }
 
-/* A soft place of shade (or light) over a rectangle, no edge: 1 inside, easing to 0 over `feather` px
- * outside it, x and y apart (so its corners round by themselves). */
-static void soft_rect(ck_canvas *cv, const ck_rect *r, ck_rect a, int32_t feather, uint32_t color, uint32_t amt,
-                      int add)
+/* The shade words rest in: an oval over the rectangle a, full across most of it and easing to nothing at its
+ * rim, so it never shows a straight edge even over the bright band of the sky. */
+static void shade(ck_canvas *cv, const ck_rect *r, ck_rect a, uint32_t amt)
 {
-    if (!amt || feather <= 0)
+    ck_rect d = a, all = {0, 0, cv->w, cv->h};
+    if (!amt || a.w < 4 || a.h < 4 || !ck_clip(&d, r) || !ck_clip(&d, &all))
         return;
-    ck_rect d = ck_grow(a, feather), all = {0, 0, cv->w, cv->h};
-    if (!ck_clip(&d, r) || !ck_clip(&d, &all))
-        return;
+    int64_t hx = a.w / 2, hy = a.h / 2, cx = a.x + hx, cy = a.y + hy;
+    int64_t ix = ((int64_t)1 << 32) / (hx * hx), iy = ((int64_t)1 << 32) / (hy * hy);
     for (int32_t y = d.y; y < d.y + d.h; y++) {
-        int32_t oy = y < a.y ? a.y - y : y >= a.y + a.h ? y - (a.y + a.h - 1) : 0;
-        uint32_t fy = 256 - ck_smooth(oy * 256 / feather);
-        if (!fy)
+        int64_t dy = y - cy, qy = dy * dy * iy >> 16;
+        if (qy >= 65536)
             continue;
         uint32_t *px = cv->px + (size_t)y * (size_t)cv->w;
         for (int32_t x = d.x; x < d.x + d.w; x++) {
-            int32_t ox = x < a.x ? a.x - x : x >= a.x + a.w ? x - (a.x + a.w - 1) : 0;
-            uint32_t f = (256 - ck_smooth(ox * 256 / feather)) * fy >> 8;
-            uint32_t k = f * amt >> 8;
+            int64_t dx = x - cx, q = qy + (dx * dx * ix >> 16); /* 65536 at the rim */
+            if (q >= 65536)
+                continue;
+            uint32_t k = (256 - ck_smooth((int32_t)((q - 30000) * 256 / 35536))) * amt >> 8;
             if (k)
-                px[x] = add ? ck_add(px[x], color, k) : ck_mix(px[x], color, k);
+                px[x] = ck_mix(px[x], C_NIGHT, k);
         }
     }
 }
@@ -657,7 +673,7 @@ static void draw_item(const ck_allen_canvas *c, const ck_canvas_item *it, ck_can
     uint32_t edge = it->warm ? C_WARM2 : C_GLOW;
     int pict = it->kind == CK_THING_PICTURE || it->kind == CK_THING_VIDEO;
     /* the shade its words rest in: no edge, so the sky is never cut by a frame */
-    soft_rect(cv, r, (ck_rect){x - S(30), y - S(26), it->w + S(60), it->h + S(52)}, S(78), C_NIGHT, 132 * D >> 8, 0);
+    shade(cv, r, (ck_rect){x - S(110), y - S(80), it->w + S(220), it->h + S(160)}, 118 * D >> 8);
     switch (it->kind) {
     case CK_THING_NOTE:
     case CK_THING_LIST:
@@ -756,14 +772,11 @@ static void draw_spark(const ck_allen_canvas *c, const ck_canvas_item *it, ck_ca
     int32_t p = ck_prog(t, it->born, it->born + SPARK_MS);
     /* a warm point with a soft halo and a fading trail, on a gentle arc up and over to its place */
     uint32_t fade = 256 - ck_smooth(ck_prog(t, it->born + SPARK_MS - 120, it->born + SPARK_MS + 40));
-    for (int k = 0; k < 6 && p < 256 + 6 * 14; k++) {
-        int32_t pk = p - k * 14;
+    for (int k = 0; k < 6; k++) {
+        int32_t pk = p - k * 14, sx, sy;
         if (pk < 0)
             break;
-        uint32_t e = ck_smooth(ck_clamp(pk, 0, 256));
-        int32_t sx = c->hx + (int32_t)((int64_t)(it->ax - c->hx) * e >> 8);
-        int32_t sy = c->hy + (int32_t)((int64_t)(it->ay - c->hy) * e >> 8) -
-                     (int32_t)((int64_t)S(70) * 16 * (e * (256 - e) >> 6) >> 8);
+        spark_at(c, it, pk, &sx, &sy);
         uint32_t a = (256u - (uint32_t)k * 40u) * fade >> 8;
         if (!k)
             ck_glow(cv, r, sx, sy, S(34) * 16, C_GLOW, 70 * a >> 8);

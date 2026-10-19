@@ -10,8 +10,11 @@
 //! (the question) and one line of `log.tsv` (status, time, tokens, finish).
 //!
 //! The server makes one answer at a time and says 503 while it is busy with
-//! someone else's: this waits (Retry-After, else 2 s doubling to 30 s) for at
-//! most --wait-max seconds per question and never sends two requests at once.
+//! someone else's: this waits (5 s doubling to 60 s between tries, longer if
+//! Retry-After asks) for at most --wait-max seconds per question, and never
+//! sends two requests at once. A reply already kept is not asked again, so a
+//! round that was cut off resumes where it stopped. A server that is not
+//! listening (restarting) is waited for the same way.
 //! Standard library only: hand-built HTTP and JSON, as in the relay.
 use std::io::{Read, Write};
 use std::net::TcpStream;
@@ -46,7 +49,7 @@ fn parse_args() -> Args {
         out: PathBuf::new(),
         prompt: None,
         max_tokens: 400,
-        wait_max: 300,
+        wait_max: 900,
         temperature: "0.3".into(),
     };
     let mut it = std::env::args().skip(1);
@@ -109,7 +112,11 @@ fn json_read_str(s: &[u8], mut i: usize) -> Option<(String, usize)> {
                         let mut cp = u32::from_str_radix(hex, 16).ok()?;
                         i += 4;
                         if (0xd800..0xdc00).contains(&cp) && s.get(i..i + 2) == Some(b"\\u") {
-                            let lo = u32::from_str_radix(std::str::from_utf8(s.get(i + 2..i + 6)?).ok()?, 16).ok()?;
+                            let lo = u32::from_str_radix(
+                                std::str::from_utf8(s.get(i + 2..i + 6)?).ok()?,
+                                16,
+                            )
+                            .ok()?;
                             if (0xdc00..0xe000).contains(&lo) {
                                 cp = 0x10000 + ((cp - 0xd800) << 10) + (lo - 0xdc00);
                                 i += 6;
@@ -187,7 +194,12 @@ fn dechunk(b: &[u8]) -> Vec<u8> {
 }
 
 /// One HTTP exchange: (status, head, body).
-fn http(host: &str, method: &str, path: &str, body: &str) -> std::io::Result<(u16, String, Vec<u8>)> {
+fn http(
+    host: &str,
+    method: &str,
+    path: &str,
+    body: &str,
+) -> std::io::Result<(u16, String, Vec<u8>)> {
     let mut s = TcpStream::connect(host)?;
     s.set_read_timeout(Some(Duration::from_secs(300)))?;
     write!(
@@ -204,9 +216,16 @@ fn http(host: &str, method: &str, path: &str, body: &str) -> std::io::Result<(u1
     s.read_to_end(&mut raw)?;
     let end = find(&raw, b"\r\n\r\n", 0).ok_or_else(|| std::io::Error::other("no http head"))?;
     let head = String::from_utf8_lossy(&raw[..end]).to_string();
-    let status = head.split_whitespace().nth(1).and_then(|s| s.parse().ok()).unwrap_or(0);
+    let status = head
+        .split_whitespace()
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
     let mut b = raw[end + 4..].to_vec();
-    if head.to_ascii_lowercase().contains("transfer-encoding: chunked") {
+    if head
+        .to_ascii_lowercase()
+        .contains("transfer-encoding: chunked")
+    {
         b = dechunk(&b);
     }
     Ok((status, head, b))
@@ -214,7 +233,11 @@ fn http(host: &str, method: &str, path: &str, body: &str) -> std::io::Result<(u1
 
 fn retry_after(head: &str) -> Option<u64> {
     head.lines()
-        .find_map(|l| l.to_ascii_lowercase().strip_prefix("retry-after:").map(|v| v.trim().to_string()))
+        .find_map(|l| {
+            l.to_ascii_lowercase()
+                .strip_prefix("retry-after:")
+                .map(|v| v.trim().to_string())
+        })
         .and_then(|v| v.parse().ok())
 }
 
@@ -222,7 +245,12 @@ fn retry_after(head: &str) -> Option<u64> {
 fn slug(q: &str) -> String {
     let words: Vec<String> = q
         .split_whitespace()
-        .map(|w| w.chars().filter(|c| c.is_ascii_alphanumeric()).collect::<String>().to_ascii_lowercase())
+        .map(|w| {
+            w.chars()
+                .filter(|c| c.is_ascii_alphanumeric())
+                .collect::<String>()
+                .to_ascii_lowercase()
+        })
         .filter(|w| !w.is_empty())
         .take(5)
         .collect();
@@ -248,7 +276,11 @@ fn main() {
         .ok()
         .filter(|(s, _, _)| *s == 200)
         .and_then(|(_, _, b)| string_after(&b, "id"));
-    println!("allen-scene: model {} at {}", model_id.as_deref().unwrap_or("(unnamed)"), a.model);
+    println!(
+        "allen-scene: model {} at {}",
+        model_id.as_deref().unwrap_or("(unnamed)"),
+        a.model
+    );
     let mut log = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
@@ -256,10 +288,17 @@ fn main() {
         .expect("log.tsv");
     let mut n = 0;
     let mut answered = 0;
-    for q in questions.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#')) {
+    for q in questions
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+    {
         n += 1;
         let name = format!("{:02}-{}", n, slug(q));
-        let model_field = model_id.as_ref().map(|m| format!("\"model\":{},", json_str(m))).unwrap_or_default();
+        let model_field = model_id
+            .as_ref()
+            .map(|m| format!("\"model\":{},", json_str(m)))
+            .unwrap_or_default();
         let body = format!(
             "{{{}\"messages\":[{{\"role\":\"system\",\"content\":{}}},{{\"role\":\"user\",\"content\":{}}}],\
              \"max_tokens\":{},\"temperature\":{},\"stream\":false}}",
@@ -269,18 +308,31 @@ fn main() {
             a.max_tokens,
             a.temperature
         );
+        if a.out.join(format!("{}.txt", name)).exists() {
+            println!("allen-scene: {} already answered, kept", name);
+            answered += 1;
+            continue; // a round cut off part way resumes where it stopped
+        }
         let t0 = Instant::now();
-        let mut wait = 2u64;
+        let mut wait = 5u64;
         let mut waited = 0u64;
         let mut busy = 0u32;
         let result = loop {
             match http(&a.model, "POST", "/v1/chat/completions", &body) {
                 Ok((503, head, _)) if waited < a.wait_max => {
                     busy += 1;
-                    let w = retry_after(&head).unwrap_or(wait).clamp(1, 30);
+                    // never sooner than our own backoff (5 s doubling to 60 s), whatever Retry-After says
+                    let w = retry_after(&head).unwrap_or(0).max(wait).min(60);
                     std::thread::sleep(Duration::from_secs(w));
                     waited += w;
-                    wait = (wait * 2).min(30);
+                    wait = (wait * 2).min(60);
+                }
+                Err(_) if waited < a.wait_max => {
+                    // the server is not there (restarting): wait for it the same way
+                    busy += 1;
+                    std::thread::sleep(Duration::from_secs(wait));
+                    waited += wait;
+                    wait = (wait * 2).min(60);
                 }
                 other => break other,
             }
@@ -292,18 +344,38 @@ fn main() {
                 let finish = string_after(&b, "finish_reason").unwrap_or_default();
                 let toks = number_after(&b, "completion_tokens").unwrap_or(0);
                 std::fs::write(a.out.join(format!("{}.txt", name)), &reply).expect("write reply");
-                std::fs::write(a.out.join(format!("ask-{}.txt", name)), format!("{}\n", q)).expect("write question");
+                std::fs::write(a.out.join(format!("ask-{}.txt", name)), format!("{}\n", q))
+                    .expect("write question");
                 let _ = writeln!(
                     log,
                     "{}\t200\t{} ms\t{} tokens\tfinish {}\t{} busy answers waited out\t{}",
                     name, ms, toks, finish, busy, q
                 );
-                println!("allen-scene: {} -> {} chars, {} tokens, {} ms ({} busy)", name, reply.len(), toks, ms, busy);
+                println!(
+                    "allen-scene: {} -> {} chars, {} tokens, {} ms ({} busy)",
+                    name,
+                    reply.len(),
+                    toks,
+                    ms,
+                    busy
+                );
                 answered += 1;
             }
             Ok((code, _, b)) => {
-                let _ = writeln!(log, "{}\t{}\t{} ms\t\t\t{} busy answers waited out\t{}", name, code, ms, busy, q);
-                println!("allen-scene: {} -> status {} ({})", name, code, String::from_utf8_lossy(&b).chars().take(160).collect::<String>());
+                let _ = writeln!(
+                    log,
+                    "{}\t{}\t{} ms\t\t\t{} busy answers waited out\t{}",
+                    name, code, ms, busy, q
+                );
+                println!(
+                    "allen-scene: {} -> status {} ({})",
+                    name,
+                    code,
+                    String::from_utf8_lossy(&b)
+                        .chars()
+                        .take(160)
+                        .collect::<String>()
+                );
             }
             Err(e) => {
                 let _ = writeln!(log, "{}\terror\t{} ms\t\t\t{}\t{}", name, ms, e, q);
@@ -325,7 +397,18 @@ mod tests {
     #[test]
     fn the_prompt_is_plain_and_names_every_kind() {
         assert!(SCENE_PROMPT.is_ascii());
-        for k in ["say", "mood", "note:", "list:", "number:", "quote:", "person to:", "timer:", "picture:", "video:"] {
+        for k in [
+            "say",
+            "mood",
+            "note:",
+            "list:",
+            "number:",
+            "quote:",
+            "person to:",
+            "timer:",
+            "picture:",
+            "video:",
+        ] {
             assert!(SCENE_PROMPT.contains(k), "{k}");
         }
     }
