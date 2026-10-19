@@ -28,11 +28,20 @@ if [[ -z "${PROD_VMLINUZ}" ]]; then
 fi
 
 KERNEL_IMAGE="${WORK_DIR}/vmlinuz"
+# /boot/vmlinuz-* is root 0600 on Ubuntu. The Spark judge runs gates as aien-run with no_new_privs, so sudo
+# cannot copy it there; the operator keeps a read-only copy of the same kernel at $HOME/boot/vmlinuz (root 0644,
+# HOME=/var/lib/aien-run), the way it provides $HOME/models. Use that copy only when the kernel cannot be read.
+JUDGE_VMLINUZ="${HOME:-/nonexistent}/boot/vmlinuz"
 if [[ -r "${PROD_VMLINUZ}" ]]; then
     cp "${PROD_VMLINUZ}" "${KERNEL_IMAGE}"
-else
-    sudo -n cp "${PROD_VMLINUZ}" "${KERNEL_IMAGE}"
+elif sudo -n cp "${PROD_VMLINUZ}" "${KERNEL_IMAGE}" 2>/dev/null; then
     sudo -n chown "$(id -u):$(id -g)" "${KERNEL_IMAGE}"
+elif [[ -r "${JUDGE_VMLINUZ}" ]]; then
+    echo "NOTE  ${PROD_VMLINUZ} is not readable and sudo is unavailable; using the read-only copy ${JUDGE_VMLINUZ}"
+    cp "${JUDGE_VMLINUZ}" "${KERNEL_IMAGE}"
+else
+    echo "Error: cannot read ${PROD_VMLINUZ} (no sudo, no ${JUDGE_VMLINUZ})" >&2
+    exit 1
 fi
 
 INITRD_TMP="${WORK_DIR}/aienos-recovery-standalone-initrd.img"
