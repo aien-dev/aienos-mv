@@ -19,6 +19,9 @@
 # Not matched: the hardware. aienos_qemu runs on an emulated CPU; the other paths on the real CPU of this machine. The row
 # that would match it (Linux inside the same QEMU) is reported NOT_RUN: this machine has no readable AArch64 Linux kernel
 # image to boot. Energy is NOT_MEASURED on every path (no power meter is read). Nothing here is a hardware result.
+# Spec read: aien-protocols-mv STREAM_TASK.md at 181855c9ff3e (ST10.2: Omega evidence only from real Linux processes).
+# UNVERIFIED (not pinned by the spec): the workload, the sizes, the one-CPU pinning (taskset, last online CPU) and the
+# median of N runs are our own choices for a fair same-machine comparison.
 #
 # Usage: bash scripts/native_pipe_compare.sh [--omega DIR] [--qemu-log FILE] [--runs N] [--out FILE]
 #   --omega DIR     an aien-dev/omega checkout (src/compiler); without it linux_omega is NOT_RUN
@@ -37,7 +40,7 @@ while [[ $# -gt 0 ]]; do
         --qemu-log) qlog="${2:?}"; shift ;;
         --runs) runs="${2:?}"; shift ;;
         --out) out="${2:?}"; shift ;;
-        -h|--help) sed -n '2,32p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help) sed -n '2,31p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "native_pipe_compare: unknown argument $1" >&2; exit 2 ;;
     esac
     shift

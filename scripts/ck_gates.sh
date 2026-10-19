@@ -115,7 +115,9 @@ CHILDREN=(boot store net artifact smp crash disk cont recov allen kbd fpu infer 
 # PHYSICAL TABLE (aienos-mv#432): id | platform | capability. Never run here and never derived from a host or QEMU
 # verdict: every row prints AIENOS_CK_<id>: NOT_RUN (PHYSICAL: ...). They are not CK_GATE_TABLE rows, so no count, no
 # --only selection and no judge rule can turn one into PASS; a physical column changes only with independent on-device
-# evidence, which this QEMU runner never takes.
+# evidence, which this QEMU runner never takes. UNVERIFIED (aienos-mv#432): the spec (aien-protocols-mv
+# STREAM_TASK.md at 181855c9ff3e, ST10.2) names native-qemu evidence only; it does not pin a physical table, its ids
+# or its platforms, so this layout is our own choice.
 CK_PHYSICAL_TABLE='
 NATIVE_PIPE_PI5|pi5|NATIVE_PIPELINE
 NATIVE_PIPE_IMAC|imac|NATIVE_PIPELINE
@@ -278,6 +280,7 @@ classify_gate() {
             elif [[ "${rc}" == 3 ]] && grep -qE '^AIENOS_CK_[A-Z0-9_]+: NOT_RUN( .*)?$' "${log}" \
                 && ! grep -qE '^AIENOS_CK_[A-Z0-9_]+: FAIL( .*)?$' "${log}"; then
                 # aienos-mv#432: a child with several gates (native_pipe) exits 3 when one of them could not run.
+                # UNVERIFIED: our own classification rule; no spec pins how a multi-gate child reports a partial NOT_RUN.
                 echo "PASS|child reported PASS; its exit 3 comes from another gate's NOT_RUN line"
             else
                 echo "FAIL|child printed PASS but exited ${rc} with no FAIL line to explain it"

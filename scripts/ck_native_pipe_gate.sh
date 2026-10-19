@@ -26,6 +26,13 @@
 # printed as "BASELINE <category> ..." with its own label. QEMU numbers are EMULATOR numbers (TCG on the Spark), host
 # numbers are C stand-in stages on the Spark CPU; neither is a hardware number and none has a pass threshold.
 #
+# Spec read: aien-protocols-mv specs/osh-platform/OSH_PLATFORM_ABI.md at fb5fca98e667 (sections 8.4, 8.5, 10, 12, 15;
+# unchanged in main 2007ee6121be) and STREAM_TASK.md on feat/osh-stream-abi-43 at 181855c9ff3e (ST6.3, ST6.5, ST9,
+# ST10.2, ST10.3). The first output line carries the ST10.3 pins (impl, corpus, toolchain, target).
+# UNVERIFIED (not pinned by the spec): the category names and the PASS/FAIL/NOT_RUN matrix, the four mutation classes
+# and their mutant lists, the "real work" log checks, the line prefix NATIVE_PIPE_RUN (this gate runs no corpus
+# vectors, so it does not claim the OSHSV1_RUN keyword) and target=host+qemu-virt for a run that covers both targets.
+#
 # Usage: bash scripts/ck_native_pipe_gate.sh            run the gate (QEMU children take the gate lock themselves)
 #        bash scripts/ck_native_pipe_gate.sh --self-test  check the parsing with canned logs (no build, no QEMU)
 # Env:   AIENOS_LOG_DIR   if set, the child serial logs, host.log and native_pipe_matrix.json are copied there
@@ -36,6 +43,7 @@ set -uo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PHYS_WHY="no on-device evidence; this runner is host and QEMU only"
+SPEC_CORPUS=181855c9ff3ec9bcc635d2043d5d7d213cee6021   # STREAM_TASK.md revision 2 (feat/osh-stream-abi-43)
 QEMU_KIDS=(pipe task osh_op)
 declare -A KID_SCRIPT=([pipe]=qemu_ck_pipe_test.sh [task]=qemu_ck_task_test.sh [osh_op]=qemu_ck_osh_op_test.sh)
 declare -A KID_MARK=([pipe]=PIPE [task]=TASK [osh_op]=OSH_OP)
@@ -298,13 +306,15 @@ main() {
     case "${1:-}" in
         --self-test) self_test ;;
         "") ;;
-        -h|--help) sed -n '2,38p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help) sed -n '2,41p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "ck_native_pipe_gate: unknown argument: $1" >&2; exit 2 ;;
     esac
     work="${AIENOS_NP_WORK:-$(mktemp -d "${TMPDIR:-/tmp}/np-gate.XXXXXX")}" || exit 2
     mkdir -p "${work}/logs"
     host_log="${work}/host.log"
-    echo "native pipeline acceptance gate (aienos-mv#432) at $(git -C "${repo_root}" rev-parse HEAD); host and QEMU only, qualifies nothing physical"
+    echo "NATIVE_PIPE_RUN impl=aienos-mv@$(git -C "${repo_root}" rev-parse HEAD) corpus=aien-protocols-mv@${SPEC_CORPUS}" \
+        "toolchain=$(cc --version 2>/dev/null | head -1 | tr ' ' '_') target=host+qemu-virt"
+    echo "native pipeline acceptance gate (aienos-mv#432): host and QEMU only, qualifies nothing physical"
     echo "--- host_unit: make -C native/kernel native-pipe-host" >&2
     nice make -s -j"${AIENOS_NP_JOBS:-8}" -C "${repo_root}/native/kernel" OUT="${work}/kout" native-pipe-host >"${host_log}" 2>&1
     local hrc=$? k

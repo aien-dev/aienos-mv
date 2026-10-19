@@ -10,6 +10,9 @@
  *               osc_native_call in the forked stage processes (built only with -DNP_OMEGA and the Omega sources)
  * Prints one line per scenario with wall time (CLOCK_MONOTONIC, spawn to reaped) and CPU time (getrusage of the stage
  * processes), measured on the machine it runs on. No pass threshold; the bytes and the hash are checked every run.
+ * Spec read: aien-protocols-mv STREAM_TASK.md at 181855c9ff3e (ST10.2: Omega evidence only from real Linux processes).
+ * UNVERIFIED (not pinned by the spec): one process per stage, pipe(2) between them, the 4096-byte step and the timing
+ * window (spawn to reaped) are our own choices to mirror the AIENOS path.
  * Usage: np_linux c|omega STAGES(2|3) TOTAL RUNS [UNIT_DIR]   (UNIT_DIR holds tgen.osc txform.osc tsink.osc) */
 #define _GNU_SOURCE
 #include <errno.h>

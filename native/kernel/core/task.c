@@ -210,7 +210,9 @@ static int flush(struct ck_task_tab *tab, struct ck_task_rec *r, int may_block)
             /* aienos-mv#432, UNVERIFIED (T1): in the interrupt grace a reader that is gone is the cancellation itself
              * (a peer stage ended its own grace first), so the output is dropped like output that does not fit and the
              * stage still ends by the interrupt (130). Without this the status of a cancelled producer depended on
-             * which stage the round robin reached first (141 or 130). */
+             * which stage the round robin reached first (141 or 130). STREAM_TASK.md ST6.3 (aien-protocols-mv
+             * 181855c9ff3e): a task the adapter ended with TASK_CANCEL(interrupt) has status 130; 141 is for a task
+             * that wrote to a stream with no reader on its own. The numbers stay open freeze items (ST11.2). */
             r->out_off = r->out_len;
             break;
         }

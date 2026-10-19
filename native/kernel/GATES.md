@@ -1027,7 +1027,9 @@ others).
 Limits: (1) No physical evidence exists; the physical columns stay NOT_RUN until an independent on-device run. (2) The QEMU
 numbers include TCG emulation and one `ck_osc_launch` (receipt check, code re-hash, EL0 address space, teardown) per stage
 step; they say nothing about Pi 5, iMac or GB10 speed. (3) Scheduling is cooperative at step granularity on one CPU (see
-TASK). (4) The signed Spark judge artifact is produced by the judge, not by this script.
+TASK). (4) The signed Spark judge artifact is produced by the judge, not by this script. (5) The gate's first output line
+carries the STREAM_TASK ST10.3 pins (`NATIVE_PIPE_RUN impl=aienos-mv@<commit> corpus=aien-protocols-mv@181855c9ff3e...
+toolchain=<cc> target=host+qemu-virt`); the gate runs no corpus vectors, so it is not an `OSHSV1_RUN` conformance report.
 
 | # | Check | CK gate | Status |
 |---|---|---|---|
