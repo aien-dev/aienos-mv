@@ -848,13 +848,32 @@ write. Refusals are the contract's names: DENIED, REVOKED, STALE, CAP_DOMAIN_MIS
 Cases: allow (two lines; the second carries `$?` = the real status), no capability, read-only capability, revoked after the request
 was built, interrupt before pipeline 2 of 3, adapter lost after the effect (restart reports OUTCOME_UNKNOWN with the digest and
 never replays), a new request after the loss, pipe/redirect/unknown command. Every case: capability released, no task slot held.
-Host test `test_osh_op` (59 checks, also under ASan+UBSan) covers the binding checks and the error paths; a mutant that makes the
-permission check always OK must fail it (`make osh-op-mutant`).
+Native stage pipelines (aienos-mv#430). The same boot also carries the three admitted stage units of the TASK gate (tgen, txform,
+tsink with their receipts; 12 Store candidates) as the registry's `gen`, `xform` and `sink`. A multi-command request is executed
+in the order of STREAM_TASK.md revision 2 (aien-protocols-mv `181855c9ff3e`, branch feat/osh-stream-abi-43, unmerged) ST7:
+shape, RESOLVE (a name of a class this adapter does not provide is UNAVAILABLE for the whole pipeline), PERM_CHECK of the spawn
+capability, a reservation of pipes and session slots, then a start left to right where a missing name (127) or a binding refused
+at that moment (126) ends only that command and its pipe ends are closed; a launch failure after a start cancels and reaps what
+started (PARTIAL_LAUNCH, status 1); the pipeline status is the last command's. Every stage is an EL0 task (`core/task.c`,
+`core/task_osc.c`) over native pipes (`core/pipe.c`). Redirections (`<`, `>`, `>>`, `N>&M`) apply in record order into TEST RAM
+locations behind their own location capability, checked at each open; a write-class open and every spawn write an intent before
+and an outcome after (ST8). Cases: stream3 (all three alive at once, a full 64 KiB pipe, sink's count and FNV hash checked against
+an independent computation, `$?` back in the shell), last status, redirection order, truncate, append and a location read back,
+`2>&1`, a missing middle command, a unit with no receipt (refused at its spawn), a foreign class, no spawn capability, a read-only
+location capability, revoke between stages, partial launch, loss after a spawn and restart, interrupt and deadline on an endless
+producer, the direct-argv route, malicious direct records and the direct route without authority. 25 cases, 100 gate checks.
+Host test `test_osh_op` (286 checks, also under ASan+UBSan) drives the same executor over C stand-in stages through the kernel's
+task seam, and part 3 runs the 16 shared vectors of that branch (`tests/fixtures/osh_exec`, PROVENANCE.txt): 3 PASS, 13 NOT_RUN
+with their reasons printed (domain 2 bindings, the `streams` feature, overrides this runner does not drive). Five mutants must
+fail it (`make osh-op-mutant`): the permission check skipped, the first command's status reported, redirections applied in
+reverse, a refused command's pipe ends kept, the location permission skipped.
 Limits: (1) intent and outcome records are RAM only: the loss case is simulated by a hook and a restart that keeps the record array;
 a durable store is not exercised (integration point: `struct osh_intent` and `osh_op_recover`, for omega's durable records).
-(2) One command per pipeline: pipes, redirections, assignments and builtins are refused NOT_SUPPORTED, so PARTIAL_LAUNCH cannot
-occur and is not exercised. (3) Revoke, interrupt, loss and sink failure are injected by test hooks at named points, not by
-real asynchronous events. (4) Numeric resource-class and operation ids, the REVOKED/STALE split, the shell statuses 126/127/130/70
+(2) `klog` stays a single-command operation (in a pipe or with a redirection it is NOT_SUPPORTED); assignments and builtins are
+NOT_SUPPORTED; at most 8 commands, a pool of 4 pipes and 8 session table slots (below the ST9 minimums). Locations are TEST RAM
+(4 of 16 KiB), not files. Several choices the spec leaves open are marked UNVERIFIED in `core/osh_op.h` (for example the
+redirection failure status 1, terminate 143 against the spec's 137, LIMIT as status 1). (3) Revoke, interrupt, loss, spawn failure and sink failure are
+injected by test hooks at named points, not by real asynchronous events. (4) Numeric resource-class and operation ids, the REVOKED/STALE split, the shell statuses 126/127/130/70
 are this adapter's choices (UNVERIFIED against a frozen contract). (5) The request digest covers the request cells and the OUT
 bytes; the contract's exact digest input is not defined (UNVERIFIED). (6) The "task" is the adapter's session; the EL0 shell units
 hold no capability (caps=0) and the check is made by the kernel-side adapter.

@@ -593,6 +593,28 @@ TASK_STATE, TASK_CANCEL (OSH_PLATFORM_ABI 8.4, read at `fb5fca98e667`, v1 DRAFT)
   `scripts/qemu_ck_task_test.sh` builds the TEST-ONLY `CK_TASK_TEST=1` image and checks the in-kernel run (GATES.md, TASK).
   Host and QEMU evidence qualify nothing physical.
 
+## Native OSH pipelines (aienos-mv#430)
+
+`core/osh_op.c` / `core/osh_op.h` (TEST builds only, `CK_OSH_OP_TEST=1`) execute an OSH request record (OSH_PLATFORM_ABI
+section 7.1) of up to 8 commands as a pipeline of admitted Omega stages, in the launch order of STREAM_TASK.md revision 2 ST7
+(aien-protocols-mv `181855c9ff3e`, unmerged branch feat/osh-stream-abi-43). Omega host behaviour compared: `osh_exec.c` at
+`a8ffd2b912c8`.
+
+- **What runs.** A command name is looked up in the session's registry of native operations (`struct osh_op_def`); a name
+  of another class (artifact, service, Linux) or one containing `/` is UNAVAILABLE and nothing runs. There is no host shell
+  and no fallback. `klog` stays the single-command console operation. Arguments are decimal stage parameters (UNVERIFIED).
+- **Launch.** Shape, RESOLVE, PERM_CHECK of the spawn capability, a reservation of pipes and session slots, then left to
+  right: a missing name (127) or a binding refused at that moment (126) ends only that command; a launch failure after a
+  start cancels and reaps what started (PARTIAL_LAUNCH, status 1). The pipeline status is the last command's.
+- **Redirections.** `<`, `>`, `>>`, `N>&M` in record order, into TEST RAM locations behind their own location capability,
+  checked at every open; a failed redirection gives the command status 1 and it does not run. Bytes are pumped by the
+  adapter, never cut silently (a full location is LIMIT and the writer sees BROKEN_PIPE).
+- **Effects.** Every spawn and every write-class open writes an intent before and an outcome after (ST8); after a loss a
+  restart reports OUTCOME_UNKNOWN and never replays.
+- **Tests.** `make test` runs `test_osh_op` (with the 16 shared vectors in `tests/fixtures/osh_exec`) and `osh-op-mutant`;
+  `make sanitize` runs it under ASan+UBSan; `scripts/qemu_ck_osh_op_test.sh` runs the real shell units and stage units in
+  QEMU (GATES.md, OSH_OP). Host and QEMU evidence qualify nothing physical.
+
 ## Notes for stage code
 
 - `ck_puts` prints the string as given; it does not add a newline.
