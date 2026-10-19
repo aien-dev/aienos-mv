@@ -44,8 +44,21 @@ Known look of the pictures: the Milky Way is drawn from a 241 x 152 grid at quar
   It has not been measured on the iMac.
 - Generator end to end (reads the five inputs, writes the tables): 7 s.
 
+## Other host checks
+
+- `scripts/ck_allen_ui_test.sh`: ALLEN_UI_TEST PASS, 91 checks (`allen-ui-test.log`). The whole picture at 3840x2160 on one core of this host: 3912 frames, average 21434 us, slowest 171262 us.
+- `make -C native/kernel imac-kernel` builds clean with -Werror: `IMACKERN.EFI` is 348160 bytes. The earlier figure for the invented sky on the Horizon branch was 282624 bytes (that branch, not remeasured on this base), so the real sky costs about 65536 bytes, in step with the 73.8 KB of tables.
+- Both of these were run directly at the lowest priority (nice 19), not through `quiet-build`, because the quiet-build queue stayed blocked behind other agents' timing runs for over an hour. They are correctness checks and a size count; the timings above are therefore not lock-held publication timings.
+
 ## What was not done
 
-- Nothing was run on the real iMac screen.
+- Nothing was run on the real iMac screen or measured on the iMac chip.
 - The sky shown is fixed on the GW150914 position; the sidereal time, zenith and precession code is in
   `sky_real.c` and tested, but not wired to a place and time.
+
+## Boost choice
+
+The sky is built with the diffuse light shown 5 times (default). The first worker's frames at 1, 3 and 5 times are
+on the Spark in `~/handoffs/real-sky/sky-whole-b{1,3,5}.png` (not committed, 6 MB each). 1 is the true contrast at one
+design pixel and makes the Milky Way faint; 3 was that worker's pick for a dark-site look; 5 is what is built in.
+Change it with `SKY_BOOST=3 scripts/ck_sky_gen.sh`, then rerun `scripts/ck_sky_test.sh`.
