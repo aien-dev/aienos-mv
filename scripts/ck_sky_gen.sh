@@ -1,7 +1,7 @@
 #!/bin/sh
 # ck_sky_gen.sh -- makes native/kernel/ui/sky_data.c, the real sky Allen
 # opens on, from real astronomical data (see native/kernel/tools/ck_sky_gen.c
-# and native/kernel/ui/SKY_SOURCES.md for the sources, their licences and credits).
+# and docs/ALLEN_SKY_SCIENCE.md for the sources, their licences and credits).
 #
 # Downloads each input once into $SKY_CACHE (default ~/.cache/aienos-sky),
 # checks its sha256 (a file that does not match is refused), unpacks the two
