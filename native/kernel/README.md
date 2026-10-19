@@ -203,7 +203,14 @@ host.
 **Startup: the night sky.** The moment the clock is measured, before anything
 is printed, `ui/allen_ui.c` takes the screen and starts the night
 (`ui/night.c`): a dark sky fades in over about seven seconds, the brightest
-stars first, with the Milky Way, its dust and six galaxies; two black holes
+stars first. The sky is the real one (`ui/sky_real.c`, from tables the generator
+`tools/ck_sky_gen.c` makes out of the Yale Bright Star Catalogue, ESO's Milky Way
+photograph, OpenNGC and the GW150914 sky map, by `scripts/ck_sky_gen.sh`): 8404
+stars to the naked-eye limit at their true places, brightness and colour, the
+Milky Way, and the Large and Small Magellanic Clouds, seen as a pinhole camera
+would from the point the first black-hole merger heard (GW150914) most probably
+came from. Sources, limits and a science audit of every picture and sound:
+`docs/ALLEN_SKY_SCIENCE.md`. Two black holes
 appear, bending the starlight round them, circle and spiral in on the
 inspiral law (separation as t^(1/4), angle as t^(5/8), t the time left),
 merge at 12 s in a flash, and a ripple runs out across the sky. From the light
@@ -222,7 +229,7 @@ ms` (when Allen wakes, 20 s later, and at goodbye).
 `ui/chirp.c` is the matching sound: a quick "blirp", the last 0.6 s of the
 gravitational-wave chirp of the same inspiral, raised into hearing (200 Hz
 sweeping to 1000 Hz, loudness as pitch^(2/3)), peaking at the merger and
-ringing out within 0.3 s: under a second in all, worked out from the formula. `x86/hda_x86.c` plays
+ringing out within 0.3 s: under a second in all, worked out from the formula. The audit measures it against the real signal: the pitch law is real, the sweep, cycle count and ring are not (`docs/ALLEN_SKY_SCIENCE.md`, section 5). `x86/hda_x86.c` plays
 it: on each HD Audio controller it stops any DMA the firmware left running, resets the link with
 the settle times Linux uses, talks to the codecs through the command rings
 (CORB/RIRB, polled), maps every widget of each codec onto the report
@@ -246,7 +253,7 @@ run 24 dB under the level macOS uses. **Heard on the test computer
 and the chirp played; at 12 dB under it was very loud and the old ten-second
 chirp too long, hence the quieter level and the short blirp. QEMU has no
 CS8409, so this path is checked only on that machine.
-Tests: `scripts/ck_allen_ui_test.sh` (host; pictures in
+Tests: `scripts/ck_sky_test.sh` (host: the real sky's projection, sidereal time, zenith, timings; pictures in `target/native-kernel-sky/`), `scripts/ck_allen_ui_test.sh` (host; pictures in
 `target/native-kernel-allen-ui/`), `scripts/ck_chirp_test.sh` (the sound as
 `target/native-kernel-chirp/chirp.wav`); the QEMU kernel test requires the
 night line, the drawing cores, the codec mapped through the command rings,

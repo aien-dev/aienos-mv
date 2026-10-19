@@ -1,0 +1,1544 @@
+/* ck_sky_gen.c -- makes native/kernel/ui/sky_data.c: the real sky Allen
+ * opens on, as tables the kernel draws from with integer arithmetic only.
+ *
+ * Inputs (scripts/ck_sky_gen.sh downloads them, checks each against its
+ * sha256 and unpacks the two .gz files; nothing is fetched while the kernel
+ * runs), all in the --cache directory:
+ *   bsc5.dat            Yale Bright Star Catalogue, 5th revised edition
+ *                       (Hoffleit and Warren 1991; CDS V/50): every star to
+ *                       about magnitude 6.5, the naked-eye limit, with J2000
+ *                       position, proper motion, V magnitude and B-V colour;
+ *   eso0932a.tif        "The Milky Way panorama", ESO/S. Brunier (CC BY 4.0):
+ *                       a photograph of the whole sky, 6000 x 3000, in
+ *                       galactic longitude and latitude;
+ *   NGC.csv, addendum.csv
+ *                       OpenNGC (Mattia Verga, CC BY-SA 4.0): galaxy
+ *                       positions, sizes and orientations;
+ *   GW150914_skymap.fits
+ *                       the GWTC-1 sky map of GW150914 (LIGO/Virgo,
+ *                       LIGO-P1800381): where the first black-hole merger
+ *                       ever heard came from.
+ *
+ * What it works out (floating point is fine here; the kernel gets integers):
+ *   - the view: a gnomonic (pinhole camera) projection centred on GW150914's
+ *     most probable position, north up, a set width of sky across the screen;
+ *   - the stars in that view as unit vectors (the kernel projects them), with
+ *     a brightness code (flux = 10^(-0.4 m)) and a colour from B-V through a
+ *     real temperature (Ballesteros 2012) to the colour of a black body of
+ *     that temperature (CIE 1931 observer, sRGB);
+ *   - the photograph re-projected into the same view, its stars taken out
+ *     (the catalogue draws those, sharp), as a coarse grid of light;
+ *   - the galaxies that are in the view and bright enough to see with the eye,
+ *     at their true size and angle.
+ *
+ * Usage: ck_sky_gen --cache DIR --out sky_data.c [--report FILE]
+ *        [--inputs FILE] [--ra DEG --dec DEG] [--fov DEG] [--roll DEG]
+ *        [--mag LIMIT] [--grid N] [--boost X] [--skyglow MAG]
+ *        [--mw-top-s10 X] [--exposure X]
+ * Host tool only; plain C11 and libm.
+ */
+#include <ctype.h>
+#include <math.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+
+#define EPOCH 2026.8 /* the stars are moved along their proper motion to this year */
+
+/* The screen shape the grid is made for: centre of the view at half the width
+ * and 40% of the height (where allen_ui.c puts the merger); rows cover a 16:10
+ * screen so a 1280x800 one is covered as well as 3840x2160. */
+#define CX_FRAC 0.5
+#define CY_FRAC 0.40
+#define H_OVER_W_MAX (10.0 / 16.0)
+
+static const double PI = 3.14159265358979323846;
+
+static void die(const char *fmt, ...) __attribute__((noreturn, format(printf, 1, 2)));
+#include <stdarg.h>
+static void die(const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    fprintf(stderr, "ck_sky_gen: ");
+    vfprintf(stderr, fmt, ap);
+    fprintf(stderr, "\n");
+    va_end(ap);
+    exit(1);
+}
+
+static void *xmalloc(size_t n)
+{
+    void *p = malloc(n ? n : 1);
+    if (!p)
+        die("out of memory (%zu bytes)", n);
+    return p;
+}
+
+static void *xrealloc(void *p, size_t n)
+{
+    p = realloc(p, n ? n : 1);
+    if (!p)
+        die("out of memory (%zu bytes)", n);
+    return p;
+}
+
+static double rad(double d) { return d * (PI / 180.0); }
+static double deg(double r) { return r * (180.0 / PI); }
+static double pmod(double x, double m)
+{
+    double r = fmod(x, m);
+    return r < 0 ? r + m : r;
+}
+static long rnd(double x) { return (long)nearbyint(x); } /* half to even, like the rest of the tables' maths */
+static double clampd(double x, double lo, double hi) { return x < lo ? lo : x > hi ? hi : x; }
+
+/* ---- a text report, kept in memory and printed at the end ---- */
+
+static char *rep;
+static size_t replen;
+static void report(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+static void report(const char *fmt, ...)
+{
+    char buf[4096];
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vsnprintf(buf, sizeof buf, fmt, ap);
+    va_end(ap);
+    if (n < 0)
+        die("report format");
+    if ((size_t)n >= sizeof buf)
+        n = (int)sizeof buf - 1;
+    rep = xrealloc(rep, replen + (size_t)n + 2);
+    memcpy(rep + replen, buf, (size_t)n);
+    replen += (size_t)n;
+    rep[replen++] = '\n';
+    rep[replen] = 0;
+}
+
+static uint8_t *slurp(const char *path, size_t *len)
+{
+    FILE *f = fopen(path, "rb");
+    if (!f)
+        die("cannot open %s (run scripts/ck_sky_gen.sh, it fetches the inputs)", path);
+    fseek(f, 0, SEEK_END);
+    long n = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    uint8_t *b = xmalloc((size_t)n + 1);
+    if (fread(b, 1, (size_t)n, f) != (size_t)n)
+        die("short read of %s", path);
+    fclose(f);
+    b[n] = 0;
+    *len = (size_t)n;
+    return b;
+}
+
+/* ---- small vector helpers ---- */
+
+typedef struct {
+    double x, y, z;
+} vec3;
+
+static vec3 vec(double ra, double dec)
+{
+    double r = rad(ra), d = rad(dec);
+    return (vec3){cos(d) * cos(r), cos(d) * sin(r), sin(d)};
+}
+static double dot(vec3 a, vec3 b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+static double sep_deg(vec3 a, vec3 b) { return deg(acos(clampd(dot(a, b), -1.0, 1.0))); }
+
+/* ---- the GW150914 sky map (HEALPix, nested order) ---- */
+
+static void healpix_nest_ang(int nside, long ipix, double *ra, double *dec)
+{
+    static const int jrll[12] = {2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4};
+    static const int jpll[12] = {1, 3, 5, 7, 0, 2, 4, 6, 1, 3, 5, 7};
+    long npface = (long)nside * nside;
+    int face = (int)(ipix / npface);
+    long ipf = ipix % npface;
+    long ix = 0, iy = 0;
+    for (int b = 0; b < 16; b++) {
+        ix |= ((ipf >> (2 * b)) & 1) << b;
+        iy |= (((ipf >> 1) >> (2 * b)) & 1) << b;
+    }
+    long nl4 = 4L * nside;
+    long jr = (long)jrll[face] * nside - ix - iy - 1;
+    long nr, kshift;
+    double z;
+    if (jr < nside) {
+        nr = jr;
+        z = 1 - (double)(jr * jr) / (3.0 * (double)npface);
+        kshift = 0;
+    } else if (jr > 3L * nside) {
+        nr = nl4 - jr;
+        z = (double)(nr * nr) / (3.0 * (double)npface) - 1;
+        kshift = 0;
+    } else {
+        nr = nside;
+        z = (double)(2L * nside - jr) * 2.0 / (3.0 * nside);
+        kshift = (jr - nside) & 1;
+    }
+    long t = (long)jpll[face] * nr + ix - iy + 1 + kshift;
+    long jp = t >= 0 ? t / 2 : -((-t + 1) / 2); /* floor division */
+    if (jp > nl4)
+        jp -= nl4;
+    if (jp < 1)
+        jp += nl4;
+    double phi = ((double)jp - (double)(kshift + 1) * 0.5) * (PI / 2 / (double)nr);
+    *ra = pmod(deg(phi), 360.0);
+    *dec = 90.0 - deg(acos(z));
+}
+
+static const double *g_prob;
+static int by_prob(const void *a, const void *b)
+{
+    long i = *(const long *)a, j = *(const long *)b;
+    if (g_prob[i] != g_prob[j])
+        return g_prob[i] > g_prob[j] ? -1 : 1;
+    return i < j ? -1 : i > j; /* ties by pixel number, like a stable sort */
+}
+
+typedef struct {
+    int nside;
+    double max_ra, max_dec, area90;
+    long n90;
+    double *region_ra, *region_dec;
+} gwmap;
+
+/* FITS: the header is a run of 2880-byte blocks of 80-character cards; the
+ * binary table's first column is PROB, big-endian doubles, NAXIS1 bytes a row. */
+static int fits_card_int(const char *blk, const char *key, long *out)
+{
+    for (int i = 0; i < 36; i++) {
+        const char *c = blk + i * 80;
+        size_t kl = strlen(key);
+        if (strncmp(c, key, kl) == 0 && (c[kl] == ' ' || kl == 8) && c[8] == '=') {
+            *out = strtol(c + 10, NULL, 10);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int fits_has_end(const char *blk)
+{
+    for (int i = 0; i < 36; i++)
+        if (strncmp(blk + i * 80, "END     ", 8) == 0)
+            return 1;
+    return 0;
+}
+
+static gwmap gw_load(const char *path)
+{
+    size_t len;
+    uint8_t *raw = slurp(path, &len);
+    size_t off = 0;
+    int hdr = 0;
+    long nside = 0, rows = 0, width = 0;
+    int nested = 1;
+    for (;;) {
+        if (off + 2880 > len)
+            die("%s: header runs off the end", path);
+        const char *blk = (const char *)raw + off;
+        off += 2880;
+        if (hdr == 1) {
+            fits_card_int(blk, "NSIDE", &nside);
+            fits_card_int(blk, "NAXIS1", &width);
+            fits_card_int(blk, "NAXIS2", &rows);
+            for (int i = 0; i < 36; i++) {
+                const char *c = blk + i * 80;
+                if (strncmp(c, "ORDERING", 8) == 0 && c[8] == '=')
+                    nested = strstr(c, "NEST") != NULL;
+            }
+        }
+        if (fits_has_end(blk)) {
+            if (++hdr == 2)
+                break;
+        }
+    }
+    if (!nested)
+        die("%s: not NESTED ordering", path);
+    if (!nside || !rows || width < 8 || off + (size_t)rows * (size_t)width > len)
+        die("%s: bad table (nside %ld rows %ld width %ld)", path, nside, rows, width);
+    double *prob = xmalloc((size_t)rows * sizeof(double));
+    for (long i = 0; i < rows; i++) {
+        const uint8_t *p = raw + off + (size_t)i * (size_t)width;
+        uint64_t u = 0;
+        for (int k = 0; k < 8; k++)
+            u = (u << 8) | p[k];
+        memcpy(&prob[i], &u, 8);
+    }
+    long *order = xmalloc((size_t)rows * sizeof(long));
+    for (long i = 0; i < rows; i++)
+        order[i] = i;
+    g_prob = prob;
+    qsort(order, (size_t)rows, sizeof(long), by_prob);
+    double tot = 0;
+    for (long i = 0; i < rows; i++)
+        tot += prob[i];
+    double cum = 0;
+    long n90 = 0;
+    for (long k = 0; k < rows; k++) {
+        cum += prob[order[k]];
+        if (cum >= 0.9 * tot) {
+            n90 = k + 1;
+            break;
+        }
+    }
+    gwmap g;
+    g.nside = (int)nside;
+    healpix_nest_ang(g.nside, order[0], &g.max_ra, &g.max_dec);
+    double pixarea = 4 * PI / (12.0 * (double)nside * (double)nside) * (180 / PI) * (180 / PI);
+    g.area90 = (double)n90 * pixarea;
+    g.n90 = n90;
+    g.region_ra = xmalloc((size_t)n90 * sizeof(double));
+    g.region_dec = xmalloc((size_t)n90 * sizeof(double));
+    for (long k = 0; k < n90; k++)
+        healpix_nest_ang(g.nside, order[k], &g.region_ra[k], &g.region_dec[k]);
+    free(order);
+    free(prob);
+    free(raw);
+    return g;
+}
+
+/* ---- the view ---- */
+
+typedef struct {
+    double ra, dec, fov, roll;
+    vec3 rows[3]; /* right, up, forward */
+    double t;     /* tangent-plane units across half the width */
+} view_t;
+
+static view_t view_make(double ra, double dec, double fov, double roll)
+{
+    view_t v;
+    v.ra = ra, v.dec = dec, v.fov = fov, v.roll = roll;
+    double a = rad(ra), d = rad(dec);
+    vec3 d0 = vec(ra, dec);
+    vec3 east = {-sin(a), cos(a), 0.0};
+    vec3 north = {-sin(d) * cos(a), -sin(d) * sin(a), cos(d)};
+    vec3 west = {-east.x, -east.y, -east.z};
+    double cr = cos(rad(roll)), sr = sin(rad(roll));
+    /* screen right and screen up; roll turns the view clockwise on screen */
+    v.rows[0] = (vec3){cr * west.x + sr * north.x, cr * west.y + sr * north.y, cr * west.z + sr * north.z};
+    v.rows[1] = (vec3){-sr * west.x + cr * north.x, -sr * west.y + cr * north.y, -sr * west.z + cr * north.z};
+    v.rows[2] = d0;
+    v.t = tan(rad(fov) / 2);
+    return v;
+}
+
+/* sky direction -> screen px (x right, y down); 0 if behind the camera */
+static int to_screen(const view_t *v, vec3 s, double w, double h, double *px, double *py)
+{
+    double x = dot(v->rows[0], s), y = dot(v->rows[1], s), z = dot(v->rows[2], s);
+    if (z <= 1e-6)
+        return 0;
+    double p = (w / 2) / v->t;
+    *px = w * CX_FRAC + p * x / z;
+    *py = h * CY_FRAC - p * y / z;
+    return 1;
+}
+
+/* screen offset from the view centre, in widths -> sky direction */
+static vec3 from_frac(const view_t *v, double fx, double fy)
+{
+    double u = fx * 2 * v->t, w = -fy * 2 * v->t;
+    vec3 d;
+    d.x = v->rows[2].x + u * v->rows[0].x + w * v->rows[1].x;
+    d.y = v->rows[2].y + u * v->rows[0].y + w * v->rows[1].y;
+    d.z = v->rows[2].z + u * v->rows[0].z + w * v->rows[1].z;
+    double n = sqrt(dot(d, d));
+    return (vec3){d.x / n, d.y / n, d.z / n};
+}
+
+/* ---- equatorial (J2000) to galactic (Hipparcos Vol. 1, sect. 1.5.3) ---- */
+
+static const vec3 GAL[3] = {{-0.0548755604, -0.8734370902, -0.4838350155},
+                            {0.4941094279, -0.4448296300, 0.7469822445},
+                            {-0.8676661490, -0.1980763734, 0.4559837762}};
+
+static void galactic(vec3 v, double *l, double *b)
+{
+    double g0 = dot(GAL[0], v), g1 = dot(GAL[1], v), g2 = dot(GAL[2], v);
+    *l = pmod(deg(atan2(g1, g0)), 360.0);
+    *b = deg(asin(clampd(g2, -1, 1)));
+}
+
+/* ---- colour: B-V -> temperature -> black body -> sRGB ---- */
+
+/* B-V -> effective temperature, K (Ballesteros 2012, EPL 97, 34008) */
+static double ballesteros(double bv) { return 4600.0 * (1.0 / (0.92 * bv + 1.7) + 1.0 / (0.92 * bv + 0.62)); }
+
+static double lobe(double x, double mu, double s1, double s2)
+{
+    double s = x < mu ? s1 : s2, t = (x - mu) / s;
+    return exp(-0.5 * t * t);
+}
+
+/* CIE 1931 2-degree observer, the multi-lobe fit of Wyman, Sloan and Shirley
+ * 2013 (JCGT 2(2)); lam in nm */
+static void cie1931(double lam, double *xb, double *yb, double *zb)
+{
+    *xb = 1.056 * lobe(lam, 599.8, 37.9, 31.0) + 0.362 * lobe(lam, 442.0, 16.0, 26.7) - 0.065 * lobe(lam, 501.1, 20.4, 26.2);
+    *yb = 0.821 * lobe(lam, 568.8, 46.9, 40.5) + 0.286 * lobe(lam, 530.9, 16.3, 31.1);
+    *zb = 1.217 * lobe(lam, 437.0, 11.8, 36.0) + 0.681 * lobe(lam, 459.0, 26.0, 13.8);
+}
+
+/* linear sRGB of a black body at T kelvin, brightest channel 1 */
+static void blackbody_rgb(double T, double out[3])
+{
+    double X = 0, Y = 0, Z = 0;
+    for (int lam = 380; lam <= 780; lam += 5) {
+        double l = lam * 1e-9;
+        double b = 1.0 / (pow(l, 5) * (exp(0.014387769 / (l * T)) - 1.0));
+        double xb, yb, zb;
+        cie1931(lam, &xb, &yb, &zb);
+        X += b * xb, Y += b * yb, Z += b * zb;
+    }
+    double r = 3.2404542 * X - 1.5371385 * Y - 0.4985314 * Z;
+    double g = -0.9692660 * X + 1.8760108 * Y + 0.0415560 * Z;
+    double bl = 0.0556434 * X - 0.2040259 * Y + 1.0572252 * Z;
+    r = r > 0 ? r : 0, g = g > 0 ? g : 0, bl = bl > 0 ? bl : 0;
+    double m = r > g ? r : g;
+    m = m > bl ? m : bl;
+    out[0] = r / m, out[1] = g / m, out[2] = bl / m;
+}
+
+static double srgb_decode(double v)
+{
+    v /= 255.0;
+    return v <= 0.04045 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4);
+}
+
+static double srgb_encode(double l)
+{
+    l = clampd(l, 0.0, 1.0);
+    double v = l <= 0.0031308 ? l * 12.92 : 1.055 * pow(l, 1 / 2.4) - 0.055;
+    return v * 255.0;
+}
+
+/* ---- the Yale Bright Star Catalogue ---- */
+
+typedef struct {
+    int hr;
+    char name[16];
+    double ra, dec, v, bv;
+    int has_bv;
+} star_t;
+
+static void field(const char *line, int a, int b, char *out)
+{
+    int n = b - a;
+    memcpy(out, line + a, (size_t)n);
+    out[n] = 0;
+}
+
+static int blank(const char *s)
+{
+    for (; *s; s++)
+        if (!isspace((unsigned char)*s))
+            return 0;
+    return 1;
+}
+
+static void trim(char *s)
+{
+    size_t n = strlen(s);
+    while (n && isspace((unsigned char)s[n - 1]))
+        s[--n] = 0;
+    char *p = s;
+    while (isspace((unsigned char)*p))
+        p++;
+    memmove(s, p, strlen(p) + 1);
+}
+
+static star_t *bsc5_load(const char *path, size_t *count, int *nobv)
+{
+    size_t len;
+    char *txt = (char *)slurp(path, &len);
+    size_t cap = 10000, n = 0;
+    star_t *st = xmalloc(cap * sizeof *st);
+    *nobv = 0;
+    char *p = txt;
+    while (*p) {
+        char *e = strchr(p, '\n');
+        size_t ll = e ? (size_t)(e - p) : strlen(p);
+        char line[256];
+        memset(line, ' ', sizeof line);
+        memcpy(line, p, ll < 197 ? ll : 197);
+        line[197] = 0;
+        p = e ? e + 1 : p + ll;
+        char f[32];
+        field(line, 75, 77, f);
+        int nopos = blank(f);
+        field(line, 102, 107, f);
+        if (nopos || blank(f))
+            continue; /* the 14 entries with no position (novae, clusters taken out) */
+        star_t s;
+        memset(&s, 0, sizeof s);
+        field(line, 0, 4, f);
+        s.hr = atoi(f);
+        double rah, ram, ras;
+        field(line, 75, 77, f), rah = atof(f);
+        field(line, 77, 79, f), ram = atof(f);
+        field(line, 79, 83, f), ras = atof(f);
+        double ra = (rah + ram / 60 + ras / 3600) * 15;
+        double dd, dm, ds;
+        field(line, 84, 86, f), dd = atof(f);
+        field(line, 86, 88, f), dm = atof(f);
+        field(line, 88, 90, f), ds = atof(f);
+        double dec = dd + dm / 60 + ds / 3600;
+        if (line[83] == '-')
+            dec = -dec;
+        field(line, 102, 107, f);
+        s.v = atof(f);
+        field(line, 109, 114, f);
+        if (!blank(f))
+            s.bv = atof(f), s.has_bv = 1;
+        else
+            (*nobv)++;
+        double pmra = 0, pmde = 0;
+        field(line, 148, 154, f);
+        if (!blank(f))
+            pmra = atof(f); /* arcsec/yr, along RA (times cos dec) */
+        field(line, 154, 160, f);
+        if (!blank(f))
+            pmde = atof(f);
+        double dt = EPOCH - 2000.0;
+        double dec2 = dec + pmde * dt / 3600;
+        double cd = cos(rad(dec));
+        double ra2 = ra + pmra * dt / 3600 / (cd > 1e-6 ? cd : 1e-6);
+        field(line, 4, 14, s.name);
+        trim(s.name);
+        s.ra = pmod(ra2, 360.0);
+        s.dec = dec2;
+        if (n == cap)
+            st = xrealloc(st, (cap *= 2) * sizeof *st);
+        st[n++] = s;
+    }
+    free(txt);
+    *count = n;
+    return st;
+}
+
+/* ---- OpenNGC ---- */
+
+typedef struct {
+    char name[32], common[160];
+    double ra, dec, vmag, bv, maj, min, pa;
+    int has_bv;
+} galaxy_t;
+
+/* splits one ';' separated line in place; fields may be "quoted" */
+static int csv_split(char *line, char **f, int max)
+{
+    int n = 0;
+    char *p = line;
+    for (;;) {
+        if (n == max)
+            return n;
+        if (*p == '"') {
+            char *w = ++p;
+            f[n++] = w;
+            for (;;) {
+                if (!*p)
+                    return n;
+                if (*p == '"') {
+                    if (p[1] == '"') {
+                        *w++ = '"', p += 2;
+                        continue;
+                    }
+                    p++;
+                    break;
+                }
+                *w++ = *p++;
+            }
+            *w = 0;
+            if (*p == ';') {
+                p++;
+                continue;
+            }
+            return n;
+        }
+        f[n++] = p;
+        while (*p && *p != ';')
+            p++;
+        if (*p == ';') {
+            *p++ = 0;
+            continue;
+        }
+        return n;
+    }
+}
+
+static int col_of(char **h, int nh, const char *name)
+{
+    for (int i = 0; i < nh; i++)
+        if (strcmp(h[i], name) == 0)
+            return i;
+    die("OpenNGC: no column %s", name);
+}
+
+static double fnum(const char *s) { return *s ? atof(s) : 0.0; }
+
+static void openngc_load(const char *path, galaxy_t **out, size_t *n, size_t *cap)
+{
+    size_t len;
+    char *txt = (char *)slurp(path, &len);
+    char *p = txt;
+    char *hf[64], *f[64];
+    int nh = 0, cName = 0, cType = 0, cRA = 0, cDec = 0, cMaj = 0, cMin = 0, cPA = 0, cB = 0, cV = 0, cCommon = 0;
+    int first = 1;
+    while (*p) {
+        char *e = strchr(p, '\n');
+        char *line = p;
+        if (e)
+            *e = 0, p = e + 1;
+        else
+            p += strlen(p);
+        size_t ll = strlen(line);
+        if (ll && line[ll - 1] == '\r')
+            line[ll - 1] = 0;
+        if (first) {
+            nh = csv_split(line, hf, 64);
+            cName = col_of(hf, nh, "Name"), cType = col_of(hf, nh, "Type"), cRA = col_of(hf, nh, "RA");
+            cDec = col_of(hf, nh, "Dec"), cMaj = col_of(hf, nh, "MajAx"), cMin = col_of(hf, nh, "MinAx");
+            cPA = col_of(hf, nh, "PosAng"), cB = col_of(hf, nh, "B-Mag"), cV = col_of(hf, nh, "V-Mag");
+            cCommon = col_of(hf, nh, "Common names");
+            first = 0;
+            continue;
+        }
+        if (!*line)
+            continue;
+        int nf = csv_split(line, f, 64);
+        int need = cCommon > cV ? cCommon : cV;
+        if (nf <= need)
+            continue;
+        if (strcmp(f[cType], "G") != 0 || !*f[cRA])
+            continue;
+        const char *mag = *f[cV] ? f[cV] : f[cB];
+        if (!*mag)
+            continue;
+        galaxy_t g;
+        memset(&g, 0, sizeof g);
+        snprintf(g.name, sizeof g.name, "%s", f[cName]);
+        snprintf(g.common, sizeof g.common, "%s", f[cCommon]);
+        double h, m, s;
+        if (sscanf(f[cRA], "%lf:%lf:%lf", &h, &m, &s) != 3)
+            continue;
+        g.ra = (h + m / 60 + s / 3600) * 15;
+        int sd = f[cDec][0] == '-' ? -1 : 1;
+        double d, dm, ds;
+        if (sscanf(f[cDec], "%lf:%lf:%lf", &d, &dm, &ds) != 3)
+            continue;
+        g.dec = sd * (fabs(d) + fabs(dm) / 60 + fabs(ds) / 3600);
+        g.vmag = atof(mag);
+        if (*f[cB] && *f[cV])
+            g.bv = atof(f[cB]) - atof(f[cV]), g.has_bv = 1;
+        g.maj = fnum(f[cMaj]);
+        g.min = *f[cMin] ? atof(f[cMin]) : g.maj;
+        g.pa = fnum(f[cPA]);
+        if (*n == *cap)
+            *out = xrealloc(*out, (*cap *= 2) * sizeof **out);
+        (*out)[(*n)++] = g;
+    }
+    free(txt);
+}
+
+/* ---- the photograph: a little-endian or big-endian TIFF, 8-bit RGB, LZW,
+ * with or without horizontal differencing, in strips ---- */
+
+typedef struct {
+    int w, h;
+    uint8_t *rgb; /* w * h * 3 */
+} image_t;
+
+static int be; /* the TIFF's byte order */
+static uint32_t rd16(const uint8_t *p) { return be ? (uint32_t)p[0] << 8 | p[1] : (uint32_t)p[1] << 8 | p[0]; }
+static uint32_t rd32(const uint8_t *p)
+{
+    return be ? (uint32_t)p[0] << 24 | (uint32_t)p[1] << 16 | (uint32_t)p[2] << 8 | p[3]
+              : (uint32_t)p[3] << 24 | (uint32_t)p[2] << 16 | (uint32_t)p[1] << 8 | p[0];
+}
+
+/* TIFF's LZW (MSB first, early change, 9 to 12 bit codes, 256 clear, 257 end). Returns bytes written. */
+static size_t lzw_decode(const uint8_t *in, size_t inlen, uint8_t *out, size_t outcap)
+{
+    static uint16_t prefix[4096];
+    static uint8_t suffix[4096];
+    static uint16_t length[4096];
+    uint32_t bitbuf = 0;
+    int bits = 0, width = 9, next = 258;
+    size_t ip = 0, op = 0;
+    int prev = -1;
+    for (;;) {
+        while (bits < width) {
+            if (ip >= inlen)
+                return op;
+            bitbuf = bitbuf << 8 | in[ip++];
+            bits += 8;
+        }
+        int code = (int)((bitbuf >> (bits - width)) & ((1u << width) - 1));
+        bits -= width;
+        bitbuf &= (1u << bits) - 1;
+        if (code == 257)
+            return op;
+        if (code == 256) {
+            width = 9, next = 258, prev = -1;
+            continue;
+        }
+        int emit_code;
+        uint8_t first;
+        if (prev < 0) {
+            if (code > 255)
+                die("TIFF LZW: bad first code");
+            if (op >= outcap)
+                return op;
+            out[op++] = (uint8_t)code;
+            prev = code;
+            continue;
+        }
+        if (code < next) {
+            emit_code = code;
+        } else if (code == next) {
+            emit_code = prev; /* the string of prev plus its own first byte */
+        } else {
+            die("TIFF LZW: code %d beyond the table (%d)", code, next);
+        }
+        /* write the string of emit_code */
+        size_t slen = emit_code < 256 ? 1 : length[emit_code];
+        size_t extra = code == next ? 1 : 0;
+        if (op + slen + extra > outcap)
+            return op;
+        size_t at = op + slen;
+        int c = emit_code;
+        while (c >= 256) {
+            out[--at] = suffix[c];
+            c = prefix[c];
+        }
+        out[--at] = (uint8_t)c;
+        first = (uint8_t)c;
+        op += slen;
+        if (extra)
+            out[op++] = first;
+        if (next < 4096) {
+            prefix[next] = (uint16_t)prev;
+            suffix[next] = first;
+            length[next] = (uint16_t)((prev < 256 ? 1 : length[prev]) + 1);
+            next++;
+        }
+        if (next == (1 << width) - 1 && width < 12) /* early change: one code sooner */
+            width++;
+        prev = code;
+    }
+}
+
+static image_t tiff_load(const char *path)
+{
+    size_t len;
+    uint8_t *d = slurp(path, &len);
+    if (len < 8 || !((d[0] == 'I' && d[1] == 'I') || (d[0] == 'M' && d[1] == 'M')))
+        die("%s: not a TIFF", path);
+    be = d[0] == 'M';
+    if (rd16(d + 2) != 42)
+        die("%s: not a classic TIFF", path);
+    uint32_t ifd = rd32(d + 4);
+    uint32_t n = rd16(d + ifd);
+    uint32_t width = 0, height = 0, comp = 1, rps = 0, spp = 1, planar = 1, pred = 1, photo = 0;
+    uint32_t nstrips = 0, offs_at = 0, cnts_at = 0, offs_type = 0, cnts_type = 0;
+    uint32_t bps0 = 0;
+    for (uint32_t i = 0; i < n; i++) {
+        const uint8_t *e = d + ifd + 2 + 12 * i;
+        uint32_t tag = rd16(e), type = rd16(e + 2), cnt = rd32(e + 4);
+        uint32_t val = type == 3 && cnt == 1 ? rd16(e + 8) : rd32(e + 8);
+        switch (tag) {
+        case 256: width = val; break;
+        case 257: height = val; break;
+        case 258: bps0 = type == 3 && cnt > 2 ? rd16(d + rd32(e + 8)) : val; break;
+        case 259: comp = val; break;
+        case 262: photo = val; break;
+        case 273: nstrips = cnt, offs_at = (cnt == 1) ? (uint32_t)(e + 8 - d) : val, offs_type = type; break;
+        case 277: spp = val; break;
+        case 278: rps = val; break;
+        case 279: cnts_at = (cnt == 1) ? (uint32_t)(e + 8 - d) : val, cnts_type = type; break;
+        case 284: planar = val; break;
+        case 317: pred = val; break;
+        default: break;
+        }
+    }
+    if (bps0 != 8 || spp != 3 || planar != 1 || photo != 2 || (comp != 5 && comp != 1) || (pred != 1 && pred != 2))
+        die("%s: unsupported TIFF (bps %u spp %u planar %u photo %u comp %u pred %u)", path, bps0, spp, planar, photo, comp, pred);
+    if (!rps || rps > height)
+        rps = height;
+    image_t im;
+    im.w = (int)width, im.h = (int)height;
+    im.rgb = xmalloc((size_t)width * height * 3);
+    size_t rowbytes = (size_t)width * 3;
+    for (uint32_t s = 0; s < nstrips; s++) {
+        uint32_t off = offs_type == 3 ? rd16(d + offs_at + 2 * s) : rd32(d + offs_at + 4 * s);
+        uint32_t cnt = cnts_type == 3 ? rd16(d + cnts_at + 2 * s) : rd32(d + cnts_at + 4 * s);
+        uint32_t row0 = s * rps, rows = row0 + rps > height ? height - row0 : rps;
+        uint8_t *dst = im.rgb + (size_t)row0 * rowbytes;
+        size_t want = (size_t)rows * rowbytes;
+        if ((size_t)off + cnt > len)
+            die("%s: strip %u runs off the end", path, s);
+        if (comp == 5) {
+            size_t got = lzw_decode(d + off, cnt, dst, want);
+            if (got != want)
+                die("%s: strip %u decoded %zu bytes, wanted %zu", path, s, got, want);
+        } else {
+            memcpy(dst, d + off, want);
+        }
+        if (pred == 2)
+            for (uint32_t r = 0; r < rows; r++) {
+                uint8_t *row = dst + (size_t)r * rowbytes;
+                for (size_t x = 3; x < rowbytes; x++)
+                    row[x] = (uint8_t)(row[x] + row[x - 3]);
+            }
+    }
+    free(d);
+    return im;
+}
+
+/* the photograph's colour planes taken one at a time */
+static void filt_minmax(uint8_t *plane, int w, int h, int r, int is_max)
+{
+    uint8_t *tmp = xmalloc((size_t)w * h);
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++) {
+            int m = plane[(size_t)y * w + x];
+            for (int k = -r; k <= r; k++) {
+                int xx = ((x + k) % w + w) % w; /* longitude wraps */
+                int v = plane[(size_t)y * w + xx];
+                m = is_max ? (v > m ? v : m) : (v < m ? v : m);
+            }
+            tmp[(size_t)y * w + x] = (uint8_t)m;
+        }
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++) {
+            int m = tmp[(size_t)y * w + x];
+            for (int k = -r; k <= r; k++) {
+                int yy = y + k < 0 ? 0 : y + k >= h ? h - 1 : y + k; /* latitude clamps at the poles */
+                int v = tmp[(size_t)yy * w + x];
+                m = is_max ? (v > m ? v : m) : (v < m ? v : m);
+            }
+            plane[(size_t)y * w + x] = (uint8_t)m;
+        }
+    free(tmp);
+}
+
+static void filt_gauss(uint8_t *plane, int w, int h, double sigma)
+{
+    int r = (int)ceil(3.0 * sigma);
+    double *k = xmalloc((size_t)(2 * r + 1) * sizeof *k);
+    double sum = 0;
+    for (int i = -r; i <= r; i++)
+        sum += k[i + r] = exp(-0.5 * i * i / (sigma * sigma));
+    for (int i = 0; i <= 2 * r; i++)
+        k[i] /= sum;
+    uint8_t *tmp = xmalloc((size_t)w * h);
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++) {
+            double a = 0;
+            for (int i = -r; i <= r; i++)
+                a += k[i + r] * plane[(size_t)y * w + ((x + i) % w + w) % w];
+            tmp[(size_t)y * w + x] = (uint8_t)clampd(floor(a + 0.5), 0, 255);
+        }
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++) {
+            double a = 0;
+            for (int i = -r; i <= r; i++) {
+                int yy = y + i < 0 ? 0 : y + i >= h ? h - 1 : y + i;
+                a += k[i + r] * tmp[(size_t)yy * w + x];
+            }
+            plane[(size_t)y * w + x] = (uint8_t)clampd(floor(a + 0.5), 0, 255);
+        }
+    free(tmp);
+    free(k);
+}
+
+typedef struct {
+    image_t im, clean;
+    double dx, dy;
+    double lin[256];
+} pano_t;
+
+static void pano_xy(const pano_t *p, double l, double b, double *x, double *y)
+{
+    *x = (180.0 - (pmod(l + 180.0, 360.0) - 180.0)) / 360.0 * p->im.w - 0.5 + p->dx;
+    *y = (90.0 - b) / 180.0 * p->im.h - 0.5 + p->dy;
+}
+
+static int pano_luma(const image_t *im, int x, int y)
+{
+    const uint8_t *q = im->rgb + ((size_t)y * im->w + x) * 3;
+    return (int)(((uint32_t)q[0] * 19595 + (uint32_t)q[1] * 38470 + (uint32_t)q[2] * 7471 + 0x8000) >> 16);
+}
+
+typedef struct {
+    double dx, dy;
+} off2;
+static int cmpd(const void *a, const void *b)
+{
+    double x = *(const double *)a, y = *(const double *)b;
+    return x < y ? -1 : x > y;
+}
+
+/* where the photograph's bright stars are against where the catalogue says:
+ * the median offset is applied, the scatter reported */
+static void pano_measure(pano_t *p, const star_t *st, size_t ns)
+{
+    size_t cap = 256, n = 0;
+    off2 *o = xmalloc(cap * sizeof *o);
+    for (size_t i = 0; i < ns; i++) {
+        if (st[i].v > 2.5)
+            continue;
+        double l, b, x, y;
+        galactic(vec(st[i].ra, st[i].dec), &l, &b);
+        pano_xy(p, l, b, &x, &y);
+        if (fabs(b) > 80 || !(8 < x && x < p->im.w - 8 && 8 < y && y < p->im.h - 8))
+            continue;
+        double sw = 0, sx = 0, sy = 0;
+        int ix = (int)rnd(x), iy = (int)rnd(y);
+        int base = 255;
+        for (int a = -7; a <= 7; a += 14)
+            for (int c = -7; c <= 7; c += 14) {
+                int v = pano_luma(&p->im, ix + a, iy + c);
+                if (v < base)
+                    base = v;
+            }
+        for (int j = -5; j <= 5; j++)
+            for (int k = -5; k <= 5; k++) {
+                int d = pano_luma(&p->im, ix + k, iy + j) - base;
+                double v = d > 0 ? (double)d * d : 0.0;
+                sw += v, sx += v * (ix + k), sy += v * (iy + j);
+            }
+        if (sw > 0) {
+            if (n == cap)
+                o = xrealloc(o, (cap *= 2) * sizeof *o);
+            o[n++] = (off2){sx / sw - x, sy / sw - y};
+        }
+    }
+    double *tx = xmalloc(n * sizeof(double)), *ty = xmalloc(n * sizeof(double));
+    for (size_t i = 0; i < n; i++)
+        tx[i] = o[i].dx, ty[i] = o[i].dy;
+    qsort(tx, n, sizeof(double), cmpd);
+    qsort(ty, n, sizeof(double), cmpd);
+    double mx = tx[n / 2], my = ty[n / 2];
+    size_t good = 0;
+    double ss = 0;
+    for (size_t i = 0; i < n; i++)
+        if (fabs(o[i].dx - mx) < 2.5 && fabs(o[i].dy - my) < 2.5) {
+            good++;
+            ss += (o[i].dx - mx) * (o[i].dx - mx) + (o[i].dy - my) * (o[i].dy - my);
+        }
+    double rms = sqrt(ss / (good ? (double)good : 1.0));
+    report("photograph registration: %zu stars brighter than V 2.5 found; median offset (%.2f, %.2f) px "
+           "(1 px = %.3f deg); %zu within 2.5 px, rms %.2f px",
+           n, mx, my, 360.0 / p->im.w, good, rms);
+    p->dx = mx, p->dy = my;
+    free(tx), free(ty), free(o);
+}
+
+/* the photograph with its stars taken out: a grey opening (minimum then
+ * maximum over 7 px, about 0.4 deg), then a light blur. What is left is the
+ * light of the stars too faint and too many to see one by one, the glowing
+ * gas and the dark dust. */
+static void pano_starless(pano_t *p)
+{
+    clock_t t0 = clock();
+    int w = p->im.w, h = p->im.h;
+    p->clean.w = w, p->clean.h = h;
+    p->clean.rgb = xmalloc((size_t)w * h * 3);
+    uint8_t *plane = xmalloc((size_t)w * h);
+    for (int c = 0; c < 3; c++) {
+        for (size_t i = 0; i < (size_t)w * h; i++)
+            plane[i] = p->im.rgb[i * 3 + (size_t)c];
+        filt_minmax(plane, w, h, 3, 0);
+        filt_minmax(plane, w, h, 3, 1);
+        filt_gauss(plane, w, h, 2.5);
+        for (size_t i = 0; i < (size_t)w * h; i++)
+            p->clean.rgb[i * 3 + (size_t)c] = plane[i];
+    }
+    free(plane);
+    report("photograph without its stars: grey opening 7 px then blur 2.5 px (%.1f s)",
+           (double)(clock() - t0) / CLOCKS_PER_SEC);
+}
+
+/* the photograph's own light of catalogue stars V 3.5 to 6.0 away from the
+ * Milky Way's crowded middle (|b| > 15 deg): the sum, in linear light, of what
+ * the star adds over the starless photograph within 4 px. Fits
+ * log F = gamma x log(10^(-0.4 V)) + c: gamma 1 is a photograph whose light is
+ * proportional to the sky's. A diagnostic only. */
+static void pano_photometry(pano_t *p, const star_t *st, size_t ns)
+{
+    size_t cap = 512, n = 0;
+    double *px = xmalloc(cap * sizeof(double)), *py = xmalloc(cap * sizeof(double));
+    for (size_t i = 0; i < ns; i++) {
+        if (!(3.5 <= st[i].v && st[i].v <= 6.0))
+            continue;
+        double l, b, x, y;
+        galactic(vec(st[i].ra, st[i].dec), &l, &b);
+        if (fabs(b) < 15 || fabs(b) > 75)
+            continue;
+        pano_xy(p, l, b, &x, &y);
+        int ix = (int)rnd(x), iy = (int)rnd(y);
+        if (!(6 < ix && ix < p->im.w - 6 && 6 < iy && iy < p->im.h - 6))
+            continue;
+        double f = 0;
+        for (int j = -4; j <= 4; j++)
+            for (int k = -4; k <= 4; k++) {
+                if (k * k + j * j > 16)
+                    continue;
+                size_t at = ((size_t)(iy + j) * p->im.w + (size_t)(ix + k)) * 3;
+                f += 0.2126 * (p->lin[p->im.rgb[at]] - p->lin[p->clean.rgb[at]]) +
+                     0.7152 * (p->lin[p->im.rgb[at + 1]] - p->lin[p->clean.rgb[at + 1]]) +
+                     0.0722 * (p->lin[p->im.rgb[at + 2]] - p->lin[p->clean.rgb[at + 2]]);
+            }
+        if (f > 0) {
+            if (n == cap)
+                px = xrealloc(px, (cap *= 2) * sizeof(double)), py = xrealloc(py, cap * sizeof(double));
+            px[n] = -0.4 * st[i].v, py[n] = log10(f), n++;
+        }
+    }
+    if (n < 2)
+        die("photometry: only %zu stars", n);
+    double mx = 0, my = 0;
+    for (size_t i = 0; i < n; i++)
+        mx += px[i], my += py[i];
+    mx /= (double)n, my /= (double)n;
+    double sxx = 0, sxy = 0;
+    for (size_t i = 0; i < n; i++)
+        sxx += (px[i] - mx) * (px[i] - mx), sxy += (px[i] - mx) * (py[i] - my);
+    double gamma = sxy / sxx, c = my - gamma * mx, ss = 0;
+    for (size_t i = 0; i < n; i++) {
+        double r = py[i] - (gamma * px[i] + c);
+        ss += r * r;
+    }
+    report("photograph photometry: %zu stars V 3.5..6.0, |b| > 15: light ~ (10^(-0.4 V))^%.3f, "
+           "a magnitude 0 star = %.4g linear x photo pixels; scatter %.2f mag",
+           n, gamma, pow(10, c), sqrt(ss / (double)n) / 0.4);
+    free(px), free(py);
+}
+
+/* bilinear, in linear light, of the starless photograph at galactic (l, b) */
+static void pano_sample(const pano_t *p, double l, double b, double acc[3])
+{
+    double x, y;
+    pano_xy(p, l, b, &x, &y);
+    double x0 = floor(x), y0 = floor(y), fx = x - x0, fy = y - y0;
+    acc[0] = acc[1] = acc[2] = 0;
+    static const int dij[4][2] = {{0, 0}, {1, 0}, {0, 1}, {1, 1}};
+    for (int q = 0; q < 4; q++) {
+        int i = dij[q][0], j = dij[q][1];
+        double wgt = (i ? fx : 1 - fx) * (j ? fy : 1 - fy);
+        long xx = (long)pmod(x0 + i, p->im.w);
+        long yy = (long)clampd(y0 + j, 0, p->im.h - 1);
+        const uint8_t *c = p->clean.rgb + ((size_t)yy * p->im.w + (size_t)xx) * 3;
+        for (int k = 0; k < 3; k++)
+            acc[k] += wgt * p->lin[c[k]];
+    }
+}
+
+/* ---- the run ---- */
+
+typedef struct {
+    const char *cache, *out, *report, *inputs;
+    double ra, dec, fov, roll, mag, boost, skyglow, mw_top_s10, exposure;
+    int have_ra, have_dec, grid;
+    double glow_lin, g_phys;
+} opts_t;
+
+typedef struct {
+    star_t *s;
+    vec3 v;
+} sel_t;
+
+static int by_v(const void *a, const void *b)
+{
+    const sel_t *x = a, *y = b;
+    if (x->s->v != y->s->v)
+        return x->s->v < y->s->v ? -1 : 1;
+    return x->s < y->s ? -1 : x->s > y->s; /* ties keep the catalogue's order */
+}
+
+typedef struct {
+    galaxy_t *g;
+    vec3 v;
+} gsel_t;
+
+static int by_vmag(const void *a, const void *b)
+{
+    const gsel_t *x = a, *y = b;
+    if (x->g->vmag != y->g->vmag)
+        return x->g->vmag < y->g->vmag ? -1 : 1;
+    return x->g < y->g ? -1 : x->g > y->g;
+}
+
+static const double W = 3840, H = 2160;
+
+static int on_169(const view_t *view, vec3 v)
+{
+    double x, y;
+    return to_screen(view, v, W, H, &x, &y) && 0 <= x && x < W && 0 <= y && y < H;
+}
+
+static char *path_join(const char *dir, const char *name)
+{
+    size_t n = strlen(dir) + strlen(name) + 2;
+    char *s = xmalloc(n);
+    snprintf(s, n, "%s/%s", dir, name);
+    return s;
+}
+
+static void emit(const opts_t *a, const view_t *view, const sel_t *sel, size_t nsel, double pal[128][3], const double *grid,
+                 int gw_cols, int gw_rows, double gy0, double step, double floor_, const gsel_t *gals, size_t ngal, double ra,
+                 double dec);
+
+int main(int argc, char **argv)
+{
+    opts_t a = {0};
+    a.fov = 80.0, a.mag = 6.5, a.grid = 240, a.boost = 5.0, a.skyglow = 22.0, a.mw_top_s10 = 900.0, a.exposure = 0.06;
+    for (int i = 1; i < argc; i++) {
+        const char *k = argv[i];
+        const char *v = i + 1 < argc ? argv[i + 1] : NULL;
+        if (!v)
+            die("%s needs a value", k);
+        i++;
+        if (!strcmp(k, "--cache")) a.cache = v;
+        else if (!strcmp(k, "--out")) a.out = v;
+        else if (!strcmp(k, "--report")) a.report = v;
+        else if (!strcmp(k, "--inputs")) a.inputs = v;
+        else if (!strcmp(k, "--ra")) a.ra = atof(v), a.have_ra = 1;
+        else if (!strcmp(k, "--dec")) a.dec = atof(v), a.have_dec = 1;
+        else if (!strcmp(k, "--fov")) a.fov = atof(v);
+        else if (!strcmp(k, "--roll")) a.roll = atof(v);
+        else if (!strcmp(k, "--mag")) a.mag = atof(v);
+        else if (!strcmp(k, "--grid")) a.grid = atoi(v);
+        else if (!strcmp(k, "--boost")) a.boost = atof(v);
+        else if (!strcmp(k, "--skyglow")) a.skyglow = atof(v);
+        else if (!strcmp(k, "--mw-top-s10")) a.mw_top_s10 = atof(v);
+        else if (!strcmp(k, "--exposure")) a.exposure = atof(v);
+        else die("unknown option %s", k);
+    }
+    if (!a.cache || !a.out)
+        die("--cache and --out are needed");
+    time_t t0 = time(NULL);
+
+    if (a.inputs) { /* "input name: url sha256 ..." lines made by scripts/ck_sky_gen.sh */
+        size_t len;
+        char *t = (char *)slurp(a.inputs, &len);
+        char *p = t;
+        while (*p) {
+            char *e = strchr(p, '\n');
+            if (e)
+                *e = 0;
+            if (*p)
+                report("%s", p);
+            p = e ? e + 1 : p + strlen(p);
+        }
+        free(t);
+    }
+
+    gwmap gw = gw_load(path_join(a.cache, "GW150914_skymap.fits"));
+    double ra = a.have_ra ? a.ra : rnd(gw.max_ra * 1000) / 1000.0;
+    double dec = a.have_dec ? a.dec : rnd(gw.max_dec * 1000) / 1000.0;
+    report("GW150914 sky map: HEALPix nside %d; most probable point RA %.3f Dec %.3f deg; 90%% region %.1f sq deg", gw.nside,
+           gw.max_ra, gw.max_dec, gw.area90);
+    view_t view = view_make(ra, dec, a.fov, a.roll);
+    report("view: gnomonic, centre RA %.3f Dec %.3f deg, %.1f deg across the width, roll %.1f deg, "
+           "centre at %.0f%% across and %.0f%% down",
+           ra, dec, a.fov, a.roll, CX_FRAC * 100, CY_FRAC * 100);
+    vec3 tl = from_frac(&view, -0.5, -CY_FRAC * H / W), br = from_frac(&view, 0.5, (1 - CY_FRAC) * H / W);
+    report("3840x2160: the top-left corner is %.1f deg from the centre, the bottom-right %.1f deg", sep_deg(tl, view.rows[2]),
+           sep_deg(br, view.rows[2]));
+    double lc, bc;
+    galactic(view.rows[2], &lc, &bc);
+    report("the centre in galactic coordinates: l %.2f b %.2f deg", lc, bc);
+    long inside = 0;
+    for (long i = 0; i < gw.n90; i++) {
+        double x, y;
+        if (to_screen(&view, vec(gw.region_ra[i], gw.region_dec[i]), W, H, &x, &y) && 0 <= x && x < W && 0 <= y && y < H)
+            inside++;
+    }
+    report("of the GW150914 90%% region, %.0f%% of its pixels are on the 3840x2160 screen", 100.0 * (double)inside / (double)gw.n90);
+
+    /* ---- stars ---- */
+    size_t nstars;
+    int nobv;
+    star_t *stars = bsc5_load(path_join(a.cache, "bsc5.dat"), &nstars, &nobv);
+    report("catalogue: %zu stars with positions; %d have no B-V (drawn at B-V 0.6, close to the Sun's)", nstars, nobv);
+    const double margin = 64, hmax = W * H_OVER_W_MAX;
+    sel_t *sel = xmalloc(nstars * sizeof *sel);
+    size_t nsel = 0, allsky = 0;
+    static const double lims[7] = {4.0, 5.0, 5.5, 6.0, 6.5, 7.0, 99};
+    long counts[7] = {0};
+    for (size_t i = 0; i < nstars; i++) {
+        vec3 v = vec(stars[i].ra, stars[i].dec);
+        int s169 = on_169(&view, v);
+        for (int k = 0; k < 7; k++)
+            if (stars[i].v <= lims[k] && s169)
+                counts[k]++;
+        if (stars[i].v <= a.mag) {
+            allsky++;
+            double x, y;
+            if (to_screen(&view, v, W, hmax, &x, &y) && -margin <= x && x < W + margin && -margin <= y && y < hmax + margin)
+                sel[nsel++] = (sel_t){&stars[i], v};
+        }
+    }
+    {
+        char buf[512];
+        int n = 0;
+        buf[0] = 0;
+        for (int k = 0; k < 7; k++) {
+            if (!counts[k])
+                continue;
+            char lim[16];
+            if (k == 6)
+                snprintf(lim, sizeof lim, "all");
+            else
+                snprintf(lim, sizeof lim, "%.1f", lims[k]);
+            n += snprintf(buf + n, sizeof buf - (size_t)n, "%sV<=%s: %ld", n ? ", " : "", lim, counts[k]);
+        }
+        report("stars on the 3840x2160 screen by limit: %s", buf);
+    }
+    report("stars to V %.1f in the whole sky: %zu (8 bytes each: %zu bytes); in this view with its margin: %zu", a.mag, allsky,
+           allsky * 8, nsel);
+    qsort(sel, nsel, sizeof *sel, by_v);
+
+    /* colour palette: B-V from -0.40 to 2.14 in steps of 0.02 */
+    static double pal[128][3];
+    for (int i = 0; i < 128; i++)
+        blackbody_rgb(ballesteros(-0.40 + 0.02 * i), pal[i]);
+    static const double bvs[4] = {-0.3, 0.0, 0.65, 1.5};
+    for (int i = 0; i < 4; i++) {
+        double rgb[3];
+        double T = ballesteros(bvs[i]);
+        blackbody_rgb(T, rgb);
+        report("colour: B-V %.2f -> %.0f K -> sRGB (%.0f, %.0f, %.0f)", bvs[i], T, srgb_encode(rgb[0]), srgb_encode(rgb[1]),
+               srgb_encode(rgb[2]));
+    }
+
+    /* ---- the Milky Way ---- */
+    pano_t pano;
+    memset(&pano, 0, sizeof pano);
+    for (int i = 0; i < 256; i++)
+        pano.lin[i] = srgb_decode(i);
+    pano.im = tiff_load(path_join(a.cache, "eso0932a.tif"));
+    report("photograph: %d x %d, %.3f deg per pixel", pano.im.w, pano.im.h, 360.0 / pano.im.w);
+    pano_measure(&pano, stars, nstars);
+    pano_starless(&pano);
+    pano_photometry(&pano, stars, nstars); /* a diagnostic only: the photograph is not photometric (see the report) */
+    /* The photograph's light is set from a measured value instead: the mean surface brightness of the
+     * Milky Way over the whole sky, the stars fainter than 6.5 included, from Pioneer 10/11 photometry:
+     * 101 S10(V) in B and 136 in R (Mattila et al. 2018, A&A 617, A42, table 5; from Toller 1981 and
+     * Leinert et al. 1998); taken here as their mean, 118 S10(V). One S10 is one 10th-magnitude star per
+     * square degree. */
+    double r0 = 1.2; /* design px: the core of a star */
+    double star0 = a.exposure * (PI * r0 * r0 / 4) / 0.8 * pow(10, 0.4 * 6.5); /* a magnitude 0 star's light, linear x design px */
+    double px_deg2 = (a.fov / 1920.0) * (a.fov / 1920.0); /* a design px at the centre, square degrees */
+    double s10 = 1e-4 * star0 * px_deg2;                    /* linear light per design px of 1 S10 */
+    a.glow_lin = pow(10, 0.4 * (27.78 - a.skyglow)) * s10 * a.boost;
+    report("display: a magnitude 6.5 star peaks at %.3f linear (sRGB level %.0f); a magnitude 0 star holds "
+           "%.1f linear x design px; 1 S10 is %.3g linear per design px",
+           a.exposure, srgb_encode(a.exposure), star0, s10);
+    report("the dark sky's own glow, V %.1f mag per square arcsec (%.0f S10; airglow and zodiacal light at a dark "
+           "site): %.5f linear per design px (sRGB level %.1f)",
+           a.skyglow, pow(10, 0.4 * (27.78 - a.skyglow)), a.glow_lin, srgb_encode(a.glow_lin));
+    int gw_cols = a.grid;
+    int gw_rows = (int)ceil(gw_cols * H_OVER_W_MAX) + 2;
+    double gy0 = -CY_FRAC * H_OVER_W_MAX; /* widths */
+    double step = 1.0 / gw_cols;
+    double *grid = xmalloc((size_t)gw_rows * (size_t)(gw_cols + 1) * 3 * sizeof(double));
+    for (int j = 0; j < gw_rows; j++)
+        for (int i = 0; i <= gw_cols; i++) {
+            vec3 d = from_frac(&view, -0.5 + i * step, gy0 + j * step);
+            double l, b;
+            galactic(d, &l, &b);
+            pano_sample(&pano, l, b, grid + ((size_t)j * (gw_cols + 1) + (size_t)i) * 3);
+        }
+    /* the photograph's darkest sky (its 2nd percentile of light) is taken as its black: what is under that is the
+     * photographer's floor, not the sky. */
+    size_t ng = (size_t)gw_rows * (size_t)(gw_cols + 1);
+    double *lums = xmalloc(ng * sizeof(double));
+    for (size_t i = 0; i < ng; i++)
+        lums[i] = 0.2126 * grid[i * 3] + 0.7152 * grid[i * 3 + 1] + 0.0722 * grid[i * 3 + 2];
+    qsort(lums, ng, sizeof(double), cmpd);
+    double floor_ = lums[ng / 50], top = lums[ng * 999 / 1000];
+    free(lums);
+    /* The photograph is not photometric (the report's photometry line: its stars' light hardly follows their
+     * magnitudes), so its light is tied to a measurement: the Bochum V photometry of the southern Milky Way
+     * (Leinert et al. 1998, A&AS 127, 1, section 10, fig. 65: its scale tops out at 900 S10(V); the
+     * Carina-Coalsack isophotes in V are 250, 500 and 800 S10). The view's brightest Milky Way (the 99.9th
+     * percentile of the grid) is set to --mw-top-s10, the photograph's black to nothing. */
+    a.g_phys = a.mw_top_s10 * s10 / (top - floor_);
+    report("the photograph tied to Leinert et al. 1998: the brightest Milky Way in the view = %.0f S10(V), "
+           "linear x %.4f per design px; the dark sky's glow %.0f S10; all of that shown x %.2f against the "
+           "stars (--boost; 1 is the true contrast at one design pixel, 2.5 arcmin)",
+           a.mw_top_s10, a.g_phys, pow(10, 0.4 * (27.78 - a.skyglow)), a.boost);
+    report("Milky Way grid: %d x %d samples, %.3f deg apart at the centre; photograph light (linear): "
+           "2nd percentile %.4f (taken as black), 99.9th %.4f",
+           gw_cols + 1, gw_rows, deg(2 * view.t * step), floor_, top);
+
+    /* galaxies in the view, bright enough for the eye */
+    size_t gcap = 4096, ngx = 0;
+    galaxy_t *gx = xmalloc(gcap * sizeof *gx);
+    openngc_load(path_join(a.cache, "NGC.csv"), &gx, &ngx, &gcap);
+    openngc_load(path_join(a.cache, "addendum.csv"), &gx, &ngx, &gcap);
+    gsel_t *gals = xmalloc((ngx + 1) * sizeof *gals);
+    size_t ngal = 0;
+    for (size_t i = 0; i < ngx; i++) {
+        vec3 v = vec(gx[i].ra, gx[i].dec);
+        if (gx[i].vmag > a.mag || !on_169(&view, v))
+            continue;
+        gals[ngal++] = (gsel_t){&gx[i], v};
+    }
+    qsort(gals, ngal, sizeof *gals, by_vmag);
+    {
+        char buf[2048];
+        int n = 0;
+        buf[0] = 0;
+        for (size_t i = 0; i < ngal; i++) {
+            char common[160];
+            snprintf(common, sizeof common, "%s", gals[i].g->common);
+            char *c = strchr(common, ',');
+            if (c)
+                *c = 0;
+            n += snprintf(buf + n, sizeof buf - (size_t)n, "%s%s %s V %.2f %.0fx%.0f arcmin PA %.0f", n ? ", " : "",
+                          gals[i].g->name, common, gals[i].g->vmag, gals[i].g->maj, gals[i].g->min, gals[i].g->pa);
+        }
+        report("galaxies on screen brighter than V %.1f (OpenNGC): %s", a.mag, ngal ? buf : "none");
+    }
+
+    emit(&a, &view, sel, nsel, pal, grid, gw_cols, gw_rows, gy0, step, floor_, gals, ngal, ra, dec);
+    report("made in %ld s", (long)(time(NULL) - t0));
+    fputs(rep, stdout);
+    if (a.report) {
+        FILE *f = fopen(a.report, "w");
+        if (!f)
+            die("cannot write %s", a.report);
+        fputs(rep, f);
+        fclose(f);
+    }
+    return 0;
+}
+
+static void emit(const opts_t *a, const view_t *view, const sel_t *sel, size_t nsel, double pal[128][3], const double *grid,
+                 int gw_cols, int gw_rows, double gy0, double step, double floor_, const gsel_t *gals, size_t ngal, double ra,
+                 double dec)
+{
+    const double Q30 = (double)(1 << 30);
+    FILE *o = fopen(a->out, "w");
+    if (!o)
+        die("cannot write %s", a->out);
+    fprintf(o, "/* sky_data.c -- GENERATED by native/kernel/tools/ck_sky_gen.c; do not edit.\n");
+    fprintf(o, " * Regenerate: scripts/ck_sky_gen.sh (downloads the inputs, checks their sha256).\n *\n");
+    fprintf(o, " * Stars: Yale Bright Star Catalogue, 5th revised ed. (Hoffleit & Warren 1991),\n");
+    fprintf(o, " *   CDS catalogue V/50, positions moved by proper motion to %.1f.\n", EPOCH);
+    fprintf(o, " * Milky Way: \"The Milky Way panorama\", ESO/S. Brunier (eso0932a), CC BY 4.0,\n");
+    fprintf(o, " *   re-projected, its stars taken out.\n");
+    fprintf(o, " * Galaxies: OpenNGC (Mattia Verga), CC BY-SA 4.0.\n");
+    fprintf(o, " * View centre: the most probable point of the GW150914 sky map, GWTC-1,\n");
+    fprintf(o, " *   LIGO/Virgo (LIGO-P1800381-v7).\n");
+    fprintf(o, " * Settings: centre RA %.3f Dec %.3f deg, %.1f deg across, roll %.1f deg, faintest V %.1f,\n", ra, dec, a->fov,
+            a->roll, a->mag);
+    fprintf(o, " *   grid %d, exposure %.4f, sky glow %.1f mag/arcsec2, Milky Way boost %.2f. */\n", gw_cols, a->exposure,
+            a->skyglow, a->boost);
+    fprintf(o, "#include \"sky_data.h\"\n\n");
+    fprintf(o, "const ck_sky_view ck_sky_the_view = {\n");
+    fprintf(o, "    .ra_mdeg = %ld, .dec_mdeg = %ld, .fov_mdeg = %ld, .roll_mdeg = %ld,\n", rnd(ra * 1000), rnd(dec * 1000),
+            rnd(a->fov * 1000), rnd(a->roll * 1000));
+    fprintf(o, "    .tan_half_q30 = %ld,\n", rnd(view->t * Q30));
+    fprintf(o, "    .rot_q30 = {\n");
+    for (int r = 0; r < 3; r++)
+        fprintf(o, "        {%ld, %ld, %ld},\n", rnd(view->rows[r].x * Q30), rnd(view->rows[r].y * Q30), rnd(view->rows[r].z * Q30));
+    fprintf(o, "    },\n};\n\n");
+
+    /* stars */
+    fprintf(o, "/* x, y, z: the direction, Q15 (J2000 axes); mag: (V + 2) * 20; bv: palette index */\n");
+    fprintf(o, "const ck_sky_star ck_sky_stars[%zu] = {\n", nsel);
+    for (size_t i = 0; i < nsel; i++) {
+        const star_t *s = sel[i].s;
+        double bv = s->has_bv ? s->bv : 0.6;
+        long bvi = rnd((bv + 0.40) / 0.02);
+        bvi = bvi < 0 ? 0 : bvi > 127 ? 127 : bvi;
+        long mc = rnd((s->v + 2.0) * 20);
+        mc = mc < 0 ? 0 : mc > 255 ? 255 : mc;
+        char bvs[16];
+        if (s->has_bv)
+            snprintf(bvs, sizeof bvs, "%.2f", s->bv);
+        else
+            snprintf(bvs, sizeof bvs, "none");
+        fprintf(o, "    {%ld, %ld, %ld, %ld, %ld}, /* HR %d %s V %.2f B-V %s */\n", rnd(sel[i].v.x * 32767), rnd(sel[i].v.y * 32767),
+                rnd(sel[i].v.z * 32767), mc, bvi, s->hr, s->name, s->v, bvs);
+    }
+    fprintf(o, "};\nconst unsigned ck_sky_nstars = %zu;\n\n", nsel);
+
+    /* brightness of a star at each magnitude code: linear light at the centre of its core at the reference scale
+     * (k = 256, 1920 px wide), Q16 */
+    fprintf(o, "/* light at the middle of a star of magnitude code m, linear, Q16: exposure x 10^(-0.4 (V - 6.5)) */\n");
+    fprintf(o, "const uint32_t ck_sky_flux[256] = {\n");
+    for (int i = 0; i < 256; i += 8) {
+        fprintf(o, "    ");
+        for (int k = 0; k < 8; k++) {
+            double V = (i + k) / 20.0 - 2.0;
+            long v = rnd(a->exposure * pow(10, -0.4 * (V - 6.5)) * 65536);
+            if (v > 0x7fffffff)
+                v = 0x7fffffff;
+            fprintf(o, "%ld%s", v, k < 7 ? ", " : ",\n");
+        }
+    }
+    fprintf(o, "};\n\n");
+    fprintf(o, "/* the colour of a black body at the temperature of B-V = -0.40 + 0.02 i (Ballesteros 2012),\n");
+    fprintf(o, " * linear sRGB, the brightest channel 4096 */\n");
+    fprintf(o, "const uint16_t ck_sky_palette[128][3] = {\n");
+    for (int i = 0; i < 128; i++)
+        fprintf(o, "    {%ld, %ld, %ld}, /* B-V %.2f, %.0f K */\n", rnd(pal[i][0] * 4096), rnd(pal[i][1] * 4096), rnd(pal[i][2] * 4096),
+                (2 * i - 40) / 100.0, ballesteros(-0.40 + 0.02 * i));
+    fprintf(o, "};\n\n");
+
+    /* sRGB tables */
+    fprintf(o, "/* sRGB level -> linear light, Q15 */\n");
+    fprintf(o, "const uint16_t ck_sky_lin[256] = {\n");
+    for (int i = 0; i < 256; i += 16) {
+        fprintf(o, "    ");
+        for (int k = 0; k < 16; k++)
+            fprintf(o, "%ld%s", rnd(srgb_decode(i + k) * 32768), k < 15 ? ", " : ",\n");
+    }
+    fprintf(o, "};\n");
+    fprintf(o, "/* linear light (Q15 >> 3, 0..4095) -> sRGB level x 16 (sixteenths, for dithering) */\n");
+    fprintf(o, "const uint16_t ck_sky_srgb16[4096] = {\n");
+    for (int i = 0; i < 4096; i += 16) {
+        fprintf(o, "    ");
+        for (int k = 0; k < 16; k++) {
+            long v = rnd(srgb_encode((i + k) / 4095.0) * 16);
+            fprintf(o, "%ld%s", v > 4080 ? 4080 : v, k < 15 ? ", " : ",\n");
+        }
+    }
+    fprintf(o, "};\n\n");
+
+    /* the Milky Way grid: luma full, chroma at half, all in sixteenths-of-level space */
+    double br[3], bgl[3];
+    (void)bgl;
+    blackbody_rgb(ballesteros(0.8), br); /* the dark sky's colour, B-V about 0.8 (Benn and Ellison 1998) */
+    double gl = 0.2126 * br[0] + 0.7152 * br[1] + 0.0722 * br[2];
+    double glow[3] = {a->glow_lin * br[0] / gl, a->glow_lin * br[1] / gl, a->glow_lin * br[2] / gl};
+    int cols = gw_cols + 1;
+    size_t ng = (size_t)cols * (size_t)gw_rows;
+    double *lv = xmalloc(ng * 3 * sizeof(double));
+    for (size_t i = 0; i < ng; i++)
+        for (int k = 0; k < 3; k++) {
+            /* surface brightness is the same wherever it lands on the screen (radiance is conserved) */
+            double c = grid[i * 3 + (size_t)k] - floor_;
+            double cc = glow[k] + (c > 0 ? c : 0) * a->g_phys * a->boost;
+            lv[i * 3 + (size_t)k] = srgb_encode(cc); /* sRGB levels 0..255 (float) */
+        }
+    uint8_t *Y = xmalloc(ng);
+    for (size_t i = 0; i < ng; i++) {
+        long y = rnd((lv[i * 3] + 2 * lv[i * 3 + 1] + lv[i * 3 + 2]) / 4);
+        Y[i] = (uint8_t)(y < 0 ? 0 : y > 255 ? 255 : y);
+    }
+    int hc = (cols + 1) / 2, hr = (gw_rows + 1) / 2;
+    size_t nco = (size_t)hc * (size_t)hr;
+    int8_t *CO = xmalloc(nco), *CG = xmalloc(nco);
+    for (int j = 0; j < hr; j++)
+        for (int i = 0; i < hc; i++) {
+            double ao = 0, ag = 0;
+            int n = 0;
+            for (int dj = 0; dj < 2; dj++)
+                for (int di = 0; di < 2; di++) {
+                    int ii = 2 * i + di < cols - 1 ? 2 * i + di : cols - 1;
+                    int jj = 2 * j + dj < gw_rows - 1 ? 2 * j + dj : gw_rows - 1;
+                    const double *p = lv + ((size_t)jj * (size_t)cols + (size_t)ii) * 3;
+                    ao += (p[0] - p[2]) / 2;
+                    ag += (-p[0] + 2 * p[1] - p[2]) / 4;
+                    n++;
+                }
+            long co = rnd(ao / n * 2), cg = rnd(ag / n * 2); /* half-levels */
+            CO[(size_t)j * (size_t)hc + (size_t)i] = (int8_t)(co < -127 ? -127 : co > 127 ? 127 : co);
+            CG[(size_t)j * (size_t)hc + (size_t)i] = (int8_t)(cg < -127 ? -127 : cg > 127 ? 127 : cg);
+        }
+    fprintf(o, "/* the Milky Way in the view: %d x %d samples, %.15g widths apart, the first row %.6f widths\n", cols, gw_rows, step,
+            gy0);
+    fprintf(o, " * above the view centre and the first column half a width left of it; luma (R + 2G + B) / 4 in sRGB\n");
+    fprintf(o, " * levels; colour (Co, Cg) at half the spacing, in half levels */\n");
+    fprintf(o, "const ck_sky_map ck_sky_milkyway = {\n");
+    fprintf(o, "    .cols = %d, .rows = %d, .per_width = %d, .row0_q16 = %ld,\n};\n", cols, gw_rows, gw_cols, rnd(gy0 * 65536));
+    fprintf(o, "const uint8_t ck_sky_luma[%zu] = {\n", ng);
+    for (size_t i = 0; i < ng; i += 24) {
+        fprintf(o, "    ");
+        for (size_t k = i; k < i + 24 && k < ng; k++)
+            fprintf(o, "%u%s", Y[k], k + 1 < i + 24 && k + 1 < ng ? ", " : ",\n");
+    }
+    fprintf(o, "};\nconst int8_t ck_sky_chroma[%zu][2] = {\n", nco);
+    for (size_t i = 0; i < nco; i += 12) {
+        fprintf(o, "    ");
+        for (size_t k = i; k < i + 12 && k < nco; k++)
+            fprintf(o, "{%d, %d}%s", CO[k], CG[k], k + 1 < i + 12 && k + 1 < nco ? ", " : ",\n");
+    }
+    fprintf(o, "};\n\n");
+
+    /* galaxies: centre direction, axes and angle on screen worked out here */
+    fprintf(o, "/* galaxies in the view bright enough to see: centre (Q15 direction), half axes in widths Q16,\n");
+    fprintf(o, " * long axis angle on screen (turns / 65536, from screen right towards down), tint (sRGB) */\n");
+    fprintf(o, "const ck_sky_galaxy ck_sky_galaxies[%zu] = {\n", ngal ? ngal : 1);
+    for (size_t gi = 0; gi < ngal; gi++) {
+        const galaxy_t *g = gals[gi].g;
+        vec3 v = gals[gi].v;
+        double p0x, p0y, p1x, p1y, p2x, p2y;
+        to_screen(view, v, W, W, &p0x, &p0y);
+        double pa = rad(g->pa), a_ = rad(g->ra), d_ = rad(g->dec);
+        vec3 east = {-sin(a_), cos(a_), 0.0};
+        vec3 north = {-sin(d_) * cos(a_), -sin(d_) * sin(a_), cos(d_)};
+        double half = rad(g->maj / 120.0);
+        double cp = cos(pa), sp = sin(pa);
+        vec3 dirv = {cos(half) * v.x + sin(half) * (cp * north.x + sp * east.x), cos(half) * v.y + sin(half) * (cp * north.y + sp * east.y),
+                     cos(half) * v.z + sin(half) * (cp * north.z + sp * east.z)};
+        double halfm = rad(g->min / 120.0);
+        vec3 dirm = {cos(halfm) * v.x + sin(halfm) * (-sp * north.x + cp * east.x),
+                     cos(halfm) * v.y + sin(halfm) * (-sp * north.y + cp * east.y),
+                     cos(halfm) * v.z + sin(halfm) * (-sp * north.z + cp * east.z)};
+        to_screen(view, dirv, W, W, &p1x, &p1y);
+        to_screen(view, dirm, W, W, &p2x, &p2y);
+        double ax = p1x - p0x, ay = p1y - p0y;
+        double amaj = hypot(ax, ay) / W, amin = hypot(p2x - p0x, p2y - p0y) / W;
+        double ang = pmod(atan2(ay, ax) / (2 * PI), 1.0);
+        double rgb[3];
+        blackbody_rgb(ballesteros(g->has_bv ? g->bv : 0.6), rgb);
+        long t0 = rnd(srgb_encode(rgb[0])), t1 = rnd(srgb_encode(rgb[1])), t2 = rnd(srgb_encode(rgb[2]));
+        char common[160];
+        snprintf(common, sizeof common, "%s", g->common);
+        char *c = strchr(common, ',');
+        if (c)
+            *c = 0;
+        fprintf(o, "    {{%ld, %ld, %ld}, %ld, %ld, %ld, 0x%02lx%02lx%02lxu}, /* %s, %s: V %.2f, %.1f x %.1f arcmin, PA %.0f deg */\n",
+                rnd(v.x * 32767), rnd(v.y * 32767), rnd(v.z * 32767), rnd(amaj * 65536), rnd(amin * 65536), rnd(ang * 65536) % 65536,
+                t0, t1, t2, g->name, common, g->vmag, g->maj, g->min, g->pa);
+        report("galaxy %s: on screen half axes %.1f x %.1f px at 3840 wide, long axis at %.1f deg from right", g->name, amaj * W,
+               amin * W, ang * 360);
+    }
+    if (!ngal)
+        fprintf(o, "    {{0, 0, 0}, 0, 0, 0, 0u},\n");
+    fprintf(o, "};\nconst unsigned ck_sky_ngalaxies = %zu;\n\n", ngal);
+
+    /* a check list for the host test: named stars and where the generator puts them at 3840x2160 */
+    fprintf(o, "/* for the host test: where these stars land on a 3840 x 2160 screen, 16ths of a pixel */\n");
+    size_t chk_i[8], chk_n = 0;
+    double chk_x[8], chk_y[8];
+    for (size_t i = 0; i < nsel && i < 40 && chk_n < 8; i++) {
+        double x, y;
+        if (to_screen(view, sel[i].v, 3840, 2160, &x, &y) && 0 <= x && x < 3840 && 0 <= y && y < 2160)
+            chk_i[chk_n] = i, chk_x[chk_n] = x, chk_y[chk_n] = y, chk_n++;
+    }
+    fprintf(o, "const ck_sky_check ck_sky_checks[%zu] = {\n", chk_n);
+    for (size_t k = 0; k < chk_n; k++)
+        fprintf(o, "    {%zu, %ld, %ld}, /* HR %d %s */\n", chk_i[k], rnd(chk_x[k] * 16), rnd(chk_y[k] * 16), sel[chk_i[k]].s->hr,
+                sel[chk_i[k]].s->name);
+    fprintf(o, "};\nconst unsigned ck_sky_nchecks = %zu;\n", chk_n);
+    fclose(o);
+    report("tables: stars %zu B, Milky Way luma %zu B + colour %zu B, other tables about %d B", nsel * 8, ng, 2 * nco,
+           256 * 4 + 128 * 6 + 512 + 8192);
+    free(Y), free(CO), free(CG), free(lv);
+}
