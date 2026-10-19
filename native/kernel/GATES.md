@@ -943,9 +943,15 @@ arriving exact (count and FNV-1a) over one 64 KiB pipe, never more than the capa
 exiting 3 early while an endless producer is stopped by BROKEN_PIPE (141); a middle stage trapping (real OSC BOUNDS trap, 134);
 a deadline passing on an endless pipeline, then interrupt with grace (130); a partial spawn (third receipt missing:
 PARTIAL_LAUNCH, two started stages reaped, no step run); spawn refused before any effect (another program's receipt, unknown
-entry, wrong principal, hosted domain); stage ends holding exactly READ / WRITE. Host test `test_task` (204 checks, also under
-ASan+UBSan) and five mutants that must fail it (`make task-mutants`: full rights, no wake, admission skipped, session keeps an
-inner end, partial launch not reaped).
+entry, wrong principal, hosted domain); stage ends holding exactly READ / WRITE. Host test `test_task` (221 checks, also under
+ASan+UBSan) and six mutants that must fail it (`make task-mutants`: full rights, no wake, admission skipped, session keeps an
+inner end, partial launch not reaped, and (aienos-mv#432) cancel grace outcome order-dependent).
+Since aienos-mv#432 the same boot also runs the native pipeline baselines (`core/pipe_bench.h`, 11 `pipe_bench` lines, see
+NATIVE_PIPE below), so the self-test ends `checks=20`. The cancel check used to be timing-sensitive under load (status
+`141,130` in about 1 run of 3, seen again on this branch before the fix): a stage whose consumer had ended its own interrupt
+grace first saw BROKEN_PIPE. `core/task.c` now drops output that cannot be delivered during the grace, as it already dropped
+output that did not fit, so every interrupted stage that does not end itself ends 130 whatever the round-robin order
+(UNVERIFIED choice T1; host test and mutant `GRACE_BROKEN_PIPE`; two `test_osh_op` interrupt checks moved from 141 to 130).
 Limits: (1) Scheduling is cooperative at step granularity on one CPU: one bounded EL0 step of one stage at a time, round robin;
 a step is never preempted and resumed (a step over its tick budget is ended, and the task with it). "Simultaneously" means both
 stages alive with interleaved progress, not parallel execution. (2) The stage ABI v1 (workspace header cells, MORE / DONE,
@@ -958,8 +964,75 @@ control is a log with one wrong byte count that the gate's checks must reject.
 
 | # | Check | CK gate | Status |
 |---|---|---|---|
-| 222 | `CK_TASK_TEST=1` image: 9 `task_check` lines PASS (8 with `clean=1`, the mid-run snapshot `clean=alive`), `task_test: done checks=9 failed=0 launches>0 not_torn_down=0 scheduling=cooperative-step`, three units ACCEPT and three receipts STORED, QEMU exit 0 | TASK | QEMU PASS (2026-10-18, branch feat/native-task-429 on feat/native-pipe-1, QEMU 8.2.2, AIENOS_CK_TASK PASS 31/31; hardware NOT_RUN) |
+| 222 | `CK_TASK_TEST=1` image: 9 `task_check` lines PASS (8 with `clean=1`, the mid-run snapshot `clean=alive`), `task_test: done checks=20 failed=0 launches>0 not_torn_down=0 scheduling=cooperative-step` (9 before aienos-mv#432), three units ACCEPT and three receipts STORED, QEMU exit 0 | TASK | QEMU PASS (2026-10-18, branch feat/native-pipe-gate-432, QEMU 8.2.2, AIENOS_CK_TASK PASS 43/43, three runs in a row at load about 11.5; first PASS 31/31 on feat/native-task-429; hardware NOT_RUN) |
+| 223 | same boot: 11 `pipe_bench` lines PASS (2- and 3-stage at 163840 and 1048576 bytes, one byte, first byte, cancel, 64 KiB capacity, revoke of a blocked reader and of a blocked writer, footprint), each with exact bytes and no leak, labelled emulator numbers | TASK | QEMU PASS (2026-10-18, branch feat/native-pipe-gate-432; numbers under NATIVE_PIPE; hardware NOT_RUN) |
 
+
+## NATIVE_PIPE: native pipeline acceptance gate (aienos-mv#432) -> CK `NATIVE_PIPE`, `PIPE`, `TASK` (scripts/ck_native_pipe_gate.sh)
+
+Label: **host and QEMU (aarch64 virt) only, TEST signer, TEST build, not physical.** Subordinate to aien-architecture-mv#158;
+not a master plan. Contract read: OSH_PLATFORM_ABI v1 DRAFT at aien-protocols-mv `fb5fca98e667` (8.5, 8.6, 10, 12) and
+STREAM_TASK on `feat/osh-stream-abi-43` at `181855c9ff3e`; neither sets a throughput, latency or cancellation-time target
+(UNVERIFIED B1 in `core/pipe_bench.h`), so the baselines have no pass threshold.
+
+Inventory reused, no parallel CI authority: the gate is one more child of `scripts/ck_gates.sh` (source `native_pipe`), which
+the Spark judge already runs (`tests/gates/aienos-ck-qemu-gates.gate`: every non-`missing` row except FPU and INFER must PASS);
+its receipt stays `aienos.ck_gates.v1` (content-addressed, tree clean before and after, QEMU and firmware hashes) with three
+added fields: `toolchain` (cc, make, bash), `physical_gates` and `qualification`. The judge's host gate
+(`aienos-ck-host-tests.gate`, `make test sanitize`) now also runs `pipe-order-mutants`; its self-test gate
+(`aienos-ck-gate-selftest.gate`) also runs `ck_native_pipe_gate.sh --self-test`. Parts reused as they are: PIPE
+(`qemu_ck_pipe_test.sh`, row 221), TASK (`qemu_ck_task_test.sh`, rows 222-223), OSH_OP (`qemu_ck_osh_op_test.sh`, three boots
+with the #431 journal), the host tests `test_pipe`, `test_task`, `test_osh_op` and all their mutants. OSH_CORE is not part of
+the acceptance: its driver feeds fake pipeline statuses by design (`core/osh_test.c`), and the gate fails if a fake status
+appears in any native pipeline log.
+
+| Category | Source | Verdict rule |
+|---|---|---|
+| host_unit | `make -C native/kernel native-pipe-host` | the three host tests PASS, `test_task --bench` PASS, no mutant survives, make exit 0 |
+| qemu_integration | PIPE, TASK, OSH_OP children, then their serial logs | each child PASS (whole verdict line, exit 0); then: two admitted stages alive at once with bytes in flight; three admitted stages alive at once through the shell with the sink hash right; every native case ends with no task, no pipe, every EL0 slot torn down; real stage steps ran; no fake status; unknown outcomes after the power cut recorded OUTCOME_UNKNOWN and never replayed |
+| pi5_physical, imac_physical, gb10_physical | none | always NOT_RUN: `ck_gates.sh` prints them from its own `CK_PHYSICAL_TABLE` (`AIENOS_CK_NATIVE_PIPE_PI5/IMAC/GB10`), outside the gate table, so no count, `--only` selection, log line or judge rule can make one PASS |
+
+Mutation classes (each KILLED only if every listed mutant makes its test FAIL; the gate FAILs otherwise):
+capability_validation (pipe write right skipped; stage ends with every right; admission skipped; OSH permission check
+skipped; location capability skipped), stage_teardown (session keeps an inner write end; partial launch not reaped; a command
+that does not start keeps its pipe ends; cancel grace outcome order-dependent), byte_ordering (new `CK_PIPE_MUTANT_REORDER`:
+the first two bytes of every read swapped; the pipe test, the task test and the OSH test each FAIL), intent_journaling (effect
+without its intent; non-durable journal accepted; failed append not poisoning). Host only: `pipe.c` refuses its mutant flags
+in a freestanding build.
+
+Baselines, 2026-10-18 at 9940e2c, QEMU 8.2.2 TCG `-cpu max` on the Spark (EMULATOR numbers: they measure the emulator, not
+any hardware) and host (the same pipe and task code with C stand-in stages on the Spark CPU, -O1):
+
+| Scenario | QEMU, admitted Omega stages | Host, C stand-ins |
+|---|---|---|
+| 2 stages, 1048576 bytes, median of 3 (QEMU) / 5 (host) | 1373348 us, 763518 B/s | 4486 us, 233744092 B/s |
+| 3 stages, 1048576 bytes | 2023812 us, 518119 B/s | 7806 us, 134329490 B/s |
+| 2 stages, 163840 bytes | 220958 us, 741498 B/s | 757 us |
+| 3 stages, 163840 bytes | 326074 us, 502462 B/s | 1311 us |
+| one byte end to end | 9868 us | 66 us |
+| first byte at the sink | 7199 us (2 turns) | 43 us (2 turns) |
+| cancel an endless pipeline | 20163 us, 8 steps, both 130 | 63 us, 8 steps |
+| revoke a blocked reader / writer | 285 us / 235 us, 137 | 29 us / 29 us |
+| capacity | exactly 65536 bytes, then WOULD_BLOCK, drained in order | same |
+| footprint (static, no allocation) | pipe pool 262808 B, task table 397312 B | same |
+| restart after the power cut | 2 unknown outcomes, 0 replayed | (host: test_osh_op Part 4) |
+
+Comparison: `scripts/native_pipe_compare.sh --omega DIR` runs the same workload as Linux processes over pipe(2) with C stages
+and with the fixture `.osc` stages compiled by Omega, pinned to one CPU, next to the AIENOS rows; measured numbers only, no
+ratio, energy NOT_MEASURED, and the hardware-matched row (Linux inside the same QEMU) NOT_RUN: no readable AArch64 Linux
+kernel image on this machine. Run on 2026-10-18 at 5d93189 (Omega a8ffd2b912c8): 2 stages, 1048576 bytes: linux_c 2058 us,
+linux_omega 16512 us, aienos_host 4491 us (all on the Spark CPU), aienos_qemu 1373348 us (emulated CPU, not comparable to the
+others).
+
+Limits: (1) No physical evidence exists; the physical columns stay NOT_RUN until an independent on-device run. (2) The QEMU
+numbers include TCG emulation and one `ck_osc_launch` (receipt check, code re-hash, EL0 address space, teardown) per stage
+step; they say nothing about Pi 5, iMac or GB10 speed. (3) Scheduling is cooperative at step granularity on one CPU (see
+TASK). (4) The signed Spark judge artifact is produced by the judge, not by this script.
+
+| # | Check | CK gate | Status |
+|---|---|---|---|
+| 224 | `scripts/ck_native_pipe_gate.sh`: host_unit PASS, 4 of 4 mutation classes KILLED, PIPE, TASK and OSH_OP PASS, 7 real-work checks OK, 23 baseline lines, `AIENOS_CK_NATIVE_PIPE: PASS`; physical columns NOT_RUN | NATIVE_PIPE | QEMU and host PASS (2026-10-18, at 9940e2c, branch feat/native-pipe-gate-432; hardware NOT_RUN) |
+| 225 | `scripts/ck_native_pipe_gate.sh --self-test`: 24 checks, each category and each mutation class goes red on a canned bad log; a log claiming a physical PASS stays NOT_RUN | NATIVE_PIPE | host PASS (2026-10-18) |
 
 ## LIFECYCLE: resident production lifecycle (native v1 plan P03, P04 cuts 1-2b, P05 cut 1, P06 cuts 2-4; C-only) -> CK `LIFECYCLE` (scripts/qemu_ck_lifecycle_test.sh)
 

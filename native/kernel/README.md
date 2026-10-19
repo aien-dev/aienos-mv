@@ -694,6 +694,27 @@ section 7.1) of up to 8 commands as a pipeline of admitted Omega stages, in the 
   (`tools/ck_gpt_image.c`); `ck_store_image` also opens only the AIENOS
   partition.
 
+## Native pipeline acceptance gate (aienos-mv#432)
+
+`scripts/ck_native_pipe_gate.sh` judges native pipelines as one capability from evidence that already exists, and
+`scripts/ck_gates.sh` runs it as its child `native_pipe` (gates `PIPE`, `TASK`, `NATIVE_PIPE`), so the Spark judge sees it with
+no new CI path. Host and QEMU only; nothing here qualifies a Pi 5, iMac or GB10.
+
+- **Categories.** `host_unit` (`make native-pipe-host`: `test_pipe`, `test_task`, `test_osh_op`, every mutant of them, the
+  host baselines), `qemu_integration` (the PIPE, TASK and OSH_OP QEMU gates plus checks on their serial logs: admitted stages
+  alive at once, no fake status, nothing left over, no unknown outcome replayed) and `pi5_physical`, `imac_physical`,
+  `gb10_physical`, which are NOT_RUN by construction (`ck_gates.sh` keeps them in a separate physical table).
+- **Mutation classes.** capability validation, stage teardown, byte ordering (`CK_PIPE_MUTANT_REORDER`, caught by all three
+  host tests: `make pipe-order-mutants`) and intent journaling; each must be killed or the gate fails.
+- **Baselines.** `core/pipe_bench.h` is shared by `test_task --bench` (host) and the QEMU task self-test: 2- and 3-stage
+  throughput, one-byte and first-byte latency, cancel time, 64 KiB capacity, revoke of a blocked reader and writer, static
+  footprint. QEMU numbers are emulator numbers. Numbers and limits: GATES.md, NATIVE_PIPE.
+- **Comparison.** `scripts/native_pipe_compare.sh [--omega DIR]` runs the same workload as Linux processes (C stages, and the
+  fixture `.osc` stages compiled by Omega), pinned to one CPU, next to the AIENOS rows. Measured numbers only; no ratio.
+- **Cancel outcome (T1, UNVERIFIED).** During the interrupt grace, output that can no longer be delivered (no reader) is
+  dropped like output that does not fit, so an interrupted stage that does not end itself always ends 130; before, it could
+  end 141 depending on the round-robin order (`GRACE_BROKEN_PIPE` mutant).
+
 ## Differences from the Rust kernel
 
 - `guard_page: ok fault=contained` is an addition: the C kernel proves its
