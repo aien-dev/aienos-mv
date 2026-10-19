@@ -2290,7 +2290,7 @@ CK_COURIER_PEER ?= 255.255.255.255
 IMACKERN_REPORT_SYMS := ck_x86_report_hold|ck_x86_report_frame|ck_x86_report_filter|ck_x86_report_parts|ck_x86_tg3_send|ck_x86_tg3_drain|ck_x86_tg3_recv|ck_courier_udp_init|net_udp_build
 ifeq ($(CK_X86_REPORT),1)
 IMACKERN_OBJS += $(IMACKERN_REPORT_OBJS)
-IMACKERN_CFLAGS += -DCK_X86_REPORT=1 -DCK_COURIER_PEER_STR=\"$(CK_COURIER_PEER)\" -DCK_COURIER_PEER_STR=\"$(CK_COURIER_PEER)\"
+IMACKERN_CFLAGS += -DCK_X86_REPORT=1 -DCK_COURIER_PEER_STR=\"$(CK_COURIER_PEER)\"
 endif
 IMACKERN_HDRS := $(X86K)/x86.h $(BOOT)/handoff.h $(BOOT)/efi.h $(KDIR)/core/ck_internal.h $(KDIR)/include/ck.h
 $(IMACKERN_DIR)/efi_entry_x86_64.o: $(BOOT)/efi_entry_x86_64.S

@@ -22,12 +22,13 @@ static uint64_t hz, run;
 static uint16_t ip_id;
 
 static uint64_t hi_at, hello_at;  /* clock of the last HI heard, the last HELLO sent */
-static int hi;                    /* a HI was ever heard */
+static int hi, hello_sent;        /* a HI was ever heard; a HELLO was ever sent */
 
 static char job[CK_COURIER_JOB_MAX]; /* the job out, whole */
 static unsigned job_n, job_parts;
 static uint32_t job_seq;
-static uint64_t job_sent;         /* clock of the last send of the whole set; 0: nothing out */
+static uint64_t job_sent;         /* clock of the last send of the whole set */
+static int job_out;               /* a job is out (sent, not yet heard by the far side) */
 static int job_acked;
 
 static char lines[LINES][CK_COURIER_LINE_MAX]; /* LINE bodies waiting for take(), in order */
@@ -119,7 +120,8 @@ static void send_job(void)
         unsigned off = p * CK_COURIER_PART, n = job_n - off < CK_COURIER_PART ? job_n - off : CK_COURIER_PART;
         emit("JOB", job_seq, p + 1, job_parts, job_n, job + off, n);
     }
-    job_sent = io->now(io->ctx) | 1;
+    job_sent = io->now(io->ctx);
+    job_out = 1;
 }
 
 static int ready(void)
@@ -162,23 +164,37 @@ static uint32_t field(const char *h, unsigned n, const char *key)
     return 0;
 }
 
+/* 1 when the head's kind= field is exactly `kind` (the head is HEAD, 16 hex digits, then " kind=K ..."). */
+static int kind_is(const char *h, unsigned hn, const char *kind)
+{
+    unsigned at = sizeof HEAD - 1 + 16 + 1 + 5, k = 0; /* past the space and "kind=" */
+    if (hn < at)
+        return 0;
+    while (kind[k]) {
+        if (at + k >= hn || h[at + k] != kind[k])
+            return 0;
+        k++;
+    }
+    return at + k == hn || h[at + k] == ' ';
+}
+
 /* One datagram in, already ours by run id: the head's kind decides. */
 static void on_datagram(const char *h, unsigned hn, const char *body, unsigned bn)
 {
     st_in++;
     uint32_t seq = field(h, hn, "seq=");
     unsigned part = field(h, hn, "part=");
-    if (hn > 33 && !memcmp(h + 33, "kind=HI", 7)) {
+    if (kind_is(h, hn, "HI")) {
         hi = 1;
-        hi_at = io->now(io->ctx) | 1;
+        hi_at = io->now(io->ctx);
         return;
     }
-    if (hn > 33 && !memcmp(h + 33, "kind=ACK", 8)) {
+    if (kind_is(h, hn, "ACK")) {
         if (seq == job_seq)
             job_acked = 1;
         return;
     }
-    if (hn <= 33 || memcmp(h + 33, "kind=LINE", 9)) {
+    if (!kind_is(h, hn, "LINE")) {
         st_dropped++;
         return;
     }
@@ -250,11 +266,12 @@ static void pump(void)
     /* the timers: HELLO until HI then every 10 s; the job again every 2 s until it is heard */
     if (io->link(io->ctx)) {
         uint64_t hello_every = ready() ? 10 * hz : 2 * hz;
-        if (!hello_at || now - hello_at >= hello_every) {
+        if (!hello_sent || now - hello_at >= hello_every) {
             emit("HELLO", 0, 0, 0, 0, "", 0);
-            hello_at = now | 1;
+            hello_at = now;
+            hello_sent = 1;
         }
-        if (job_sent && !job_acked && now - job_sent >= 2 * hz) {
+        if (job_out && !job_acked && now - job_sent >= 2 * hz) {
             st_resends++;
             send_job();
         }
@@ -294,6 +311,7 @@ const ck_courier *ck_courier_udp_init(const ck_netio *dev, const uint8_t m[6], c
         run = 1;
     hi = 0;
     hi_at = hello_at = job_sent = 0;
+    hello_sent = job_out = 0;
     job_n = job_parts = 0;
     job_seq = 0;
     line_head = line_count = 0;

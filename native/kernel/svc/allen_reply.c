@@ -803,10 +803,13 @@ const char *ck_allen_answer(ck_allen_mind *m, const char *line, uint64_t awake_s
     /* Ending the session: whole line only, so it never happens by accident. */
     if (eq(f, "goodbye") || eq(f, "goodbye allen") || eq(f, "bye") || eq(f, "bye allen") || eq(f, "good bye"))
         return ck_allen_goodbye;
-    /* The first words ever typed to Allen. */
+    /* The first words ever typed to Allen. With a far-off worker listening, only the very first
+     * meeting (he just asked what to be called) is answered here; every later greeting is the worker's. */
     if (eq(f, "hello allen") || eq(f, "hi allen") || eq(f, "hey allen") || eq(f, "hello world") || greets_self(f, m)) {
-        m->naming = 0; /* greeted by name, he is called that */
-        return "Hello Humanity.";
+        if (!m->far || m->naming) {
+            m->naming = 0; /* greeted by name, he is called that */
+            return "Hello Humanity.";
+        }
     }
     if (!f[0])
         return not_yet;

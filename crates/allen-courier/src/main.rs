@@ -314,6 +314,7 @@ fn for_allen_keep(text: &str, max: usize, keep: usize) -> String {
     format!("{}...", room[..cut].trim_end())
 }
 
+#[cfg(test)]
 fn for_allen(text: &str, max: usize) -> String {
     for_allen_keep(text, max, 0)
 }
@@ -321,6 +322,23 @@ fn for_allen(text: &str, max: usize) -> String {
 /// True when the line is the word alone or the word followed by a space.
 fn is_word(line: &str, word: &str) -> bool {
     line == word || line.strip_prefix(word).is_some_and(|r| r.starts_with(' '))
+}
+
+/// How long to wait after the n-th busy answer (503): 0.5 s, 1 s, 2 s, then 4 s at most;
+/// a Retry-After the server names (whole seconds, at most 4) is used when it is longer.
+fn backoff(n: u32, head: &str) -> Duration {
+    let own = 500u64 << (n.saturating_sub(1)).min(3);
+    let named = head
+        .lines()
+        .find_map(|l| {
+            let (k, v) = l.split_once(':')?;
+            k.trim()
+                .eq_ignore_ascii_case("retry-after")
+                .then(|| v.trim().parse::<u64>().ok())?
+        })
+        .map(|s| s.min(4) * 1000)
+        .unwrap_or(0);
+    Duration::from_millis(own.max(named).min(4000))
 }
 
 fn utc_now() -> (u64, String) {
@@ -503,33 +521,42 @@ impl Brain {
         let mut sent_chars = 0usize;
         let mut parts = 0u32;
         let say_max = self.say_max;
-        let mut part_out = |text: &str, last: bool, parts: &mut u32, said: &mut Vec<String>| {
+        // one part of the answer: counted, kept, and handed to the wire
+        fn part_out(
+            emit: &mut dyn FnMut(String),
+            seq: u32,
+            text: &str,
+            last: bool,
+            parts: &mut u32,
+            said: &mut Vec<String>,
+        ) {
             *parts += 1;
-            let line = format!(
+            emit(format!(
                 "SAY {} {}/{} {}",
-                job.seq,
+                seq,
                 *parts,
                 if last { *parts } else { 0 },
                 text
-            );
+            ));
             said.push(text.to_string());
-            emit(line);
-        };
+        }
         loop {
             match self.open(&system, &job.ask) {
-                Ok((503, _, _)) if t0.elapsed() < Duration::from_secs(120) => {
+                Ok((503, head, _)) if t0.elapsed() < Duration::from_secs(120) => {
                     waits += 1;
                     if last_wait.elapsed() >= Duration::from_secs(2) || waits == 1 {
                         emit(format!("WAIT {}", job.seq));
                         last_wait = Instant::now();
                     }
-                    std::thread::sleep(Duration::from_millis(500));
+                    std::thread::sleep(backoff(waits, &head));
                     continue;
                 }
                 Ok((200, head, stream)) => {
                     out.status = 200;
                     let sse = head.to_ascii_lowercase().contains("text/event-stream");
-                    let chunked = head.to_ascii_lowercase().contains("transfer-encoding: chunked");
+                    let chunked = head
+                        .to_ascii_lowercase()
+                        .contains("transfer-encoding: chunked");
                     let mut full = String::new();
                     let mut first: Option<Instant> = None;
                     let mut on_text = |piece: &str, full: &mut String| {
@@ -543,7 +570,9 @@ impl Brain {
                         // a part goes out once 36 more chars have settled, cut at the last space,
                         // while the whole stays well inside the window
                         let f: Vec<char> = folded(full).chars().collect();
-                        while f.len() >= sent_chars + 36 && sent_chars + 48 <= say_max.saturating_sub(24) {
+                        while f.len() >= sent_chars + 36
+                            && sent_chars + 48 <= say_max.saturating_sub(24)
+                        {
                             let window = &f[sent_chars..(sent_chars + 48).min(f.len())];
                             let Some(cut) = window.iter().rposition(|&c| c == ' ') else {
                                 break;
@@ -552,7 +581,14 @@ impl Brain {
                                 break;
                             }
                             let text: String = window[..cut].iter().collect();
-                            part_out(text.trim(), false, &mut parts, &mut out.said);
+                            part_out(
+                                &mut emit,
+                                job.seq,
+                                text.trim(),
+                                false,
+                                &mut parts,
+                                &mut out.said,
+                            );
                             sent_chars += cut + 1;
                         }
                     };
@@ -623,23 +659,44 @@ impl Brain {
                     let tail: String = whole.chars().skip(sent_chars).collect();
                     let tail = tail.trim().to_string();
                     if !tail.is_empty() {
-                        part_out(&tail, true, &mut parts, &mut out.said);
+                        part_out(&mut emit, job.seq, &tail, true, &mut parts, &mut out.said);
                     } else if parts == 0 {
-                        part_out("The far side had nothing to say.", true, &mut parts, &mut out.said);
+                        part_out(
+                            &mut emit,
+                            job.seq,
+                            "The far side had nothing to say.",
+                            true,
+                            &mut parts,
+                            &mut out.said,
+                        );
                     } else {
                         // close the answer with an empty last part
-                        part_out("", true, &mut parts, &mut out.said);
+                        part_out(&mut emit, job.seq, "", true, &mut parts, &mut out.said);
                     }
                     break;
                 }
                 Ok((code, _, _)) => {
                     out.status = code;
-                    part_out("The far side had nothing to say.", true, &mut parts, &mut out.said);
+                    part_out(
+                        &mut emit,
+                        job.seq,
+                        "The far side had nothing to say.",
+                        true,
+                        &mut parts,
+                        &mut out.said,
+                    );
                     break;
                 }
                 Err(_) => {
                     out.status = 0;
-                    part_out("The far side had nothing to say.", true, &mut parts, &mut out.said);
+                    part_out(
+                        &mut emit,
+                        job.seq,
+                        "The far side had nothing to say.",
+                        true,
+                        &mut parts,
+                        &mut out.said,
+                    );
                     break;
                 }
             }
@@ -790,6 +847,7 @@ fn serial_wire(path: PathBuf, brain: Arc<Brain>) {
 
 /// A LINE waiting for its GOT.
 struct Pending {
+    run: String,
     seq: u32,
     part: u32,
     body: String,
@@ -865,8 +923,12 @@ fn udp_wire(port: u16, answer: SocketAddr, brain: Arc<Brain>) {
                     };
                     s.line_no += 1;
                     let part = s.line_no;
-                    let _ = sock.send_to(&datagram(&run, "LINE", job.seq, part, 0, &body), s.answer_to);
+                    let _ = sock.send_to(
+                        &datagram(&run, "LINE", job.seq, part, 0, &body),
+                        s.answer_to,
+                    );
                     s.pending.push(Pending {
+                        run: run.clone(),
                         seq: job.seq,
                         part,
                         body,
@@ -888,7 +950,10 @@ fn udp_wire(port: u16, answer: SocketAddr, brain: Arc<Brain>) {
             for s in sessions.values_mut() {
                 for p in s.pending.iter_mut() {
                     if p.sent.elapsed() >= Duration::from_millis(300) {
-                        let _ = sock.send_to(&datagram("", "LINE", p.seq, p.part, 0, &p.body), s.answer_to);
+                        let _ = sock.send_to(
+                            &datagram(&p.run, "LINE", p.seq, p.part, 0, &p.body),
+                            s.answer_to,
+                        );
                         p.sent = Instant::now();
                         p.tries += 1;
                     }
@@ -927,7 +992,11 @@ fn udp_wire(port: u16, answer: SocketAddr, brain: Arc<Brain>) {
             .and_then(|v| v.parse().ok())
             .unwrap_or(0u32);
         let bytes = field(head, "bytes=");
-        let answer_to = if from.ip().is_unspecified() { answer } else { from };
+        let answer_to = if from.ip().is_unspecified() {
+            answer
+        } else {
+            from
+        };
         let Udp { sock, sessions } = &mut *st;
         let fresh = !sessions.contains_key(&run);
         let s = sessions.entry(run.clone()).or_insert_with(|| Session {
@@ -939,7 +1008,10 @@ fn udp_wire(port: u16, answer: SocketAddr, brain: Arc<Brain>) {
         });
         s.answer_to = answer_to;
         if fresh {
-            println!("courier: udp: hello from a kernel, run {}, answers to {}", run, answer_to);
+            println!(
+                "courier: udp: hello from a kernel, run {}, answers to {}",
+                run, answer_to
+            );
         }
         match kind {
             "HELLO" => {
@@ -958,7 +1030,8 @@ fn udp_wire(port: u16, answer: SocketAddr, brain: Arc<Brain>) {
                         .or_insert_with(|| (total, bytes, vec![None; total as usize]));
                     e.2[(part - 1) as usize] = Some(body.to_string());
                     if e.2.iter().all(|p| p.is_some()) {
-                        let line: String = e.2.iter().map(|p| p.clone().unwrap_or_default()).collect();
+                        let line: String =
+                            e.2.iter().map(|p| p.clone().unwrap_or_default()).collect();
                         let whole = line.len() as u32 == e.1;
                         s.job_parts.remove(&seq);
                         if whole {
@@ -970,7 +1043,9 @@ fn udp_wire(port: u16, answer: SocketAddr, brain: Arc<Brain>) {
                                 Some(job) => {
                                     let _ = job_tx.send((run.clone(), job));
                                 }
-                                None => println!("courier: udp: a job line without its parts was dropped"),
+                                None => println!(
+                                    "courier: udp: a job line without its parts was dropped"
+                                ),
                             }
                         } else {
                             println!("courier: udp: a job arrived with the wrong length; waiting for it again");
@@ -1060,7 +1135,8 @@ mod tests {
     #[test]
     fn what_was_already_said_in_parts_is_kept() {
         // 20 chars went out as parts; the cut may not land before them
-        let text = "Short one. Then a long run of words with no stop at all until the very end of it all";
+        let text =
+            "Short one. Then a long run of words with no stop at all until the very end of it all";
         let said = for_allen_keep(text, 40, 20);
         assert!(said.starts_with("Short one. Then a lo"), "{said}");
         assert!(said.chars().count() <= 40);
@@ -1124,6 +1200,23 @@ mod tests {
         assert_eq!(field(head, "bytes="), 15);
         assert_eq!(body, "SAY 4 2/0 words");
         assert!(head.starts_with("ALLEN-COURIER v=1 run=00000000deadbeef kind=LINE"));
+    }
+
+    #[test]
+    fn a_busy_server_is_asked_again_with_growing_waits() {
+        let ms: Vec<u128> = (1..=6)
+            .map(|n| backoff(n, "HTTP/1.1 503\r\n\r\n").as_millis())
+            .collect();
+        assert_eq!(ms, vec![500, 1000, 2000, 4000, 4000, 4000]);
+        // the server names a wait: used when longer, never past 4 s
+        assert_eq!(
+            backoff(1, "HTTP/1.1 503\r\nRetry-After: 3\r\n\r\n").as_millis(),
+            3000
+        );
+        assert_eq!(
+            backoff(1, "HTTP/1.1 503\r\nretry-after: 30\r\n\r\n").as_millis(),
+            4000
+        );
     }
 
     #[test]
