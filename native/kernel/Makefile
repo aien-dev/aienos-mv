@@ -892,9 +892,15 @@ endif
 ifneq ($(strip $(CK_PIPE_TEST)),)
 $(error CK_OSH_OP_TEST (it links the native pipes and tasks itself) cannot be combined with CK_PIPE_TEST)
 endif
+ifneq ($(strip $(CK_SERVICE)$(CK_PI5_STORE)$(CK_PI5_UNLOCK)$(CK_TEST_STORE_CRASH)$(CK_TEST_CONTINUITY)),)
+$(error CK_OSH_OP_TEST (its effect journal keeps the TEST-key Store open) cannot be combined with CK_SERVICE, CK_PI5_STORE, CK_PI5_UNLOCK, CK_TEST_STORE_CRASH or CK_TEST_CONTINUITY)
+endif
 ART_TRUST_FLAGS += -DCK_OSH_OP_TEST=1
 # aienos-mv#430: stage pipelines run the admitted stage units as tasks (core/task.c, core/task_osc.c) over native pipes.
 OSH_TEST_C += $(KDIR)/core/osh_op.c $(KDIR)/core/task.c $(KDIR)/core/task_osc.c $(KDIR)/core/pipe.c
+# aienos-mv#431: the effect journal (core/osh_journal.c) over the canonical Cortex of the boot disk's sealed Store; the
+# stage block below links the Cortex sources and keeps the Store open (svc/store_boot.c, TEST-ONLY).
+OSH_TEST_C += $(KDIR)/core/osh_journal.c
 endif
 endif
 
@@ -1084,6 +1090,12 @@ ifneq ($(strip $(CK_PI5_LIFECYCLE)),)
 STAGE_SRCS += $(filter-out $(KDIR)/svc/slot_service.c $(BOOT)/slot_select.c $(BOOT)/slot_control.c $(BOOT)/slot_update.c,$(SVC_STAGE_ADDED)) $(KDIR)/svc/slot_service_pi5.c
 endif
 endif
+ifeq ($(strip $(CK_OSH_TEST))$(strip $(CK_OSH_OP_TEST)),11)
+# aienos-mv#431 (TEST-ONLY): the OSH effect journal is the Cortex over the TEST-key Store. Own OUT subdirectory.
+FULL_NAME := $(FULL_NAME)-osh-op-test
+STAGE_DMA_FLAGS += -DCK_OSH_OP_TEST=1
+STAGE_SRCS += $(filter-out $(STAGE_SRCS),$(STAGE_CORTEX_SRCS))
+endif
 FULL_OUT := $(OUT)/$(FULL_NAME)
 STAGE_KOBJ := $(OUT)/obj/stage-$(FULL_NAME)
 STAGE_HDRS := $(HDRS) $(wildcard $(NATIVE)/*/*.h $(NATIVE)/argus/bridge/*.h $(KDIR)/svc/compat/*.h)
@@ -1146,6 +1158,12 @@ $(KOBJ)/kernel/core/osc_admit.o: $(KDIR)/core/osc_admit.c $(HDRS) $(ART_HDRS) $(
 
 # core/osh_op.c refuses to build without CK_OSH_OP_TEST (and with CK_HARDWARE_STAGING): it takes the trust flags too.
 $(KOBJ)/kernel/core/osh_op.o: $(KDIR)/core/osh_op.c $(KDIR)/core/osh_op.h $(HDRS) $(OUT)/trust.stamp
+	@mkdir -p $(dir $@)
+	$(KCC) $(KCFLAGS) $(ART_TRUST_FLAGS) -c -o $@ $<
+
+# core/osh_journal.c carries its TEST RAM backend under CK_OSH_OP_TEST: the trust flags too.
+$(KOBJ)/kernel/core/osh_journal.o: $(KDIR)/core/osh_journal.c $(KDIR)/core/osh_journal.h $(KDIR)/third_party/omega/rx_cortex.h \
+		$(HDRS) $(ART_HDRS) $(OUT)/trust.stamp
 	@mkdir -p $(dir $@)
 	$(KCC) $(KCFLAGS) $(ART_TRUST_FLAGS) -c -o $@ $<
 
@@ -1416,19 +1434,22 @@ $(OUT)/host-san/%: $(KDIR)/tests/%.c $(HOST_SRCS) $(KDIR)/tests/ck_test.h $(HDRS
 # OSH adapter operation layer (core/osh_op.c, aien-architecture#158, aienos-mv#430): pure logic over ipc.c capabilities,
 # the native pipes and tasks (pipe.c, task.c, sched.c) and SHA-256 for the request digest. Its own rule because it needs
 # the argus SHA-256 source. The test also runs the shared OSH launch vectors copied into tests/fixtures/osh_exec/.
+# aienos-mv#431: the effect journal (core/osh_journal.c) over the canonical Omega Cortex (svc/cortex_store.c builds the
+# vendored rx_cortex.c freestanding; the test supplies the three Cortex heap routines and the TEST RAM backend's buffer).
 OSH_OP_SRCS := $(KDIR)/core/osh_op.c $(KDIR)/core/ipc.c $(KDIR)/core/fmt.c $(KDIR)/core/pipe.c $(KDIR)/core/task.c \
-	$(KDIR)/core/sched.c $(NATIVE)/argus/sha256.c
+	$(KDIR)/core/sched.c $(NATIVE)/argus/sha256.c $(KDIR)/core/osh_journal.c $(KDIR)/svc/cortex_store.c
 OSH_OP_DEPS := $(KDIR)/tests/test_osh_op.c $(OSH_OP_SRCS) $(KDIR)/tests/ck_test.h $(HDRS) \
-	$(wildcard $(KDIR)/tests/fixtures/osh_exec/*)
+	$(wildcard $(KDIR)/tests/fixtures/osh_exec/*) $(KDIR)/core/osh_journal.h $(KDIR)/third_party/omega/rx_cortex.c \
+	$(KDIR)/third_party/omega/rx_cortex.h $(KDIR)/svc/cortex_config.h
 OSH_OP_VEC := -DOSH_EXEC_VEC_DIR='"$(KDIR)/tests/fixtures/osh_exec"' \
 	-DOSH_EXEC_IMPL='"$(shell git -C $(KDIR) rev-parse HEAD 2>/dev/null || echo unknown)"'
 $(OUT)/host/test_osh_op: $(OSH_OP_DEPS)
 	@mkdir -p $(dir $@)
-	$(HOSTCC) $(HCFLAGS) -DCK_OSH_OP_TEST $(OSH_OP_VEC) -I$(NATIVE)/argus -o $@ $< $(OSH_OP_SRCS)
+	$(HOSTCC) $(HCFLAGS) -DCK_OSH_OP_TEST $(OSH_OP_VEC) -I$(NATIVE)/argus -I$(KDIR)/svc -o $@ $< $(OSH_OP_SRCS)
 
 $(OUT)/host-san/test_osh_op: $(OSH_OP_DEPS)
 	@mkdir -p $(dir $@)
-	$(HOSTCC) $(HCFLAGS) $(SANFLAGS) -DCK_OSH_OP_TEST $(OSH_OP_VEC) -I$(NATIVE)/argus -o $@ $< $(OSH_OP_SRCS)
+	$(HOSTCC) $(HCFLAGS) $(SANFLAGS) -DCK_OSH_OP_TEST $(OSH_OP_VEC) -I$(NATIVE)/argus -I$(KDIR)/svc -o $@ $< $(OSH_OP_SRCS)
 
 # TEST-ONLY mutants of core/osh_op.c (red before green). Each must make test_osh_op FAIL; "make test" fails if one passes.
 # Host only (osh_op.c refuses the flags freestanding).
@@ -1437,10 +1458,13 @@ $(OUT)/host-san/test_osh_op: $(OSH_OP_DEPS)
 #   REDIR_REVERSE   a command's redirections apply right to left
 #   KEEP_GAP_ENDS   a command that does not start keeps its pipe ends open (its neighbours never see EOF)
 #   LOC_NO_PERM     a location open skips the location capability check
-OSH_OP_MUTANTS := SKIP_PERM FIRST_STATUS REDIR_REVERSE KEEP_GAP_ENDS LOC_NO_PERM
+#   SKIP_INTENT     (#431) an effect runs without its intent written; VOLATILE_OK a non-durable journal is accepted
+#   NO_POISON       (#431) a failed append does not poison the journal; RECOVER_COMPLETED recovery writes COMPLETED
+OSH_OP_MUTANTS := SKIP_PERM FIRST_STATUS REDIR_REVERSE KEEP_GAP_ENDS LOC_NO_PERM SKIP_INTENT VOLATILE_OK NO_POISON \
+	RECOVER_COMPLETED
 $(OUT)/host/test_osh_op_mut_%: $(OSH_OP_DEPS)
 	@mkdir -p $(dir $@)
-	$(HOSTCC) $(HCFLAGS) -DCK_OSH_OP_TEST $(OSH_OP_VEC) -I$(NATIVE)/argus -DCK_OSH_OP_MUTANT_$* -o $@ $< $(OSH_OP_SRCS)
+	$(HOSTCC) $(HCFLAGS) -DCK_OSH_OP_TEST $(OSH_OP_VEC) -I$(NATIVE)/argus -I$(KDIR)/svc -DCK_OSH_OP_MUTANT_$* -o $@ $< $(OSH_OP_SRCS)
 
 osh-op-mutant: $(addprefix $(OUT)/host/test_osh_op_mut_,$(OSH_OP_MUTANTS))
 	@fail=0; for m in $(OSH_OP_MUTANTS); do b=$(OUT)/host/test_osh_op_mut_$$m; \

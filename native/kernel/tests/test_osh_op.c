@@ -6,11 +6,15 @@
  * Part 3: the shared OSH launch vectors (aien-protocols-mv specs/osh-platform/vectors/t*.vec on feat/osh-stream-abi-43
  * at 181855c9ff3e, copied into tests/fixtures/osh_exec/), run against this executor; NOT_RUN for every vector whose
  * features or authority domain this adapter lacks.
+ * Part 4 (aienos-mv#431): the effect journal: what each intent binds, refusal by name without a usable journal, a
+ * poisoned journal, every crash point with exact counts and no duplicate effect, read-only inspection with no OSH
+ * session, recovery categories, and operator reconciliation.
  * Requests are built as the expander's request record (OSH_PLATFORM_ABI section 7) without calling the shell core. */
 #include <stdlib.h>
 #include <string.h>
 #include "ck_test.h"
 #include "osh_op.h"
+#include "sha256.h"
 
 static char cap_buf[4096];
 static int cap_calls;
@@ -47,8 +51,30 @@ static int so_sink(void *ctx, const uint8_t *b, size_t n)
     so_len += n;
     return 0;
 }
-static const struct osh_env env = { 0, sink, logger, 0 };
-static const struct osh_env senv = { 0, sink, logger, so_sink };
+/* aienos-mv#431: every session records its effects in a journal. These tests run on the TEST RAM backend (the same
+ * Cortex bytes in memory, durable=0, accepted only because each session asks for it); a restart closes the journal,
+ * which drops every in-memory Cortex state, and reopens it over the same bytes: what a crash leaves. */
+void *ck_cx_alloc(size_t n) { return malloc(n); }
+void *ck_cx_realloc(void *p, size_t n) { return realloc(p, n); }
+void ck_cx_free(void *p) { free(p); }
+static uint8_t jbuf[1u << 20];
+static struct oshj_ram jram;
+static struct osh_journal J0;
+static void J(struct osh_session *s) /* a fresh journal */
+{
+    osh_journal_close(&J0);
+    oshj_ram_init(&jram, jbuf, sizeof jbuf);
+    CHECK(osh_journal_open(&J0, &oshj_ram_ops, &jram, 0, "ram_test", 0) == CX_OK);
+    osh_session_journal(s, &J0, 1);
+}
+static void JR(struct osh_session *t) /* what survives the crash: the journal's bytes, reopened and replayed */
+{
+    osh_journal_close(&J0);
+    CHECK(osh_journal_open(&J0, &oshj_ram_ops, &jram, 0, "ram_test", 0) == CX_OK);
+    osh_session_journal(t, &J0, 1);
+}
+static const struct osh_env env = { 0, sink, logger, 0, 0 };
+static const struct osh_env senv = { 0, sink, logger, so_sink, 0 };
 
 static void reset_capture(void)
 {
@@ -310,13 +336,15 @@ static uint64_t h_now(void *ctx)
     return clock_now;
 }
 
+/* a stand-in unit digest for gen: each spawn intent of gen must carry it */
+static const uint8_t gen_unit[32] = { 0x67, 0x65, 0x6e, 0x01 };
 static const struct osh_op_def ops[] = {
-    { "gen", OSH_CLASS_NATIVE_OP, 2, K_GEN, 0 },     { "xform", OSH_CLASS_NATIVE_OP, 3, K_XFORM, 1024 },
-    { "sink", OSH_CLASS_NATIVE_OP, 2, K_SINK, 512 }, { "exit", OSH_CLASS_NATIVE_OP, 1, K_EXIT, 0 },
-    { "cat", OSH_CLASS_NATIVE_OP, 0, K_XFORM, 0 },   { "flood", OSH_CLASS_NATIVE_OP, 0, K_FLOOD, 0 },
-    { "drain", OSH_CLASS_NATIVE_OP, 0, K_DRAIN, 0 }, { "honor", OSH_CLASS_NATIVE_OP, 0, K_HONOR, 0 },
-    { "badunit", OSH_CLASS_NATIVE_OP, 0, IMG_DENIED, 0 },
-    { "foreign", OSH_CLASS_LINUX, 0, 0, 0 },          /* a name RESOLVE maps to a class this adapter does not provide */
+    { "gen", OSH_CLASS_NATIVE_OP, 2, K_GEN, 0, gen_unit },     { "xform", OSH_CLASS_NATIVE_OP, 3, K_XFORM, 1024, 0 },
+    { "sink", OSH_CLASS_NATIVE_OP, 2, K_SINK, 512, 0 }, { "exit", OSH_CLASS_NATIVE_OP, 1, K_EXIT, 0, 0 },
+    { "cat", OSH_CLASS_NATIVE_OP, 0, K_XFORM, 0, 0 },   { "flood", OSH_CLASS_NATIVE_OP, 0, K_FLOOD, 0, 0 },
+    { "drain", OSH_CLASS_NATIVE_OP, 0, K_DRAIN, 0, 0 }, { "honor", OSH_CLASS_NATIVE_OP, 0, K_HONOR, 0, 0 },
+    { "badunit", OSH_CLASS_NATIVE_OP, 0, IMG_DENIED, 0, 0 },
+    { "foreign", OSH_CLASS_LINUX, 0, 0, 0, 0 },        /* a name RESOLVE maps to a class this adapter does not provide */
 };
 
 static struct ck_task_tab tab;
@@ -327,6 +355,7 @@ static struct osh_native nat;
 static void native(struct osh_session *s, unsigned spawn_rights, unsigned loc_rights)
 {
     osh_session_init(s, CK_R_WRITE);
+    J(s);
     if (spawn_rights)
         CHECK(osh_session_grant_spawn(s, spawn_rights) == 0);
     if (loc_rights)
@@ -412,7 +441,7 @@ static void part1(void)
 
     /* allowed: the task holds WRITE on the console resource */
     reset_capture();
-    osh_session_init(&s, CK_R_WRITE);
+    osh_session_init(&s, CK_R_WRITE); J(&s);
     r = run(&s, hello);
     CHECK(r.error == OSH_E_OK && r.outcome == OSH_O_COMPLETED && r.status == 0 && !r.stop);
     CHECK(strcmp(cap_buf, "osh_op_out: hello world\n") == 0 && cap_calls == 1);
@@ -428,7 +457,7 @@ static void part1(void)
 
     /* no capability at all: refused before any effect, with the named refusal */
     reset_capture();
-    osh_session_init(&s, 0);
+    osh_session_init(&s, 0); J(&s);
     r = run(&s, hello);
     CHECK(r.error == OSH_E_DENIED && r.outcome == OSH_O_FAILED_NO_EFFECT && r.status == 126);
     CHECK(cap_calls == 0 && cap_buf[0] == 0);
@@ -437,13 +466,13 @@ static void part1(void)
 
     /* a capability without WRITE: denied */
     reset_capture();
-    osh_session_init(&s, CK_R_READ);
+    osh_session_init(&s, CK_R_READ); J(&s);
     r = run(&s, hello);
     CHECK(r.error == OSH_E_DENIED && cap_calls == 0);
 
     /* revoked between building the request and using it */
     reset_capture();
-    osh_session_init(&s, CK_R_WRITE);
+    osh_session_init(&s, CK_R_WRITE); J(&s);
     s.hooks.revoke_before_perm_at = 1;
     r = run(&s, hello);
     CHECK(r.error == OSH_E_REVOKED && r.outcome == OSH_O_FAILED_NO_EFFECT && cap_calls == 0);
@@ -454,7 +483,7 @@ static void part1(void)
     {
         struct osh_binding b;
         struct ck_handle h2;
-        osh_session_init(&s, CK_R_WRITE);
+        osh_session_init(&s, CK_R_WRITE); J(&s);
         memset(&b, 0, sizeof b);
         memcpy(b.principal_id, s.principal, 32);
         b.domain = 1;
@@ -491,7 +520,7 @@ static void part1(void)
         CHECK(h2.index == b.cap_index && h2.generation > s.console_cap.generation);
         CHECK(osh_op_perm_check(&s, &b) == OSH_E_STALE);
         /* a capability on another resource does not authorize the console */
-        osh_session_init(&s, 0);
+        osh_session_init(&s, 0); J(&s);
         CHECK(ck_cap_insert(&s.caps, 0x1234u, CK_R_WRITE, &s.console_cap) == CK_CAP_OK);
         memcpy(s.cap_holder, s.principal, 32); /* the principal matches: only the resource is wrong */
         r = run(&s, hello);
@@ -500,7 +529,7 @@ static void part1(void)
 
     /* an interrupt before the effect: cancelled, no bytes, the list stops */
     reset_capture();
-    osh_session_init(&s, CK_R_WRITE);
+    osh_session_init(&s, CK_R_WRITE); J(&s);
     s.hooks.interrupt_before_effect_at = 2;
     r = run(&s, hello);
     CHECK(r.error == OSH_E_OK && cap_calls == 1);
@@ -512,24 +541,31 @@ static void part1(void)
 
     /* lost after the effect: the outcome is unknown, restart reports it and never replays it */
     reset_capture();
-    osh_session_init(&s, CK_R_WRITE);
+    osh_session_init(&s, CK_R_WRITE); J(&s);
     s.hooks.crash_after_effect_at = 1;
     r = run(&s, hello);
     CHECK(r.crashed && r.stop && r.outcome == OSH_O_OUTCOME_UNKNOWN && cap_calls == 1);
     CHECK(s.intents[0].used && !s.intents[0].closed);
-    osh_session_restart(&t, &s);
+    osh_session_restart(&t, &s); JR(&t);
     CHECK(t.console_cap.generation == 0); /* the restarted adapter holds no capability */
     CHECK(t.epoch == s.epoch + 1);
     nlogs = 0;
     CHECK(osh_op_recover(&t, &env) == 1);
     CHECK(cap_calls == 1); /* not replayed */
-    CHECK(t.intents[0].closed && t.intents[0].outcome == OSH_O_OUTCOME_UNKNOWN);
+    /* #431: nothing is inherited from memory; the journal says it: one console intent, no STARTED (a console write has
+     * none), now OUTCOME_UNKNOWN written by recovery */
+    CHECK(!t.intents[0].used && t.recovery.unknown_intent == 1 && t.recovery.unknown_started == 0);
+    {
+        struct oshj_report rp;
+        oshj_inspect(&J0.cx, &rp, 0, 0);
+        CHECK(rp.intents == 1 && rp.cat[OSHJ_CAT_RECOVERED] == 1 && rp.outcomes == 1 && rp.receipts == 1 && rp.bad == 0);
+    }
     CHECK(nlogs == 1 && strstr(logs[0], "outcome=OUTCOME_UNKNOWN") && strstr(logs[0], "replayed=0"));
     CHECK(osh_op_recover(&t, &env) == 0 && nlogs == 1 && cap_calls == 1); /* idempotent */
 
     /* a failed console write is unknown, not "no effect" */
     reset_capture();
-    osh_session_init(&s, CK_R_WRITE);
+    osh_session_init(&s, CK_R_WRITE); J(&s);
     s.hooks.sink_fail_at = 1;
     r = run(&s, hello);
     CHECK(r.error == OSH_E_IO && r.outcome == OSH_O_OUTCOME_UNKNOWN && s.intents[0].outcome == OSH_O_OUTCOME_UNKNOWN);
@@ -540,7 +576,7 @@ static void part1(void)
      * redirection and assignment records below carry real entries: an empty entry under a nonzero count is now a
      * malformed record (INVALID_ARG), tested with the other malformed records. */
     reset_capture();
-    osh_session_init(&s, CK_R_WRITE);
+    osh_session_init(&s, CK_R_WRITE); J(&s);
     const char *const ls[] = { "ls", 0 };
     r = run(&s, ls);
     CHECK(r.error == OSH_E_NOT_FOUND && r.status == 127 && r.outcome == OSH_O_NOT_STARTED && !s.intents[0].used);
@@ -608,7 +644,7 @@ static void part1(void)
     /* closed intents are reclaimed (their outcome is already logged): 40 sequential klogs succeed, each with a
      * "grant used" receipt; only OPEN intents count against the limit */
     reset_capture();
-    osh_session_init(&s, CK_R_WRITE);
+    osh_session_init(&s, CK_R_WRITE); J(&s);
     int okn = 0;
     for (int i = 0; i < 40; i++)
         okn += run(&s, hello).error == OSH_E_OK;
@@ -619,7 +655,7 @@ static void part1(void)
     /* the receipt names the request digest */
     {
         reset_capture();
-        osh_session_init(&s, CK_R_WRITE);
+        osh_session_init(&s, CK_R_WRITE); J(&s);
         r = run(&s, hello);
         static const char hex[] = "0123456789abcdef";
         char want[64 + 1];
@@ -632,7 +668,7 @@ static void part1(void)
     }
     /* 16 open intents (the adapter lost after each effect) fill the log; the next pipeline is refused LIMIT with a receipt */
     reset_capture();
-    osh_session_init(&s, CK_R_WRITE);
+    osh_session_init(&s, CK_R_WRITE); J(&s);
     for (int i = 0; i < OSH_INTENT_MAX; i++) {
         s.hooks.crash_after_effect_at = s.pipelines + 1;
         r = run(&s, hello);
@@ -645,18 +681,18 @@ static void part1(void)
     CHECK(nlogs == 1 && strstr(logs[0], "osh_op_receipt:") && strstr(logs[0], "result=LIMIT") && strstr(logs[0], "effect=none"));
     /* the denial receipts carry the binding too */
     reset_capture();
-    osh_session_init(&s, 0);
+    osh_session_init(&s, 0); J(&s);
     r = run(&s, hello);
     CHECK(nlogs == 1 && strstr(logs[0], "result=DENIED") && strstr(logs[0], "cap_domain=1") && strstr(logs[0], "principal="));
 
     /* the capability belongs to the principal it was granted to: another principal presenting it is DENIED */
     reset_capture();
-    osh_session_init(&s, CK_R_WRITE);
+    osh_session_init(&s, CK_R_WRITE); J(&s);
     CHECK(memcmp(s.cap_holder, s.principal, 32) == 0);
     s.principal[0] ^= 1; /* a different task now runs the shell session */
     r = run(&s, hello);
     CHECK(r.error == OSH_E_DENIED && cap_calls == 0);
-    osh_session_init(&s, 0);
+    osh_session_init(&s, 0); J(&s);
     {
         static const uint8_t zero32[32];
         CHECK(memcmp(s.cap_holder, zero32, 32) == 0); /* nothing granted, no holder */
@@ -881,7 +917,7 @@ static void part2(void)
     CHECK(r.crashed && r.stop && r.outcome == OSH_O_OUTCOME_UNKNOWN && r.started == 2 && open_intents(s) == 3);
     CHECK(tab.stats.spawned == spawned0 + 2 && !ck_task_tab_empty(&tab));
     CHECK(osh_session_close(s) == 1); /* everything the lost adapter left is reaped and closed */
-    osh_session_restart(&T, s);
+    osh_session_restart(&T, s); JR(&T);
     CHECK(T.epoch == s->epoch + 1 && T.spawn_cap.generation == 0 && T.nat == 0);
     nlogs = 0;
     CHECK(osh_op_recover(&T, &env) == 3 && nlogs == 3 && count_logs("replayed=0") == 3);
@@ -1218,10 +1254,325 @@ static void part3(void)
     CHECK(got[1] == 1 && got[7] == 1 && got[8] == 1); /* t002, t008, t009: the domain-1 launch vectors */
 }
 
+/* ---- Part 4 (aienos-mv#431): durable intent before every effect, outcome after, crash points, read-only inspection,
+ * recovery categories, no replay, operator reconciliation ---- */
+
+static struct osh_session R; /* a restart that may run again (Part 4) */
+
+static int item_at(uint64_t id, struct oshj_item *it)
+{
+    return oshj_item(&J0.cx, id, it);
+}
+
+/* the k-th intent (1-based) of the journal */
+static uint64_t nth_intent(unsigned k)
+{
+    for (uint64_t id = 1; id <= J0.cx.n; id++) {
+        struct oshj_item it;
+        if (item_at(id, &it) && --k == 0)
+            return id;
+    }
+    return 0;
+}
+
+static void sha(const char *p, size_t n, uint8_t d[32])
+{
+    sha256_hash((const uint8_t *)p, n, d);
+}
+
+/* a crash at `cp` (nth intent) in pipeline 1 of a fresh session, then a read-only look with no OSH session, then a
+ * restart: exact counts at every step, nothing replayed, a new request runs once */
+static void crash_case(const char *what, const char *text, unsigned cp, unsigned nth, int interrupt, unsigned want_spawned,
+                       unsigned want_ui, unsigned want_us, unsigned want_rw, int want_o)
+{
+    struct osh_session *s = &S;
+    struct oshj_report rp;
+    native(s, CK_R_WRITE, CK_R_READ | CK_R_WRITE);
+    if (interrupt) {
+        s->hooks.interrupt_at = 1;
+        s->hooks.interrupt_after_turns = 30;
+    }
+    s->hooks.crash_at = 1;
+    s->hooks.crash_point = cp;
+    s->hooks.crash_nth = nth;
+    uint64_t sp0 = tab.stats.spawned;
+    struct osh_result r = line(s, text);
+    int ok = r.crashed && r.stop && r.crash_point == cp && tab.stats.spawned - sp0 == want_spawned;
+    CHECK(osh_session_close(s) == 1); /* the kernel reaps and closes what the lost adapter left */
+    osh_journal_close(&J0);           /* the lost adapter's handle goes with it */
+
+    /* read-only inspection needs no OSH session and cannot write */
+    struct osh_journal ro;
+    CHECK(osh_journal_open(&ro, &oshj_ram_ops, &jram, 0, "ram_test", 1) == CX_OK);
+    size_t len0 = jram.len;
+    oshj_inspect(&ro.cx, &rp, 0, 0);
+    ok = ok && rp.cat[OSHJ_CAT_UNKNOWN_INTENT] == want_ui && rp.cat[OSHJ_CAT_UNKNOWN_STARTED] == want_us &&
+         rp.bad == 0 && rp.chain_ok && rp.dup_outcomes == 0;
+    if (cp == OSH_CP_DURING_RECEIPT)
+        ok = ok && rp.cat[OSHJ_CAT_FINISHED] == 3 && rp.unsealed_finished == 1 && rp.receipts == 0;
+    struct oshj_effect dummy;
+    memset(&dummy, 0, sizeof dummy);
+    CHECK(!osh_journal_usable(&ro) && oshj_put_outcome(&ro, 1, &dummy, 1, 0, 0, 0, 0) != CX_OK && jram.len == len0);
+    osh_journal_close(&ro);
+
+    /* restart: the journal is what survives; recovery writes OUTCOME_UNKNOWN once per open intent, seals, runs nothing */
+    osh_session_restart(&R, s);
+    JR(&R);
+    nlogs = 0;
+    unsigned open = osh_op_recover(&R, &env);
+    ok = ok && open == want_ui + want_us && R.recovery.unknown_intent == want_ui && R.recovery.unknown_started == want_us &&
+         R.recovery.outcomes_written == want_ui + want_us && R.recovery.receipts_written == want_rw &&
+         R.recovery.failed == 0 && count_logs("replayed=0") == (int)(want_ui + want_us);
+    ok = ok && tab.stats.spawned - sp0 == want_spawned; /* nothing replayed */
+    ok = ok && (osh_loc_find(&R, (const uint8_t *)"o", 1) != 0) == want_o;
+    ok = ok && osh_op_recover(&R, &env) == 0 && R.recovery.receipts_written == 0; /* reported once */
+    oshj_inspect(&J0.cx, &rp, 0, 0);
+    ok = ok && rp.cat[OSHJ_CAT_UNKNOWN_INTENT] == 0 && rp.cat[OSHJ_CAT_UNKNOWN_STARTED] == 0 &&
+         rp.cat[OSHJ_CAT_RECOVERED] == want_ui + want_us && rp.dup_outcomes == 0 && rp.sealed == rp.pipelines &&
+         rp.unsealed_finished == 0 && rp.bad == 0;
+    ok = ok && R.epoch > s->epoch && rp.max_epoch < R.epoch;
+
+    /* a new request after the loss is a new decision: it runs once, with its own records */
+    CHECK(osh_session_grant_spawn(&R, CK_R_WRITE) == 0);
+    osh_session_attach(&R, &nat);
+    uint64_t sp1 = tab.stats.spawned;
+    r = line(&R, "gen 4096 512 | sink");
+    ok = ok && r.status == 0 && r.outcome == OSH_O_COMPLETED && !r.journal_failed && tab.stats.spawned - sp1 == 2;
+    oshj_inspect(&J0.cx, &rp, 0, 0);
+    ok = ok && rp.sealed == rp.pipelines && rp.cat[OSHJ_CAT_FINISHED] >= 2;
+    CHECK(osh_session_close(&R) == 1);
+    if (!ok)
+        printf("  crash case %s: spawned=%llu ui=%u us=%u rw=%u open=%u\n", what,
+               (unsigned long long)(tab.stats.spawned - sp0), R.recovery.unknown_intent, R.recovery.unknown_started,
+               R.recovery.receipts_written, open);
+    CHECK(ok);
+}
+
+static void part4(void)
+{
+    struct osh_session *s = &S;
+    struct osh_result r;
+    struct oshj_report rp;
+    static const char *const hello[] = { "klog", "hello", 0 };
+
+    /* 1. the records bind what the effect is: request digest, principal, capability, stage, location hashes */
+    native(s, CK_R_WRITE, CK_R_READ | CK_R_WRITE);
+    r = line(s, "gen 4096 512 | sink >o");
+    CHECK(r.status == 0 && r.outcome == OSH_O_COMPLETED && !r.journal_failed && r.journal_refused == 0);
+    oshj_inspect(&J0.cx, &rp, 0, 0);
+    CHECK(rp.intents == 3 && rp.started == 3 && rp.outcomes == 3 && rp.receipts == 1 && rp.pipelines == 1 &&
+          rp.sealed == 1 && rp.cat[OSHJ_CAT_FINISHED] == 3 && rp.bad == 0 && rp.other == 0 && rp.chain_ok);
+    {
+        struct oshj_item a, b, c;
+        uint8_t ho[32], zero32[32];
+        memset(zero32, 0, 32);
+        sha("o", 1, ho);
+        CHECK(item_at(nth_intent(1), &a) && item_at(nth_intent(2), &b) && item_at(nth_intent(3), &c));
+        CHECK(a.e.effect == OSHJ_EF_SPAWN && a.e.cmd == 0 && a.e.ncmds == 2 && a.e.argc == 3 && a.e.name_len == 3 &&
+              memcmp(a.e.name, "gen", 3) == 0 && memcmp(a.e.stage_id, gen_unit, 32) == 0);
+        CHECK(memcmp(a.e.digest, r.digest, 32) == 0 && memcmp(a.e.principal, s->principal, 32) == 0 && a.e.domain == 1 &&
+              a.e.cap_index == s->spawn_cap.index && a.e.cap_generation == s->spawn_cap.generation &&
+              a.e.resource_class == CK_TASK_RC_TASK && a.e.operation == CK_TASK_OP_SPAWN && a.e.seq == r.seq &&
+              a.e.epoch == s->epoch);
+        CHECK(memcmp(a.e.target_hash, zero32, 32) == 0 && memcmp(a.e.input_hash, zero32, 32) == 0);
+        CHECK(b.e.effect == OSHJ_EF_OPEN_WRITE && b.e.cmd == 1 && b.e.mode == OSH_RK_OUT && memcmp(b.e.target_hash, ho, 32) == 0 &&
+              memcmp(b.e.target_pre, zero32, 32) == 0 && b.e.resource_class == OSH_RC_LOCATION &&
+              b.e.operation == OSH_OP_OPEN_WRITE && b.e.cap_index == s->loc_cap.index);
+        CHECK(c.e.effect == OSHJ_EF_SPAWN && c.e.cmd == 1 && memcmp(c.e.name, "sink", 4) == 0 &&
+              memcmp(c.e.target_hash, ho, 32) == 0 && memcmp(c.e.stage_id, zero32, 32) == 0);
+        CHECK(a.started_id > a.intent_id && a.outcome_id > a.started_id && a.outcome == OSH_O_COMPLETED && a.status == 0 &&
+              a.sealed && !a.recovered);
+        /* the provisional result comes before the effect's end; the receipt is last and lists the three outcomes */
+        const CxObject *last = cx_get(&J0.cx, J0.cx.n);
+        CHECK(last->kind == OSHJ_K_RECEIPT && last->cls == CX_EVIDENCE && (cx_payload(&J0.cx, last)[1] & 0xffffu) == 3 &&
+              (last->protect & CX_PROT_EFFECT_RECEIPT));
+        /* an input location is bound by the hash of its bytes; an append by the bytes it found */
+        const struct osh_loc *lo = osh_loc_find(s, (const uint8_t *)"o", 1);
+        uint8_t hb[32];
+        CHECK(lo && lo->len == 16);
+        sha256_hash(lo->bytes, lo->len, hb);
+        r = line(s, "xform 7 <o | sink");
+        CHECK(r.status == 0 && item_at(nth_intent(4), &a) && a.e.cmd == 0 && memcmp(a.e.input_hash, hb, 32) == 0);
+        r = line(s, "gen 10 1 >>o");
+        CHECK(r.status == 0 && item_at(nth_intent(6), &a) && a.e.effect == OSHJ_EF_OPEN_WRITE && a.e.mode == OSH_RK_APPEND &&
+              memcmp(a.e.target_pre, hb, 32) == 0);
+    }
+    CHECK(osh_session_close(s) == 1);
+
+    /* 2. no usable journal: every effect refused BY NAME before it happens (ST8.2), never a silent downgrade */
+    uint64_t sp0;
+    native(s, CK_R_WRITE, CK_R_READ | CK_R_WRITE);
+    osh_session_journal(s, 0, 0);
+    sp0 = tab.stats.spawned;
+    r = line(s, "gen 4096 512 | sink >o");
+    CHECK(r.status == 1 && r.error == OSH_E_IO && r.journal_refused == 2 && tab.stats.spawned == sp0 && idle(s));
+    CHECK(r.cmd_status[0] == 1 && r.cmd_outcome[0] == OSH_O_FAILED_NO_EFFECT && r.cmd_error[0] == OSH_E_IO);
+    CHECK(r.cmd_status[1] == 1 && r.cmd_outcome[1] == OSH_O_FAILED_NO_EFFECT && r.cmd_error[1] == OSH_E_IO);
+    CHECK(!osh_loc_find(s, (const uint8_t *)"o", 1)); /* the open did not happen either */
+    CHECK(count_logs("osh_op_refused: seq=1 cmd=0 name=gen effect=task_spawn error=IO outcome=FAILED_NO_EFFECT "
+                     "reason=journal_unavailable") == 1);
+    CHECK(count_logs("osh_op_refused: seq=1 cmd=1 name=sink effect=open_write error=IO outcome=FAILED_NO_EFFECT "
+                     "reason=journal_unavailable") == 1);
+    CHECK(count_logs("op=task_spawn result=IO") == 1 && count_logs("op=location_open_write result=IO") == 1);
+    CHECK(osh_session_close(s) == 1);
+    reset_capture();
+    osh_session_init(s, CK_R_WRITE); /* the console write too */
+    r = run(s, hello);
+    CHECK(r.status == 1 && r.error == OSH_E_IO && r.outcome == OSH_O_FAILED_NO_EFFECT && cap_calls == 0 && r.journal_refused == 1);
+    CHECK(count_logs("name=klog effect=console_write error=IO outcome=FAILED_NO_EFFECT reason=journal_unavailable") == 1);
+    CHECK(osh_session_close(s) == 1);
+
+    /* a volatile journal while the session demands durability (the default): refused, nothing recorded */
+    native(s, CK_R_WRITE, CK_R_READ | CK_R_WRITE);
+    osh_session_journal(s, &J0, 0);
+    sp0 = tab.stats.spawned;
+    r = line(s, "gen 4096 512 | sink");
+    CHECK(r.status == 1 && r.journal_refused == 2 && tab.stats.spawned == sp0 && J0.cx.n == 0 &&
+          count_logs("reason=journal_not_durable durable=0") == 2);
+    CHECK(osh_session_close(s) == 1);
+    /* the same with a journal the caller declares durable (only the policy is tested here: these bytes are RAM) */
+    native(s, CK_R_WRITE, CK_R_READ | CK_R_WRITE);
+    osh_journal_close(&J0);
+    CHECK(osh_journal_open(&J0, &oshj_ram_ops, &jram, 1, "ram_declared_durable_TEST", 0) == CX_OK);
+    osh_session_journal(s, &J0, 0);
+    r = line(s, "gen 4096 512 | sink");
+    CHECK(r.status == 0 && r.journal_refused == 0 && tab.stats.spawned == sp0 + 2);
+    CHECK(osh_session_close(s) == 1);
+    /* a journal opened read-only */
+    native(s, CK_R_WRITE, CK_R_READ | CK_R_WRITE);
+    osh_journal_close(&J0);
+    CHECK(osh_journal_open(&J0, &oshj_ram_ops, &jram, 0, "ram_test", 1) == CX_OK);
+    osh_session_journal(s, &J0, 1);
+    sp0 = tab.stats.spawned;
+    r = line(s, "gen 4096 512 | sink");
+    CHECK(r.status == 1 && tab.stats.spawned == sp0 && count_logs("reason=journal_read_only") == 2);
+    CHECK(osh_session_close(s) == 1);
+
+    /* the intent append fails: that effect does not happen, the journal is poisoned for good, every later one refused */
+    native(s, CK_R_WRITE, CK_R_READ | CK_R_WRITE);
+    jram.fail_at = jram.attempts + 1u;
+    sp0 = tab.stats.spawned;
+    r = line(s, "gen 4096 512 | sink >o");
+    CHECK(r.status == 1 && r.journal_refused == 2 && tab.stats.spawned == sp0 && J0.poisoned && J0.cx.n == 0);
+    CHECK(count_logs("name=gen effect=task_spawn error=IO outcome=FAILED_NO_EFFECT reason=intent_not_durable") == 1);
+    CHECK(count_logs("name=sink effect=open_write error=IO outcome=FAILED_NO_EFFECT reason=journal_failed") == 1);
+    CHECK(!osh_loc_find(s, (const uint8_t *)"o", 1) && idle(s));
+    r = line(s, "gen 4096 512 | sink");
+    CHECK(r.status == 1 && tab.stats.spawned == sp0 && count_logs("reason=journal_failed") == 2);
+    CHECK(osh_session_close(s) == 1);
+
+    /* an outcome append fails after the effects ran: the pipeline's own result stands, its intents stay open, recovery
+     * reports them UNKNOWN (started), nothing is replayed */
+    native(s, CK_R_WRITE, CK_R_READ | CK_R_WRITE);
+    jram.fail_at = jram.attempts + 5u; /* intent, started, intent, started, then the first outcome */
+    sp0 = tab.stats.spawned;
+    r = line(s, "gen 4096 512 | sink");
+    CHECK(r.status == 0 && r.outcome == OSH_O_COMPLETED && r.journal_failed == 1 && tab.stats.spawned == sp0 + 2);
+    CHECK(osh_session_close(s) == 1);
+    osh_session_restart(&R, s);
+    JR(&R);
+    CHECK(osh_op_recover(&R, &env) == 2 && R.recovery.unknown_started == 2 && R.recovery.receipts_written == 1 &&
+          tab.stats.spawned == sp0 + 2);
+    CHECK(osh_session_close(&R) == 1);
+
+    /* 3. every crash point, exact counts, no duplicate effect. Pipeline: intent 1 = spawn gen, 2 = open o, 3 = spawn sink */
+    static const char P[] = "gen 4096 512 | sink >o";
+    crash_case("before_intent_1", P, OSH_CP_BEFORE_INTENT, 1, 0, 0, 0, 0, 0, 0);
+    crash_case("before_intent_2", P, OSH_CP_BEFORE_INTENT, 2, 0, 1, 0, 1, 1, 0);
+    crash_case("after_intent_1", P, OSH_CP_AFTER_INTENT, 1, 0, 0, 1, 0, 1, 0);
+    crash_case("after_intent_2", P, OSH_CP_AFTER_INTENT, 2, 0, 1, 1, 1, 1, 0);
+    crash_case("after_spawn_1", P, OSH_CP_AFTER_EFFECT, 1, 0, 1, 1, 0, 1, 0);
+    crash_case("after_write_2", P, OSH_CP_AFTER_EFFECT, 2, 0, 1, 1, 1, 1, 1);
+    crash_case("after_spawn_3", P, OSH_CP_AFTER_EFFECT, 3, 0, 2, 1, 2, 1, 1);
+    crash_case("after_started_3", P, OSH_CP_AFTER_STARTED, 3, 0, 2, 0, 3, 1, 1);
+    crash_case("after_finish", P, OSH_CP_AFTER_FINISH, 0, 0, 2, 0, 3, 1, 1);
+    crash_case("during_cancel", "gen 0 | sink >o", OSH_CP_DURING_CANCEL, 0, 1, 2, 0, 3, 1, 1);
+    crash_case("during_receipt", P, OSH_CP_DURING_RECEIPT, 0, 0, 2, 0, 0, 1, 1);
+    /* the console write: lost after the intent, nothing printed; lost after the write, printed once and never again */
+    reset_capture();
+    osh_session_init(s, CK_R_WRITE);
+    J(s);
+    s->hooks.crash_at = 1;
+    s->hooks.crash_point = OSH_CP_AFTER_INTENT;
+    s->hooks.crash_nth = 1;
+    r = run(s, hello);
+    CHECK(r.crashed && cap_calls == 0);
+    osh_session_restart(&R, s);
+    JR(&R);
+    CHECK(osh_op_recover(&R, &env) == 1 && R.recovery.unknown_intent == 1 && cap_calls == 0);
+    reset_capture();
+    osh_session_init(s, CK_R_WRITE);
+    J(s);
+    s->hooks.crash_at = 1;
+    s->hooks.crash_point = OSH_CP_AFTER_EFFECT;
+    s->hooks.crash_nth = 1;
+    r = run(s, hello);
+    CHECK(r.crashed && cap_calls == 1);
+    osh_session_restart(&R, s);
+    JR(&R);
+    CHECK(osh_op_recover(&R, &env) == 1 && R.recovery.unknown_intent == 1 && cap_calls == 1);
+
+    /* 4. operator reconciliation through the capability root's grant: a statement, never a re-run */
+    native(s, CK_R_WRITE, CK_R_READ | CK_R_WRITE);
+    s->hooks.crash_at = 1;
+    s->hooks.crash_point = OSH_CP_AFTER_INTENT;
+    s->hooks.crash_nth = 1;
+    sp0 = tab.stats.spawned;
+    r = line(s, P);
+    CHECK(r.crashed && osh_session_close(s) == 1);
+    osh_session_restart(&R, s);
+    JR(&R);
+    CHECK(osh_op_recover(&R, &env) == 1);
+    uint64_t in1 = nth_intent(1);
+    uint8_t opid[32];
+    sha("operator-test", 13, opid);
+    uint64_t n0 = J0.cx.n;
+    nlogs = 0;
+    CHECK(osh_op_reconcile(&R, &env, opid, in1, OSHJ_V_OBSERVED_ABSENT) == OSH_E_DENIED && J0.cx.n == n0); /* no grant */
+    CHECK(count_logs("osh_op_receipt: op=reconcile result=DENIED") == 1);
+    CHECK(osh_session_grant_reconcile(&R, opid, CK_R_WRITE) == 0);
+    CHECK(osh_op_reconcile(&R, &env, R.principal, in1, OSHJ_V_OBSERVED_ABSENT) == OSH_E_DENIED); /* the shell's principal */
+    CHECK(osh_op_reconcile(&R, &env, opid, in1, 9) == OSH_E_INVALID_ARG && J0.cx.n == n0);   /* no such verdict */
+    CHECK(osh_op_reconcile(&R, &env, opid, in1, OSHJ_V_OBSERVED_ABSENT) == OSH_E_OK && J0.cx.n == n0 + 1);
+    {
+        struct oshj_item it;
+        CHECK(item_at(in1, &it) && it.cat == OSHJ_CAT_RECONCILED && it.verdict == OSHJ_V_OBSERVED_ABSENT &&
+              it.outcome == OSH_O_OUTCOME_UNKNOWN && it.recovered); /* the unknown outcome itself is unchanged */
+    }
+    CHECK(osh_op_reconcile(&R, &env, opid, in1, OSHJ_V_OBSERVED_DONE) == OSH_E_INVALID_ARG); /* once */
+    CHECK(osh_op_reconcile(&R, &env, opid, J0.cx.n, OSHJ_V_OBSERVED_DONE) == OSH_E_INVALID_ARG); /* not an intent */
+    CHECK(tab.stats.spawned == sp0); /* nothing ran */
+    CHECK(osh_session_grant_spawn(&R, CK_R_WRITE) == 0);
+    osh_session_attach(&R, &nat);
+    r = line(&R, "gen 4096 512 | sink");
+    CHECK(r.status == 0 && osh_op_reconcile(&R, &env, opid, nth_intent(2), OSHJ_V_OBSERVED_DONE) == OSH_E_INVALID_ARG);
+    CHECK(ck_cap_remove(&R.rec_caps, R.rec_cap) == CK_CAP_OK);
+    CHECK(osh_op_reconcile(&R, &env, opid, in1, OSHJ_V_ACCEPT_UNKNOWN) == OSH_E_REVOKED);
+    CHECK(osh_session_close(&R) == 1);
+
+    /* 5. a journal that cannot be opened at all (the device is absent): no session can record, so nothing runs */
+    struct oshj_ram gone;
+    struct osh_journal jg;
+    static uint8_t gbuf[4096];
+    oshj_ram_init(&gone, gbuf, sizeof gbuf);
+    gone.unavailable = 1;
+    CHECK(osh_journal_open(&jg, &oshj_ram_ops, &gone, 0, "ram_test", 0) != CX_OK && !osh_journal_usable(&jg));
+    native(s, CK_R_WRITE, CK_R_READ | CK_R_WRITE);
+    osh_session_journal(s, &jg, 1);
+    sp0 = tab.stats.spawned;
+    r = line(s, "gen 4096 512 | sink");
+    CHECK(r.status == 1 && tab.stats.spawned == sp0 && count_logs("reason=journal_unavailable") == 2);
+    nlogs = 0;
+    CHECK(osh_op_recover(s, &env) == 0 && count_logs("osh_op_recover: no usable effect journal") == 1);
+    CHECK(osh_session_close(s) == 1);
+    osh_journal_close(&J0);
+}
+
 int main(void)
 {
     part1();
     part2();
     part3();
+    part4();
     return ck_t_verdict("test_osh_op");
 }

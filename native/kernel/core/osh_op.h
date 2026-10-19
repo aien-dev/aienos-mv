@@ -47,12 +47,23 @@
  * More bytes than a location holds is LIMIT (the write is cut at the limit, the writer gets BROKEN_PIPE, and the
  * command's error says LIMIT): never a silent truncation.
  *
- * EFFECTS AND RECORDS (section 10, ST8). An effect is one spawn, one write-class open or one console write. Before
- * each the adapter writes an intent record (RAM here; the integration point for Omega's durable records is struct
- * osh_intent and osh_op_recover), after it an outcome. Every grant used and every refusal at an effect boundary
- * writes a security receipt (section 13). An adapter lost after an effect leaves its intent open: a restart reports
- * it OUTCOME_UNKNOWN with the request digest and never replays it; the kernel reaps what the lost adapter left
- * running (osh_session_close).
+ * EFFECTS AND RECORDS (section 10, ST8; aienos-mv#431). An effect is one spawn, one write-class open or one console
+ * write. Before each the adapter makes a DURABLE intent record in the session's effect journal (core/osh_journal.h:
+ * the canonical Cortex, whose only durable backend on AIENOS is the sealed Store), after the effect is observed to
+ * begin a STARTED record (the provisional result), after it is observed to end an OUTCOME record (the finished
+ * result), and when the pipeline is done one RECEIPT (the immutable receipt). Each binds the request digest, the
+ * principal, the capability domain/index/generation, the stage's unit digest and the hashes of the location read or
+ * written, as available. If no journal is attached, the journal failed (poisoned), or it is not durable while the
+ * session demands durability (the default), every effectful command is REFUSED BY NAME before its effect
+ * (FAILED_NO_EFFECT, IO, status 1, an `osh_op_refused:` line naming argv[0], the effect and the reason): never a
+ * silent downgrade. A volatile TEST journal is accepted only when the caller says so (osh_session_journal
+ * allow_volatile) and every line then says durable=0. Every grant used and every refusal at an effect boundary also
+ * writes a security receipt line (section 13). An adapter lost at any point leaves what the journal holds: a restart
+ * (osh_op_recover over the reopened journal) reports each intent without an outcome OUTCOME_UNKNOWN, split into
+ * "intent only" and "started", writes that outcome once and never replays anything; the kernel reaps what the lost
+ * adapter left running (osh_session_close). An operator may later reconcile an unknown effect through the
+ * reconcile capability (osh_op_reconcile); that records a statement and runs nothing. No effect is claimed
+ * exactly-once or reversible.
  *
  * UNVERIFIED CHOICES (the drafts at the commits above do not pin these; each is this adapter's own reading):
  *   U1  klog is single-command only: in a pipeline or with a redirection it is NOT_SUPPORTED (126).
@@ -82,6 +93,15 @@
  *       revoked between stages is REVOKED as the drafts name it.
  *   U16 at most 8 commands, 4 pipes in the pool and 8 slots in the session table: below the ST9 minimums.
  *   U17 descriptor 2 of a stage goes nowhere (stage ABI v1 cannot write stderr), so `2>file` creates an empty file.
+ *   U18 (#431) a journal refusal is per command (FAILED_NO_EFFECT, IO, status 1, Omega's status), not a launch failure:
+ *       the other commands of the pipeline are decided on their own (they are effects too, so they are refused alike).
+ *   U19 (#431) the default policy demands a durable journal; the in-memory TEST journal is accepted only on request.
+ *   U20 (#431) outcomes of a stage pipeline are written after every stage is reaped (Omega's order); an effect refused
+ *       at its own boundary after its intent gets its FAILED_NO_EFFECT outcome at once.
+ *   U21 (#431) reconciliation needs WRITE on the session's reconcile capability (resource "OSHR", class 4, operation
+ *       4), held by the operator principal it was granted to; it applies only to an effect recovery left
+ *       OUTCOME_UNKNOWN, once. The drafts name no reconcile operation.
+ * The journal's own UNVERIFIED choices are J1..J5 in core/osh_journal.h.
  *
  * Pure logic over ipc.c, pipe.c, task.c and sched.c, no hardware: host-tested in tests/test_osh_op.c with C stand-in
  * stages through the task runner seam, driven in QEMU by core/osh_test.c (CK_OSH_OP_TEST) with the real shell units
@@ -106,8 +126,11 @@
 #include "osh_err.h"
 #include "pipe.h"
 #include "task.h"
+#include "osh_journal.h"
 /* section 10 outcomes */
 enum osh_outcome { OSH_O_NOT_STARTED = 0, OSH_O_COMPLETED, OSH_O_FAILED_NO_EFFECT, OSH_O_CANCELLED, OSH_O_OUTCOME_UNKNOWN };
+_Static_assert((int)OSH_O_OUTCOME_UNKNOWN == (int)OSHJ_O_OUTCOME_UNKNOWN && (int)OSH_O_CANCELLED == (int)OSHJ_O_CANCELLED,
+               "one outcome numbering in the adapter and its journal");
 
 /* The resources and operations this layer knows. The numeric ids are this adapter's own (the draft names the fields and
  * leaves the numbering open: UNVERIFIED against a frozen contract). The spawn capability is task.h's. */
@@ -118,6 +141,9 @@ enum osh_outcome { OSH_O_NOT_STARTED = 0, OSH_O_COMPLETED, OSH_O_FAILED_NO_EFFEC
 #define OSH_RC_LOCATION 3u              /* binding.resource_class (task.h uses 2 for spawning) */
 #define OSH_OP_OPEN_READ 2u
 #define OSH_OP_OPEN_WRITE 3u
+#define OSH_RES_RECONCILE 0x4f534852u   /* "OSHR": operator reconciliation of an unknown effect (UNVERIFIED U21) */
+#define OSH_RC_RECONCILE 4u
+#define OSH_OP_RECONCILE 4u
 
 /* section 8.3 resolution classes */
 enum osh_class { OSH_CLASS_NATIVE_OP = 1, OSH_CLASS_ARTIFACT = 2, OSH_CLASS_SERVICE = 3, OSH_CLASS_LINUX = 4 };
@@ -147,7 +173,9 @@ struct osh_binding {
 };
 
 #define OSH_INTENT_MAX 16
-enum osh_effect { OSH_EF_CONSOLE = 0, OSH_EF_SPAWN = 1, OSH_EF_OPEN_WRITE = 2 };
+enum osh_effect { OSH_EF_CONSOLE = OSHJ_EF_CONSOLE, OSH_EF_SPAWN = OSHJ_EF_SPAWN, OSH_EF_OPEN_WRITE = OSHJ_EF_OPEN_WRITE };
+/* The adapter's in-memory view of its open effects (it sizes step 4 and links each record to its intent). It is NOT what
+ * a restart inherits: that is the journal (osh_op_recover). */
 struct osh_intent {
     uint8_t used;      /* 1 once the intent is written */
     uint8_t closed;    /* 1 once an outcome is written */
@@ -158,7 +186,24 @@ struct osh_intent {
     uint32_t seq;      /* 1-based pipeline number in the session */
     uint32_t status;   /* shell status when COMPLETED */
     uint8_t digest[32];
+    uint8_t nth;       /* 1-based intent number within its pipeline (crash points) */
+    uint64_t jid;      /* the INTENT's Cortex id in the journal */
+    struct oshj_effect e;
 };
+
+/* Crash points (aienos-mv#431): the adapter is lost there and does nothing more. */
+enum osh_crash_point {
+    OSH_CP_NONE = 0,
+    OSH_CP_BEFORE_INTENT,  /* just before the nth intent of the pipeline is written */
+    OSH_CP_AFTER_INTENT,   /* the nth intent is durable, its effect has not happened */
+    OSH_CP_AFTER_EFFECT,   /* the nth effect happened, its STARTED record is not written */
+    OSH_CP_AFTER_STARTED,  /* the nth STARTED record is durable (the stage runs on) */
+    OSH_CP_AFTER_FINISH,   /* every stage ended and was reaped, no OUTCOME written */
+    OSH_CP_DURING_CANCEL,  /* an interrupt is cancelling the stages: lost before they are reaped */
+    OSH_CP_DURING_RECEIPT  /* every OUTCOME is durable; the power fails inside the RECEIPT's append (the sealed Store
+                            * writes all of a transaction or none: the receipt is not there) */
+};
+#define OSH_CP_COUNT 8u
 
 /* Test injection points (all zero in normal use). Each `_at` names the 1-based pipeline number of the session. */
 struct osh_hooks {
@@ -173,6 +218,8 @@ struct osh_hooks {
     uint32_t crash_cmd;                           /* with crash_after_effect_at: lost right after this command's spawn */
     uint32_t interrupt_at, interrupt_after_turns; /* an interrupt (section 12 cleanup) after that many scheduler turns */
     uint32_t snapshot_at, snapshot_after_turns;   /* record a mid-run snapshot after that many turns */
+    /* aienos-mv#431 */
+    uint32_t crash_at, crash_point, crash_nth;    /* lost at that point of pipeline crash_at (nth intent, 1-based) */
 };
 
 struct osh_env {
@@ -181,6 +228,9 @@ struct osh_env {
     void (*log)(void *ctx, const char *line);            /* receipts and records, one line, no newline */
     /* the session's stdout: bytes the last command writes when not redirected; 0 = accepted. NULL: none (discarded). */
     int (*stdout_bytes)(void *ctx, const uint8_t *b, size_t n);
+    /* optional evidence (#431): one `osh_op_journal:` line per pipeline that wrote an intent. NULL: not printed. The
+     * mandatory lines (receipts, `osh_op_refused:`, `osh_op_record:`) always go to log. */
+    void (*jlog)(void *ctx, const char *line);
 };
 
 /* ---- the stage registry and the native task machinery a session may run on ---- */
@@ -191,6 +241,7 @@ struct osh_op_def {
     uint8_t max_args;  /* argv[1..] accepted, each a decimal u64 -> params[k-1]; at most CK_TASK_PARAMS */
     unsigned image;    /* task image index (struct osh_native images[]) */
     uint32_t in_chunk; /* stdin bytes per step (0 = CK_TASK_IN_MAX) */
+    const uint8_t *unit_digest; /* #431: the admitted unit's digest, recorded in each spawn intent (NULL: zero) */
 };
 
 struct osh_native {
@@ -253,6 +304,16 @@ struct osh_session {
     struct osh_native *nat; /* NULL: no stage operations (klog only) */
     struct osh_live live;
     struct osh_loc locs[OSH_LOC_MAX];
+    /* aienos-mv#431: the effect journal and what the pipeline in flight has written to it */
+    struct osh_journal *jr;       /* NULL: none, every effect refused */
+    uint8_t allow_volatile;       /* 1: a non-durable TEST journal is accepted (its lines say durable=0) */
+    unsigned pl_nint, pl_ndur, pl_nout; /* intents begun (the crash ordinal), made durable, outcomes written */
+    uint8_t pl_failed;            /* an append failed after an effect in the pipeline in flight */
+    uint64_t pl_out[OSHJ_RECEIPT_MAX]; /* the pipeline's OUTCOME ids, for its RECEIPT */
+    struct oshj_recovery recovery; /* what the last osh_op_recover found */
+    struct ck_cap_table rec_caps; /* the operator's reconcile capability (its own table) */
+    struct ck_handle rec_cap;
+    uint8_t operator_id[32];      /* the principal the reconcile capability was granted to */
 };
 
 struct osh_result {
@@ -262,7 +323,10 @@ struct osh_result {
     unsigned launch_error; /* OK once every command was started or refused one by one (ST7 step 5); else the whole
                             * pipeline's refusal (steps 1 to 4) or launch failure (step 6, PARTIAL_LAUNCH) */
     int stop;        /* 1: interrupted or lost, the list must stop */
-    int crashed;     /* 1: lost after an effect, outcome open */
+    int crashed;     /* 1: lost (after an effect, or at an injected crash point), outcome open */
+    unsigned crash_point;  /* enum osh_crash_point where it was lost (0: none or the older crash_after_effect hook) */
+    int journal_refused;   /* commands refused because no usable journal could record their intent */
+    int journal_failed;    /* an append failed after an effect: that intent stays open for recovery */
     uint32_t seq;
     uint8_t digest[32];
     /* per command (aienos-mv#430) */
@@ -291,13 +355,25 @@ void osh_session_attach(struct osh_session *s, struct osh_native *nat);
  * every pipe end closed, every capability the session holds dropped. Returns 1 if the session table, the task table and
  * the pipe pool are all empty afterwards. */
 int osh_session_close(struct osh_session *s);
-/* A restart: a new session that inherits only the intent records (what a durable log would give back) and the
- * locations (state outside the adapter), holding no capability and no stage machinery. Intents without an outcome
- * are then reported by osh_op_recover. */
+/* A restart: a new session that inherits only the locations (state outside the adapter) and the session counters,
+ * holding no capability, no stage machinery and no journal. Its caller reopens the journal (what survives a crash),
+ * attaches it (osh_session_journal) and calls osh_op_recover. */
 void osh_session_restart(struct osh_session *fresh, const struct osh_session *old);
-/* Marks every open intent OUTCOME_UNKNOWN and logs it with its request digest. Never re-runs anything.
- * Returns how many were open. */
+/* The session's effect journal (open, writable). The session epoch moves past every epoch the journal records, so a
+ * restart never reuses a pipeline identity. allow_volatile: accept a non-durable TEST journal. */
+void osh_session_journal(struct osh_session *s, struct osh_journal *j, int allow_volatile);
+/* Recovery over the session's journal (oshj_recover): every intent without an outcome gets OUTCOME_UNKNOWN (once) and
+ * is logged with its request digest and category; every pipeline left without a receipt is sealed. Never re-runs
+ * anything. Returns how many intents were open (also in s->recovery). No usable journal: 0 and a line saying so. */
 unsigned osh_op_recover(struct osh_session *s, const struct osh_env *env);
+/* The capability root grants an operator principal the reconcile capability (WRITE needed). 0 on success. */
+int osh_session_grant_reconcile(struct osh_session *s, const uint8_t operator_id[32], unsigned rights);
+/* Operator reconciliation (UNVERIFIED U21): `who` states `verdict` (OSHJ_V_*) about the effect whose intent is `intent`.
+ * Checked at this moment: who holds WRITE on the reconcile capability (else DENIED / REVOKED / STALE), the effect was
+ * left OUTCOME_UNKNOWN by recovery and is not reconciled yet (else INVALID_ARG). Writes one RECONCILE record and a
+ * security receipt line; runs nothing, changes no earlier record. Returns enum osh_err. */
+unsigned osh_op_reconcile(struct osh_session *s, const struct osh_env *env, const uint8_t who[32], uint64_t intent,
+                          unsigned verdict);
 
 /* Run one PIPELINE_READY request record. req = the REQUEST cells, out = the OUT cells (one byte per cell, n_out cells). */
 void osh_op_exec(struct osh_session *s, const struct osh_env *env, const uint64_t *req, const uint64_t *out, size_t n_out,

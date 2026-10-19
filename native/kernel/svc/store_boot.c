@@ -18,6 +18,18 @@
 #ifdef CK_SERVICE
 #include "continuity_service.h"
 #endif
+#ifdef CK_OSH_OP_TEST
+/* TEST-ONLY (aienos-mv#431, scripts/qemu_ck_osh_op_test.sh): the OSH effect journal of the OSH_OP gate is the canonical
+ * Cortex over this sealed TEST-key Store (svc/cortex_journal.c), so the Store stays open after the boot record commit
+ * until core/osh_test.c releases it. Never in a service or hardware image. */
+#if defined(CK_SERVICE) || defined(CK_HARDWARE_STAGING) || defined(CK_PI5_UNLOCK) || defined(CK_PI5_STORE)
+#error "CK_OSH_OP_TEST (TEST-ONLY OSH effect journal on the TEST-key Store) cannot be combined with CK_SERVICE, CK_HARDWARE_STAGING, CK_PI5_UNLOCK or CK_PI5_STORE"
+#endif
+#include "cortex_journal.h"
+#include "../core/osh_journal.h"
+_Static_assert(OSHJ_SUBJECT == CK_CX_FACT_SUBJECT && OSHJ_SUBJECTS == CK_CX_SUBJECTS,
+               "the OSH effect journal opens the one Cortex of this Store with its subject layout");
+#endif
 
 #ifdef CK_HARDWARE_STAGING
 /* Hardware staging image: owner provisioning generated at build time by
@@ -194,6 +206,10 @@ static int secman_refuse(ck_store_report *r, const char *step)
     bz(&g_ss->keys, sizeof g_ss->keys);
     return fail(r, "keyed", step, CK_SB_E_SECMAN);
 }
+#ifdef CK_OSH_OP_TEST
+static int g_osh_open; /* Store kept open for the OSH effect journal (TEST-ONLY) */
+static ck_cj g_osh_cj;
+#endif
 #ifdef CK_SERVICE
 static int g_service_open;      /* Store open for the service lifetime (core/lifecycle.c) */
 static int g_service_locked_rc; /* last production key source refusal */
@@ -880,6 +896,13 @@ int ck_stage_store(void)
         if (arc && rc == 0) rc = arc;
     }
 #endif
+#ifdef CK_OSH_OP_TEST
+    if (r.verdict == CK_SB_COMMITTED) {
+        g_osh_open = 1;
+        ck_puts("store: TEST-ONLY OSH effect journal: Store open, NVMe stays bound until the OSH_OP test releases it\n");
+        return rc;
+    }
+#endif
 #ifdef CK_SERVICE
     /* Service lifetime (core/lifecycle.c): an open Store keeps the NVMe bound
      * until the lifecycle stop order releases it, in that order. A refused
@@ -894,6 +917,38 @@ int ck_stage_store(void)
     ck_dev_nvme_release(); /* last disk user: revoke NVMe bus mastering */
     return rc;
 }
+
+#ifdef CK_OSH_OP_TEST
+/* The journal backend over the open Store, or 0 when the Store did not open (the OSH test then refuses every effect by
+ * name). One context; the Cortex rebuilds its chunk index at every journal open. */
+const CxJournalOps *ck_store_osh_journal(void **ctx)
+{
+    static int init;
+    if (!g_osh_open || !g_ss) return 0;
+    if (!init) ck_cj_init(&g_osh_cj, g_ss);
+    init = 1;
+    *ctx = &g_osh_cj;
+    return &ck_cx_journal_store;
+}
+
+/* Journal chunks on the disk now and the journal's limit (CK_CJ_MAX_CHUNKS): the gate fills the journal exactly. */
+unsigned ck_store_osh_chunks(unsigned *max)
+{
+    *max = CK_CJ_MAX_CHUNKS;
+    return g_osh_cj.nchunks;
+}
+
+/* End of the OSH test: erase the Store keys and release the disk, as the diagnostic image does after its commit. Every
+ * journal append is already durable (one sealed transaction each). */
+void ck_store_osh_release(void)
+{
+    if (!g_osh_open) return;
+    g_osh_open = 0;
+    if (g_ss) bz(&g_ss->keys, sizeof g_ss->keys);
+    ck_dev_nvme_release();
+    ck_puts("store: TEST-ONLY OSH effect journal: Store keys erased, NVMe released\n");
+}
+#endif
 
 #ifdef CK_SERVICE
 int ck_store_service_ready(void)

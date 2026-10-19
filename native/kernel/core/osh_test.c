@@ -619,6 +619,74 @@ static const char *case_name;
 static unsigned sink_calls;
 static int real_crashed;
 
+/* ---- aienos-mv#431: the effect journal (core/osh_journal.c) ----
+ * Spec read: aien-protocols-mv main fb5fca98e667 (OSH Platform ABI v1 sections 9, 10, 13) and feat/osh-stream-abi-43
+ * 181855c9ff3e (STREAM_TASK ST8). Two backends, one at a time on one Cortex heap: the canonical Cortex over the boot
+ * disk's sealed TEST-key Store (durable=1, svc/store_boot.c keeps the Store open in this image only) and a labelled RAM
+ * journal (durable=0, accepted only because the session says allow_volatile) for the #429/#430 cases, which test other
+ * things. A RAM journal is never counted as durable. The Store journal holds at most 64 chunks (CK_CJ_MAX_CHUNKS, one
+ * per record plus the Cortex header), so the durable cases are few and small and the last ones fill it. */
+const CxJournalOps *ck_store_osh_journal(void **ctx);
+unsigned ck_store_osh_chunks(unsigned *max);
+void ck_store_osh_release(void);
+void ck_cx_heap_init(void *base, size_t size);
+#define JHEAP_PAGES 1024u /* CK_CX_HEAP_PAGES (svc/cortex_journal.h): the whole journal and its replay */
+enum { JB_RAM = 0, JB_STORE = 1 };
+static uint64_t jheap_pa;
+static uint8_t jram_buf[256u * 1024u];
+static struct oshj_ram jram;
+static struct osh_journal gj;
+static int jbackend;   /* what run_case attaches */
+static int powercut;   /* halt the machine where the adapter is lost (the host kills QEMU there) */
+
+/* (Re)open the one journal handle. The Cortex heap is a bump region that frees nothing: it starts over at every open,
+ * which is safe because only this handle uses it. A backend that cannot open leaves the handle closed (unusable). */
+static int jopen(int backend, int ro)
+{
+    osh_journal_close(&gj);
+    memset(&gj, 0, sizeof gj);
+    if (!jheap_pa)
+        return CX_ERR_NOMEM;
+    ck_cx_heap_init((void *)(uintptr_t)jheap_pa, (size_t)JHEAP_PAGES * 4096u);
+    if (backend == JB_RAM)
+        return osh_journal_open(&gj, &oshj_ram_ops, &jram, 0, "ram_volatile_test", ro);
+    void *ctx = 0;
+    const CxJournalOps *ops = ck_store_osh_journal(&ctx);
+    if (!ops)
+        return CX_ERR_IO;
+    return osh_journal_open(&gj, ops, ctx, 1, "store_cortex", ro);
+}
+
+static void jattach(struct osh_session *s, int backend)
+{
+    (void)jopen(backend, 0);
+    osh_session_journal(s, &gj, backend == JB_RAM);
+}
+
+static unsigned jchunks(void)
+{
+    unsigned max;
+    return ck_store_osh_chunks(&max);
+}
+
+/* one line: what a read-only look at the journal shows (no OSH session needed) */
+static void insp(const char *when, int rc)
+{
+    struct oshj_report rp;
+    memset(&rp, 0, sizeof rp);
+    if (rc == CX_OK)
+        oshj_inspect(&gj.cx, &rp, 0, 0);
+    ck_printf("osh_op_inspect: case=%s when=%s rc=%d label=%s durable=%u readonly=%u records=%llu osh=%u other=%u bad=%u "
+              "intents=%u started=%u outcomes=%u receipts=%u reconciles=%u dup_outcomes=%u finished=%u unknown_intent=%u "
+              "unknown_started=%u recovered=%u reconciled=%u pipelines=%u sealed=%u unsealed_finished=%u chain_ok=%d "
+              "chunks=%u osh_units_launched=%lu; %s\n",
+              case_name, when, rc, gj.label ? gj.label : "none", gj.durable, gj.readonly, (unsigned long long)rp.records,
+              rp.osh, rp.other, rp.bad, rp.intents, rp.started, rp.outcomes, rp.receipts, rp.reconciles, rp.dup_outcomes,
+              rp.cat[OSHJ_CAT_FINISHED], rp.cat[OSHJ_CAT_UNKNOWN_INTENT], rp.cat[OSHJ_CAT_UNKNOWN_STARTED],
+              rp.cat[OSHJ_CAT_RECOVERED], rp.cat[OSHJ_CAT_RECONCILED], rp.pipelines, rp.sealed, rp.unsealed_finished,
+              rp.chain_ok, jbackend == JB_STORE ? jchunks() : 0u, launches, LABEL);
+}
+
 static int op_sink(void *ctx, const char *line, size_t len)
 {
     (void)ctx;
@@ -643,9 +711,12 @@ static void op_log(void *ctx, const char *line)
 enum { SI_GEN = 0, SI_XFORM = 1, SI_SINK = 2, SI_NORCPT = 3, SI_COUNT = 4 };
 static struct ck_task_osc_image simg[SI_COUNT];
 static const struct osh_op_def sops[] = {
-    { "gen", OSH_CLASS_NATIVE_OP, 2, SI_GEN, 0 },     { "xform", OSH_CLASS_NATIVE_OP, 3, SI_XFORM, 0 },
-    { "sink", OSH_CLASS_NATIVE_OP, 2, SI_SINK, 512 }, { "nounit", OSH_CLASS_NATIVE_OP, 2, SI_NORCPT, 512 },
-    { "foreign", OSH_CLASS_LINUX, 0, 0, 0 },
+    /* aienos-mv#431: the stage identity in every spawn intent is the admitted unit's UnitDigest */
+    { "gen", OSH_CLASS_NATIVE_OP, 2, SI_GEN, 0, sunit[SU_GEN].acc.unit_digest },
+    { "xform", OSH_CLASS_NATIVE_OP, 3, SI_XFORM, 0, sunit[SU_XFORM].acc.unit_digest },
+    { "sink", OSH_CLASS_NATIVE_OP, 2, SI_SINK, 512, sunit[SU_SINK].acc.unit_digest },
+    { "nounit", OSH_CLASS_NATIVE_OP, 2, SI_NORCPT, 512, sunit[SU_SINK].acc.unit_digest },
+    { "foreign", OSH_CLASS_LINUX, 0, 0, 0, 0 },
 };
 static struct ck_task_tab stab;
 static struct ck_pipe_pool spool;
@@ -699,7 +770,7 @@ static int op_stdout(void *ctx, const uint8_t *b, size_t n)
     return 0;
 }
 
-static const struct osh_env op_env = { 0, op_sink, op_log, op_stdout };
+static const struct osh_env op_env = { 0, op_sink, op_log, op_stdout, op_log };
 
 static void hex32(const uint8_t d[32], char o[65])
 {
@@ -767,6 +838,14 @@ static int real_pipeline(void)
     memset(so_head, 0, sizeof so_head);
     osh_op_exec(&sess, &op_env, w + OSH_REQUEST, w + OSH_OUT, (size_t)(CKOSH_WS_CELLS - OSH_OUT), &r);
     pipeline_line(&r);
+    if (r.crashed && powercut) {
+        /* aienos-mv#431: the machine stops here, as at a power cut: no close, no reap, no recovery in this boot. What is
+         * on the disk is exactly what the journal made durable before this point. */
+        ck_printf("osh_op_powercut: HALT case=%s n=%u crash_point=%u spawned=%llu chunks=%u; %s\n", case_name,
+                  (unsigned)r.seq, r.crash_point, (unsigned long long)stab.stats.spawned, jchunks(), LABEL);
+        for (;;)
+            __asm__ volatile("wfi");
+    }
     if (r.stop)
         real_stop = 1;
     if (r.crashed)
@@ -809,6 +888,8 @@ static void run_case(const char *name, unsigned rights, const char *script, stru
     osh_session_init(&sess, rights);
     if (nc)
         native_attach(nc);
+    jattach(&sess, jbackend);
+    uint64_t sp0 = stab.stats.spawned;
     sess.hooks = hk;
     sink_calls = 0;
     real_mode = 1;
@@ -835,14 +916,36 @@ static void run_case(const char *name, unsigned rights, const char *script, stru
                   name, ck_task_tab_empty(&stab), ck_pipe_pool_empty(&spool), (unsigned long long)sost.launches,
                   (unsigned long long)sost.not_torn_down, (unsigned long long)sost.admit_refused, LABEL);
     if (real_crashed) {
-        /* the adapter was lost after the effect: a restart keeps only the intent records and holds no capability */
+        /* the adapter was lost: its journal handle goes with it. A read-only look needs no OSH session and cannot write;
+         * then a restart holds no capability, reopens the journal (what survives) and recovers: OUTCOME_UNKNOWN once per
+         * open intent, never a replay (aienos-mv#431) */
         unsigned before = sink_calls;
+        int rc = jopen(jbackend, 1);
+        size_t len0 = jram.len;
+        unsigned ch0 = jbackend == JB_STORE ? jchunks() : 0u;
+        struct oshj_effect dummy;
+        memset(&dummy, 0, sizeof dummy);
+        int ro_refused = rc == CX_OK && oshj_put_outcome(&gj, 1, &dummy, OSHJ_O_COMPLETED, 0, 0, 0, 0) != CX_OK &&
+                         jram.len == len0 && (jbackend == JB_STORE ? jchunks() : 0u) == ch0;
+        insp("after_loss", rc);
+        ck_printf("osh_op_readonly: case=%s write_refused=%d; %s\n", name, ro_refused, LABEL);
         osh_session_restart(&fresh, &sess);
+        jattach(&fresh, jbackend);
         unsigned n = osh_op_recover(&fresh, &op_env);
+        struct oshj_recovery rv = fresh.recovery; /* the first scan's work; the second must find nothing */
         unsigned again = osh_op_recover(&fresh, &op_env);
         ck_printf("osh_op_restart: case=%s open_intents=%u second_scan=%u sink_calls_before=%u sink_calls_after=%u held_cap=%u; %s\n",
                   name, n, again, before, sink_calls, (unsigned)fresh.console_cap.generation, LABEL);
+        ck_printf("osh_op_recovery: case=%s unknown_intent=%u unknown_started=%u outcomes_written=%u receipts_written=%u "
+                  "failed=%u second_written=%u spawned_since_case=%llu epoch=%u; %s\n",
+                  name, rv.unknown_intent, rv.unknown_started, rv.outcomes_written, rv.receipts_written, rv.failed,
+                  fresh.recovery.outcomes_written + fresh.recovery.receipts_written,
+                  (unsigned long long)(stab.stats.spawned - sp0), fresh.epoch, LABEL);
+        insp("after_recovery", gj.open ? CX_OK : CX_ERR_IO);
     }
+    if (jbackend == JB_STORE)
+        ck_printf("osh_op_durable_end: case=%s spawned=%llu chunks=%u; %s\n", name,
+                  (unsigned long long)(stab.stats.spawned - sp0), jchunks(), LABEL);
     real_mode = 0;
 }
 
@@ -899,6 +1002,7 @@ static void direct_case(const char *name, int variant, const struct ncfg *nc)
     case_name = name;
     osh_session_init(&sess, CK_R_WRITE);
     native_attach(nc);
+    jattach(&sess, jbackend);
     ck_printf("osh_op_begin: case=%s cap_rights=%u; %s\n", name, (unsigned)CK_R_WRITE, LABEL);
     direct_record();
     if (variant == 1) {
@@ -915,19 +1019,187 @@ static void direct_case(const char *name, int variant, const struct ncfg *nc)
               (unsigned long long)sost.not_torn_down, (unsigned long long)sost.admit_refused, empty, LABEL);
 }
 
+/* ---- aienos-mv#431: durable cases on the Store journal, chosen by what the journal on the disk already holds ----
+ *   fresh     no OSH record yet: the #429/#430 cases (RAM journal), then the durable cases below; every loss is
+ *             recovered in this boot. Ends normally.
+ *   powercut  OSH records, none open: a two-stage pipeline loses its adapter after both spawns are recorded STARTED
+ *             and the machine halts there (the host kills QEMU: a real power cut, no reap, no recovery).
+ *   recover   open intents (after the power cut): a read-only look before any shell unit runs, recovery
+ *             (OUTCOME_UNKNOWN, never a replay), a fresh decision, then the journal is filled to its 64-chunk limit
+ *             and the next effects are refused by name (FAILED_NO_EFFECT) with no spawn.
+ * UNVERIFIED U22: the three-boot sequence and the case list are this gate's choice; the spec pins the rules, not the
+ * test. */
+enum { JM_NONE = 0, JM_FRESH = 1, JM_POWERCUT = 2, JM_RECOVER = 3 };
+static const char *const jm_name[] = { "store_unavailable", "fresh", "powercut", "recover" };
+
+static int journal_boot(void)
+{
+    oshj_ram_init(&jram, jram_buf, sizeof jram_buf);
+    if (ck_mm_frames_alloc(JHEAP_PAGES, &jheap_pa) != 0)
+        jheap_pa = 0;
+    case_name = "journal_boot";
+    jbackend = JB_STORE;
+    int mode = JM_NONE, created = 0;
+    int rc = jopen(JB_STORE, 1);
+    struct oshj_report rp;
+    memset(&rp, 0, sizeof rp);
+    if (rc == CX_OK) {
+        oshj_inspect(&gj.cx, &rp, 0, 0);
+        unsigned open = rp.cat[OSHJ_CAT_UNKNOWN_INTENT] + rp.cat[OSHJ_CAT_UNKNOWN_STARTED] + rp.unsealed_finished;
+        mode = rp.osh == 0 ? JM_FRESH : open ? JM_RECOVER : JM_POWERCUT;
+    } else if (jheap_pa && ck_store_osh_journal(&(void *){ 0 })) {
+        /* an empty journal has no header yet, and a read-only open cannot write one: the first writable open does */
+        rc = jopen(JB_STORE, 0);
+        created = rc == CX_OK;
+        mode = created ? JM_FRESH : JM_NONE;
+    }
+    insp("boot", rc);
+    ck_printf("osh_op_journal_boot: mode=%s created=%d heap=%d; %s\n", jm_name[mode], created, jheap_pa != 0, LABEL);
+    osh_journal_close(&gj);
+    jbackend = JB_RAM;
+    return mode;
+}
+
+struct dcrash {
+    const char *name, *script;
+    unsigned cp, nth;
+    int interrupt;
+};
+
+static uint64_t last_recovered;
+
+static void find_recovered(void *u, const struct oshj_item *it)
+{
+    (void)u;
+    if (it->cat == OSHJ_CAT_RECOVERED)
+        last_recovered = it->intent_id;
+}
+
+/* operator reconciliation of the effect recovery left OUTCOME_UNKNOWN: a principal without the capability is DENIED,
+ * the operator's statement is one RECONCILE record, a second statement about the same effect is refused */
+static void reconcile_case(void)
+{
+    uint8_t opid[32], other[32];
+    sha256_hash((const uint8_t *)"osh-op-test-operator", 20, opid);
+    sha256_hash((const uint8_t *)"osh-op-test-not-operator", 24, other);
+    last_recovered = 0;
+    struct oshj_report rp;
+    oshj_inspect(&gj.cx, &rp, find_recovered, 0);
+    case_name = "d_reconcile";
+    unsigned g = (unsigned)osh_session_grant_reconcile(&fresh, opid, CK_R_WRITE);
+    unsigned ch0 = jchunks();
+    unsigned e1 = osh_op_reconcile(&fresh, &op_env, other, last_recovered, OSHJ_V_OBSERVED_DONE);
+    unsigned ch1 = jchunks();
+    unsigned e2 = osh_op_reconcile(&fresh, &op_env, opid, last_recovered, OSHJ_V_OBSERVED_DONE);
+    unsigned ch2 = jchunks();
+    unsigned e3 = osh_op_reconcile(&fresh, &op_env, opid, last_recovered, OSHJ_V_ACCEPT_UNKNOWN);
+    unsigned ch3 = jchunks();
+    ck_printf("osh_op_reconcile: case=d_reconcile intent=%llu grant=%u not_operator=%s operator=%s again=%s "
+              "records_added=%u/%u/%u; %s\n",
+              (unsigned long long)last_recovered, g, osh_err_name(e1), osh_err_name(e2), osh_err_name(e3), ch1 - ch0,
+              ch2 - ch1, ch3 - ch2, LABEL);
+    insp("after_reconcile", CX_OK);
+    (void)osh_session_close(&fresh);
+}
+
+static void durable_fresh(const struct ncfg *k0)
+{
+    struct osh_hooks none = { 0 };
+    jbackend = JB_STORE;
+    run_case("d_ok", CK_R_WRITE, "gen 4096 512 | sink\n", none, k0);
+    run_case("d_write", CK_R_WRITE, "gen 100 >o\n", none, k0);
+    static const struct dcrash dc[] = {
+        { "d_before_intent", "gen 4096 512\n", OSH_CP_BEFORE_INTENT, 1, 0 },
+        { "d_after_intent", "gen 4096 512\n", OSH_CP_AFTER_INTENT, 1, 0 },
+        { "d_after_spawn", "gen 4096 512\n", OSH_CP_AFTER_EFFECT, 1, 0 },
+        { "d_after_started", "gen 4096 512\n", OSH_CP_AFTER_STARTED, 1, 0 },
+        { "d_after_finish", "gen 4096 512\n", OSH_CP_AFTER_FINISH, 0, 0 },
+        { "d_during_cancel", "gen 0\n", OSH_CP_DURING_CANCEL, 0, 1 },
+        { "d_during_receipt", "gen 4096 512\n", OSH_CP_DURING_RECEIPT, 0, 0 },
+    };
+    for (unsigned i = 0; i < sizeof dc / sizeof dc[0]; i++) {
+        struct osh_hooks h = { 0 };
+        h.crash_at = 1;
+        h.crash_point = dc[i].cp;
+        h.crash_nth = dc[i].nth;
+        if (dc[i].interrupt) {
+            h.interrupt_at = 1;
+            h.interrupt_after_turns = 30;
+        }
+        run_case(dc[i].name, CK_R_WRITE, dc[i].script, h, k0);
+        if (dc[i].cp == OSH_CP_AFTER_EFFECT)
+            reconcile_case();
+    }
+    case_name = "d_end";
+    insp("end", gj.open ? CX_OK : CX_ERR_IO);
+    ck_printf("osh_op_durable_done: mode=fresh cases=10; %s\n", LABEL);
+}
+
+static void durable_powercut(const struct ncfg *k0)
+{
+    struct osh_hooks h = { 0 };
+    h.crash_at = 1;
+    h.crash_point = OSH_CP_AFTER_STARTED;
+    h.crash_nth = 2;
+    jbackend = JB_STORE;
+    powercut = 1;
+    run_case("powercut", CK_R_WRITE, "gen 4096 512 | sink\n", h, k0);
+    powercut = 0;
+    ck_printf("osh_op_powercut: NOT_HALTED (the loss point was not reached); %s\n", LABEL);
+}
+
+static void durable_recover(const struct ncfg *k0)
+{
+    struct osh_hooks none = { 0 };
+    jbackend = JB_STORE;
+    /* the adapter that was lost at the power cut is gone: a new one holds no capability and recovers */
+    case_name = "powercut";
+    osh_session_init(&fresh, 0);
+    jattach(&fresh, JB_STORE);
+    uint64_t sp0 = stab.stats.spawned;
+    unsigned n = osh_op_recover(&fresh, &op_env);
+    struct oshj_recovery rv = fresh.recovery;
+    unsigned again = osh_op_recover(&fresh, &op_env);
+    ck_printf("osh_op_restart: case=powercut open_intents=%u second_scan=%u unknown_intent=%u unknown_started=%u "
+              "outcomes_written=%u receipts_written=%u failed=%u second_written=%u spawned=%llu held_cap=%u epoch=%u; %s\n",
+              n, again, rv.unknown_intent, rv.unknown_started, rv.outcomes_written, rv.receipts_written, rv.failed,
+              fresh.recovery.outcomes_written + fresh.recovery.receipts_written, (unsigned long long)(stab.stats.spawned - sp0),
+              (unsigned)fresh.console_cap.generation, fresh.epoch, LABEL);
+    insp("after_recovery", gj.open ? CX_OK : CX_ERR_IO);
+    (void)osh_session_close(&fresh);
+    /* a new request after the loss is a new decision: it runs once, durably */
+    run_case("pc_fresh", CK_R_WRITE, "gen 4096 512 | sink\n", none, k0);
+    /* fill the journal to its limit with single-stage pipelines (4 records each), then effects are refused by name */
+    unsigned max, fills = 0;
+    while (ck_store_osh_chunks(&max) + 4u <= max && fills < 16u) {
+        run_case("fill", CK_R_WRITE, "gen 1\n", none, k0);
+        fills++;
+    }
+    unsigned ch = ck_store_osh_chunks(&max);
+    ck_printf("osh_op_fill: pipelines=%u chunks=%u max=%u; %s\n", fills, ch, max, LABEL);
+    run_case("full", CK_R_WRITE, "gen 1\ngen 1 | sink\n", none, k0);
+    case_name = "d_end";
+    insp("end", gj.open ? CX_OK : CX_ERR_IO);
+    ck_printf("osh_op_durable_done: mode=recover cases=%u; %s\n", 2u + fills, LABEL);
+}
+
 static void op_scenarios(void)
 {
+    int mode = journal_boot();
+    int old = mode == JM_FRESH || mode == JM_NONE;
     struct osh_hooks none = { 0 };
     struct osh_hooks rv = { .revoke_before_perm_at = 1 }, ir = { .interrupt_before_effect_at = 2 },
                      cr = { .crash_after_effect_at = 1 };
-    scenario("allow", CK_R_WRITE, "klog hello from osh\nklog \"status=$?\"\n", none);
-    scenario("deny_no_cap", 0, "klog SECRET-no-cap\n", none);
-    scenario("deny_read_only", CK_R_READ, "klog SECRET-read-only\n", none);
-    scenario("revoked", CK_R_WRITE, "klog SECRET-revoked\n", rv);
-    scenario("interrupt", CK_R_WRITE, "klog one; klog two; klog three\n", ir);
-    scenario("lost", CK_R_WRITE, "klog LOST-MARKER\n", cr);
-    scenario("after_restart", CK_R_WRITE, "klog fresh decision\n", none);
-    scenario("unsupported", CK_R_WRITE, "klog a | klog SECRET-pipe\nklog SECRET-redir >f\nnosuchcmd\n", none);
+    if (old) {
+        scenario("allow", CK_R_WRITE, "klog hello from osh\nklog \"status=$?\"\n", none);
+        scenario("deny_no_cap", 0, "klog SECRET-no-cap\n", none);
+        scenario("deny_read_only", CK_R_READ, "klog SECRET-read-only\n", none);
+        scenario("revoked", CK_R_WRITE, "klog SECRET-revoked\n", rv);
+        scenario("interrupt", CK_R_WRITE, "klog one; klog two; klog three\n", ir);
+        scenario("lost", CK_R_WRITE, "klog LOST-MARKER\n", cr);
+        scenario("after_restart", CK_R_WRITE, "klog fresh decision\n", none);
+        scenario("unsupported", CK_R_WRITE, "klog a | klog SECRET-pipe\nklog SECRET-redir >f\nnosuchcmd\n", none);
+    }
 
     /* aienos-mv#430: native stage pipelines */
     unsigned have = 0;
@@ -936,6 +1208,7 @@ static void op_scenarios(void)
     if (have != SU_COUNT) {
         ck_printf("osh_op_stages: NOT_RUN (a stage unit was not admitted, %u of %u); %s\n", have, SU_COUNT, LABEL);
         ck_printf("osh_op_done: cases=8; %s\n", LABEL);
+        ck_store_osh_release();
         return;
     }
     stage_image(SI_GEN, SU_GEN, 1);
@@ -946,6 +1219,14 @@ static void op_scenarios(void)
     const struct ncfg k90 = { CK_R_WRITE, RW, 0, 90 }, k7 = { CK_R_WRITE, RW, 0, 7 }, k0 = { CK_R_WRITE, RW, 0, 0 };
     const struct ncfg nospawn = { 0, RW, 0, 0 }, roloc = { CK_R_WRITE, CK_R_READ, 0, 0 }, dl = { CK_R_WRITE, RW, 20, 0 };
     /* three distinct admitted stages at once, 2.5 pipe capacities through the middle one; $? is the last command's */
+    if (mode == JM_POWERCUT)
+        durable_powercut(&k0);
+    if (mode == JM_RECOVER)
+        durable_recover(&k0);
+    if (!old) {
+        ck_store_osh_release();
+        return;
+    }
     struct osh_hooks snap = { .snapshot_at = 1, .snapshot_after_turns = 20 }; /* who is alive mid-run */
     run_case("stream3", CK_R_WRITE, "gen 163840 4096 | xform 90 | sink\nklog \"stream3 status=$?\"\n", snap, &k90);
     /* the pipeline status is the last command's: 3 when xform (stopping after 1000 bytes with 3) is last, 0 when sink follows */
@@ -977,6 +1258,16 @@ static void op_scenarios(void)
     direct_case("malicious", 1, &k0);
     direct_case("direct_no_cap", 0, &nospawn);
     ck_printf("osh_op_done: cases=25; %s\n", LABEL);
+    if (mode == JM_FRESH) {
+        durable_fresh(&k0);
+    } else {
+        /* no Store journal: an effect that needs one is refused by name, nothing spawns */
+        jbackend = JB_STORE;
+        run_case("d_unavailable", CK_R_WRITE, "gen 10\n", none, &k0);
+        jbackend = JB_RAM;
+    }
+    osh_journal_close(&gj);
+    ck_store_osh_release();
 }
 #endif
 

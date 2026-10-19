@@ -10,10 +10,14 @@
  *   FIRST_STATUS    the pipeline status is the first command's, not the last's
  *   REDIR_REVERSE   a command's redirections apply right to left
  *   KEEP_GAP_ENDS   a command that does not start keeps its pipe ends open (its neighbours never see EOF)
- *   LOC_NO_PERM     a location open skips the location capability check */
+ *   LOC_NO_PERM     a location open skips the location capability check
+ *   SKIP_INTENT     (#431) the effect runs without its intent being written (recovery then finds nothing)
+ *   VOLATILE_OK     (#431) a non-durable journal is accepted although the session demands durability
+ * (osh_journal.c has NO_POISON and RECOVER_COMPLETED.) */
 #if (defined(CK_OSH_OP_MUTANT_SKIP_PERM) || defined(CK_OSH_OP_MUTANT_FIRST_STATUS) || \
      defined(CK_OSH_OP_MUTANT_REDIR_REVERSE) || defined(CK_OSH_OP_MUTANT_KEEP_GAP_ENDS) || \
-     defined(CK_OSH_OP_MUTANT_LOC_NO_PERM)) &&                                                \
+     defined(CK_OSH_OP_MUTANT_LOC_NO_PERM) || defined(CK_OSH_OP_MUTANT_SKIP_INTENT) ||        \
+     defined(CK_OSH_OP_MUTANT_VOLATILE_OK)) &&                                                \
     !__STDC_HOSTED__
 #error "CK_OSH_OP_MUTANT_* are host-test-only mutants"
 #endif
@@ -81,6 +85,7 @@ void osh_session_init(struct osh_session *s, unsigned grant_rights)
     zero(s, sizeof *s);
     ck_cap_init(&s->caps, 0x4f534800u, CK_CAP_SLOTS);
     ck_cap_init(&s->loc_caps, 0x4f53484cu, 1);
+    ck_cap_init(&s->rec_caps, 0x4f534852u, 1);
     sha256_hash((const uint8_t *)"aienos-osh-test-session", 23, s->principal);
     if (grant_rights && ck_cap_insert(&s->caps, OSH_RES_CONSOLE_LOG, grant_rights, &s->console_cap) == CK_CAP_OK)
         hold(s);
@@ -100,6 +105,22 @@ int osh_session_grant_loc(struct osh_session *s, unsigned rights)
         return -1;
     hold(s);
     return 0;
+}
+
+int osh_session_grant_reconcile(struct osh_session *s, const uint8_t operator_id[32], unsigned rights)
+{
+    if (s->rec_cap.generation || ck_cap_insert(&s->rec_caps, OSH_RES_RECONCILE, rights, &s->rec_cap) != CK_CAP_OK)
+        return -1;
+    copy(s->operator_id, operator_id, 32);
+    return 0;
+}
+
+void osh_session_journal(struct osh_session *s, struct osh_journal *j, int allow_volatile)
+{
+    s->jr = j;
+    s->allow_volatile = (uint8_t)(allow_volatile != 0);
+    if (j && j->open && j->max_epoch >= s->epoch)
+        s->epoch = j->max_epoch + 1u; /* never reuse a pipeline identity the journal already holds (ST8.3) */
 }
 
 void osh_session_attach(struct osh_session *s, struct osh_native *nat)
@@ -167,7 +188,9 @@ int osh_session_close(struct osh_session *s)
         (void)ck_cap_remove(&s->caps, s->spawn_cap);
     if (s->loc_cap.generation)
         (void)ck_cap_remove(&s->loc_caps, s->loc_cap);
-    int empty = live_slots(&s->caps) == 0 && live_slots(&s->loc_caps) == 0;
+    if (s->rec_cap.generation)
+        (void)ck_cap_remove(&s->rec_caps, s->rec_cap);
+    int empty = live_slots(&s->caps) == 0 && live_slots(&s->loc_caps) == 0 && live_slots(&s->rec_caps) == 0;
     if (s->nat)
         empty = empty && ck_task_tab_empty(s->nat->tab) && ck_pipe_pool_empty(s->nat->pool);
     return empty;
@@ -175,9 +198,7 @@ int osh_session_close(struct osh_session *s)
 
 void osh_session_restart(struct osh_session *fresh, const struct osh_session *old)
 {
-    osh_session_init(fresh, 0);
-    for (unsigned i = 0; i < OSH_INTENT_MAX; i++)
-        fresh->intents[i] = old->intents[i];
+    osh_session_init(fresh, 0); /* no intent is inherited from memory: the journal is what survives (#431) */
     for (unsigned i = 0; i < OSH_LOC_MAX; i++)
         fresh->locs[i] = old->locs[i];
     fresh->pipelines = old->pipelines;
@@ -234,20 +255,45 @@ static void receipt_cmd(const struct osh_env *env, const struct osh_result *r, u
     env->log(env->ctx, line);
 }
 
+static void name_text(const struct oshj_effect *e, char o[OSHJ_NAME_MAX + 1])
+{
+    unsigned n = e->name_len <= OSHJ_NAME_MAX ? e->name_len : OSHJ_NAME_MAX;
+    for (unsigned i = 0; i < n; i++)
+        o[i] = e->name[i] > 0x20 && e->name[i] < 0x7f ? (char)e->name[i] : '.'; /* never forges a record line */
+    o[n] = 0;
+}
+
+struct rec_ctx {
+    const struct osh_env *env;
+    const struct osh_journal *j;
+};
+
+static void recovered_line(void *u, const struct oshj_item *it)
+{
+    const struct rec_ctx *c = u;
+    char d[65], nm[OSHJ_NAME_MAX + 1], line[320];
+    hex32(it->e.digest, d);
+    name_text(&it->e, nm);
+    ck_snprintf(line, sizeof line,
+                "osh_op_record: seq=%u outcome=%s request_digest=%s replayed=0 category=%s effect=%s cmd=%u name=%s "
+                "epoch=%u intent=%llu written=%u durable=%u",
+                (unsigned)it->e.seq, "OUTCOME_UNKNOWN", d, oshj_cat_name(it->started_id ? OSHJ_CAT_UNKNOWN_STARTED
+                                                                                       : OSHJ_CAT_UNKNOWN_INTENT),
+                oshj_effect_name(it->e.effect), (unsigned)it->e.cmd, nm, (unsigned)it->e.epoch,
+                (unsigned long long)it->intent_id, (unsigned)(it->outcome_id != 0), (unsigned)c->j->durable);
+    c->env->log(c->env->ctx, line);
+}
+
 unsigned osh_op_recover(struct osh_session *s, const struct osh_env *env)
 {
-    unsigned n = 0;
-    for (unsigned i = 0; i < OSH_INTENT_MAX; i++) {
-        struct osh_intent *t = &s->intents[i];
-        if (!t->used || t->closed)
-            continue;
-        t->closed = 1;
-        t->outcome = OSH_O_OUTCOME_UNKNOWN;
-        t->err = OSH_E_OUTCOME_UNKNOWN;
-        note(env, "osh_op_record: seq=%u outcome=%s request_digest=%s replayed=0", t->seq, "OUTCOME_UNKNOWN", t->digest);
-        n++;
+    zero(&s->recovery, sizeof s->recovery);
+    if (!osh_journal_usable(s->jr)) {
+        env->log(env->ctx, "osh_op_recover: no usable effect journal: nothing can be recovered, nothing is run");
+        return 0;
     }
-    return n;
+    struct rec_ctx c = { env, s->jr };
+    (void)oshj_recover(s->jr, &s->recovery, recovered_line, &c);
+    return s->recovery.unknown_intent + s->recovery.unknown_started;
 }
 
 /* ---- section 9 PERM_CHECK ---- */
@@ -300,6 +346,45 @@ static unsigned loc_perm_check(const struct osh_session *s, const struct osh_bin
 {
     return perm_in(&s->loc_caps, s->cap_holder, b, OSH_RC_LOCATION, write ? OSH_OP_OPEN_WRITE : OSH_OP_OPEN_READ,
                    OSH_RES_LOCATIONS, write ? CK_R_WRITE : CK_R_READ);
+}
+
+unsigned osh_op_reconcile(struct osh_session *s, const struct osh_env *env, const uint8_t who[32], uint64_t intent,
+                          unsigned verdict)
+{
+    struct osh_binding b;
+    zero(&b, sizeof b);
+    copy(b.principal_id, who, 32);
+    b.domain = 1;
+    b.cap_index = s->rec_cap.index;
+    b.cap_generation = s->rec_cap.generation;
+    b.resource_class = OSH_RC_RECONCILE;
+    b.operation = OSH_OP_RECONCILE;
+    /* the authority first, at this moment: the operator's capability, never the shell's */
+    unsigned e = s->rec_cap.generation ? perm_in(&s->rec_caps, s->operator_id, &b, OSH_RC_RECONCILE, OSH_OP_RECONCILE,
+                                                 OSH_RES_RECONCILE, CK_R_WRITE)
+                                       : OSH_E_DENIED;
+    struct oshj_item it;
+    zero(&it, sizeof it);
+    if (e == OSH_E_OK && (!osh_journal_usable(s->jr) || !oshj_item(&s->jr->cx, intent, &it)))
+        e = osh_journal_usable(s->jr) ? OSH_E_INVALID_ARG : OSH_E_IO;
+    if (e == OSH_E_OK && (it.cat != OSHJ_CAT_RECOVERED || verdict < OSHJ_V_OBSERVED_DONE || verdict > OSHJ_V_ACCEPT_UNKNOWN))
+        e = OSH_E_INVALID_ARG; /* only an effect recovery left OUTCOME_UNKNOWN, once */
+    uint64_t id = 0;
+    if (e == OSH_E_OK &&
+        oshj_put_reconcile(s->jr, intent, it.outcome_id, verdict, who, b.domain, b.cap_index, b.cap_generation,
+                           b.resource_class, b.operation, &id) != CX_OK)
+        e = OSH_E_IO;
+    char d[65], p[65], line[400];
+    hex32(it.e.digest, d);
+    hex32(who, p);
+    ck_snprintf(line, sizeof line,
+                "osh_op_receipt: op=reconcile result=%s intent=%llu verdict=%u record=%llu request_digest=%s principal=%s "
+                "cap_domain=1 cap_index=%u cap_generation=%llu resource_class=%u operation=%u replayed=0",
+                osh_err_name(e), (unsigned long long)intent, verdict, (unsigned long long)id, d, p,
+                (unsigned)b.cap_index, (unsigned long long)b.cap_generation, (unsigned)b.resource_class,
+                (unsigned)b.operation);
+    env->log(env->ctx, line);
+    return e;
 }
 
 /* the binding an effect carries, built from what the session holds. Nothing here grants anything. */
@@ -433,6 +518,192 @@ static void close_intent(struct osh_session *s, int t, unsigned outcome, unsigne
     x->outcome = (uint8_t)outcome;
     x->err = (uint8_t)err;
     x->status = (uint32_t)status;
+    /* the finished result, after the observed end (section 10); if it cannot be made durable the intent stays open in
+     * the journal and recovery reports it OUTCOME_UNKNOWN (Omega's rule) */
+    uint64_t oid = 0;
+    if (x->jid && oshj_put_outcome(s->jr, x->jid, &x->e, outcome, err, status, 0, &oid) == CX_OK &&
+        s->pl_nout < OSHJ_RECEIPT_MAX)
+        s->pl_out[s->pl_nout++] = oid;
+    else if (x->jid)
+        s->pl_failed = 1;
+}
+
+/* ---- the effect journal (aienos-mv#431) ---- */
+
+#define OSH_LOST 0xffu /* internal: the adapter is lost at an injected crash point */
+
+static int crash_here(const struct osh_session *s, const struct osh_result *r, unsigned cp, unsigned nth)
+{
+    return s->hooks.crash_at == r->seq && s->hooks.crash_point == cp && (nth == 0 || s->hooks.crash_nth == nth);
+}
+
+static void cmd_set(struct osh_result *r, unsigned k, int status, unsigned outcome, unsigned err);
+
+/* The adapter is lost here: it writes nothing more. Every command whose effect may have begun and has no outcome is
+ * OUTCOME_UNKNOWN in this (never delivered) result; the journal says the same to the restart. */
+static void lose(struct osh_session *s, struct osh_result *r, unsigned cp)
+{
+    r->crashed = 1;
+    r->stop = 1;
+    r->crash_point = cp;
+    r->error = OSH_E_OUTCOME_UNKNOWN;
+    r->outcome = OSH_O_OUTCOME_UNKNOWN;
+    r->status = 70;
+    for (unsigned i = 0; i < OSH_INTENT_MAX; i++) {
+        const struct osh_intent *x = &s->intents[i];
+        if (x->used && !x->closed && x->seq == r->seq && x->cmd < r->ncmds)
+            cmd_set(r, x->cmd, 70, OSH_O_OUTCOME_UNKNOWN, OSH_E_OUTCOME_UNKNOWN);
+    }
+}
+
+/* why no intent can be recorded now, or NULL */
+static const char *journal_why(const struct osh_session *s)
+{
+    if (!s->jr || !s->jr->open)
+        return "journal_unavailable";
+    if (s->jr->readonly)
+        return "journal_read_only";
+    if (s->jr->poisoned)
+        return "journal_failed";
+#ifndef CK_OSH_OP_MUTANT_VOLATILE_OK
+    if (!s->jr->durable && !s->allow_volatile)
+        return "journal_not_durable";
+#endif
+    return 0;
+}
+
+static void sha_bytes(const uint8_t *b, size_t n, uint8_t d[32])
+{
+    sha256_hash(b, n, d);
+}
+
+/* what an intent binds: request digest, principal and capability (the binding of this effect), argv[0] and the count */
+static void effect_init(const struct osh_session *s, const struct osh_result *r, struct oshj_effect *e, unsigned effect,
+                        unsigned cmd, const uint64_t *c, const uint64_t *out, const struct osh_binding *b)
+{
+    zero(e, sizeof *e);
+    e->effect = (uint8_t)effect;
+    e->cmd = (uint8_t)cmd;
+    e->ncmds = (uint8_t)r->ncmds;
+    e->argc = (uint8_t)c[0];
+    e->seq = r->seq;
+    e->epoch = s->epoch;
+    copy(e->digest, r->digest, 32);
+    copy(e->principal, b->principal_id, 32);
+    e->domain = b->domain;
+    e->cap_index = b->cap_index;
+    e->cap_generation = b->cap_generation;
+    e->resource_class = b->resource_class;
+    e->operation = b->operation;
+    uint64_t off = c[4], len = c[5];
+    e->name_len = (uint8_t)(len < OSHJ_NAME_MAX ? len : OSHJ_NAME_MAX);
+    for (unsigned i = 0; i < e->name_len; i++)
+        e->name[i] = (uint8_t)out[off + i];
+}
+
+/* the named refusal (ST8.2): the effect does not happen */
+static void refused_line(const struct osh_session *s, const struct osh_env *env, const struct osh_result *r,
+                         const struct oshj_effect *e, const char *why)
+{
+    char d[65], nm[OSHJ_NAME_MAX + 1], line[300];
+    hex32(r->digest, d);
+    name_text(e, nm);
+    ck_snprintf(line, sizeof line,
+                "osh_op_refused: seq=%u cmd=%u name=%s effect=%s error=IO outcome=FAILED_NO_EFFECT reason=%s durable=%u "
+                "request_digest=%s",
+                (unsigned)r->seq, (unsigned)e->cmd, nm, oshj_effect_name(e->effect), why,
+                (unsigned)(s->jr && s->jr->open ? s->jr->durable : 0), d);
+    env->log(env->ctx, line);
+}
+
+/* ST8.2: the durable intent before an effect. >= 0: its slot; -1 refused by name (no usable journal, or the append
+ * failed: the effect must not happen); -2 lost at a crash point; -3 the session's intent table is full (LIMIT). */
+static int intent_begin(struct osh_session *s, const struct osh_env *env, struct osh_result *r, const struct oshj_effect *e)
+{
+    unsigned nth = ++s->pl_nint;
+    if (crash_here(s, r, OSH_CP_BEFORE_INTENT, nth)) {
+        lose(s, r, OSH_CP_BEFORE_INTENT);
+        return -2;
+    }
+    const char *why = journal_why(s);
+    if (why) {
+        refused_line(s, env, r, e, why);
+        r->journal_refused++;
+        return -1;
+    }
+    int t = open_intent(s, r, e->effect, e->cmd);
+    if (t < 0)
+        return -3;
+    struct osh_intent *x = &s->intents[t];
+    x->nth = (uint8_t)nth;
+    x->e = *e;
+#ifdef CK_OSH_OP_MUTANT_SKIP_INTENT
+    if (0) {
+#else
+    if (oshj_put_intent(s->jr, e, &x->jid) != CX_OK) {
+#endif
+        x->used = 0; /* no intent was recorded, so no effect may follow */
+        x->jid = 0;
+        refused_line(s, env, r, e, "intent_not_durable");
+        r->journal_refused++;
+        return -1;
+    }
+    s->pl_ndur++;
+    if (crash_here(s, r, OSH_CP_AFTER_INTENT, nth)) {
+        lose(s, r, OSH_CP_AFTER_INTENT);
+        return -2;
+    }
+    return t;
+}
+
+/* the effect happened: the provisional result. 0, or -2 when lost at a crash point. */
+static int effect_started(struct osh_session *s, struct osh_result *r, int t, unsigned what)
+{
+    struct osh_intent *x = &s->intents[t];
+    if (crash_here(s, r, OSH_CP_AFTER_EFFECT, x->nth)) {
+        lose(s, r, OSH_CP_AFTER_EFFECT);
+        return -2;
+    }
+    if (oshj_put_started(s->jr, x->jid, &x->e, what, 0) != CX_OK)
+        s->pl_failed = 1; /* the journal is poisoned now: the outcome cannot follow, recovery will say UNKNOWN */
+    if (crash_here(s, r, OSH_CP_AFTER_STARTED, x->nth)) {
+        lose(s, r, OSH_CP_AFTER_STARTED);
+        return -2;
+    }
+    return 0;
+}
+
+/* the immutable receipt of a pipeline that wrote an intent, last (or lost inside its append) */
+static void seal(struct osh_session *s, const struct osh_env *env, struct osh_result *r)
+{
+    if (r->crashed || !s->pl_nint || !s->jr || !s->jr->open)
+        return;
+    uint64_t rid = 0;
+    int written = 0;
+    if (crash_here(s, r, OSH_CP_DURING_RECEIPT, 0)) {
+        r->crashed = 1; /* the sealed Store writes all of a transaction or none: the receipt is not on the disk */
+        r->stop = 1;
+        r->crash_point = OSH_CP_DURING_RECEIPT;
+    } else if (s->pl_nout) {
+        struct oshj_effect pl;
+        zero(&pl, sizeof pl);
+        pl.seq = r->seq;
+        pl.epoch = s->epoch;
+        pl.ncmds = (uint8_t)r->ncmds;
+        copy(pl.digest, r->digest, 32);
+        written = oshj_put_receipt(s->jr, &pl, s->pl_out, s->pl_nout, r->outcome, r->error, r->status, 0, &rid) == CX_OK;
+        if (!written)
+            s->pl_failed = 1;
+    }
+    r->journal_failed = s->pl_failed;
+    char line[200];
+    ck_snprintf(line, sizeof line, "osh_op_journal: seq=%u epoch=%u intents=%u refused=%d outcomes=%u receipt=%llu durable=%u "
+                "label=%s%s",
+                (unsigned)r->seq, (unsigned)s->epoch, s->pl_ndur, r->journal_refused, s->pl_nout, (unsigned long long)rid,
+                (unsigned)s->jr->durable, s->jr->label ? s->jr->label : "?",
+                r->crash_point == OSH_CP_DURING_RECEIPT ? " lost_in_receipt=1" : s->pl_failed ? " failed=1" : "");
+    if (env->jlog)
+        env->jlog(env->ctx, line);
 }
 
 /* ---- step 1: the shape of the record (section 7.1, section 11) ---- */
@@ -600,8 +871,18 @@ static void klog_exec(struct osh_session *s, const struct osh_env *env, const ui
     struct osh_binding b;
     bind(s, s->console_cap, OSH_RC_CONSOLE_LOG, OSH_OP_WRITE, &b);
 
-    /* the intent record, before the effect (section 10) */
-    int t = open_intent(s, r, OSH_EF_CONSOLE, 0);
+    /* the durable intent record, before the effect (section 10, ST8.2) */
+    struct oshj_effect je;
+    effect_init(s, r, &je, OSH_EF_CONSOLE, 0, c0, out, &b);
+    int t = intent_begin(s, env, r, &je);
+    if (t == -2)
+        return;
+    if (t == -1) { /* refused by name: no durable intent, so no effect */
+        refuse_all(r, OSH_E_IO, OSH_O_FAILED_NO_EFFECT);
+        r->status = r->cmd_status[0] = 1;
+        receipt(env, r, &b, osh_err_name(OSH_E_IO), "none");
+        return;
+    }
     if (t < 0) {
         refuse_all(r, OSH_E_LIMIT, OSH_O_NOT_STARTED);
         receipt(env, r, &b, osh_err_name(OSH_E_LIMIT), "none");
@@ -645,14 +926,11 @@ static void klog_exec(struct osh_session *s, const struct osh_env *env, const ui
     /* the grant was used: a security receipt, always (section 13), written even if the adapter is lost right after */
     receipt(env, r, &b, "OK", "console_write");
     if (s->hooks.crash_after_effect_at == r->seq) {
-        r->crashed = 1; /* the adapter is lost here: the effect happened, the outcome is never written */
-        r->stop = 1;
-        r->error = OSH_E_OUTCOME_UNKNOWN;
-        r->outcome = OSH_O_OUTCOME_UNKNOWN;
-        r->status = 70;
-        r->cmd_status[0] = 70;
-        r->cmd_outcome[0] = OSH_O_OUTCOME_UNKNOWN;
-        r->cmd_error[0] = OSH_E_OUTCOME_UNKNOWN;
+        lose(s, r, OSH_CP_NONE); /* the adapter is lost here: the effect happened, the outcome is never written */
+        return;
+    }
+    if (crash_here(s, r, OSH_CP_AFTER_EFFECT, s->intents[t].nth)) {
+        lose(s, r, OSH_CP_AFTER_EFFECT);
         return;
     }
     close_intent(s, t, OSH_O_COMPLETED, OSH_E_OK, 0);
@@ -883,7 +1161,24 @@ static unsigned redirect(struct osh_session *s, const struct osh_env *env, struc
         }
         int t = -1;
         if (write) {
-            t = open_intent(s, r, OSH_EF_OPEN_WRITE, k); /* reserved at step 4, so it exists */
+            struct oshj_effect je;
+            effect_init(s, r, &je, OSH_EF_OPEN_WRITE, k, c, out, &b);
+            je.mode = (uint8_t)kind;
+            uint8_t nm[OSH_LOC_NAME];
+            for (uint64_t i = 0; i < tlen; i++)
+                nm[i] = (uint8_t)out[toff + i];
+            sha_bytes(nm, (size_t)tlen, je.target_hash);
+            if (s->locs[li].used)
+                sha_bytes(s->locs[li].bytes, s->locs[li].len, je.target_pre);
+            t = intent_begin(s, env, r, &je); /* a slot was reserved at step 4 */
+            if (t < 0) {
+                close_end(s, &prd);
+                close_end(s, &pwr);
+                if (t == -2)
+                    return OSH_LOST;
+                receipt_cmd(env, r, k, opn, &b, t == -1 ? OSH_E_IO : OSH_E_LIMIT, "none");
+                return t == -1 ? OSH_E_IO : OSH_E_LIMIT;
+            }
             struct osh_loc *l = &s->locs[li];
             if (!l->used) {
                 l->used = 1;
@@ -895,6 +1190,11 @@ static unsigned redirect(struct osh_session *s, const struct osh_env *env, struc
                 l->len = 0; /* the effect: create or truncate */
         }
         receipt_cmd(env, r, k, opn, &b, OSH_E_OK, write ? "open_write" : "open_read");
+        if (write && effect_started(s, r, t, OSHJ_ST_OPENED) < 0) {
+            close_end(s, &prd);
+            close_end(s, &pwr);
+            return OSH_LOST;
+        }
         int pi = pump_new(s, li, !write, k, write ? prd : pwr, t);
         if (pi < 0) { /* cannot happen: step 4 reserved a pump per location pipe */
             close_end(s, &prd);
@@ -908,6 +1208,14 @@ static unsigned redirect(struct osh_session *s, const struct osh_env *env, struc
         fd[n].map = (uint8_t)(((write ? OSH_FD_LOC_OUT : OSH_FD_LOC_IN) << 4) | (unsigned)li);
     }
     return OSH_E_OK;
+}
+
+/* the first act of section 12 cleanup: every live stage is asked to stop */
+static void interrupt_live(struct osh_session *s)
+{
+    for (unsigned k = 0; k < s->live.n; k++)
+        if (s->live.ids[k])
+            (void)ck_task_cancel(s->nat->tab, s->live.ids[k], CK_TASK_CANCEL_INTERRUPT);
 }
 
 static void stage_exec(struct osh_session *s, const struct osh_env *env, const uint64_t *req, const uint64_t *out,
@@ -1021,6 +1329,8 @@ static void stage_exec(struct osh_session *s, const struct osh_env *env, const u
         }
         if (e == OSH_E_OK) {
             e = redirect(s, env, r, k, c, out, fd, opened, &nopened);
+            if (e == OSH_LOST)
+                return; /* lost: what it holds is reaped by osh_session_close */
             if (e != OSH_E_OK)
                 status = 1; /* a failed redirection: the command does not run (Omega, POSIX shells; UNVERIFIED U5) */
         }
@@ -1039,14 +1349,36 @@ static void stage_exec(struct osh_session *s, const struct osh_env *env, const u
             rq.max_ticks = nat->step_ticks;
             rq.max_steps = nat->max_steps;
             task_binding(&b, &rq.binding);
-            lv->intent[k] = (int8_t)open_intent(s, r, OSH_EF_SPAWN, k); /* reserved at step 4 */
-            if (s->hooks.fail_spawn_at == r->seq && s->hooks.fail_spawn_cmd == k)
+            struct oshj_effect je;
+            effect_init(s, r, &je, OSH_EF_SPAWN, k, c, out, &b);
+            if (plan[k].def->unit_digest)
+                copy(je.stage_id, plan[k].def->unit_digest, 32);
+            if ((fd[0].map >> 4) == OSH_FD_LOC_IN) {
+                const struct osh_loc *l = &s->locs[fd[0].map & 0xfu];
+                sha_bytes(l->bytes, l->len, je.input_hash);
+            }
+            if ((fd[1].map >> 4) == OSH_FD_LOC_OUT) {
+                const struct osh_loc *l = &s->locs[fd[1].map & 0xfu];
+                sha_bytes(l->name, l->name_len, je.target_hash);
+            }
+            int t = intent_begin(s, env, r, &je); /* a slot was reserved at step 4 */
+            if (t == -2)
+                return;
+            lv->intent[k] = (int8_t)(t >= 0 ? t : -1);
+            if (t < 0)
+                e = t == -1 ? OSH_E_IO : OSH_E_LIMIT; /* refused by name: no durable intent, no spawn (UNVERIFIED U18) */
+            else if (s->hooks.fail_spawn_at == r->seq && s->hooks.fail_spawn_cmd == k)
                 e = s->hooks.fail_spawn_err ? s->hooks.fail_spawn_err : OSH_E_LIMIT; /* fault-spawn: the call fails */
             else
                 e = ck_task_spawn(tab, &rq, &lv->ids[k]);
-            if (e == OSH_E_OK) {
+            if (t < 0) {
+                receipt_cmd(env, r, k, "task_spawn", &b, e, "none");
+                status = 1;
+            } else if (e == OSH_E_OK) {
                 r->started++;
                 receipt_cmd(env, r, k, "task_spawn", &b, OSH_E_OK, "spawn");
+                if (effect_started(s, r, t, OSHJ_ST_SPAWNED) < 0)
+                    return;
             } else if (e == OSH_E_LIMIT || e == OSH_E_IO) {
                 close_intent(s, lv->intent[k], OSH_O_FAILED_NO_EFFECT, e, 1);
                 lv->intent[k] = -1;
@@ -1085,14 +1417,7 @@ static void stage_exec(struct osh_session *s, const struct osh_env *env, const u
         if (e == OSH_E_OK && s->hooks.crash_after_effect_at == r->seq && s->hooks.crash_cmd == k) {
             /* the adapter is lost right after this spawn: intents stay open, the stages stay as they are */
             close_end(s, &carried);
-            r->crashed = 1;
-            r->stop = 1;
-            r->error = OSH_E_OUTCOME_UNKNOWN;
-            r->outcome = OSH_O_OUTCOME_UNKNOWN;
-            r->status = 70;
-            for (unsigned q = 0; q <= k; q++)
-                if (lv->ids[q])
-                    cmd_set(r, q, 70, OSH_O_OUTCOME_UNKNOWN, OSH_E_OUTCOME_UNKNOWN);
+            lose(s, r, OSH_CP_NONE);
             return;
         }
     }
@@ -1102,6 +1427,11 @@ static void stage_exec(struct osh_session *s, const struct osh_env *env, const u
         /* ST7 step 6: cancel and reap what started, close every end, PARTIAL_LAUNCH (or the error if none started) */
         int st[OSH_MAX_CMDS];
         unsigned started = r->started;
+        if (crash_here(s, r, OSH_CP_DURING_CANCEL, 0)) {
+            interrupt_live(s); /* the cancel has begun; the adapter is lost before anything is reaped */
+            lose(s, r, OSH_CP_DURING_CANCEL);
+            return;
+        }
         (void)cleanup_live(s, st);
         for (unsigned k = 0; k < n; k++) {
             if (k == fail_at) {
@@ -1153,6 +1483,11 @@ static void stage_exec(struct osh_session *s, const struct osh_env *env, const u
     int st[OSH_MAX_CMDS];
     for (unsigned k = 0; k < OSH_MAX_CMDS; k++)
         st[k] = -1;
+    if (cancelled && crash_here(s, r, OSH_CP_DURING_CANCEL, 0)) {
+        interrupt_live(s); /* the cancel has begun; the adapter is lost before anything is reaped */
+        lose(s, r, OSH_CP_DURING_CANCEL);
+        return;
+    }
     if (cancelled) {
         (void)cleanup_live(s, st);
     } else {
@@ -1166,6 +1501,10 @@ static void stage_exec(struct osh_session *s, const struct osh_env *env, const u
             if (lv->pumps[i].used)
                 close_end(s, &lv->pumps[i].h);
         lv->active = 0;
+    }
+    if (crash_here(s, r, OSH_CP_AFTER_FINISH, 0)) {
+        lose(s, r, OSH_CP_AFTER_FINISH); /* every stage ended and was reaped; no outcome is written */
+        return;
     }
     for (unsigned k = 0; k < n; k++) {
         if (st[k] < 0)
@@ -1217,6 +1556,8 @@ void osh_op_exec(struct osh_session *s, const struct osh_env *env, const uint64_
 {
     zero(r, sizeof *r);
     r->seq = ++s->pipelines;
+    s->pl_nint = s->pl_ndur = s->pl_nout = 0;
+    s->pl_failed = 0;
     for (unsigned k = 0; k < OSH_MAX_CMDS; k++)
         r->cmd_status[k] = -1;
 
@@ -1250,6 +1591,7 @@ void osh_op_exec(struct osh_session *s, const struct osh_env *env, const uint64_
     }
     if (plan[0].how == RS_KLOG) {
         klog_exec(s, env, req + OSH_REQ_HDR, out, r);
+        seal(s, env, r);
         return;
     }
     if (nstage == 0) { /* nothing resolved: every command is not found, no effect, no authority needed */
@@ -1259,4 +1601,5 @@ void osh_op_exec(struct osh_session *s, const struct osh_env *env, const uint64_
         return;
     }
     stage_exec(s, env, req, out, plan, r);
+    seal(s, env, r);
 }
