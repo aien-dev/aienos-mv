@@ -117,7 +117,7 @@ against the stars. At true contrast (boost 1) the Milky Way is nearly invisible
 on a screen at 2.5 arcminute per design pixel; the eye sees it on a dark night
 because it is large and the eye integrates over area and has adapted for half an
 hour. A screen in a lit room does not. Boost 5 was chosen by looking at boost
-1, 3 and 5 frames (`evidence/real-sky/`); it is one number in
+1, 3 and 5 frames (on the Spark in `~/handoffs/real-sky/`, not committed); it is one number in
 `scripts/ck_sky_gen.sh` (`SKY_BOOST`) and printed in the report.
 
 The Milky Way is stored as a 241 x 152 grid (0.40 degree apart) and drawn at a
@@ -267,7 +267,7 @@ Only the first two are in the picture here; the rest are for the dusk.
 
 ## 8. What this change measured
 
-See `evidence/real-sky/README.md` for the sizes, timings and pictures.
+Sizes, timings and pictures are in `evidence/real-sky/README.md`. In short, on a host with one core: the whole sky at 3840x2160 is built in 275.8 ms (best of 3); the data tables are 73.8 KB; the iMac kernel image is 348160 bytes (about 65536 more than the invented sky); the 13 sky checks and 91 picture checks pass. Nothing here was measured on the iMac itself.
 
 ## 9. Open
 
