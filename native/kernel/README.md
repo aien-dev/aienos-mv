@@ -272,9 +272,12 @@ next step is then the bridge's coefficient dump against the macOS replay.
 for every function it finds, before the drivers claim theirs. On the real machine these lines are
 the ground truth for which drivers are still missing (lab report allowlist: `pci:`).
 
-**Sleep.** "goodbye", or a tap of the power button, puts Allen to sleep: the screen goes
-black but for a faint point of light where he was, nothing moves, nothing is typed. Any key or
-another tap wakes him and the sky comes back at once (the waking key is not typed). Holding the
+**Sleep.** "goodbye", or a tap of the power button, puts Allen to sleep: the dusk. Over four
+seconds everything on the screen (the stars, the galaxies, the water's light, Allen, his words)
+falls in a spiral into a black hole where he was, an accretion disk glows as the light arrives and
+dims again, and the horizon closes to pure black; then nothing moves and nothing is typed. Any key
+or another tap wakes him and the sky comes back calmly in under a second (the waking key is not
+typed). Holding the
 power button 4 s is still the chipset's own hard power-off. The button is read by polling the
 PM1 status register named in the ACPI FADT (bit 8, PWRBTN_STS; its interrupt enable is cleared so
 the firmware never sees the press); the QEMU keyboard test drives it with the monitor's
@@ -329,8 +332,9 @@ moves, cool blue when still and warm white when fast. Idle, it turns slowly and
 breathes; while a line is typed a current runs from the bar up to him; while he
 thinks a vortex deepens over four seconds and ink wells up in a ring round him;
 each word he says pushes a ring out; asleep it stills and clears. Every change
-of state is a blend of eased weights over 0.7 s, dusk takes 1.4 s and dawn
-0.9 s, so nothing on the screen cuts. Cost, measured by the host window test:
+of state is a blend of eased weights over 0.7 s, the dusk takes 4.2 s (see
+`docs/ALLEN_PRESENCE_RESEARCH.md`, section 3.3) and the dawn 0.9 s, so nothing on
+the screen cuts. Cost, measured by the host window test:
 a 3840 by 2160 frame takes 18.1 ms on average on one host core (9.2 ms before
 the water, run of 2026-10-18); the kernel draws with three cores in strips.
 

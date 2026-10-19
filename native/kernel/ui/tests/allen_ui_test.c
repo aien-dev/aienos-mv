@@ -2,8 +2,9 @@
  * sky, ui/night.c, and his presence, ui/mind.c), his typeface
  * (ui/allen_font.c) and his first answers (svc/allen_reply.c). Runs the
  * startup at 3840 x 2160 BGRX on a hand-moved clock, wakes Allen, types
- * "Hello Allen", lets him answer, leaves him alone, saves a note; checks the
- * pixels at each step, checks that drawing only the changed parts gives the
+ * "Hello Allen", lets him answer, leaves him alone, saves a note, says goodbye
+ * (the dusk: everything falls into the black hole, the disk glows, the horizon
+ * closes to black) and wakes him; checks the pixels at each step, checks that drawing only the changed parts gives the
  * same picture as drawing everything, runs 1280 x 800 RGBX with and without
  * three helper threads (the frames must match exactly), and writes PNG
  * pictures to the directory given as argv[1] (if any) for a person to look at.
@@ -164,6 +165,18 @@ static unsigned count(const struct pic *p, uint32_t x0, uint32_t y0, uint32_t w,
         }
     return n;
 }
+/* the light in a rectangle: r + g + b summed over every fourth pixel each way */
+static uint64_t light(const struct pic *p, uint32_t x0, uint32_t y0, uint32_t w, uint32_t h)
+{
+    uint64_t s = 0;
+    for (uint32_t y = y0; y < y0 + h; y += 4)
+        for (uint32_t x = x0; x < x0 + w; x += 4) {
+            int r, g, b;
+            rgb(p, x, y, &r, &g, &b);
+            s += (uint64_t)(r + g + b);
+        }
+    return s;
+}
 /* pixels of a and b (w x h, rows `pitch`) that differ by more than tol in any channel */
 static unsigned differ(const uint32_t *a, const uint32_t *b, uint32_t pitch, uint32_t w, uint32_t h, int tol)
 {
@@ -182,10 +195,13 @@ static unsigned differ(const uint32_t *a, const uint32_t *b, uint32_t pitch, uin
     return n;
 }
 
+/* the frames are timed by the wall clock; ALLEN_UI_CLOCK=cpu times them by this thread's CPU time instead,
+ * which is the fairer figure on a busy host */
+static int cpu_clock;
 static uint64_t real_us(void)
 {
     struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
+    clock_gettime(cpu_clock ? CLOCK_THREAD_CPUTIME_ID : CLOCK_MONOTONIC, &ts);
     return (uint64_t)ts.tv_sec * 1000000u + (uint64_t)ts.tv_nsec / 1000u;
 }
 
@@ -240,6 +256,7 @@ int main(int argc, char **argv)
     const char *dir = argc > 1 ? argv[1] : 0;
     char path[512];
     crc_init();
+    cpu_clock = getenv("ALLEN_UI_CLOCK") && !strcmp(getenv("ALLEN_UI_CLOCK"), "cpu");
 
     /* ---- answers ---- */
     CHECK(!strcmp(ck_allen_reply("Hello Allen"), "Hello Humanity."), "reply: Hello Allen");
@@ -597,40 +614,102 @@ int main(int argc, char **argv)
         run_to(m0 + 15000);
         CHECK(added(&P, sky, mx, my, mw, mh) < 400, "map: it goes again after a while");
     }
-    /* ---- sleep: dark but for a faint mark, nothing moves; waking brings the sky back ---- */
+    /* ---- sleep: the dusk. Everything falls into the black hole, the disk glows and dims, the horizon closes
+     * to pure black and nothing moves; waking brings the sky back calmly ---- */
     {
         ck_allen_ui_sleep(1, now_us);
         uint32_t s0 = (uint32_t)(now_us / 1000);
-        run_to(s0 + 700); /* halfway into the dusk: the sky is still there, dimmed, and he is not yet asleep */
-        CHECK(!ck_allen_ui_asleep(), "sleep: dusk first, not a cut to black");
-        unsigned dusk_lit = 0;
-        for (uint32_t y = 0; y < H; y += 4)
-            for (uint32_t x = 0; x < W; x += 4)
-                dusk_lit += (fb[(size_t)y * W + x] & 0xffffffu) != 0;
-        CHECK(dusk_lit > 4000, "sleep: the sky is still on screen halfway into the dusk");
+        static const uint32_t at[6] = {600, 1300, 2000, 2700, 3200, 3700}; /* the pictures, ms into the dusk */
+        static uint64_t whole[320], middle[320];                            /* the light in each frame, and in the middle */
+        static uint32_t when[320];
+        unsigned nf = 0, saved = 0, lit600 = 0;
+        int mid_ok = 1;
+        for (; now_us <= (uint64_t)(s0 + 4300) * 1000u; now_us += 16000) {
+            if (!ck_allen_ui_tick(now_us))
+                continue;
+            uint32_t d = (uint32_t)(now_us / 1000) - s0;
+            if (nf < 320) {
+                when[nf] = d;
+                whole[nf] = light(&P, 0, 0, W, H);
+                middle[nf] = light(&P, cx - 350, cy - 350, 700, 700);
+                nf++;
+            }
+            if (saved < 6 && d >= at[saved]) {
+                if (saved == 0)
+                    for (uint32_t y = 0; y < H; y += 4)
+                        for (uint32_t x = 0; x < W; x += 4)
+                            lit600 += (fb[(size_t)y * W + x] & 0xffffffu) != 0;
+                if (saved == 2 || saved == 3) { /* mid-dusk: the disk is there, brighter than the edges of the screen */
+                    uint64_t c = light(&P, cx - 350, cy - 350, 700, 700) / (700 * 700 / 16);
+                    uint64_t e = (light(&P, 0, 0, W, 200) + light(&P, 0, H - 200, W, 200) + light(&P, 0, 200, 200, H - 400) +
+                                  light(&P, W - 200, 200, 200, H - 400)) /
+                                 ((2 * (uint64_t)W * 200 + 2 * (uint64_t)(H - 400) * 200) / 16);
+                    printf("note: dusk %u ms: the middle's light %llu, the edges' %llu (per pixel, r + g + b)\n", d,
+                           (unsigned long long)c, (unsigned long long)e);
+                    mid_ok &= c > 2 * e + 10;
+                }
+                if (dir) {
+                    snprintf(path, sizeof path, "%s/allen-8-horizon-%u.png", dir, saved + 1);
+                    png(path, fb, W, 1, 0, 0, W, H, 2);
+                    if (saved == 3) {
+                        snprintf(path, sizeof path, "%s/allen-8-horizon-%u-detail.png", dir, saved + 1);
+                        png(path, fb, W, 1, cx - 800, cy - 500, 1600, 1000, 1);
+                    }
+                }
+                saved++;
+            }
+        }
+        CHECK(saved == 6 && nf >= 200, "dusk: six pictures and the light of every frame through it");
+        CHECK(lit600 > 4000, "dusk: the sky is still on screen early in the dusk, falling, not cut to black");
+        /* the disk's height: the most light in the middle once the disk has begun (from 700 ms; before that the
+         * middle's light is Allen's own, going into the hole) */
+        unsigned peak = 0;
+        for (unsigned i = 0; i < nf; i++)
+            if (when[i] >= 1000 && (!peak || middle[i] > middle[peak]))
+                peak = i;
+        printf("note: dusk: the disk is brightest %u ms in (frame %u of %u)\n", when[peak], peak, nf);
+        CHECK(when[peak] > 1500 && when[peak] < 3600, "dusk: the disk comes to its height in the second half");
+        unsigned rises = 0; /* a thousandth is the noise of summing every fourth pixel while the picture turns */
+        for (unsigned i = peak; i + 1 < nf; i++)
+            if (whole[i + 1] > whole[i] + whole[i] / 1000) {
+                if (rises < 5)
+                    printf("  the light rose again at %u ms: %llu after %llu\n", when[i + 1],
+                           (unsigned long long)whole[i + 1], (unsigned long long)whole[i]);
+                rises++;
+            }
+        CHECK(rises == 0, "dusk: after the disk's height the light only falls, frame by frame (within a thousandth)");
+        CHECK(mid_ok, "dusk: in the middle of the dusk the middle of the screen is brighter than its edges");
+        CHECK(ck_allen_ui_asleep(), "dusk: asleep once the horizon has closed");
+        CHECK(count(&P, 0, 0, W, H, BLACK) == W * H, "dusk: the closed horizon is pure black, every pixel");
         if (dir) {
-            snprintf(path, sizeof path, "%s/allen-7-dusk.png", dir);
+            snprintf(path, sizeof path, "%s/allen-8-horizon-closed.png", dir);
             png(path, fb, W, 1, 0, 0, W, H, 2);
         }
-        run_to(s0 + 1700);
-        CHECK(ck_allen_ui_asleep(), "sleep: asleep once the dusk is done");
-        unsigned lit = 0;
-        for (uint32_t y = 0; y < H; y += 4)
-            for (uint32_t x = 0; x < W; x += 4)
-                lit += (fb[(size_t)y * W + x] & 0xffffffu) != 0;
-        CHECK(lit > 3 && lit < 4000, "sleep: the screen is dark but for a faint mark (more than one pixel)");
         memcpy(copy, fb, (size_t)W * H * 4);
-        run_to(s0 + 2000);
+        run_to(s0 + 4600);
         CHECK(differ(fb, copy, W, W, H, 0) == 0, "sleep: nothing moves while asleep");
+        uint32_t df, ds, da;
+        ck_allen_ui_dusk_stats(&df, &ds, &da);
+        printf("note: the dusk: %u frames at 3840x2160 on one core of this host: average %u us, slowest %u us (%s)\n",
+               df, da, ds, cpu_clock ? "CPU time of this thread" : "wall clock");
+        CHECK(df >= 200 && da > 0, "dusk: its frames are counted");
+        /* the dawn: not a cut, and the sky is back in under a second, with nothing of the dusk left */
         ck_allen_ui_sleep(0, now_us);
-        run_to(s0 + 2300);
-        CHECK(!ck_allen_ui_asleep(), "sleep: awake after ck_allen_ui_sleep(0)");
-        CHECK(differ(fb, copy, W, W, H, 0) > 100000, "sleep: the sky is back after waking");
+        uint32_t w0 = (uint32_t)(now_us / 1000);
+        run_to(w0 + 300);
+        CHECK(!ck_allen_ui_asleep(), "dawn: awake after ck_allen_ui_sleep(0)");
+        uint64_t part = light(&P, 0, 0, W, H);
+        CHECK(part > 0, "dawn: the sky is coming back a third of the way in");
+        run_to(w0 + 1000);
+        uint64_t full = light(&P, 0, 0, W, H);
+        CHECK(full > part * 3 / 2, "dawn: the sky is back, brighter than a third of the way in");
+        CHECK(stale(fb, copy, W, W, H) < 40, "dawn: nothing of the dusk is left behind on the screen");
+        CHECK(count(&P, cx - R, cy - R, 2 * R, 2 * R, VIOLET) > 5000, "dawn: Allen is back where he was");
     }
     uint32_t frames, slowest, average;
     ck_allen_ui_stats(&frames, &slowest, &average);
-    printf("note: %u frames at 3840x2160 on one core of this host: average %u us, slowest %u us\n", frames, average,
-           slowest);
+    printf("note: %u frames at 3840x2160 on one core of this host: average %u us, slowest %u us (%s)\n", frames,
+           average, slowest, cpu_clock ? "CPU time of this thread" : "wall clock");
     CHECK(frames > 1000, "ui: frames counted");
 
     /* ---- 1280 x 800 RGBX with a padded pitch (QEMU's usual mode); then the same with three helper cores ---- */

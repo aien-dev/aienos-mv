@@ -35,6 +35,8 @@
 #define FORMED_MS (BORN_MS + CK_MIND_FORM_MS)
 #define LETTER_MS 35u
 #define BAR_REST_MS 9000u /* the bar fades this long after the last thing happened */
+#define DUSK_MS 4200u /* goodbye: everything falls into the black hole, the disk glows, the horizon closes */
+#define DAWN_MS 900u  /* waking: the sky comes back, calmly */
 #define MAP_SHOW_MS 9000u
 
 struct words {
@@ -76,7 +78,12 @@ static struct {
     ck_night night;
     ck_mind mind;
     ck_flow flow;     /* the water and the ink round him */
-    uint32_t dim;     /* dusk: 0 the sky, DIM_FULL dark (1/256 steps of 1/256); eased, so sleep and waking are never a cut */
+    uint32_t dim;     /* 0 the sky, DIM_FULL dark (1/256 steps of 1/256): how far the dusk has gone, or how much of the dawn is left */
+    uint32_t dusk_t;  /* when the dusk began (ms; 0: no dusk) */
+    void *keep;       /* the picture as it was when the dusk began, with its smaller copies (ck_night_picture_take) */
+    ck_night_picture kept;
+    int32_t far16;    /* from the hole to the farthest corner of the screen, 16ths of a pixel */
+    uint32_t dusk_frames, dusk_slowest, dusk_ticks; /* the dusk's own frame times (microseconds) */
     int thinking;     /* an answer is on its way from further off; he thinks until it arrives */
     ck_af_face voice, body, small;
     uint64_t hz, t0;
@@ -510,20 +517,17 @@ static void present(const ck_rect *r)
     }
 }
 
-/* Asleep: black, and a faint point of light where Allen was, so a dark room
- * still shows the computer is on. */
+/* Asleep: pure black, nothing drawn (the panel may be switched off behind it). */
 static void dark(const ck_rect *r)
 {
     for (int32_t y = r->y; y < r->y + r->h; y++)
         for (int32_t x = 0; x < r->w; x++)
             ui.back[(size_t)y * (size_t)ui.w + r->x + x] = 0;
-    ck_glow(&ui.cv, r, ui.cx * 16 + 8, ui.cy * 16 + 8, S(6) * 16, CK_RGB(120, 130, 160), 40); /* radius in 1/16 px */
     present(r);
 }
 
-/* Dusk: the picture dims toward black while the faint mark of the dark room
- * comes up, so falling asleep and waking are one movement each. */
-static void dusk(const ck_rect *r)
+/* Dawn: the picture comes back from black over DAWN_MS, everything already moving under it. */
+static void dawn(const ck_rect *r)
 {
     uint32_t keep = 256 - (ui.dim >> 8);
     for (int32_t y = r->y; y < r->y + r->h; y++) {
@@ -531,7 +535,35 @@ static void dusk(const ck_rect *r)
         for (int32_t x = 0; x < r->w; x++)
             px[x] = ck_scale(px[x], keep);
     }
-    ck_glow(&ui.cv, r, ui.cx * 16 + 8, ui.cy * 16 + 8, S(6) * 16, CK_RGB(120, 130, 160), 40 * ui.dim >> 16);
+}
+
+/* The dusk at d ms: how far everything has fallen, the hole, the disk, the closing. Slow at first and then
+ * inevitable: the hole opens where Allen was over the first two seconds; the pull eases in (the cube of a
+ * smooth step, so the sky barely stirs at first) and by 3400 ms a pixel at the hole shows what was at the
+ * farthest corner (past the screen's edges the sky is mirrored, so the stars keep coming); the disk brightens
+ * as the light arrives and is brightest from 2800 to 3100 ms. From 2800 the picture's light is let go, quickly
+ * at first and gently at the end, the edges of the screen ahead of the middle; the disk dims from 3100 to
+ * 3900 while the shadow grows over it, and at DUSK_MS the screen is black. */
+static void horizon_at(uint32_t d)
+{
+    ck_night_dusk k = {0};
+    uint32_t q = ck_smooth(ck_prog(d, 0, 3400));
+    q = (q * q >> 8) * q >> 8;
+    k.fallen = (int64_t)ui.far16 * ui.far16 * (int64_t)q >> 8;
+    k.swirl = 65536u * 6 / 10; /* near the hole: six tenths of a turn for each doubling of the distance fallen from */
+    k.calm = S(120) * 16;      /* further out the turning eases off, so the edges of the picture barely turn */
+    k.crowd = 256 + (768 * ck_smooth(ck_prog(d, 300, 2400)) >> 8);
+    k.e = (int32_t)((int64_t)S(90) * 16 * ck_smooth(ck_prog(d, 0, 2000)) >> 8);
+    int32_t rs0 = (int32_t)((int64_t)S(60) * 16 * ck_smooth(ck_prog(d, 0, 2000)) >> 8);
+    k.rs = rs0 + (int32_t)((int64_t)S(60) * 16 * ck_smooth(ck_prog(d, 3400, 4200)) >> 8);
+    uint32_t rise = ck_smooth(ck_prog(d, 900, 2800)), fall = 256 - ck_smooth(ck_prog(d, 3100, 3900));
+    k.disk = rise < fall ? rise : fall;
+    k.beam = 16384u + d * 65536u / 9000u; /* the bright side comes slowly round, one turn in nine seconds */
+    k.keep = 256 - ck_ease_out(ck_prog(d, 2800, 4000));
+    k.near = S(260) * 16, k.far = ui.far16;
+    k.shade = 230 * ck_smooth(ck_prog(d, 400, 2600)) >> 8;
+    k.fine = S(300) * 16;
+    ck_night_fall(&ui.night, &k);
 }
 
 static void compose(const ck_rect *r)
@@ -539,6 +571,11 @@ static void compose(const ck_rect *r)
     uint32_t t = ui.t;
     if (ui.asleep && ui.dim == DIM_FULL) {
         dark(r);
+        return;
+    }
+    if (ui.asleep && ui.dusk_t) { /* the dusk: the kept picture falling into the hole */
+        ck_night_base_from(&ui.night, &ui.kept, &ui.cv, r);
+        present(r);
         return;
     }
     ck_night_base(&ui.night, &ui.cv, r);
@@ -557,7 +594,7 @@ static void compose(const ck_rect *r)
     draw_words(&ui.now, r, t);
     draw_bar(r, t);
     if (ui.dim)
-        dusk(r);
+        dawn(r);
     present(r);
 }
 
@@ -730,14 +767,32 @@ static void advance(uint32_t t)
 {
     uint32_t prev = ui.last, dt = t - prev;
     take_notes(t);
-    /* dusk and dawn: the whole picture dims or returns over a moment, everything still moving */
+    if (dt > 100)
+        dt = 100; /* after a long sleep the first frame moves things on by a moment, not by the whole sleep */
+    /* the dusk: the picture as it stands is kept and falls into the black hole; then nothing moves */
     uint32_t dim_was = ui.dim;
-    uint32_t dim_step = (uint32_t)((uint64_t)DIM_FULL * dt / (ui.asleep ? 1400u : 900u)); /* toward() moves in 256ths */
-    ui.dim = ui.asleep ? (ui.dim + dim_step < DIM_FULL ? ui.dim + dim_step : DIM_FULL) : (ui.dim > dim_step ? ui.dim - dim_step : 0);
-    if (ui.dim != dim_was || (ui.dim && ui.dim < DIM_FULL))
+    if (ui.asleep) {
+        if (!ui.dusk_t) {
+            ui.dusk_t = t ? t : 1;
+            ck_night_picture_take(&ui.night, ui.back, ui.keep, &ui.kept);
+        }
+        uint32_t d = t - ui.dusk_t;
+        ui.dim = d >= DUSK_MS ? DIM_FULL : (uint32_t)((uint64_t)DIM_FULL * d / DUSK_MS);
+        mark_all(); /* the whole screen moves every frame of the dusk; the black is drawn once */
+        if (ui.dim == DIM_FULL)
+            return;
+        ck_night_at(&ui.night, t);
+        horizon_at(d);
+        return;
+    }
+    /* the dawn: the sky comes back over DAWN_MS with everything moving under it. Woken during the dusk, it
+     * starts from the dark rather than from the falling picture. */
+    if (ui.dusk_t)
+        ui.dusk_t = 0, ui.dim = DIM_FULL;
+    uint32_t dim_step = (uint32_t)((uint64_t)DIM_FULL * dt / DAWN_MS);
+    ui.dim = ui.dim > dim_step ? ui.dim - dim_step : 0;
+    if (ui.dim != dim_was || ui.dim)
         mark_all();
-    if (ui.asleep && ui.dim == DIM_FULL)
-        return; /* nothing moves while Allen sleeps; the tiles marked on the way in are drawn once */
     ck_flow_mode(&ui.flow,
                  ui.asleep || !ui.on || t < FORMED_MS ? CK_FLOW_SLEEP
                  : ui.mind.mode == CK_MIND_THINK      ? CK_FLOW_THINK
@@ -871,6 +926,12 @@ int ck_allen_ui_tick(uint64_t now)
         ui.total_ticks += us;
         if (us > ui.slowest)
             ui.slowest = us;
+        if (ui.asleep && ui.dusk_t && ui.dim < DIM_FULL) {
+            ui.dusk_frames++;
+            ui.dusk_ticks += us;
+            if (us > ui.dusk_slowest)
+                ui.dusk_slowest = us;
+        }
     }
     return 1;
 }
@@ -880,6 +941,13 @@ void ck_allen_ui_stats(uint32_t *frames, uint32_t *slowest_us, uint32_t *average
     *frames = ui.frames;
     *slowest_us = ui.slowest;
     *average_us = ui.frames ? ui.total_ticks / ui.frames : 0;
+}
+
+void ck_allen_ui_dusk_stats(uint32_t *frames, uint32_t *slowest_us, uint32_t *average_us)
+{
+    *frames = ui.dusk_frames;
+    *slowest_us = ui.dusk_slowest;
+    *average_us = ui.dusk_frames ? ui.dusk_ticks / ui.dusk_frames : 0;
 }
 
 /* ---- the interface ---- */
@@ -904,8 +972,8 @@ static uint32_t scale_for(uint32_t w, uint32_t h)
 size_t ck_allen_ui_mem_bytes(uint32_t w, uint32_t h)
 {
     uint32_t k = scale_for(w, h);
-    return (size_t)w * h * 4 + ck_night_mem_bytes(w, h, k) + face_bytes(CAP_VOICE * k / 256) +
-           face_bytes(CAP_BODY * k / 256) + face_bytes(CAP_SMALL * k / 256) + 64;
+    return (size_t)w * h * 4 + ck_night_mem_bytes(w, h, k) + ck_night_picture_bytes(w, h) +
+           face_bytes(CAP_VOICE * k / 256) + face_bytes(CAP_BODY * k / 256) + face_bytes(CAP_SMALL * k / 256) + 64;
 }
 
 int ck_allen_ui_started(void) { return ui.started; }
@@ -936,6 +1004,13 @@ int ck_allen_ui_start(volatile uint32_t *fb, uint32_t w, uint32_t h, uint32_t pi
     if (ck_night_init(&ui.night, w, h, ui.k, ui.cx, ui.cy, p, nb, ui.back))
         return -1;
     p += nb;
+    ui.keep = p;
+    p += ck_night_picture_bytes(w, h);
+    for (int i = 0; i < 4; i++) { /* the dusk pulls the picture in from as far as the farthest corner */
+        int64_t dx = (i & 1 ? ui.w : 0) - ui.cx, dy = (i & 2 ? ui.h : 0) - ui.cy;
+        int32_t d = (int32_t)ck_isqrt((uint64_t)(dx * dx + dy * dy)) * 16;
+        ui.far16 = ck_max(ui.far16, d);
+    }
     uint32_t caps[3] = {CAP_VOICE * ui.k / 256, CAP_BODY * ui.k / 256, CAP_SMALL * ui.k / 256};
     ck_af_face *faces[3] = {&ui.voice, &ui.body, &ui.small};
     unsigned weights[3] = {1000, 1150, 1250};

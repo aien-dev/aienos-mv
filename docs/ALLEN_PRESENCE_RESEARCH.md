@@ -109,12 +109,63 @@ into him and is kept by him (notes, memory), not stacked on the screen.
 
 Every change of state in the window is a movement over time with an eased
 curve (`toward()` and the fluid weights in `ui/allen_ui.c`, `ui/flow.c`):
-dusk and dawn when sleeping and waking (1.4 s down, 0.9 s up), the shift
+the dusk when sleeping (section 3.3) and the dawn when waking (0.9 s), the shift
 between idle, listening, thinking and speaking as a blend of weights over
 0.7 s, the words rising and fading. No frame is a cut. The requirement came
 from the brief (transitions "part of the experience"); the method is
 Weiser and Brown's periphery: a cut forces attention to the centre, a flow
 does not.
+
+### 3.3 Goodbye: the event horizon
+
+"Goodbye" is the one performative that ends the session, and the brief asked
+that it be seen: everything on the screen drawn into the black hole in the
+middle, the accretion disk at its most beautiful, then black, then the panel
+off. The dusk (`horizon_at()` in `ui/allen_ui.c`, `ck_night_fall()` and
+`ck_night_base_from()` in `ui/night.c`) lasts 4.2 s and is built from three
+things the sources own:
+
+- **Where the light falls from.** The picture on the screen at the moment
+  of goodbye is kept (with copies at half, quarter and so on down to a
+  thirty-second of its size, so that light crowded a hundredfold is averaged
+  rather than picked at random). A pixel at distance r from the hole then
+  shows what was at sqrt(r^2 + F), F growing from 0 to the square of the
+  distance to the farthest corner by 3.4 s. That is free fall with a speed
+  proportional to 1/r (the radial part of a drain), integrated: r^2 falls
+  linearly in time, so the sky barely stirs far out and rushes near the
+  hole. The turn is a fixed part of a turn per doubling of the distance
+  fallen from (angular momentum kept: the azimuthal speed also goes as 1/r,
+  and its integral is a logarithm), eased off further out so the edges of
+  the picture do not visibly rotate. Past the screen's edges the sky is
+  mirrored, so stars keep arriving and no edge is seen falling in.
+- **Why it brightens.** Light that has been crowded in is drawn brighter
+  (up to four times, warmer as it brightens), so the inner spiral glows as
+  the matter arrives: the disk is made of the picture. On top of it a smooth
+  disk is added by distance from the shadow: dark inside 1.15 shadow radii
+  (the gap between a black hole's photon ring and the inner edge of its
+  disk), brightest at 1.5, dying away by 3.3, warm white at the inner edge
+  (255, 222, 180) through gold (255, 212, 150) to the blue of the sky's own
+  glow (150, 170, 255), brighter on the side turning toward the eye (the
+  Doppler beaming every picture of an accretion disk shows), with a thin
+  bright photon ring at 1.06 shadow radii.
+- **How it ends.** From the disk's height (2.8 s) the picture's light is let
+  go, quickly at first and gently at the end (1 - (1 - t)^3), the edges of the
+  screen ahead of the middle; the disk dims from 3.1 to 3.9 s while the shadow
+  grows over it; at 4.2 s every pixel is black and nothing moves. Waking is
+  the plain 0.9 s dawn: the sky returns, there is no spectacle in reverse.
+
+The lens machinery of the startup's merging holes (`lens_at()`) bends the
+light round the shadow as before. Everything is integer: distances come
+from 2^(log2(r^2) / 2) with the existing log table and a 256-entry table of
+2^(k/256), so no square root is taken per pixel. The whole screen moves in
+every frame of the dusk; near the hole every pixel is worked out, further
+out two at a time each way. Receipts: the host window test
+(`scripts/ck_allen_ui_test.sh`) renders six frames through the dusk and the
+closed horizon (`target/native-kernel-allen-ui/allen-8-horizon-*.png`),
+checks that after the disk's height the light only falls, that the middle
+is brighter than the edges mid-dusk and that the last frame is pure black,
+and prints the dusk's own frame times next to the whole run's (the numbers
+of the run that landed this are in the branch's handoff).
 
 ## 4. The water: Stam's stable fluids
 

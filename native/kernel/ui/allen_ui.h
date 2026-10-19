@@ -22,7 +22,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* RAM for a w x h screen (two full-screen layers and the glyph masks). */
+/* RAM for a w x h screen (two full-screen layers, the picture kept for the dusk with its smaller copies, and
+ * the glyph masks). */
 size_t ck_allen_ui_mem_bytes(uint32_t w, uint32_t h);
 /* Takes over the screen and starts the night: fb = the framebuffer (pitch in
  * pixels; format 0 RGBX, 1 BGRX), mem = ck_allen_ui_mem_bytes(w, h) bytes,
@@ -57,12 +58,17 @@ int ck_allen_ui_help(void);
 /* The whole screen is drawn again by the next frame, at once (after
  * something else wrote to it). */
 void ck_allen_ui_refresh(void);
-/* Allen sleeps (asleep = 1): the screen goes dark but for a faint mark where he
- * was, nothing moves; asleep = 0 brings the sky back, at once. */
+/* Allen sleeps (asleep = 1): the dusk. Everything on the screen (the stars, the galaxies, the water's
+ * light, Allen, his words) falls in a spiral into a black hole where he was; an accretion disk glows as the
+ * light arrives, then dims, and the horizon closes to pure black over about four seconds, after which nothing
+ * moves and ck_allen_ui_asleep() is 1 (the panel can be switched off). asleep = 0 brings the sky back,
+ * calmly, in under a second. */
 void ck_allen_ui_sleep(int asleep, uint64_t now);
 int ck_allen_ui_asleep(void);
 /* Frames drawn, the slowest and the average (microseconds). */
 void ck_allen_ui_stats(uint32_t *frames, uint32_t *slowest_us, uint32_t *average_us);
+/* The same for the frames of the dusk alone (the whole screen moves in each of them). */
+void ck_allen_ui_dusk_stats(uint32_t *frames, uint32_t *slowest_us, uint32_t *average_us);
 
 /* The notes map, a small constellation to the right of Allen: n notes as
  * stars, 0 the newest at the centre, the older ones spiralling out (at most

@@ -13,6 +13,11 @@
 #     match drawing everything. 1280x800 RGBX with a padded pitch: red and
 #     blue swap, nothing past the visible width, and three helper threads
 #     draw exactly the same frames as one.
+#  4. Goodbye, the dusk: six pictures through it (allen-8-horizon-1..6.png)
+#     and the closed horizon; the light only falls after the disk's height,
+#     the middle of the screen is brighter than its edges mid-dusk, the last
+#     frame is pure black; then the dawn brings the sky back. The dusk's own
+#     frame times are printed next to the whole run's.
 # Pictures of each state land in target/native-kernel-allen-ui/ for a person
 # to look at. Hosted only. Ends with "AIENOS_ALLEN_UI: PASS" or
 # "AIENOS_ALLEN_UI: FAIL <why>".

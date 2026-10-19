@@ -40,6 +40,14 @@ static const struct {
 };
 
 static uint8_t band_t[256]; /* the sweeping band: ((1 + cos) / 2)^6, 0..255 */
+static uint32_t pow2_t[257]; /* 2^(k/256), Q16: for the dusk's distances without a square root per pixel */
+
+static uint64_t pow2_q16(uint32_t x) /* 2^(x / 65536), Q16; x below 40 << 16 */
+{
+    uint32_t n = x >> 16, f = x & 65535u, k = f >> 8, g = f & 255u;
+    uint64_t m = pow2_t[k] + ((uint64_t)(pow2_t[k + 1] - pow2_t[k]) * g >> 8);
+    return m << n;
+}
 
 static int32_t half_box(uint32_t k, unsigned i) { return (int32_t)((gdef[i].radius * 13 / 10 * k + 128) / 256) + 1; }
 
@@ -332,7 +340,7 @@ static uint32_t fade_px(const ck_night *n, uint32_t c, int32_t x, int32_t y)
 int ck_night_init(ck_night *n, uint32_t w, uint32_t h, uint32_t k, int32_t cx, int32_t cy, void *mem, size_t len,
                   void *scratch)
 {
-    if (!mem || !scratch || w < 64 || h < 64 || len < ck_night_mem_bytes(w, h, k))
+    if (!mem || !scratch || w < 64 || h < 64 || w > CK_NIGHT_W_MAX || len < ck_night_mem_bytes(w, h, k))
         return -1;
     (void)ck_sin(0); /* the tables, before anything else could ask for them */
     for (unsigned i = 0; i < 256; i++) {
@@ -340,6 +348,12 @@ int ck_night_init(ck_night *n, uint32_t w, uint32_t h, uint32_t k, int32_t cx, i
         uint64_t c2 = c * c >> 14, c6 = (c2 * c2 >> 14) * c2 >> 14;
         band_t[i] = (uint8_t)(c6 * 255 >> 14);
     }
+    uint64_t e2 = 1ull << 30; /* 2^(k/256): one factor of 2^(1/256) (Q30) per step */
+    for (unsigned i = 0; i < 256; i++) {
+        pow2_t[i] = (uint32_t)((e2 + (1u << 13)) >> 14);
+        e2 = e2 * 1076652777ull >> 30;
+    }
+    pow2_t[256] = 131072;
     *n = (ck_night){0};
     n->w = (int32_t)w, n->h = (int32_t)h, n->k = k, n->cx = cx, n->cy = cy;
     uint8_t *p = mem;
@@ -389,6 +403,7 @@ void ck_night_at(ck_night *n, uint32_t t)
 {
     n->t = t;
     n->holes = 0;
+    n->falling = 0;
     n->lens = (ck_rect){0, 0, 0, 0};
     n->ripple_w = 0;
     int32_t e_full = S(60) * 16, rs_full = S(20) * 16, a0 = S(270) * 16;
@@ -476,11 +491,9 @@ static uint32_t sample(const ck_night *n, int32_t sx, int32_t sy)
     return lerp16(lerp16(r0[ix], r0[ix1], fx), lerp16(r1[ix], r1[ix1], fx), fy);
 }
 
-/* where (X, Y) (16ths of a pixel) looks in the sky: offset (ax, ay), and the ripple's own faint light */
-static void warp(const ck_night *n, int64_t X, int64_t Y, int32_t *ax, int32_t *ay, uint32_t *light)
+/* the holes' pull on the light at (X, Y) (16ths of a pixel): added to (sx, sy), where the sky is read from */
+static void lens_at(const ck_night *n, int64_t X, int64_t Y, int64_t *sx, int64_t *sy)
 {
-    int64_t sx = 0, sy = 0;
-    *light = 0;
     for (unsigned i = 0; i < n->holes; i++) {
         int64_t e = n->hole[i].e, dx = X - n->hole[i].x, dy = Y - n->hole[i].y, d2 = dx * dx + dy * dy;
         int64_t out = e * e * 1936 / 100, in = e * e * 484 / 100; /* (4.4 E)^2, (2.2 E)^2 */
@@ -493,9 +506,17 @@ static void warp(const ck_night *n, int64_t X, int64_t Y, int32_t *ax, int32_t *
             int64_t w = (out - d2) * 65536 / (out - in);
             f = f * (w * w >> 16) >> 16;
         }
-        sx -= dx * f >> 16;
-        sy -= dy * f >> 16;
+        *sx -= dx * f >> 16;
+        *sy -= dy * f >> 16;
     }
+}
+
+/* where (X, Y) (16ths of a pixel) looks in the sky: offset (ax, ay), and the ripple's own faint light */
+static void warp(const ck_night *n, int64_t X, int64_t Y, int32_t *ax, int32_t *ay, uint32_t *light)
+{
+    int64_t sx = 0, sy = 0;
+    *light = 0;
+    lens_at(n, X, Y, &sx, &sy);
     if (n->ripple_w) {
         int64_t dx = X - (n->cx * 16 + 8), dy = Y - (n->cy * 16 + 8), d2 = dx * dx + dy * dy;
         int64_t r16 = (int64_t)ck_isqrt((uint64_t)d2), reach = n->ripple_w * 22 / 10;
@@ -616,6 +637,288 @@ void ck_night_base(const ck_night *n, ck_canvas *out, const ck_rect *r)
                 }
             }
         }
+}
+
+/* ---- the dusk: everything on the screen falls into one black hole ---- */
+
+size_t ck_night_picture_bytes(uint32_t w, uint32_t h)
+{
+    size_t n = 64 + (size_t)w * h * 4;
+    for (unsigned i = 1; i < CK_NIGHT_LEVELS; i++)
+        n += (size_t)(w >> i) * (size_t)(h >> i) * 4 * 2;
+    return n;
+}
+
+/* half the width and height of `from` (sw x sh) into to: the mean of each 2 x 2 */
+static void halve(const uint32_t *from, uint32_t sw, uint32_t sh, uint32_t *to)
+{
+    uint32_t dw = sw / 2, dh = sh / 2;
+    for (uint32_t y = 0; y < dh; y++) {
+        const uint32_t *r0 = from + (size_t)(2 * y) * sw, *r1 = r0 + sw;
+        uint32_t *d = to + (size_t)y * dw;
+        for (uint32_t x = 0; x < dw; x++) {
+            uint32_t a = r0[2 * x], b = r0[2 * x + 1], c = r1[2 * x], e = r1[2 * x + 1];
+            /* red and blue summed together, green on its own: the sums do not run into each other */
+            uint32_t rb = (((a & 0xff00ffu) + (b & 0xff00ffu) + (c & 0xff00ffu) + (e & 0xff00ffu)) >> 2) & 0xff00ffu;
+            uint32_t g = (((a & 0xff00u) + (b & 0xff00u) + (c & 0xff00u) + (e & 0xff00u)) >> 2) & 0xff00u;
+            d[x] = rb | g;
+        }
+    }
+}
+
+void ck_night_picture_take(const ck_night *n, const uint32_t *from, void *mem, ck_night_picture *kept)
+{
+    uint32_t w = (uint32_t)n->w, h = (uint32_t)n->h, *p = mem;
+    size_t count = (size_t)w * h;
+    for (size_t i = 0; i < count; i++)
+        p[i] = from[i];
+    kept->level[0] = p;
+    kept->sky[0] = n->sky;
+    p += count;
+    for (unsigned l = 1; l < CK_NIGHT_LEVELS; l++) {
+        uint32_t sw = w >> (l - 1), sh = h >> (l - 1);
+        halve(kept->level[l - 1], sw, sh, p);
+        kept->level[l] = p;
+        p += (size_t)(sw / 2) * (sh / 2);
+        halve(kept->sky[l - 1], sw, sh, p);
+        kept->sky[l] = p;
+        p += (size_t)(sw / 2) * (sh / 2);
+    }
+}
+
+void ck_night_fall(ck_night *n, const ck_night_dusk *d)
+{
+    n->falling = 1;
+    n->dusk = *d;
+    int32_t cx = n->cx * 16 + 8, cy = n->cy * 16 + 8, rs = d->rs;
+    n->hole[0] = (__typeof__(n->hole[0])){cx, cy, d->e, rs};
+    n->holes = 1;
+    n->ripple_w = 0;
+    n->lens = (ck_rect){0, 0, n->w, n->h};
+    /* The disk and the ring, by distance from the hole, in 1024 steps out to 3.3 shadow radii. The disk is
+     * dark inside 1.15 radii, brightest at 1.5 and dies away beyond; its colour runs from warm white at the
+     * inner edge through gold to the blue of the sky's glow. The photon ring is a thin bright line at 1.06
+     * radii, a pixel and a quarter each way (wider on a big screen). */
+    n->disk_far = rs * 33 / 10 + 16;
+    int32_t in = rs * 115 / 100, peak = rs * 150 / 100, ring = rs * 106 / 100, hw = 20 + rs / 64;
+    for (unsigned i = 0; i < 1024; i++) {
+        int32_t r = (int32_t)((int64_t)n->disk_far * (int64_t)i / 1024);
+        uint32_t a = 0, c = CK_RGB(255, 222, 180);
+        if (r >= in && peak > in) {
+            if (r < peak) {
+                uint32_t u = (uint32_t)((int64_t)(r - in) * 256 / (peak - in));
+                a = ck_smooth((int32_t)u) * 220 >> 8;
+                c = ck_mix(CK_RGB(255, 222, 180), CK_RGB(255, 212, 150), u);
+            } else {
+                uint32_t v = (uint32_t)((int64_t)(r - peak) * 256 / (rs / 2 + 1)); /* half radii past the peak, 256 each */
+                a = (ck_exp_neg(v) >> 8) * 220 >> 8;
+                c = ck_mix(CK_RGB(255, 212, 150), CK_RGB(150, 170, 255), ck_smooth((int32_t)(v * 256 / 360)));
+            }
+        }
+        int32_t off = ck_abs(r - ring);
+        if (off < hw) {
+            uint32_t ar = (uint32_t)(hw - off) * 255 / (uint32_t)hw;
+            ar = ar * ar >> 8;
+            c = a + ar ? ck_mix(c, CK_RGB(255, 244, 228), ar * 256 / (a + ar)) : c;
+            a += ar;
+        }
+        a = a * d->disk >> 8;
+        n->disk_a[i] = (uint8_t)(a > 255 ? 255 : a);
+        n->disk_c[i] = c;
+    }
+}
+
+/* a corner of the 8 x 8 grid during the dusk: where the picture is read from, and the distance to the hole */
+struct corner {
+    int32_t ax, ay;   /* offset to the picture point shown here, 16ths of a pixel */
+    int32_t sx, sy;   /* that point itself, 16ths (for telling whether a block shows only the dark beyond the edge) */
+    uint32_t crowd;   /* how much brighter the crowded light is drawn, 256 = as it is */
+    uint32_t h;       /* log2 of the crowding of the area, Q16 */
+    int32_t r;        /* distance from the hole, 16ths of a pixel */
+    int32_t inv;      /* 2^28 / r */
+    uint32_t vig;     /* how much of the light the edges of the screen keep here, 0..256 */
+};
+
+static void corner_at(const ck_night *n, int32_t x, int32_t y, struct corner *c)
+{
+    const ck_night_dusk *d = &n->dusk;
+    int64_t X = (int64_t)x * 16, Y = (int64_t)y * 16, dx = X - n->hole[0].x, dy = Y - n->hole[0].y;
+    int64_t d2 = dx * dx + dy * dy;
+    if (d2 < 256)
+        d2 = 256;
+    uint32_t l0 = ck_log2_q16((uint64_t)d2), l1 = ck_log2_q16((uint64_t)(d2 + d->fallen)), h = l1 - l0;
+    c->h = h;
+    uint64_t crowd = pow2_q16(h) >> 8;
+    c->crowd = crowd > d->crowd ? d->crowd : (uint32_t)crowd;
+    /* the picture point: the same direction turned by swirl per doubling, at the stretched distance */
+    int64_t r = (int64_t)(pow2_q16(l0 >> 1) >> 16); /* the distance, 16ths, without a square root */
+    uint32_t ang = (uint32_t)((uint64_t)d->swirl * (h >> 1) >> 16);
+    ang = (uint32_t)((int64_t)ang * d->calm / (d->calm + r));
+    int64_t stretch = (int64_t)pow2_q16(h >> 1), cs = ck_cos(ang), sn = ck_sin(ang);
+    int64_t ux = (dx * cs - dy * sn) >> 14, uy = (dx * sn + dy * cs) >> 14;
+    int64_t sx = (ux * stretch >> 16) - dx, sy = (uy * stretch >> 16) - dy;
+    lens_at(n, X, Y, &sx, &sy);
+    /* far beyond the picture is still far beyond it: held where the block arithmetic stays in 32 bits */
+    sx = sx > (1 << 22) ? (1 << 22) : sx < -(1 << 22) ? -(1 << 22) : sx;
+    sy = sy > (1 << 22) ? (1 << 22) : sy < -(1 << 22) ? -(1 << 22) : sy;
+    c->ax = (int32_t)sx;
+    c->ay = (int32_t)sy;
+    c->sx = (int32_t)X + c->ax;
+    c->sy = (int32_t)Y + c->ay;
+    c->r = (int32_t)r;
+    c->inv = (int32_t)((1 << 28) / (r > 0 ? r : 1));
+    /* the edges go dark first: from `near` out to `far` the light falls off smoothly by up to `shade` */
+    c->vig = 256 - (d->shade * ck_smooth(ck_prog((uint32_t)r, (uint32_t)d->near, (uint32_t)d->far)) >> 8);
+}
+
+/* the kept picture at (sx, sy) (16ths of a pixel of copy l, w x h): the picture itself inside its edges, the
+ * sky mirrored in them beyond (so the stars flow in from past the screen), black further out than that. */
+static uint32_t sample_kept(const ck_night_picture *kept, unsigned l, int32_t w, int32_t h, int32_t sx, int32_t sy)
+{
+    const uint32_t *px = kept->level[l];
+    int32_t W = (w - 1) * 16, H = (h - 1) * 16;
+    sx -= 8, sy -= 8;
+    if (sx < 0 || sy < 0 || sx >= W || sy >= H) {
+        sx = sx < 0 ? -sx : sx >= W ? 2 * W - sx : sx;
+        sy = sy < 0 ? -sy : sy >= H ? 2 * H - sy : sy;
+        if (sx < 0 || sy < 0 || sx >= W || sy >= H)
+            return 0;
+        px = kept->sky[l];
+    }
+    int32_t ix = sx >> 4, iy = sy >> 4;
+    const uint32_t *r0 = px + (size_t)iy * (size_t)w, *r1 = r0 + w;
+    uint32_t fx = (uint32_t)sx & 15u, fy = (uint32_t)sy & 15u;
+    return lerp16(lerp16(r0[ix], r0[ix + 1], fx), lerp16(r1[ix], r1[ix + 1], fx), fy);
+}
+
+/* c brightened g/256 times (g above 256), the excess warmer than the light itself */
+static uint32_t brighten(uint32_t c, uint32_t g)
+{
+    if (g <= 256 || !c)
+        return c;
+    uint32_t x = g - 256;
+    uint32_t r = ck_ch(c, 16) * (256 + x) >> 8, gg = ck_ch(c, 8) * (256 + x * 7 / 8) >> 8, b = ck_ch(c, 0) * (256 + x * 5 / 8) >> 8;
+    return (r > 255 ? 255u : r) << 16 | (gg > 255 ? 255u : gg) << 8 | (b > 255 ? 255u : b);
+}
+
+/* One 8 x 8 block of the dusk, clipped to d, from its four corners. Near the hole every pixel is worked out;
+ * further out, where the picture is streaming past, the block is worked out two pixels at a time each way
+ * (the screen does not show the difference there and the frame costs a third as much). */
+static void fall_block(const ck_night *n, const ck_night_picture *kept, ck_canvas *out, const ck_rect *d, int32_t bx,
+                       int32_t by, const struct corner *c00, const struct corner *c10, const struct corner *c01,
+                       const struct corner *c11)
+{
+    ck_rect b = {bx, by, 8, 8};
+    if (!ck_clip(&b, d))
+        return;
+    const ck_night_dusk *k = &n->dusk;
+    int32_t rs = k->rs, hx = n->hole[0].x, hy = n->hole[0].y;
+    int32_t rmin = ck_min(ck_min(c00->r, c10->r), ck_min(c01->r, c11->r)) - 182; /* the block's diagonal: 8 px * sqrt 2 */
+    int32_t rmax = ck_max(ck_max(c00->r, c10->r), ck_max(c01->r, c11->r));
+    int32_t W16 = n->w * 32 + 16, H16 = n->h * 32 + 16, X16 = -n->w * 16 - 16, Y16 = -n->h * 16 - 16;
+    /* all four corners read from the dark beyond the same edge of the mirrored sky: so does everything between */
+    int beyond = (c00->sx < X16 && c10->sx < X16 && c01->sx < X16 && c11->sx < X16) ||
+                 (c00->sy < Y16 && c10->sy < Y16 && c01->sy < Y16 && c11->sy < Y16) ||
+                 (c00->sx > W16 && c10->sx > W16 && c01->sx > W16 && c11->sx > W16) ||
+                 (c00->sy > H16 && c10->sy > H16 && c01->sy > H16 && c11->sy > H16);
+    int disk = k->disk && rmin < n->disk_far, edge = rmin < rs + 16, fine = rmin < k->fine;
+    /* the light kept here: the closing of the horizon, and the edges of the screen going dark first */
+    uint32_t keep = k->keep * ((c00->vig + c10->vig + c01->vig + c11->vig) >> 2) >> 8;
+    if ((!keep && !disk) || rmax < rs - 16 || (beyond && !disk)) { /* only the dark: inside the shadow, or past the edge */
+        for (int32_t y = b.y; y < b.y + b.h; y++)
+            for (int32_t x = b.x; x < b.x + b.w; x++)
+                out->px[(size_t)y * (size_t)out->w + (size_t)x] = 0;
+        return;
+    }
+    /* which copy of the picture: the one whose pixels are about as big as the crowding here, leaning to the
+     * smaller copy (the picture is streaming, and the smaller copies are read far faster); once the light is
+     * nearly gone, the copies at an eighth and below, which no eye can tell apart at that brightness */
+    uint32_t hm = (c00->h >> 2) + (c10->h >> 2) + (c01->h >> 2) + (c11->h >> 2), lvl = (hm + 98304u) >> 17;
+    lvl = keep < 16 && lvl < 3 ? 3 : lvl;
+    lvl = lvl >= CK_NIGHT_LEVELS ? CK_NIGHT_LEVELS - 1 : lvl;
+    int32_t lw = n->w >> lvl, lh = n->h >> lvl;
+    int crowded = c00->crowd > 256 || c10->crowd > 256 || c01->crowd > 256 || c11->crowd > 256;
+    int64_t cb = ck_cos(k->beam), sb = ck_sin(k->beam);
+    uint32_t inv_far = (uint32_t)((1u << 30) / (uint32_t)(n->disk_far > 0 ? n->disk_far : 1));
+    if (!fine) { /* pairs start on even pixels, so a block cut by the clip still draws the same pixels */
+        ck_rect e = {b.x & ~1, b.y & ~1, 0, 0};
+        e.w = ((b.x + b.w + 1) & ~1) - e.x, e.h = ((b.y + b.h + 1) & ~1) - e.y;
+        if (e.x >= d->x && e.y >= d->y && e.x + e.w <= d->x + d->w && e.y + e.h <= d->y + d->h)
+            b = e;
+        else
+            fine = 1; /* an odd clip: every pixel, so nothing is written outside it */
+    }
+    int32_t step = fine ? 1 : 2;
+    for (int32_t y = b.y; y < b.y + b.h; y += step) {
+        int32_t wy = 2 * (y - by) + step;
+        uint32_t *row = out->px + (size_t)y * (size_t)out->w;
+        for (int32_t x = b.x; x < b.x + b.w; x += step) {
+            int32_t wx = 2 * (x - bx) + step;
+            int32_t w00 = (16 - wx) * (16 - wy), w10 = wx * (16 - wy), w01 = (16 - wx) * wy, w11 = wx * wy;
+            uint32_t c = 0;
+            if (!beyond) {
+                int32_t ax = (c00->ax * w00 + c10->ax * w10 + c01->ax * w01 + c11->ax * w11) >> 8;
+                int32_t ay = (c00->ay * w00 + c10->ay * w10 + c01->ay * w01 + c11->ay * w11) >> 8;
+                c = sample_kept(kept, lvl, lw, lh, (x * 16 + 8 + ax) >> lvl, (y * 16 + 8 + ay) >> lvl);
+                if (c && crowded) {
+                    uint32_t g = (uint32_t)((int32_t)c00->crowd * w00 + (int32_t)c10->crowd * w10 +
+                                            (int32_t)c01->crowd * w01 + (int32_t)c11->crowd * w11) >> 8;
+                    c = brighten(c, g);
+                }
+                if (keep < 256) /* the picture goes before the disk does */
+                    c = ck_scale(c, keep);
+            }
+            if (disk || edge) {
+                int32_t r = (c00->r * w00 + c10->r * w10 + c01->r * w01 + c11->r * w11) >> 8;
+                if (disk && r < n->disk_far) {
+                    uint32_t i = (uint32_t)r * inv_far >> 20, a = n->disk_a[i < 1024 ? i : 1023];
+                    if (a) {
+                        /* brighter on the side turning toward the eye: by the cosine of the angle from the beam */
+                        int64_t inv = ((int64_t)c00->inv * w00 + (int64_t)c10->inv * w10 + (int64_t)c01->inv * w01 +
+                                       (int64_t)c11->inv * w11) >> 8;
+                        int64_t dot = ((int64_t)(x * 16 + 8 - hx) * cb + (int64_t)(y * 16 + 8 - hy) * sb) >> 14;
+                        int64_t cosb = dot * inv >> 14; /* Q14 */
+                        a = (uint32_t)((int64_t)a * (16384 + (cosb * 110 >> 8)) >> 14);
+                        c = ck_add(c, n->disk_c[i < 1024 ? i : 1023], a > 255 ? 255 : a);
+                    }
+                }
+                if (edge)
+                    c = ck_mix(c, 0, ck_cover(r - rs));
+            }
+            row[x] = c;
+            if (!fine)
+                row[x + 1] = c, row[x + out->w] = c, row[x + out->w + 1] = c;
+        }
+    }
+}
+
+#define CHUNK 32 /* blocks of a row worked at once (their corners shared); 2.4 KiB of stack for the two rows */
+
+void ck_night_base_from(const ck_night *n, const ck_night_picture *kept, ck_canvas *out, const ck_rect *r)
+{
+    ck_rect d = *r, all = {0, 0, n->w, n->h};
+    if (!ck_clip(&d, &all))
+        return;
+    if (!n->falling) {
+        ck_night_base(n, out, &d);
+        return;
+    }
+    struct corner rows[2][CHUNK + 1];
+    int32_t bx0 = d.x & ~7, bx1 = d.x + d.w, by0 = d.y & ~7, by1 = d.y + d.h;
+    for (int32_t cx0 = bx0; cx0 < bx1; cx0 += CHUNK * 8) {
+        int32_t ncol = ck_min(CHUNK, (bx1 - cx0 + 7) / 8);
+        struct corner *top = rows[0], *bottom = rows[1];
+        for (int32_t i = 0; i <= ncol; i++)
+            corner_at(n, cx0 + 8 * i, by0, &top[i]);
+        for (int32_t by = by0; by < by1; by += 8) {
+            for (int32_t i = 0; i <= ncol; i++)
+                corner_at(n, cx0 + 8 * i, by + 8, &bottom[i]);
+            for (int32_t i = 0; i < ncol; i++)
+                fall_block(n, kept, out, &d, cx0 + 8 * i, by, &top[i], &top[i + 1], &bottom[i], &bottom[i + 1]);
+            struct corner *t = top;
+            top = bottom, bottom = t;
+        }
+    }
 }
 
 /* ---- the lights on top ---- */
