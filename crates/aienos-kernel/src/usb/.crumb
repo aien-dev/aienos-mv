@@ -10,25 +10,6 @@
     }
   ],
   "extensions": {
-    "generated": {
-      "children": [
-        {
-          "digest": "451d20161f6df66f91a25be8a7257306238f81ce0afb80c7f22b5994d05f1350",
-          "last_commit": "35b3086",
-          "name": "xhci",
-          "purpose": "Directory crates/aienos-kernel/src/usb/xhci. Purpose not yet described by a human."
-        }
-      ],
-      "children_root": "sha256:84fa272544e7bafacd247ab2c9371317f746bd408f0bdb5e0918007370dfe5c3",
-      "compiled_at": "2026-10-13T02:27:54Z",
-      "compiler": "crumb-compile/1",
-      "digest": "sha256:f51233705a5c33d1c72abca84575d077a80fd907e73c14ee95d9939a02c06eb0",
-      "evidence_files": 0,
-      "evidence_root": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "files": 9,
-      "generated_at_commit": "74f638c298bc04543b03d6851a83dac815d36645",
-      "source_tree": "sha256:cb2d7930d8dbaad0d76d7e5d5903ae3a810e34e6558192ecc4554d8fb6e89675"
-    },
     "owner_lane": "",
     "provenance": {
       "entries": [
