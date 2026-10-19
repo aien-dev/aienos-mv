@@ -19,6 +19,13 @@ if [[ -n "${AIENOS_LOG_DIR:-}" ]]; then
 fi
 cd "${REPO_ROOT}"
 
+# This harness and the QEMU scripts it calls read build output from target/ in this
+# checkout (for example target/aarch64-unknown-uefi/release/aienos-boot.efi). A caller's
+# CARGO_TARGET_DIR elsewhere (the Spark judge sets a shared one per repository) made the
+# UEFI image check fail with "No such file or directory", and a shared directory can hand
+# a test binary built from another checkout. Build into this checkout's own target/.
+export CARGO_TARGET_DIR="${REPO_ROOT}/target"
+
 # shellcheck source=scripts/lib_verify_summary.sh
 source "${REPO_ROOT}/scripts/lib_verify_summary.sh"
 
