@@ -19,13 +19,21 @@
 #   a04_valid_owner_class.unit  OWNER class, valid signature, no OWNER anchor
 #   r14_bad_signature.unit  TEST-signed, signature byte flipped
 #   r37_code_svc.unit       code contains an SVC word
-# Two boots of the full image, each with QEMU iommu=smmuv3 and the NVMe image:
+# Three boots of the full image, each with QEMU iommu=smmuv3 and the NVMe image:
 #   1. qualification build (CK_SEED0B_TEST_ANCHOR=1, TEST ONLY): a01 ACCEPT with
 #      the UnitDigest and program id of the frozen expected.txt; a04
 #      UNTRUSTED_SIGNER; r14 BAD_SIGNATURE; r37 CODE_INSTRUCTION; a02
 #      CAP_GENERATION_STALE (29): the kernel's own generation lookup knows no
 #      resource, so every nonzero pin is refused (ADR 0014 amendment point 5;
 #      the host test checks the same rule only with a test lookup).
+#   3. resource-generation self-test build (CK_SEED0B_TEST_ANCHOR=1 CK_RESGEN_TEST=1,
+#      TEST ONLY, aienos#285, ADR 0019): a02 is refused 29 at admission as in boot
+#      1, then the kernel's own counter table is driven through a fixed script and
+#      a02 admitted under each state with the kernel's own lookup: counter 6
+#      (mismatch) 29, 7 (match) ACCEPT, after a reboot restore 7 ACCEPT, number
+#      reused (8) 29, rollback to the older snapshot re-issued at 9 (not lowered)
+#      29, corrupt floor untrusted 29, reset untrusted 29. The floor is in RAM: the
+#      reboot and rollback are the restore path in one boot, not a power cycle.
 #   2. ordinary (release) build, no anchors: a01 and a02 TEST_SIGNER_IN_RELEASE; a04
 #      UNTRUSTED_SIGNER; r14 TEST_SIGNER_IN_RELEASE (the class check precedes the
 #      signature); r37 CODE_INSTRUCTION; nothing accepted.
@@ -65,9 +73,11 @@ if [ "$(uname -m)" != "aarch64" ]; then cross="aarch64-linux-gnu-"; fi
 commit="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
 out_prod="${AIENOS_CK_OUT_PROD:-${repo_root}/target/native-kernel}"
 out_qual="${AIENOS_CK_OUT_QUAL:-${repo_root}/target/native-kernel-seed0b-test}"
+out_rg="${AIENOS_CK_OUT_RESGEN:-${repo_root}/target/native-kernel-resgen-test}"
 mk() { make -s -C native/kernel CROSS="${cross}" AIENOS_COMMIT="${commit}" "$@" >/dev/null; }
 mk OUT="${out_prod}" full
 mk OUT="${out_qual}" CK_SEED0B_TEST_ANCHOR=1 full
+mk OUT="${out_rg}" CK_SEED0B_TEST_ANCHOR=1 CK_RESGEN_TEST=1 full
 make -s -C native/kernel OUT="${out_prod}" store-image gpt-image >/dev/null
 simg="${out_prod}/host/ck_store_image"
 
@@ -168,11 +178,41 @@ unit_line "${qual}" a01_valid_min.unit \
     "ACCEPT unit_digest=${a01_digest} program_id=${a01_prog} funcs=2 caps=0 signer=TEST" \
     "ACCEPT, UnitDigest and program id equal the frozen expected.txt"
 unit_line "${qual}" a02_valid_caps_kernel.unit "REFUSED code=29 name=CAP_GENERATION_STALE" \
-    "REFUSED CAP_GENERATION_STALE (pinned generation 7; the kernel lookup knows no resource)"
+    "REFUSED CAP_GENERATION_STALE (pinned generation 7; the kernel counter table is untrusted, aienos#285)"
 unit_line "${qual}" a04_valid_owner_class.unit "REFUSED code=25 name=UNTRUSTED_SIGNER" "REFUSED UNTRUSTED_SIGNER (OWNER, no OWNER anchor)"
 unit_line "${qual}" r14_bad_signature.unit "REFUSED code=26 name=BAD_SIGNATURE" "REFUSED BAD_SIGNATURE"
 unit_line "${qual}" r37_code_svc.unit "REFUSED code=34 name=CODE_INSTRUCTION" "REFUSED CODE_INSTRUCTION (SVC word)"
 check "${qual}" "qualification totals: 1 accepted, 4 refused" "^osc_units: seen=5 accepted=1 refused=4 "
+if has "${qual}" "^osc_resgen"; then fail "the qualification build runs the resource-generation self-test"; fi
+
+# ---- boot 3: resource-generation self-test build (TEST ONLY, aienos#285) -----
+rg="${work}/resgen.txt"
+cp "${disk}" "${work}/disk-rg.img"
+boot "${out_rg}/full/BOOTAA64.EFI" "${rg}" "${work}/disk-rg.img"
+common_checks "${rg}"
+unit_line "${rg}" a02_valid_caps_kernel.unit "REFUSED code=29 name=CAP_GENERATION_STALE" \
+    "REFUSED CAP_GENERATION_STALE at admission (the booted counter table is untrusted)"
+rg_steps=( # step counter verdict, in order
+    "booted_untrusted none REFUSED code=29 name=CAP_GENERATION_STALE"
+    "mismatch_below 6 REFUSED code=29 name=CAP_GENERATION_STALE"
+    "match 7 ACCEPT"
+    "reboot_same_incarnation 7 ACCEPT"
+    "reused_number 8 REFUSED code=29 name=CAP_GENERATION_STALE"
+    "rollback_old_snapshot 9 REFUSED code=29 name=CAP_GENERATION_STALE"
+    "corrupt_floor none REFUSED code=29 name=CAP_GENERATION_STALE"
+    "reset_untrusted none REFUSED code=29 name=CAP_GENERATION_STALE"
+)
+grep -E "^osc_resgen: [a-z_]+ object=1 " "${rg}" | sed -E 's/^osc_resgen: ([a-z_]+) object=1 counter=([0-9a-z]+) pin=7 -> (.*); QEMU \(aarch64 virt\), TEST signer, not physical$/\1 \2 \3/' >"${work}/rg_got.txt" || true
+if printf '%s\n' "${rg_steps[@]}" | cmp -s - "${work}/rg_got.txt"; then
+    pass "a02 under the kernel's own lookup: mismatch 29, match ACCEPT, reboot ACCEPT, reused number 29, rollback 29 (counter 9, not lowered), corrupt floor 29, reset 29"
+else
+    fail "resource-generation self-test steps differ: $(diff <(printf '%s\n' "${rg_steps[@]}") "${work}/rg_got.txt" | tr '\n' ' ')"
+fi
+check "${rg}" "self-test announced as TEST ONLY with a RAM floor" \
+    "^osc_resgen_selftest: unit=a02 domain=1 kind=3 id=1 pin=7 floor=ram; QEMU \(aarch64 virt\), TEST signer, not physical$"
+check "${rg}" "rollback restore re-issues and writes the floor ahead (10 floor writes)" "^osc_resgen_floor_writes: 10$"
+check "${rg}" "corrupt floor leaves the table untrusted" "^osc_resgen: restore -> 8 trusted=0$"
+check "${rg}" "resgen totals: 1 accepted (a01), 4 refused at admission" "^osc_units: seen=5 accepted=1 refused=4 "
 
 # ---- boot 2: ordinary (release) build, no anchors ----------------------------
 prod="${work}/release.txt"
@@ -193,9 +233,11 @@ check "${prod}" "release totals: nothing accepted" "^osc_units: seen=5 accepted=
 if [[ -n "${AIENOS_LOG_DIR:-}" ]]; then
     cp "${qual}" "${AIENOS_LOG_DIR}/qemu_ck_osc_unit_qualification_serial.log"
     cp "${prod}" "${AIENOS_LOG_DIR}/qemu_ck_osc_unit_release_serial.log"
+    cp "${rg}" "${AIENOS_LOG_DIR}/qemu_ck_osc_unit_resgen_serial.log"
 fi
 if [[ "${failed}" != 0 || -n "${AIENOS_QEMU_VERBOSE:-}" ]]; then
     echo "---- qualification serial (osc lines) ----"; grep -E "^(osc_|artifact|kernel|report_kind|panic|fault)" "${qual}" | head -60 || true
+    echo "---- resgen serial (osc lines) ----"; grep -E "^(osc_|artifact|kernel|report_kind|panic|fault)" "${rg}" | head -60 || true
     echo "---- release serial (osc lines) ----"; grep -E "^(osc_|artifact|kernel|report_kind|panic|fault)" "${prod}" | head -60 || true
 fi
 echo "label: QEMU (aarch64 virt), TEST signer, not physical"
