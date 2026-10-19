@@ -23,6 +23,8 @@
 #include "osc_unit.h"
 #include "task.h"
 #include "task_osc.h"
+#define PB_FMT ck_snprintf
+#include "pipe_bench.h"
 
 #define LABEL "QEMU (aarch64 virt), TEST signer, TEST build, not physical"
 #define UNIT_MAX 8192u
@@ -188,7 +190,7 @@ static size_t drain_close(struct ck_handle hr, uint8_t *buf, size_t max)
     return got;
 }
 
-static char det[320];
+static char det[400];
 
 /* 1. two distinct admitted stages at once over one bounded pipe, the consumer slow (backpressure) */
 static void two_stage(void)
@@ -421,6 +423,40 @@ static void least_privilege(void)
     verdict("least_privilege_endpoints", ok, det);
 }
 
+/* 9. the native pipeline baselines (core/pipe_bench.h, aienos-mv#432): the same scenarios as `test_task --bench` on
+ * the host, here with the admitted Omega stages and the emulated counter. Lines:
+ *     pipe_bench: case=<name> result=PASS|FAIL <key=value ...>; <label>
+ * Emulator numbers (QEMU TCG on the Spark): they measure nothing physical and set no target (pipe_bench.h B1). */
+static struct ck_task_spawn_req req_any(unsigned image_ix)
+{
+    return req(image_ix);
+}
+
+static void bench_case(const char *name, int ok)
+{
+    checks++;
+    failed += !ok;
+    ck_printf("pipe_bench: case=%s result=%s %s; %s, emulator numbers\n", name, ok ? "PASS" : "FAIL", det, LABEL);
+}
+
+static void bench(void)
+{
+    const struct pb_env e = { &tab, &pool, &sess, setup, req_any, clean, ck_time_us, I_GEN, I_XFORM, I_SINK };
+    const unsigned runs = 3;
+    bench_case("two_stage_163840", pb_flow(&e, 2, 163840, runs, det, sizeof det));
+    bench_case("two_stage_1048576", pb_flow(&e, 2, 1048576, runs, det, sizeof det));
+    bench_case("three_stage_163840", pb_flow(&e, 3, 163840, runs, det, sizeof det));
+    bench_case("three_stage_1048576", pb_flow(&e, 3, 1048576, runs, det, sizeof det));
+    bench_case("tiny_one_byte", pb_flow(&e, 2, 1, runs, det, sizeof det));
+    bench_case("first_byte", pb_first_byte(&e, det, sizeof det));
+    bench_case("cancel_endless", pb_cancel(&e, det, sizeof det));
+    bench_case("capacity_64k", pb_capacity(&e, det, sizeof det));
+    bench_case("revoke_blocked_reader", pb_revoke(&e, 0, det, sizeof det));
+    bench_case("revoke_blocked_writer", pb_revoke(&e, 1, det, sizeof det));
+    pb_footprint(det, sizeof det);
+    bench_case("footprint", 1);
+}
+
 void ck_task_selftest(void)
 {
     ck_printf("task_test: TEST-ONLY task self-test begin abi_version=%u max_tasks=%u stage_cells=%u in_max=%u "
@@ -450,6 +486,7 @@ void ck_task_selftest(void)
     partial();
     refusals();
     least_privilege();
+    bench();
     ck_printf("task_test: done checks=%u failed=%u launches=%llu not_torn_down=%llu scheduling=cooperative-step; %s\n",
               checks, failed, (unsigned long long)ost.launches, (unsigned long long)ost.not_torn_down, LABEL);
 }

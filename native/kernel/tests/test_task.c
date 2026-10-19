@@ -5,8 +5,11 @@
  * through the same runner seam the kernel's OSC runner uses. Every scenario ends by checking that no task, pipe or
  * session capability is left over. Host evidence only. */
 #include <string.h>
+#include <time.h>
 #include "ck_test.h"
 #include "task.h"
+#define PB_FMT snprintf
+#include "pipe_bench.h"
 
 /* ---- stand-in stages ---- */
 enum kind { K_GEN, K_XFORM, K_SINK, K_NOPROG, K_BADRET, K_BIGOUT, K_CELL, K_BIGEXIT, K_HONOR, K_TRAP, K_OVERRUN,
@@ -415,6 +418,29 @@ static void cancel(void)
     ck_stream_close(&pool, &sess, hr);
     ck_stream_close(&pool, &sess, hw);
     CHECK(clean());
+
+    /* aienos-mv#432 (T1): both stages interrupted, the consumer ends its grace first and closes its end; the producer
+     * still in its grace then writes into a pipe with no reader. Its output is dropped and it ends by the interrupt
+     * (130), never by BROKEN_PIPE (141): the cancel outcome does not depend on the round-robin order. */
+    setup();
+    CHECK(ck_pipe_create(&pool, &sess, &hr, &hw) == OSH_E_OK);
+    struct ck_task_spawn_req c = req(K_SINK), g = req(K_GEN);
+    c.stdio[0] = hr;
+    g.stdio[1] = hw;
+    g.nparams = 1; /* endless */
+    uint64_t ic = 0, ig = 0;
+    CHECK(ck_task_spawn(&tab, &c, &ic) == OSH_E_OK && ck_task_spawn(&tab, &g, &ig) == OSH_E_OK);
+    ck_stream_close(&pool, &sess, hr);
+    ck_stream_close(&pool, &sess, hw);
+    ck_task_run(&tab, 6);
+    CHECK(ck_task_cancel(&tab, ic, CK_TASK_CANCEL_INTERRUPT) == OSH_E_OK);
+    CHECK(ck_task_cancel(&tab, ig, CK_TASK_CANCEL_INTERRUPT) == OSH_E_OK);
+    ck_task_run(&tab, 2 * CK_TASK_GRACE_STEPS + 2);
+    uint32_t sc = 0, sg = 0;
+    CHECK(ck_task_wait(&tab, ic, CK_TASK_FOREVER, &sc) == OSH_E_OK && sc == 130);
+    CHECK(ck_task_wait(&tab, ig, CK_TASK_FOREVER, &sg) == OSH_E_OK && sg == 130);
+    printf("cancel grace order: consumer=%u producer=%u (130 = interrupted, 141 would be the race)\n", sc, sg);
+    CHECK(clean());
 }
 
 /* ---- 6. partial launch ---- */
@@ -795,8 +821,59 @@ static void watch(void)
     CHECK(ck_pipe_pool_empty(&pool) && pool.pipes[0].waiting[0] == 0);
 }
 
-int main(void)
+/* ---- 15. the native pipeline baselines (core/pipe_bench.h, aienos-mv#432) ----
+ * In the plain run every scenario runs once as a check (a mutant that breaks bytes, cleanup or revoke turns it red);
+ * `test_task --bench` runs them with repeats and prints the numbers: host CPU, C stand-in stages, not physical. */
+static uint64_t mono_us(void)
 {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000000ull + (uint64_t)ts.tv_nsec / 1000ull;
+}
+
+static struct ck_task_spawn_req req_any(unsigned image)
+{
+    return req(image);
+}
+
+#define BENCH_LABEL "host (Spark CPU), C stand-in stages, not Omega code, not QEMU, not physical"
+static int bench(unsigned runs, int print)
+{
+    const struct pb_env e = { &tab, &pool, &sess, setup, req_any, clean, mono_us, K_GEN, K_XFORM, K_SINK };
+    static char det[400];
+    int all = 1, ok;
+#define BENCH_CASE(name, call)                                                                               \
+    do {                                                                                                     \
+        ok = (call);                                                                                         \
+        CHECK(ok);                                                                                           \
+        all = all && ok;                                                                                     \
+        if (print)                                                                                           \
+            printf("pipe_bench: case=%s result=%s %s; %s\n", name, ok ? "PASS" : "FAIL", det, BENCH_LABEL); \
+    } while (0)
+    BENCH_CASE("two_stage_163840", pb_flow(&e, 2, 163840, runs, det, sizeof det));
+    BENCH_CASE("two_stage_1048576", pb_flow(&e, 2, 1048576, runs, det, sizeof det));
+    BENCH_CASE("three_stage_163840", pb_flow(&e, 3, 163840, runs, det, sizeof det));
+    BENCH_CASE("three_stage_1048576", pb_flow(&e, 3, 1048576, runs, det, sizeof det));
+    BENCH_CASE("tiny_one_byte", pb_flow(&e, 2, 1, runs, det, sizeof det));
+    BENCH_CASE("first_byte", pb_first_byte(&e, det, sizeof det));
+    BENCH_CASE("cancel_endless", pb_cancel(&e, det, sizeof det));
+    BENCH_CASE("capacity_64k", pb_capacity(&e, det, sizeof det));
+    BENCH_CASE("revoke_blocked_reader", pb_revoke(&e, 0, det, sizeof det));
+    BENCH_CASE("revoke_blocked_writer", pb_revoke(&e, 1, det, sizeof det));
+#undef BENCH_CASE
+    pb_footprint(det, sizeof det);
+    if (print)
+        printf("pipe_bench: case=footprint result=PASS %s; %s\n", det, BENCH_LABEL);
+    return all;
+}
+
+int main(int argc, char **argv)
+{
+    if (argc == 2 && strcmp(argv[1], "--bench") == 0) {
+        int ok = bench(5, 1);
+        printf("test_task_bench: %s\n", ok ? "PASS" : "FAIL");
+        return ok ? 0 : 1;
+    }
     two_stage();
     three_stage();
     early_exit();
@@ -810,5 +887,6 @@ int main(void)
     ids();
     dispatch();
     watch();
+    bench(1, 0);
     return ck_t_verdict("test_task");
 }

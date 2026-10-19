@@ -877,7 +877,9 @@ static void part2(void)
     r = line(s, "gen 0 | honor | sink");
     CHECK(r.launch_error == OSH_E_PARTIAL_LAUNCH && r.error == OSH_E_PARTIAL_LAUNCH && r.status == 1 && r.started == 2);
     CHECK(r.cmd_outcome[0] == OSH_O_CANCELLED && r.cmd_outcome[1] == OSH_O_CANCELLED && r.cmd_outcome[2] == OSH_O_FAILED_NO_EFFECT);
-    CHECK(r.cmd_status[0] == 141 && r.cmd_status[1] == 42 && r.cmd_status[2] == 1); /* honor exits 42, so gen sees BROKEN_PIPE */
+    /* honor exits 42; gen, in its interrupt grace, finds no reader: its output is dropped and it ends by the interrupt
+     * (130). Before aienos-mv#432 (task.c T1) it ended 141, or 130 when the round robin reached it first. */
+    CHECK(r.cmd_status[0] == 130 && r.cmd_status[1] == 42 && r.cmd_status[2] == 1);
     CHECK(idle(s));
     s->hooks.fail_spawn_at = s->pipelines + 1;
     s->hooks.fail_spawn_cmd = 1;
@@ -897,7 +899,7 @@ static void part2(void)
     s->hooks.interrupt_after_turns = 30;
     r = line(s, "gen 0 | honor");
     CHECK(r.error == OSH_E_INTERRUPTED && r.outcome == OSH_O_CANCELLED && r.stop && r.status == 42);
-    CHECK(r.cmd_outcome[0] == OSH_O_CANCELLED && r.cmd_status[0] == 141 && r.cmd_outcome[1] == OSH_O_CANCELLED && idle(s));
+    CHECK(r.cmd_outcome[0] == OSH_O_CANCELLED && r.cmd_status[0] == 130 && r.cmd_outcome[1] == OSH_O_CANCELLED && idle(s)); /* T1 */
     /* a deadline does the same */
     nat.deadline_ticks = 50;
     r = line(s, "gen 0 | sink");

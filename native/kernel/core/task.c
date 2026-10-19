@@ -205,6 +205,16 @@ static int flush(struct ck_task_tab *tab, struct ck_task_rec *r, int may_block)
         }
         if (e == OSH_E_INTERRUPTED)
             return FL_RETRY; /* section 10: an interrupted call moved nothing; retried next turn */
+#ifndef CK_TASK_MUTANT_GRACE_BROKEN_PIPE
+        if (e == OSH_E_BROKEN_PIPE && !may_block) {
+            /* aienos-mv#432, UNVERIFIED (T1): in the interrupt grace a reader that is gone is the cancellation itself
+             * (a peer stage ended its own grace first), so the output is dropped like output that does not fit and the
+             * stage still ends by the interrupt (130). Without this the status of a cancelled producer depended on
+             * which stage the round robin reached first (141 or 130). */
+            r->out_off = r->out_len;
+            break;
+        }
+#endif
         if (e == OSH_E_BROKEN_PIPE)
             finish(tab, r, CK_TE_BROKEN_PIPE, 141, e);
         else

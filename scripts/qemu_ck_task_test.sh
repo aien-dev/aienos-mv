@@ -12,6 +12,10 @@
 # two started stages reaped, nothing ran); spawn refusals before any effect; least-privilege stage ends. Every check
 # also requires no leaked task, pipe or capability, no polling of a blocked task and every EL0 slot torn down.
 #
+# Baselines (aienos-mv#432, core/pipe_bench.h): 2- and 3-stage throughput, one-byte and first-byte latency, cancellation
+# time, 64 KiB capacity, revoke of a blocked reader and writer, static footprint. Printed as "BASELINE pipe_bench: ..."
+# lines. They are EMULATOR numbers (QEMU TCG on the Spark), never hardware numbers, and have no pass threshold.
+#
 # Scheduling, stated plainly: one CPU, cooperative at step granularity (one bounded EL0 step of one stage at a time,
 # round robin); a step is never preempted and resumed. Not parallel execution on two cores.
 #
@@ -151,9 +155,27 @@ tc spawn_refused_before_any_effect "spawn refusals before any effect (another pr
     "other_programs_receipt=DENIED\\(refusal [1-9][0-9]*\\) unknown_entry=NOT_FOUND wrong_principal=DENIED hosted_domain=CAP_DOMAIN_MISMATCH steps_run=0"
 tc least_privilege_endpoints "least privilege: stage ends hold exactly READ (0x1) / WRITE (0x2)" \
     "session_end_rights=0x[0-9a-f]+ stage_stdin_rights=0x1 stage_stdout_rights=0x2"
-check "${serial}" "self-test done: 9 checks, none failed, every EL0 step torn down" \
-    "^task_test: done checks=9 failed=0 launches=[1-9][0-9]* not_torn_down=0 scheduling=cooperative-step; ${label}\$"
+# aienos-mv#432 baselines (core/pipe_bench.h): each scenario checks its own bytes, statuses and cleanup; the numbers are
+# emulator numbers (QEMU TCG), printed below and kept in the log, with no pass threshold (pipe_bench.h B1).
+bl="; ${label}, emulator numbers\$"
+bc() { check "${serial}" "baseline $1: $2" "^pipe_bench: case=$1 result=PASS $3.*${bl}"; }
+for c in two_stage_163840 two_stage_1048576 three_stage_163840 three_stage_1048576; do
+    n=${c##*_}; s=${c%%_*}; s=$([[ ${s} == two ]] && echo 2 || echo 3)
+    bc "${c}" "${s} admitted stages move ${n} bytes exact, 64 KiB bound, no leak" \
+        "stages=${s} bytes=${n} chunk=4096 runs=3 wall_us_min=[0-9]+ wall_us_median=[1-9][0-9]* .* max_resident=[0-9]+ capacity=65536 bad_runs=0 leaked_runs=0"
+done
+bc tiny_one_byte "one byte through two stages (end-to-end latency)" "stages=2 bytes=1 .*bad_runs=0 leaked_runs=0"
+bc first_byte "first-byte latency" "first_byte_us=[0-9]+ turns_to_first_byte=[1-9][0-9]* first_read_bytes=[1-9]"
+bc cancel_endless "cancellation of an endless pipeline, both reaped 130" "bytes_before_cancel=[1-9][0-9]* cancel_us=[0-9]+ cancel_steps=[0-9]+ terminated=[0-9]+ status=130,130"
+bc capacity_64k "exactly 65536 bytes fit, then WOULD_BLOCK; drained in order" "capacity_bytes=65536 would_block_when_full=1 drained=65536 out_of_order_bytes=0 write_after_drain=1 max_resident=65536"
+bc revoke_blocked_reader "revoke wakes a blocked reader stage (137)" "side=reader blocked=1 wait=1 .*status=137"
+bc revoke_blocked_writer "revoke wakes a writer stage blocked on a full pipe (137)" "side=writer blocked=1 wait=2 resident_at_revoke=65536 .*status=137"
+bc footprint "static footprint, no allocation" "pipe_pool_bytes=[1-9][0-9]* task_tab_bytes=[1-9][0-9]* .*allocation=none"
+grep -E "^pipe_bench: " "${serial}" | sed "s/^/BASELINE /" || true
+check "${serial}" "self-test done: 20 checks (9 lifecycle, 11 baselines), none failed, every EL0 step torn down" \
+    "^task_test: done checks=20 failed=0 launches=[1-9][0-9]* not_torn_down=0 scheduling=cooperative-step; ${label}\$"
 if has "${serial}" "^task_check: .*result=FAIL"; then fail "no task_check line failed"; else pass "no task_check line failed"; fi
+if has "${serial}" "^pipe_bench: .*result=FAIL"; then fail "no pipe_bench line failed"; else pass "no pipe_bench line failed"; fi
 # the gate can go red: the same checks on a copy of the log with one wrong byte count must fail
 sed 's/bytes=163840 sink_count=163840/bytes=163840 sink_count=163839/' "${serial}" >"${work}/wrong.txt"
 if has "${work}/wrong.txt" "^task_check: name=two_stage_backpressure_exact_bytes result=PASS bytes=163840 sink_count=163840 "; then

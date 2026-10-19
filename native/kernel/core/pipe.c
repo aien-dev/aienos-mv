@@ -161,6 +161,15 @@ static unsigned read_once(struct ck_pipe_pool *p, const struct ck_cap_table *t, 
         q->buf[q->head] = 0; /* consumed bytes do not stay resident */
         q->head = (q->head + 1) % CK_PIPE_CAPACITY;
     }
+#ifdef CK_PIPE_MUTANT_REORDER
+    /* TEST-ONLY mutant (aienos-mv#432, make pipe-mutant): the first two bytes of every read of 2 or more bytes come out
+     * swapped, so byte ordering is broken while the count stays right. test_pipe must fail. */
+    if (take >= 2) {
+        uint8_t s = buf[0];
+        buf[0] = buf[1];
+        buf[1] = s;
+    }
+#endif
     q->len -= (uint32_t)take;
     if (q->len == 0)
         q->head = 0;
@@ -170,6 +179,10 @@ static unsigned read_once(struct ck_pipe_pool *p, const struct ck_cap_table *t, 
     wake(p, idx, CK_PIPE_END_WRITE);
     return OSH_E_OK;
 }
+
+#if (defined(CK_PIPE_MUTANT_SKIP_RIGHTS) || defined(CK_PIPE_MUTANT_REORDER)) && !__STDC_HOSTED__
+#error "CK_PIPE_MUTANT_* are host-test-only mutants"
+#endif
 
 static unsigned write_once(struct ck_pipe_pool *p, const struct ck_cap_table *t, struct ck_handle h,
                            const uint8_t *buf, size_t len, size_t *n, unsigned *idx_out)
