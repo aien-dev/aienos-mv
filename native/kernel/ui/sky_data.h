@@ -1,4 +1,4 @@
-/* sky_data.h -- the real sky as tables: what native/kernel/tools/ck_sky_gen.py
+/* sky_data.h -- the real sky as tables: what native/kernel/tools/ck_sky_gen.c
  * writes into sky_data.c (regenerate with scripts/ck_sky_gen.sh; the inputs,
  * their addresses and sha256 are listed there and in NOTICE).
  *
