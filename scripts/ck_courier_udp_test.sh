@@ -74,11 +74,11 @@ printf 'JOB 1 chat Answer as Allen.\thello allen, how was your day\tself=Allen\t
 run() { # label model drop_every
     local label="$1" model="$2" drop="$3" rp
     rp=$(free_port)
-    "$relay" --udp "$rp" --model "$model" --work "$W/work" --log-dir "$W/log-$label" >"$W/relay-$label.log" 2>&1 &
+    "$relay" --udp "$rp" --model "$model" --work "$W/work" --log-dir "$W/log-$label" --busy-wait "${ALLEN_WAIT:-90}" >"$W/relay-$label.log" 2>&1 &
     rpid=$!
     pids+=("$rpid")
     sleep 0.5
-    "$W/test" "$rp" "$drop" "$W/job.txt" 90 | tee "$W/test-$label.log" | grep -a -E "hello after|first part|PASS|FAIL" | sed "s/^/[$label] /"
+    "$W/test" "$rp" "$drop" "$W/job.txt" "${ALLEN_WAIT:-90}" | tee "$W/test-$label.log" | grep -a -E "hello after|first part|PASS|FAIL" | sed "s/^/[$label] /"
     grep -aq "COURIER_UDP: PASS" "$W/test-$label.log" || fail "run $label"
     sleep 0.4 # the relay writes its log line a moment after the last part
     kill "$rpid" 2>/dev/null || true
