@@ -1031,7 +1031,7 @@ TASK). (4) The signed Spark judge artifact is produced by the judge, not by this
 
 | # | Check | CK gate | Status |
 |---|---|---|---|
-| 224 | `scripts/ck_native_pipe_gate.sh`: host_unit PASS, 4 of 4 mutation classes KILLED, PIPE, TASK and OSH_OP PASS, 7 real-work checks OK, 23 baseline lines, `AIENOS_CK_NATIVE_PIPE: PASS`; physical columns NOT_RUN | NATIVE_PIPE | QEMU and host PASS (2026-10-18, at 9940e2c, branch feat/native-pipe-gate-432; hardware NOT_RUN) |
+| 224 | `scripts/ck_native_pipe_gate.sh`: host_unit PASS, 4 of 4 mutation classes KILLED, PIPE, TASK and OSH_OP PASS, 7 real-work checks OK, 23 baseline lines, `AIENOS_CK_NATIVE_PIPE: PASS`; physical columns NOT_RUN | NATIVE_PIPE | QEMU and host PASS (2026-10-18, branch feat/native-pipe-gate-432: first full run at 9940e2c, final run and `ck_gates.sh --only` receipt at the branch head, named in the handoff; hardware NOT_RUN) |
 | 225 | `scripts/ck_native_pipe_gate.sh --self-test`: 24 checks, each category and each mutation class goes red on a canned bad log; a log claiming a physical PASS stays NOT_RUN | NATIVE_PIPE | host PASS (2026-10-18) |
 
 ## LIFECYCLE: resident production lifecycle (native v1 plan P03, P04 cuts 1-2b, P05 cut 1, P06 cuts 2-4; C-only) -> CK `LIFECYCLE` (scripts/qemu_ck_lifecycle_test.sh)
