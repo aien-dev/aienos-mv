@@ -10,8 +10,8 @@
 //! (the question) and one line of `log.tsv` (status, time, tokens, finish).
 //!
 //! The server makes one answer at a time and says 503 while it is busy with
-//! someone else's: this waits (5 s doubling to 60 s between tries, longer if
-//! Retry-After asks) for at most --wait-max seconds per question, and never
+//! someone else's: this waits as Retry-After asks (held between 3 and 15 s;
+//! 5 s without it) for at most --wait-max seconds per question, and never
 //! sends two requests at once. A reply already kept is not asked again, so a
 //! round that was cut off resumes where it stopped. A server that is not
 //! listening (restarting) is waited for the same way.
@@ -49,7 +49,7 @@ fn parse_args() -> Args {
         out: PathBuf::new(),
         prompt: None,
         max_tokens: 400,
-        wait_max: 900,
+        wait_max: 1800,
         temperature: "0.3".into(),
     };
     let mut it = std::env::args().skip(1);
@@ -321,14 +321,14 @@ fn main() {
             match http(&a.model, "POST", "/v1/chat/completions", &body) {
                 Ok((503, head, _)) if waited < a.wait_max => {
                     busy += 1;
-                    // never sooner than our own backoff (5 s doubling to 60 s), whatever Retry-After says
-                    let w = retry_after(&head).unwrap_or(0).max(wait).min(60);
+                    // as the server asks (Retry-After, held between 3 and 15 s), else 5 s: a busy answer
+                    // costs it nothing, and a slower poll only loses the free moment to other callers
+                    let w = retry_after(&head).unwrap_or(5).clamp(3, 15);
                     std::thread::sleep(Duration::from_secs(w));
                     waited += w;
-                    wait = (wait * 2).min(60);
                 }
                 Err(_) if waited < a.wait_max => {
-                    // the server is not there (restarting): wait for it the same way
+                    // the server is not there (restarting): wait for it, 5 s doubling to 60 s
                     busy += 1;
                     std::thread::sleep(Duration::from_secs(wait));
                     waited += wait;
