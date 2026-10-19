@@ -374,6 +374,23 @@ the relay on it and the model server on this machine; NOT_RUN without one;
 screenshot `target/native-kernel-allen-courier/allen-far-side.png`). A machine
 without a second serial port gets Allen as before, answering alone.
 
+**The canvas: the model decides what is painted.** Besides the words, the
+model writes a few short scene lines (`svc/allen_scene.c` checks them one by
+one: at most three things, bounded lengths, plain letters; anything it does
+not understand is dropped, never trusted) and `ui/canvas.c` paints each in
+Allen's own style round him, with no windows, menus or boxes: a note, a list,
+a number, a timer, a person, a quote, a place for a picture or a video, and a
+mood for the sky and the water. The system prompt is
+`../../crates/allen-courier/scene_prompt.txt`; `allen-scene` asks the model
+the questions in `../../evidence/allen-canvas/questions.txt`. The hook into the
+window is small (`ck_allen_ui_scene()` in `ui/allen_ui.c`); the courier does
+not carry scenes to the machine yet, and none of it has run on the real
+computer. Host test: `scripts/ck_allen_canvas_test.sh` (kernel build rules, a
+300000-input fuzz under the sanitizers, frames at 3840 x 2160, and
+`--replies DIR` paints real model answers; pictures in
+`target/native-kernel-allen-canvas/`). Grammar and reasons:
+`../../docs/ALLEN_CANVAS.md`.
+
 **Starting from its own disk.** When the network loader (`../boot/net_loader.c`)
 starts a kernel it hands it a `struct nb_pass` (`../boot/netboot_proto.h`) as
 LoadOptions: the processor clock when the loader began, and where the verified
