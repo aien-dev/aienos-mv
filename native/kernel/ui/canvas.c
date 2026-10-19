@@ -470,8 +470,17 @@ void ck_allen_canvas_at(ck_allen_canvas *c, uint32_t t, int32_t hx, int32_t hy, 
             it->live = 0;
             continue;
         }
-        if ((t + 40 >= it->born && t <= arrived_by(it)) || it->gone)
-            mark(it->box);
+        if ((t + 40 >= it->born && t <= opens(it) + come_ms(it) + 40) || it->gone)
+            mark(it->box); /* its shade and shapes are still easing in, or it is leaving: all of it */
+        else if (t + 40 >= it->born && t <= arrived_by(it))
+            for (unsigned j = 1; j < it->nrows; j++) { /* the shade has settled: only the lines still coming */
+                uint32_t o = opens(it) + j * ROW_MS;
+                if (t + 40 < o || t > o + come_ms(it) + 40)
+                    continue;
+                const ck_canvas_row *rw = &it->row[j];
+                int32_t cap = cap_of(face_of(c, rw->face)), up = cap + S(26) + lift(c, it, 0);
+                mark((ck_rect){it->x - S(6), it->y + rw->dy - up, it->w + S(12), up + cap / 2 + S(12)});
+            }
         if (it->arrive == CK_ARRIVE_BLOOM && t + 40 >= it->born && t <= it->born + SPARK_MS + 80) {
             ck_rect sb = spark_box(c, it, t); /* only where the spark is and was: the sky between is left alone */
             mark(sb);
@@ -543,16 +552,25 @@ static void shade(ck_canvas *cv, const ck_rect *r, ck_rect a, uint32_t amt)
         return;
     int64_t hx = a.w / 2, hy = a.h / 2, cx = a.x + hx, cy = a.y + hy;
     int64_t ix = ((int64_t)1 << 32) / (hx * hx), iy = ((int64_t)1 << 32) / (hy * hy);
+    const int64_t inner = 30000, inv = (256 << 16) / (65536 - inner); /* the rim eases over the last part */
+    uint32_t keep_in = 256 - amt, night_in = ck_scale(C_NIGHT, amt);
     for (int32_t y = d.y; y < d.y + d.h; y++) {
         int64_t dy = y - cy, qy = dy * dy * iy >> 16;
         if (qy >= 65536)
             continue;
+        /* only the span of this row inside the oval */
+        int64_t lim = (int64_t)ck_isqrt((uint64_t)(((65536 - qy) << 16) / ix)) + 1;
+        int32_t x0 = (int32_t)ck_max(d.x, (int32_t)(cx - lim)), x1 = (int32_t)ck_min(d.x + d.w, (int32_t)(cx + lim + 1));
         uint32_t *px = cv->px + (size_t)y * (size_t)cv->w;
-        for (int32_t x = d.x; x < d.x + d.w; x++) {
+        for (int32_t x = x0; x < x1; x++) {
             int64_t dx = x - cx, q = qy + (dx * dx * ix >> 16); /* 65536 at the rim */
             if (q >= 65536)
                 continue;
-            uint32_t k = (256 - ck_smooth((int32_t)((q - 30000) * 256 / 35536))) * amt >> 8;
+            if (q <= inner) {
+                px[x] = ck_scale(px[x], keep_in) + night_in;
+                continue;
+            }
+            uint32_t k = (256 - ck_smooth((int32_t)((q - inner) * inv >> 16))) * amt >> 8;
             if (k)
                 px[x] = ck_mix(px[x], C_NIGHT, k);
         }
