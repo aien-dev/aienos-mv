@@ -18,11 +18,15 @@
  * NVMe disks read-only and a look at the Ethernet chip (pci_x86.c,
  * ahci_x86.c), and the final report. With a keyboard, Allen's window, whose
  * memory lives in its own partition of the approved hard disk (memory_x86.c,
- * the only disk writes). Goodbye, or a tap of the power button (PM1 status,
- * polled), puts Allen to sleep: a dark screen until a key or another tap. Without
- * a keyboard it holds the screen CK_X86_HOLD_S seconds and
+ * the only disk writes). Goodbye, a tap of the power button (PM1 status,
+ * polled) or CK_X86_IDLE_S without a key rests the computer: the picture goes
+ * to black (ui/allen_ui.c), then the display panel is switched off for real
+ * where the display chip is known (panel_x86.c), then the cores rest; any key
+ * or another tap switches the panel on and brings the picture back. Nothing
+ * restarts: only the chipset's 4 s power-button hold, or unplugging, ends
+ * AIENOS. Without a keyboard it holds the screen CK_X86_HOLD_S seconds and
  * powers off through ACPI S5 (FADT PM1 control + the DSDT's \_S5 package); the lab image
- * (CK_X86_REPORT=1) restarts through the FADT reset register instead, back
+ * (CK_X86_REPORT=1) without a keyboard restarts through the FADT reset register instead, back
  * into its network loader (native/boot/net_loader.c).
  * Scheduling on the secondary cores, the network driver and VT-d
  * are later cuts. No runtime service
@@ -48,7 +52,7 @@
 #define CK_X86_HOLD_S 60u
 #endif
 #ifndef CK_X86_IDLE_S
-#define CK_X86_IDLE_S 600u /* Allen's window: the screen sleeps after this long without a key (0: never) */
+#define CK_X86_IDLE_S 600u /* Allen's window: the computer rests after this long without a key (0: never) */
 #endif
 
 #define SEL_CODE 0x08
@@ -267,15 +271,19 @@ static void acpi_reset(void)
  * (svc/allen_reply.c). Every Enter gets an answer on the console
  * ("allen: ..."); when a keyboard is ready and the RAM for drawing is there,
  * the screen switches from the boot report to Allen's window, which stays
- * up (no countdown to power-off); "goodbye", a tap of the power button or
- * CK_X86_IDLE_S without a key puts Allen to sleep (dark screen, the cores
- * resting), a key or another tap wakes him; holding the button 4 s
- * is the hardware power-off. Without either, the text screen and its timed hold stay as they were. */
+ * up (no countdown to power-off). "goodbye", a tap of the power button or
+ * CK_X86_IDLE_S without a key rests the computer: the picture goes to black
+ * (ck_allen_ui_sleep), then, once it is black (ck_allen_ui_asleep), the panel
+ * is switched off (panel_x86.c) and the cores rest; a key or another tap
+ * switches the panel on first and then brings the picture back. Holding the
+ * button 4 s is the hardware power-off. Without either, the text screen and its timed hold stay as they were. */
 static int allen_on;
 static uint64_t allen_bye; /* TSC when Allen said goodbye; 0 = still talking */
 static uint64_t allen_woke; /* TSC when Allen's window took the screen */
 static uint64_t allen_key;  /* TSC of the last key, or of waking; the idle timer counts from it */
 static int allen_asleep;  /* the screen is dark; a key or the power button wakes him */
+static uint64_t panel_due; /* TSC when the rest began: the panel goes off once the picture is black (0: not waiting) */
+#define PANEL_WAIT_S 10u   /* the picture gets this long to go black before the panel goes off anyway */
 static uint16_t pm1_sts;  /* PM1a status port (FADT), 0 = no power-button watch */
 static uint64_t pwr_last; /* TSC of the last power-button tap taken */
 
@@ -437,16 +445,42 @@ static void allen_sleep(int on)
     if (allen_asleep == on)
         return;
     meter_line(on ? "awake" : "asleep");
-    __atomic_store_n(&allen_asleep, on, __ATOMIC_RELEASE);
-    ck_allen_ui_sleep(on, ck_rdtsc());
-    if (on)
+    if (on) {
+        __atomic_store_n(&allen_asleep, 1, __ATOMIC_RELEASE);
+        ck_allen_ui_sleep(1, ck_rdtsc()); /* the picture goes to black first */
+        panel_due = ck_rdtsc() | 1;       /* then the panel (panel_step), then the cores rest */
         ck_puts("power: Allen asleep (any key or a tap of the power button wakes him)\n");
-    else {
-        rest_wake(); /* after the UI has the news: a woken core draws the sky again */
-        allen_key = ck_rdtsc();
-        ck_x86_kbd_discard();
-        ck_puts("power: Allen awake\n");
+        return;
     }
+    panel_due = 0;          /* a wake before the panel went off: nothing to switch back */
+    ck_x86_panel_on();      /* panel first (a no-op unless it was switched off) */
+    __atomic_store_n(&allen_asleep, 0, __ATOMIC_RELEASE);
+    ck_allen_ui_sleep(0, ck_rdtsc()); /* then the picture comes back */
+    rest_wake(); /* after the UI has the news: a woken core draws the sky again */
+    allen_key = ck_rdtsc();
+    ck_x86_kbd_discard();
+    ck_puts("power: Allen awake\n");
+}
+
+/* While the rest begins: once the picture is black (or PANEL_WAIT_S have
+ * passed without it), the panel is switched off. Nothing waits here: the
+ * hold loop calls this every step. */
+static void panel_step(void)
+{
+    if (!panel_due || !allen_asleep)
+        return;
+    uint64_t now = ck_rdtsc(), began = panel_due;
+    int black = ck_allen_ui_asleep();
+    if (!black && now - began < (uint64_t)PANEL_WAIT_S * tsc_hz)
+        return;
+    panel_due = 0;
+    if (!black)
+        ck_printf("screen: the picture did not go black within %u s; the panel goes off anyway\n", (unsigned)PANEL_WAIT_S);
+    if (!ck_x86_panel_ready())
+        return; /* no panel to switch: painted black is the rest */
+    ck_printf("screen: the picture is black %llu ms after the rest began; switching the panel off\n",
+              (unsigned long long)((now - began) / (tsc_hz / 1000)));
+    ck_x86_panel_off();
 }
 
 #define STEP_MAX 16
@@ -731,7 +765,7 @@ static void allen_window(void)
         }
         night_mib = (uint32_t)(need >> 20);
     }
-    ck_snprintf(footer, sizeof footer, "Type goodbye and this computer sleeps; any key wakes it");
+    ck_snprintf(footer, sizeof footer, "Type goodbye and this computer rests; any key wakes it");
     ck_printf("screen: Allen's window (%ux%u, %u MiB drawing memory)\n", w, h, night_mib);
     ck_x86_console_fb_off();
     ck_allen_ui_refresh(); /* whatever else was on the screen goes */
@@ -742,9 +776,9 @@ static void allen_window(void)
     power_button_watch();
     const char *meter_how = meter_start();
     if (CK_X86_IDLE_S)
-        ck_printf("power: the screen sleeps after %u s without a key\n", (unsigned)CK_X86_IDLE_S);
+        ck_printf("power: this computer rests after %u s without a key\n", (unsigned)CK_X86_IDLE_S);
     else
-        ck_puts("power: the screen does not sleep by itself\n");
+        ck_puts("power: this computer does not rest by itself\n");
     if (rest_mwait)
         ck_printf("power: asleep, the drawing cores rest in mwait (hint 0x%x) and the boot core in mwait between "
                   "keyboard polls every %u ms; meter: %s\n", rest_hint, REST_MS, meter_how);
@@ -830,18 +864,19 @@ void ck_x86_hold_step(uint64_t *end)
         night_stats("by 20 s after Allen woke");
     }
     /* No countdown to power-off while Allen's window is up. After goodbye, 4 s
-     * for the answer to appear, then Allen sleeps; CK_X86_IDLE_S without a key
-     * also sleeps him; a power-button tap sleeps or wakes him. */
+     * for the answer to appear, then the computer rests; CK_X86_IDLE_S without a
+     * key rests it too; a power-button tap rests or wakes it. */
     if (allen_bye && ck_rdtsc() - allen_bye > 4 * tsc_hz) {
         allen_bye = 0;
         allen_sleep(1);
     }
     if (CK_X86_IDLE_S && !allen_asleep && ck_rdtsc() - allen_key > (uint64_t)CK_X86_IDLE_S * tsc_hz) {
-        ck_printf("power: no key for %u s; the screen sleeps\n", (unsigned)CK_X86_IDLE_S);
+        ck_printf("power: no key for %u s; the computer rests\n", (unsigned)CK_X86_IDLE_S);
         allen_sleep(1);
     }
     if (poll && power_button_tapped())
         allen_sleep(!allen_asleep);
+    panel_step();
     meter_step(ck_rdtsc());
     *end = ~0ull;
     if (allen_asleep)
@@ -863,7 +898,7 @@ static __attribute__((noreturn)) void finish(void)
     if (CK_X86_HOLD_S && ck_x86_kbd_ready()) {
         allen_window();
         if (allen_on)
-            ck_puts("keyboard: type a line and press Enter; goodbye puts Allen to sleep, any key wakes him, holding the power button 4 s turns the computer off\n");
+            ck_puts("keyboard: type a line and press Enter; type goodbye and this computer rests, any key wakes it; holding the power button 4 s turns it off\n");
         else
             ck_printf("keyboard: type a line and press Enter; the screen stays on until %u s after the last key\n",
                       ck_x86_kbd_idle_s());
@@ -873,11 +908,14 @@ static __attribute__((noreturn)) void finish(void)
         ck_x86_console_fb_show();
     }
     if (CK_X86_HOLD_S) {
+        /* With Allen's window up the hold never ends (ck_x86_hold_step moves
+         * the end out for good): goodbye, the idle time and the power-button
+         * tap rest the computer and a key wakes it, in the lab build too. */
 #if CK_X86_REPORT
         /* Lab build only (make imac-kernel CK_X86_REPORT=1): sends the
          * allowlisted, unauthenticated report if the network is up. */
         if (allen_on)
-            ck_puts("power: Allen's window stays on; goodbye or a power-button tap puts him to sleep, hold the button 4 s to turn off\n");
+            ck_puts("power: Allen's window stays on; goodbye, the idle time or a tap of the power button rests this computer (the screen goes off) and any key wakes it; hold the button 4 s to turn it off\n");
         else
             ck_printf("power: holding the screen %u s, then restart\n", (unsigned)CK_X86_HOLD_S);
         ck_x86_report_hold(tsc_hz, CK_X86_HOLD_S);
@@ -885,7 +923,7 @@ static __attribute__((noreturn)) void finish(void)
 #else
         /* Default and resident builds: no report code is linked; nothing is sent. */
         if (allen_on)
-            ck_puts("power: Allen's window stays on; goodbye or a power-button tap puts him to sleep, hold the button 4 s to turn off\n");
+            ck_puts("power: Allen's window stays on; goodbye, the idle time or a tap of the power button rests this computer (the screen goes off) and any key wakes it; hold the button 4 s to turn it off\n");
         else
             ck_printf("power: holding the screen %u s, then ACPI S5\n", (unsigned)CK_X86_HOLD_S);
         uint64_t end = ck_rdtsc() + (uint64_t)CK_X86_HOLD_S * tsc_hz; /* typing moves it out */
@@ -895,6 +933,11 @@ static __attribute__((noreturn)) void finish(void)
         }
         ck_x86_kbd_done();
 #endif
+    }
+    if (allen_on) { /* not reached while the hold holds; if it ever ends, halt: never a restart after goodbye */
+        ck_puts("power: Allen's window ended; halted (no restart); hold the power button 4 s to turn the computer off\n");
+        for (;;)
+            __asm__ volatile("hlt");
     }
 #if CK_X86_REPORT
     acpi_reset();
@@ -1770,6 +1813,14 @@ static __attribute__((noreturn)) void kernel_main(void *arg)
     ck_x86_step("sound");
     ck_x86_usb(&frames, tsc_hz);
     ck_x86_step("usb");
+    { /* the display chip whose VRAM holds the framebuffer: panel_x86.c may switch its panel while Allen rests */
+        volatile uint32_t *px;
+        uint32_t w, h, pitch, format;
+        if (ck_x86_console_fb_get(&px, &w, &h, &pitch, &format) == 0)
+            ck_x86_display((uint64_t)(uintptr_t)px, (uint64_t)pitch * 4u * h, tsc_hz);
+        else
+            ck_x86_display(0, 0, tsc_hz);
+    }
     allen_facts.cores = sr.started + 1;
     allen_facts.sata_disks = st->ahci_disks;
     allen_facts.nvme_disks = st->nvme_disks;

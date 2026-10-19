@@ -272,14 +272,42 @@ next step is then the bridge's coefficient dump against the macOS replay.
 for every function it finds, before the drivers claim theirs. On the real machine these lines are
 the ground truth for which drivers are still missing (lab report allowlist: `pci:`).
 
-**Sleep.** "goodbye", or a tap of the power button, puts Allen to sleep: the screen goes
-black but for a faint point of light where he was, nothing moves, nothing is typed. Any key or
-another tap wakes him and the sky comes back at once (the waking key is not typed). Holding the
-power button 4 s is still the chipset's own hard power-off. The button is read by polling the
-PM1 status register named in the ACPI FADT (bit 8, PWRBTN_STS; its interrupt enable is cleared so
-the firmware never sees the press); the QEMU keyboard test drives it with the monitor's
-`system_powerdown`. Without a keyboard there is no window and no sleep: the screen holds
-CK_X86_HOLD_S seconds, then ACPI S5.
+**Rest.** "goodbye", a tap of the power button, or the idle time without a key rests the
+computer; it never restarts (the lab image included). The picture goes to black
+(`ui/allen_ui.c`), then, once it is black, the display panel is switched off for real
+(`x86/panel_x86.c`, below), then the cores rest. Any key or another tap switches the panel on
+first and then brings the sky back (the waking key is not typed). Holding the power button 4 s is
+still the chipset's own hard power-off, and only that or unplugging ends AIENOS. The button is
+read by polling the PM1 status register named in the ACPI FADT (bit 8, PWRBTN_STS; its interrupt
+enable is cleared so the firmware never sees the press); the QEMU keyboard test drives it with
+the monitor's `system_powerdown`. Without a keyboard there is no window and no rest: the screen
+holds CK_X86_HOLD_S seconds, then ACPI S5 (the lab image: restart into its loader).
+
+**Panel off (`x86/panel_x86.c`, `CK_X86_PANEL_OFF=1`, the default of `make imac-kernel`).**
+Painting the screen black leaves the backlight lit, so while Allen rests the panel itself is
+switched off through the display chip's panel power sequencer, the way its firmware does at
+power-off, and switched on again at wake before the picture returns. Only on the chip it was
+written for: an AMD VGA controller (vendor 0x1002, class 0x0300) with a Polaris device id
+(DCE 11.2; the 2017 iMac's Radeon Pro 555/560 is 1002:67ef at 01:00.0), whose VRAM aperture
+(BAR0) holds the firmware's framebuffer and whose 256 KiB register aperture (BAR5) answers.
+Registers (Linux `dce_11_2_d.h` / `dce_11_2_sh_mask.h`, MIT, index times 4 from BAR5):
+`LVTMA_PWRSEQ_CNTL` 0x481b (`LVTMA_PWRSEQ_TARGET_STATE` 0x10, `LVTMA_DIGON` 0x10000,
+`LVTMA_BLON` 0x1000000 and their `_OVRD` bits), `LVTMA_PWRSEQ_STATE` 0x481c (`DIGON` 0x2,
+`BLON` 0x8, `DONE` 0x10), `BL_PWM_CNTL` 0x4820 (duty 0xffff, `BL_PWM_EN` 0x80000000),
+`BL_PWM_GRP1_REG_LOCK` 0x4823. Off: the backlight PWM duty to 0 (locked write, wait for the
+update to land), then the sequencer's target state to off, which drops BLON, waits the panel's
+power-down delay as the firmware programmed it (`LVTMA_PWRSEQ_DELAY1/2`) and drops DIGON; the
+kernel waits for `PWRSEQ_STATE` to say done. On: the reverse, then the PWM duty restored, then
+the picture. If the firmware left the override bits set instead, the BLON and DIGON pins are
+driven directly (50 ms between backlight off and panel off, 200 ms between panel on and
+backlight on). Every write is read back and logged (`screen: panel off: PWRSEQ_CNTL 0x... ->
+0x...`); a readback that differs or a wait that runs out (all TSC-bounded, 3 s for the
+sequencer) stops the sequence, says so, and the panel is left alone from then on (a black
+screen is the fallback; a wake still tries to switch it on). At start-up `screen: panel: ...`
+says what was found and whether the panel can be switched; in QEMU the display chip is not an
+AMD part and the code does nothing. NOT yet run on the real machine: the first run will say
+which path the firmware left (`screen: panel: ready to switch off ... (through the panel power
+sequencer | driving the BLON and DIGON pins directly ...)`) and whether the panel went dark.
 
 **Keyboard and Allen's window.** `x86/xhci_x86.c` drives a wired USB boot
 keyboard (polled xHCI, through USB 2.0 hubs). When one is ready, Allen wakes:
@@ -299,15 +327,18 @@ machine, how long it has been awake and sums said in words ("what is 12 times
 and otherwise gives "I don't know that yet." Answers print as `allen: <answer>`
 on the console. The
 window has no countdown to power-off. "goodbye", a tap of the power button, or
-10 minutes without a key (`CK_X86_IDLE_S`, default 600) puts Allen to sleep: the
-screen goes dark and nothing moves, the three drawing cores rest in MWAIT (the
+10 minutes without a key (`CK_X86_IDLE_S`, default 600) rests the computer: the
+screen goes dark, the panel is switched off where the chip is known (above), nothing moves, the three drawing cores rest in MWAIT (the
 deepest of C6, C3 and C1 that CPUID lists) until he wakes, and the boot core
-halts between keyboard polls every 20 ms on a one-shot LAPIC timer. Any key (not
+halts between keyboard polls every 20 ms on a one-shot LAPIC timer. Awake, the
+hold loop polls the devices (keyboard controller, courier port, power button)
+at most once every 0.5 ms by the TSC, not on every pass: the earlier storm of
+about a million device reads a second starved QEMU's main loop after a
+keyboard replug. Any key (not
 typed) or another tap wakes him; holding the button 4 s is the chipset's hard
 off. On the iMac the processor's own energy counter (RAPL) gives
 `power: processor X.Y W on average over N s awake|asleep` at each sleep and wake
-(never under a hypervisor). The display's backlight stays lit while he sleeps:
-the kernel has no driver for the iMac panel's backlight yet. Unplugging the keyboard and plugging it
+(never under a hypervisor). Unplugging the keyboard and plugging it
 (or another) back in works: the driver watches the keyboard's root port, prints
 `keyboard: unplugged`, releases the old device and runs discovery again, then
 `keyboard: ready` once more (the QEMU test does exactly this from outside the

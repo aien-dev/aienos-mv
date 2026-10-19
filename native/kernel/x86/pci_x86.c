@@ -332,6 +332,32 @@ void ck_x86_sound(struct ck_frames *fr, uint64_t tsc_hz, uint64_t night_t0)
         ck_puts("sound: none (no High Definition Audio controller)\n");
 }
 
+/* ---- Display ----
+ * The first display controller (class 0x03) whose VRAM aperture (BAR0) holds
+ * the framebuffer goes to panel_x86.c, which decides whether it knows the
+ * chip well enough to switch the panel; the others are only listed. */
+void ck_x86_display(uint64_t fb_pa, uint64_t fb_bytes, uint64_t tsc_hz)
+{
+    const struct pfn *own = 0;
+    for (unsigned i = 0; i < nfound; i++) {
+        const struct pfn *f = &found[i];
+        if ((f->cls >> 16) != 0x03 || (f->ht & 0x7f) != 0)
+            continue;
+        uint32_t lo = cr32(f->cfg, 0x10), hi = (lo & 6) == 4 ? cr32(f->cfg, 0x14) : 0;
+        uint64_t bar = ((uint64_t)hi << 32 | lo) & ~0xfull;
+        if (!own && !(lo & 1) && bar && fb_pa >= bar && fb_pa + fb_bytes <= bar + (256ull << 20))
+            own = f;
+        else
+            ck_printf("pci: display %02x:%02x.%u id=%04x:%04x class=%06x bar0=0x%llx (not the framebuffer's chip)\n",
+                      f->bus, f->dev, f->fn, f->vendor, f->device, f->cls, (unsigned long long)bar);
+    }
+    if (own)
+        ck_x86_panel_start(own->cfg, own->bus, own->dev, own->fn, own->vendor, own->device, own->cls, fb_pa, fb_bytes,
+                           tsc_hz);
+    else
+        ck_x86_panel_start(0, 0, 0, 0, 0, 0, 0, fb_pa, fb_bytes, tsc_hz);
+}
+
 const struct ck_x86_storage_result *ck_x86_storage(uint64_t rsdp, struct ck_frames *fr, uint64_t tsc_hz,
                                                    uint64_t map_top)
 {

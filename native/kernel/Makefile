@@ -2282,7 +2282,7 @@ IMACKERN_OBJS := $(IMACKERN_DIR)/efi_entry_x86_64.o $(IMACKERN_DIR)/efi_x86.o $(
 	$(IMACKERN_DIR)/allen_ui.o $(IMACKERN_DIR)/allen_font.o $(IMACKERN_DIR)/allen_reply.o $(IMACKERN_DIR)/allen_intent.o $(IMACKERN_DIR)/courier_x86.o \
 	$(IMACKERN_DIR)/paint.o $(IMACKERN_DIR)/night.o $(IMACKERN_DIR)/mind.o $(IMACKERN_DIR)/flow.o $(IMACKERN_DIR)/chirp.o \
 	$(IMACKERN_DIR)/allen_memory.o $(IMACKERN_DIR)/allen_notes.o $(IMACKERN_DIR)/gpt_add.o $(IMACKERN_DIR)/memory_x86.o \
-	$(IMACKERN_DIR)/fat_boot.o $(IMACKERN_DIR)/sha512.o $(IMACKERN_DIR)/ct.o
+	$(IMACKERN_DIR)/fat_boot.o $(IMACKERN_DIR)/sha512.o $(IMACKERN_DIR)/ct.o $(IMACKERN_DIR)/panel_x86.o
 IMACKERN_REPORT_OBJS := $(IMACKERN_DIR)/report_x86.o $(IMACKERN_DIR)/aienos_net.o
 # Symbols only the lab image may contain; the default image is checked for them after linking.
 IMACKERN_REPORT_SYMS := ck_x86_report_hold|ck_x86_report_frame|ck_x86_report_filter|ck_x86_report_parts|ck_x86_tg3_send|ck_x86_tg3_drain|net_udp_build
@@ -2308,6 +2308,7 @@ $(IMACKERN_DIR)/ahci_x86.o: $(X86K)/ahci_x86.c $(IMACKERN_HDRS) $(KDIR)/mm/frame
 $(IMACKERN_DIR)/disk_part.o: $(KDIR)/dev/disk_part.c $(KDIR)/dev/disk_part.h $(NATIVE)/disk/disk.h
 $(IMACKERN_DIR)/disk.o: $(NATIVE)/disk/disk.c $(NATIVE)/disk/disk.h
 $(IMACKERN_DIR)/pci_x86.o: $(X86K)/pci_x86.c $(IMACKERN_HDRS) $(KDIR)/mm/frames.h $(KDIR)/dev/disk_part.h $(NATIVE)/disk/disk.h $(NATIVE)/disk/disk_nvme.h
+$(IMACKERN_DIR)/panel_x86.o: $(X86K)/panel_x86.c $(IMACKERN_HDRS)
 $(IMACKERN_DIR)/smp_x86.o: $(X86K)/smp_x86.S
 $(IMACKERN_DIR)/disk_nvme.o: $(NATIVE)/disk/disk_nvme.c $(NATIVE)/disk/disk_nvme.h $(NATIVE)/disk/disk.h
 $(IMACKERN_DIR)/tg3_x86.o: $(X86K)/tg3_x86.c $(IMACKERN_HDRS) $(KDIR)/mm/frames.h
@@ -2384,6 +2385,19 @@ endif
 # Set only for test builds (scripts/qemu_ck_imac_keyboard_test.sh uses 25), into their own OUT directory.
 ifdef CK_X86_IDLE_S
 IMACKERN_CFLAGS += -DCK_X86_IDLE_S=$(CK_X86_IDLE_S)u
+endif
+# CK_X86_PANEL_OFF: while Allen rests, switch the display panel off for real through the AMD
+# display chip's panel power sequencer (x86/panel_x86.c; DCE 11.2 registers, Polaris parts only,
+# every write read back, every wait TSC-bounded) and on again when he wakes. Default 1 for
+# `make imac-kernel`. The code finds no such chip in QEMU and says so (`screen: panel: ...`);
+# 0 leaves it out of the image altogether (own OUT directory).
+CK_X86_PANEL_OFF ?= 1
+ifeq ($(CK_X86_PANEL_OFF),1)
+IMACKERN_CFLAGS += -DCK_X86_PANEL_OFF=1
+else ifeq ($(CK_X86_PANEL_OFF),0)
+IMACKERN_CFLAGS += -DCK_X86_PANEL_OFF=0
+else
+$(error CK_X86_PANEL_OFF must be 1 (default: the panel is switched off while Allen rests) or 0)
 endif
 
 # ---- NETLDR.EFI: the lab network loader for the 2017 iMac (x86_64) ----

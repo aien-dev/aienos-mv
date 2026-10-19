@@ -169,6 +169,22 @@ void ck_x86_sound(struct ck_frames *fr, uint64_t tsc_hz, uint64_t night_t0);
 int ck_x86_hda_start(unsigned ctrl, volatile uint8_t *bar, struct ck_frames *fr, uint64_t tsc_hz, uint64_t night_t0,
                      int play);
 void ck_x86_hda_step(void);
+/* pci_x86.c: hands the display chip the walk found (the one whose VRAM holds
+ * the framebuffer at fb_pa, fb_bytes long) to panel_x86.c; with none, says so.
+ * Call after ck_x86_storage. */
+void ck_x86_display(uint64_t fb_pa, uint64_t fb_bytes, uint64_t tsc_hz);
+/* panel_x86.c: the built-in display panel, switched off for real while Allen
+ * rests and on again when he wakes (built in with CK_X86_PANEL_OFF=1; otherwise,
+ * or on a machine without the AMD chip it knows, every call says so once and
+ * does nothing). start: the display chip's config space (NULL: none found) and
+ * identity, plus the framebuffer; prints what it found and whether the panel
+ * can be switched. ready: 1 when it can. off / on: 0 when every step took,
+ * -1 when the panel was left alone (each step is logged). */
+void ck_x86_panel_start(volatile uint8_t *cfg, unsigned bus, unsigned dev, unsigned fn, uint16_t vendor,
+                        uint16_t device, uint32_t cls, uint64_t fb_pa, uint64_t fb_bytes, uint64_t tsc_hz);
+int ck_x86_panel_ready(void);
+int ck_x86_panel_off(void);
+int ck_x86_panel_on(void);
 /* xhci_x86.c: the USB keyboard, polled. start: bar0 = the controller's
  * registers (mapped), memory decode and bus master on; 0 when a keyboard is
  * running. hold_poll: handles waiting keys (echo, line editing, a

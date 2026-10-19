@@ -24,8 +24,8 @@
 #   none    the controller with nothing on it: "keyboard: none (no USB keyboard
 #           found)" and the normal boot otherwise;
 #   idle    a usb-kbd on a root port and no key typed: 25 s after Allen's window
-#           opens the screen sleeps by itself ("power: no key for 25 s; the screen
-#           sleeps"), the cores rest (the startup line says how; QEMU's MWAIT does not
+#           opens the computer rests by itself ("power: no key for 25 s; the computer
+#           rests"), the cores rest (the startup line says how; QEMU's MWAIT does not
 #           really wait with more than one CPU, so nothing is measured here, and the
 #           processor meter stays off under a hypervisor), a key wakes him without
 #           being typed, a line typed after that is taken.
@@ -220,10 +220,13 @@ echo "== hub: usb-kbd behind usb-hub =="
 chk "hub: controller running" "${work}/hub.txt" '^xhci: ctrl=0 running version=[0-9a-f]+ ports=[1-9][0-9]* slots=[1-8] context_bytes=(32|64) scratchpads=[0-9]+$'
 chk "hub: hub walked" "${work}/hub.txt" '^usb: port [0-9]+: hub, [1-9][0-9]* ports, (full|high) speed$'
 chk "hub: keyboard found behind the hub" "${work}/hub.txt" '^keyboard: ready \(controller 0, port [0-9]+\.1, full speed, slot [1-8], endpoint 0x8[1-9a-f]\)$'
-chk "hub: typing prompt" "${work}/hub.txt" '^keyboard: type a line and press Enter; goodbye puts Allen to sleep, any key wakes him, holding the power button 4 s turns the computer off$'
-chk "hub: no countdown while Allen's window is up" "${work}/hub.txt" '^power: Allen.s window stays on; goodbye or a power-button tap puts him to sleep, hold the button 4 s to turn off$'
+chk "hub: typing prompt" "${work}/hub.txt" '^keyboard: type a line and press Enter; type goodbye and this computer rests, any key wakes it; holding the power button 4 s turns it off$'
+chk "hub: no countdown while Allen's window is up" "${work}/hub.txt" '^power: Allen.s window stays on; goodbye, the idle time or a tap of the power button rests this computer \(the screen goes off\) and any key wakes it; hold the button 4 s to turn it off$'
 chk "hub: power button watched" "${work}/hub.txt" '^power: button watched at PM1 status port 0x[0-9a-f]+ '
-chk "hub: default idle time 600 s" "${work}/hub.txt" '^power: the screen sleeps after 600 s without a key$'
+chk "hub: default idle time 600 s" "${work}/hub.txt" '^power: this computer rests after 600 s without a key$'
+# QEMU's display chip is not the AMD part x86/panel_x86.c knows: the panel code must say so and do nothing.
+chk "hub: display chip listed" "${work}/hub.txt" '^pci: display [0-9a-f:.]+ id=1234:1111 class=030000 bar0=0x[0-9a-f]+ bar5=0x[0-9a-f]+ mem_decode=[01]$'
+chk "hub: panel left alone (no AMD chip in QEMU)" "${work}/hub.txt" '^screen: panel: the display chip is not an AMD VGA controller; asleep the screen is painted black and stays lit$'
 
 [[ ${typed_ok} == 1 ]] && echo "PASS  hub: keys sent from outside the guest" || { echo "FAIL  hub: keys not sent"; fails=$((fails + 1)); }
 chk "hub: Allen's window took the screen" "${work}/hub.txt" '^screen: Allen.s window \([0-9]+x[0-9]+, [0-9]+ MiB drawing memory\)$'
@@ -249,7 +252,7 @@ chk "hub: typing works again after waking" "${work}/hub.txt" '^keyboard_line: ok
 
 echo "== direct: usb-kbd on a root port =="
 chk "direct: keyboard found on a root port" "${work}/direct.txt" '^keyboard: ready \(controller 0, port [0-9]+, (full|high) speed, slot 1, endpoint 0x8[1-9a-f]\)$'
-chk "direct: Allen's window stays on" "${work}/direct.txt" '^power: Allen.s window stays on; goodbye or a power-button tap puts him to sleep, hold the button 4 s to turn off$'
+chk "direct: Allen's window stays on" "${work}/direct.txt" '^power: Allen.s window stays on; goodbye, the idle time or a tap of the power button rests this computer \(the screen goes off\) and any key wakes it; hold the button 4 s to turn it off$'
 
 chk "direct: unplug noticed" "${work}/direct.txt" '^keyboard: unplugged'
 [[ ${replug_ok} == 1 ]] && echo "PASS  direct: keyboard found again after replug" || { echo "FAIL  direct: no second keyboard: ready after replug"; fails=$((fails + 1)); }
@@ -272,10 +275,10 @@ fi
 
 echo "== idle: nobody types, idle time 25 s =="
 chk "idle: keyboard found" "${work}/idle.txt" '^keyboard: ready \(controller 0, port [0-9]+, (full|high) speed, slot 1, endpoint 0x8[1-9a-f]\)$'
-chk "idle: idle time 25 s" "${work}/idle.txt" '^power: the screen sleeps after 25 s without a key$'
+chk "idle: idle time 25 s" "${work}/idle.txt" '^power: this computer rests after 25 s without a key$'
 # Either way of resting is accepted: whether QEMU's -cpu max lists MONITOR/MWAIT is QEMU's choice.
 chk "idle: how the cores rest, meter off under a hypervisor" "${work}/idle.txt" '^power: asleep, the drawing cores (rest in mwait \(hint 0x[0-9a-f]+\) and the boot core in mwait|spin \(no MONITOR/MWAIT\) and the boot core halts) between keyboard polls every 20 ms; meter: none \(under a hypervisor\)$'
-chk "idle: the screen slept by itself" "${work}/idle.txt" '^power: no key for 25 s; the screen sleeps$'
+chk "idle: the screen slept by itself" "${work}/idle.txt" '^power: no key for 25 s; the computer rests$'
 [[ ${idle_slept} == 1 ]] && echo "PASS  idle: Allen asleep with no key typed" || { echo "FAIL  idle: Allen did not fall asleep by himself"; fails=$((fails + 1)); }
 [[ ${idle_woke} == 1 ]] && echo "PASS  idle: a key woke Allen" || { echo "FAIL  idle: key did not wake Allen"; fails=$((fails + 1)); }
 n_sl=$(grep -acE '^power: Allen asleep' "${work}/idle.txt" || true); n_aw=$(grep -acE '^power: Allen awake' "${work}/idle.txt" || true)
@@ -295,7 +298,7 @@ for r in hub direct none idle; do
         echo "PASS  ${r}: no panic"
     fi
 done
-for r in hub direct none idle; do echo "---- ${r} serial (keyboard and power lines) ----"; grep -aE '^(pci: xhci|xhci|usb|keyboard|power)' "${work}/${r}.txt" || true; done
+for r in hub direct none idle; do echo "---- ${r} serial (keyboard, power and panel lines) ----"; grep -aE '^(pci: xhci|pci: display|xhci|usb|keyboard|power|screen: panel)' "${work}/${r}.txt" || true; done
 if [[ ${fails} == 0 ]]; then
     echo "${tag}: PASS"
     exit 0
