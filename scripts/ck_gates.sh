@@ -13,11 +13,11 @@
 # scripts/qemu_ck_console_test.sh,
 # scripts/qemu_ck_rollback_test.sh, scripts/qemu_ck_osc_unit_test.sh,
 # scripts/qemu_ck_osc_launch_test.sh, scripts/qemu_ck_osc_receipt_test.sh, scripts/qemu_ck_osh_core_test.sh, scripts/qemu_ck_osh_op_test.sh,
-# scripts/qemu_ck_slot_loader_test.sh), and prints
+# scripts/qemu_ck_slot_loader_test.sh, scripts/ck_native_pipe_gate.sh), and prints
 # one line per gate:
 #     AIENOS_CK_<gate>: PASS|FAIL|NOT_RUN [(reason)]
 # for M1 M3 SMMU NVME_SHUTDOWN P2_ARTIFACT M0_ROLLBACK OSC_UNIT OSC_LAUNCH OSC_RECEIPT OSH_CORE OSH_OP M4_NVME M4_STORE M4_STORE_CRASH
-# M4_CONTINUITY M4_RECOVERY M4_ALLEN ARGUS1_REVOKE KEYBOARD NET SMP DISK_LAYOUT FPU INFER SCREEN CONSOLE SLOT_LOADER. Gates with no C
+# M4_CONTINUITY M4_RECOVERY M4_ALLEN ARGUS1_REVOKE KEYBOARD NET SMP DISK_LAYOUT FPU INFER SCREEN CONSOLE SLOT_LOADER PIPE TASK NATIVE_PIPE. Gates with no C
 # implementation print NOT_RUN (MISSING_IMPLEMENTATION: <reason>) and never
 # run anything. A missing child script, a child that reports NOT_RUN, a child
 # that prints no verdict line, or a PASS line contradicted by the child's exit
@@ -76,6 +76,7 @@ set -uo pipefail
 #         osh_core -> verdict line from scripts/qemu_ck_osh_core_test.sh (OSH shell core as EL0 tasks, step trace equals Linux; QEMU, TEST signer, not physical)
 #         osh_op -> verdict line from scripts/qemu_ck_osh_op_test.sh (a real capability-authorized OSH operation, klog; QEMU, TEST signer, not physical)
 #         slots -> verdict line from scripts/qemu_ck_slot_loader_test.sh (SLOTLDR.EFI signed A/B slot loader: bounded tries, rollback, refusals; QEMU, TEST signer, not physical)
+#         native_pipe -> verdict lines from scripts/ck_native_pipe_gate.sh (aienos-mv#432 native pipeline acceptance: host unit tests and mutants, the PIPE, TASK and OSH_OP QEMU runs, real-work checks and baselines; PIPE and TASK are its pass-through lines; QEMU and host only)
 #         missing -> NOT_RUN (MISSING_IMPLEMENTATION), never run, never PASS
 # ===========================================================================
 CK_GATE_TABLE='
@@ -106,8 +107,21 @@ INFER|infer|-
 SCREEN|screen|-
 CONSOLE|console|-
 SLOT_LOADER|slots|-
+PIPE|native_pipe|-
+TASK|native_pipe|-
+NATIVE_PIPE|native_pipe|-
 '
-CHILDREN=(boot store net artifact smp crash disk cont recov allen kbd fpu infer screen console rollback osc osc_launch osc_receipt osh_core osh_op slots)
+CHILDREN=(boot store net artifact smp crash disk cont recov allen kbd fpu infer screen console rollback osc osc_launch osc_receipt osh_core osh_op slots native_pipe)
+# PHYSICAL TABLE (aienos-mv#432): id | platform | capability. Never run here and never derived from a host or QEMU
+# verdict: every row prints AIENOS_CK_<id>: NOT_RUN (PHYSICAL: ...). They are not CK_GATE_TABLE rows, so no count, no
+# --only selection and no judge rule can turn one into PASS; a physical column changes only with independent on-device
+# evidence, which this QEMU runner never takes.
+CK_PHYSICAL_TABLE='
+NATIVE_PIPE_PI5|pi5|NATIVE_PIPELINE
+NATIVE_PIPE_IMAC|imac|NATIVE_PIPELINE
+NATIVE_PIPE_GB10|gb10|NATIVE_PIPELINE
+'
+PHYSICAL_WHY="PHYSICAL: no on-device evidence; this runner is QEMU and host only"
 # Gate selection (--only): empty selection means every gate (the default).
 selection_active=0
 declare -A sel_gate=()
@@ -194,6 +208,7 @@ set_default_children() {
         [osh_core]="${repo_root}/scripts/qemu_ck_osh_core_test.sh"
         [osh_op]="${repo_root}/scripts/qemu_ck_osh_op_test.sh"
         [slots]="${repo_root}/scripts/qemu_ck_slot_loader_test.sh"
+        [native_pipe]="${repo_root}/scripts/ck_native_pipe_gate.sh"
     )
 }
 
@@ -260,6 +275,10 @@ classify_gate() {
                 echo "PASS|child reported PASS, exit 0"
             elif [[ "${rc}" == 1 ]] && grep -qE '^AIENOS_CK_[A-Z0-9_]+: FAIL( .*)?$' "${log}"; then
                 echo "PASS|child reported PASS; its exit 1 comes from another gate's FAIL line"
+            elif [[ "${rc}" == 3 ]] && grep -qE '^AIENOS_CK_[A-Z0-9_]+: NOT_RUN( .*)?$' "${log}" \
+                && ! grep -qE '^AIENOS_CK_[A-Z0-9_]+: FAIL( .*)?$' "${log}"; then
+                # aienos-mv#432: a child with several gates (native_pipe) exits 3 when one of them could not run.
+                echo "PASS|child reported PASS; its exit 3 comes from another gate's NOT_RUN line"
             else
                 echo "FAIL|child printed PASS but exited ${rc} with no FAIL line to explain it"
             fi ;;
@@ -318,6 +337,26 @@ evaluate_table() {
     done <<<"${CK_GATE_TABLE}"
 }
 
+# evaluate_physical: fills phys_rows ("id|platform|capability|NOT_RUN") and prints one line per physical row.
+evaluate_physical() {
+    local id plat cap
+    phys_rows=()
+    while IFS='|' read -r id plat cap; do
+        [[ -n "${id}" ]] || continue
+        phys_rows+=("${id}|${plat}|${cap}|NOT_RUN")
+        echo "AIENOS_CK_${id}: NOT_RUN (${PHYSICAL_WHY})"
+    done <<<"${CK_PHYSICAL_TABLE}"
+}
+
+# native_category CAT: a category line of the native_pipe child (NATIVE_PIPE_CATEGORY <cat>: VERDICT), whole line only;
+# NOT_RUN when that child did not run, FAIL when it ran and printed no such line.
+native_category() {
+    local log="${child_log[native_pipe]:-}" v
+    if [[ "${child_present[native_pipe]:-0}" != 1 || ! -f "${log}" ]]; then echo NOT_RUN; return; fi
+    v="$(sed -nE "s/^NATIVE_PIPE_CATEGORY $1: (PASS|FAIL|NOT_RUN)( .*)?\$/\\1/p" "${log}" | sort -u)"
+    case "${v}" in PASS|FAIL|NOT_RUN) echo "${v}" ;; *) echo FAIL ;; esac
+}
+
 count_rows() {
     n_pass=0; n_fail=0; n_notrun=0; n_total=0; n_notsel=0
     local row v
@@ -350,6 +389,8 @@ collect_host() {
         q_path="not installed"; q_version="not installed"
     fi
     fw_code_sha="$(file_sha "${AAVMF_CODE_FD}")"; fw_vars_sha="$(file_sha "${AAVMF_VARS_FD}")"
+    t_cc="$(cc --version 2>/dev/null | head -1)"; t_make="$(make --version 2>/dev/null | head -1)"
+    [[ -n "${t_cc}" ]] || t_cc="not installed"; [[ -n "${t_make}" ]] || t_make="not installed"
 }
 
 # write_receipt: builds the JSON in work_dir, names it by its sha256 and
@@ -370,6 +411,7 @@ write_receipt() {
         echo "  \"host\": {\"hostname\": $(json_str "${h_host}"), \"arch\": $(json_str "${h_arch}"), \"kernel\": $(json_str "${h_kernel}"), \"cpu_model\": $(json_str "${h_cpu}")},"
         echo "  \"qemu\": {\"binary\": $(json_str "${q_path}"), \"version\": $(json_str "${q_version}")},"
         echo "  \"firmware\": {\"aavmf_code\": $(json_str "${AAVMF_CODE_FD}"), \"aavmf_code_sha256\": $(json_str "${fw_code_sha}"), \"aavmf_vars\": $(json_str "${AAVMF_VARS_FD}"), \"aavmf_vars_sha256\": $(json_str "${fw_vars_sha}")},"
+        echo "  \"toolchain\": {\"cc\": $(json_str "${t_cc}"), \"make\": $(json_str "${t_make}"), \"bash\": $(json_str "${BASH_VERSION}")},"
         echo "  \"nvme_dma_mode\": $(json_str "${dma_mode}"),"
         if [[ ${selection_active} == 1 ]]; then echo "  \"selection\": $(json_str "$(printf "%s\n" "${!sel_gate[@]}" | sort | paste -sd, -)"),"; fi
         echo "  \"children\": ["
@@ -399,6 +441,18 @@ write_receipt() {
             echo "  \"counts\": {\"total\": ${n_total}, \"pass\": ${n_pass}, \"fail\": ${n_fail}, \"not_run\": ${n_notrun}},"
         fi
         echo "  \"verdict\": $(json_str "${overall}"),"
+        echo "  \"physical_gates\": ["
+        for i in "${!phys_rows[@]}"; do
+            IFS='|' read -r g s c v <<<"${phys_rows[$i]}"
+            printf '    {"id": %s, "marker": %s, "platform": %s, "capability": %s, "verdict": %s, "reason": %s}' \
+                "$(json_str "${g}")" "$(json_str "AIENOS_CK_${g}")" "$(json_str "${s}")" "$(json_str "${c}")" \
+                "$(json_str "${v}")" "$(json_str "${PHYSICAL_WHY}")"
+            [[ $i -lt $((${#phys_rows[@]} - 1)) ]] && echo "," || echo ""
+        done
+        echo "  ],"
+        # Qualification per platform and path (aienos-mv#432): host and QEMU from the native_pipe child's category
+        # lines, the physical columns NOT_RUN by construction.
+        echo "  \"qualification\": [{\"capability\": \"NATIVE_PIPELINE\", \"path\": \"native AIENOS C kernel: admitted Omega stages over native pipes and tasks through the OSH adapter\", \"host_unit\": $(json_str "$(native_category host_unit)"), \"qemu\": $(json_str "$(native_category qemu_integration)"), \"pi5\": \"NOT_RUN\", \"imac\": \"NOT_RUN\", \"gb10\": \"NOT_RUN\"}],"
         echo "  \"parity\": \"native/kernel/GATES.md\","
         echo "  \"physical\": \"NOT_RUN\","
         echo "  \"physical_statement\": $(json_str "${PHYSICAL_STATEMENT}")"
@@ -444,11 +498,11 @@ self_test() {
     }
     expect_missing_all() {
         local g
-        for g in P2_ARTIFACT M0_ROLLBACK OSC_UNIT OSC_LAUNCH OSC_RECEIPT OSH_CORE OSH_OP M4_STORE_CRASH M4_CONTINUITY M4_RECOVERY M4_ALLEN KEYBOARD DISK_LAYOUT FPU INFER SCREEN CONSOLE; do expect "${g}" NOT_RUN; done  # P2_ARTIFACT: no artifact child in A..G; M4_STORE_CRASH: no crash child in A..J and R; DISK_LAYOUT: no disk child in A..S
+        for g in P2_ARTIFACT M0_ROLLBACK OSC_UNIT OSC_LAUNCH OSC_RECEIPT OSH_CORE OSH_OP M4_STORE_CRASH M4_CONTINUITY M4_RECOVERY M4_ALLEN KEYBOARD DISK_LAYOUT FPU INFER SCREEN CONSOLE PIPE TASK NATIVE_PIPE; do expect "${g}" NOT_RUN; done  # P2_ARTIFACT: no artifact child in A..G; M4_STORE_CRASH: no crash child in A..J and R; DISK_LAYOUT: no disk child in A..S
     }
     scenario() { # NAME BOOT_SCRIPT STORE_SCRIPT [NET_SCRIPT] [ARTIFACT_SCRIPT] [SMP_SCRIPT] [CRASH_SCRIPT] [DISK_SCRIPT] (absent: missing)
         scen="$1"
-        declare -gA child_script=([boot]="$2" [store]="$3" [net]="${4:-${tmp}/kids/net_not_present.sh}" [artifact]="${5:-${tmp}/kids/no_artifact_child.sh}" [smp]="${6:-${tmp}/kids/no_smp_child.sh}" [crash]="${7:-${tmp}/kids/no_crash_child.sh}" [disk]="${8:-${tmp}/kids/no_disk_child.sh}" [cont]="${tmp}/kids/no_cont_child.sh" [recov]="${tmp}/kids/no_recov_child.sh" [allen]="${tmp}/kids/no_allen_child.sh" [kbd]="${kbd_kid:-${tmp}/kids/no_kbd_child.sh}" [fpu]="${tmp}/kids/no_fpu_child.sh" [infer]="${tmp}/kids/no_infer_child.sh" [screen]="${tmp}/kids/no_screen_child.sh" [console]="${console_kid:-${tmp}/kids/no_console_child.sh}" [rollback]="${rollback_kid:-${tmp}/kids/no_rollback_child.sh}" [osc]="${osc_kid:-${tmp}/kids/no_osc_child.sh}" [osc_launch]="${osc_launch_kid:-${tmp}/kids/no_osc_launch_child.sh}" [osc_receipt]="${osc_receipt_kid:-${tmp}/kids/no_osc_receipt_child.sh}" [osh_core]="${osh_core_kid:-${tmp}/kids/no_osh_core_child.sh}" [osh_op]="${osh_op_kid:-${tmp}/kids/no_osh_op_child.sh}" [slots]="${slots_kid:-${tmp}/kids/no_slots_child.sh}")
+        declare -gA child_script=([boot]="$2" [store]="$3" [net]="${4:-${tmp}/kids/net_not_present.sh}" [artifact]="${5:-${tmp}/kids/no_artifact_child.sh}" [smp]="${6:-${tmp}/kids/no_smp_child.sh}" [crash]="${7:-${tmp}/kids/no_crash_child.sh}" [disk]="${8:-${tmp}/kids/no_disk_child.sh}" [cont]="${tmp}/kids/no_cont_child.sh" [recov]="${tmp}/kids/no_recov_child.sh" [allen]="${tmp}/kids/no_allen_child.sh" [kbd]="${kbd_kid:-${tmp}/kids/no_kbd_child.sh}" [fpu]="${tmp}/kids/no_fpu_child.sh" [infer]="${tmp}/kids/no_infer_child.sh" [screen]="${tmp}/kids/no_screen_child.sh" [console]="${console_kid:-${tmp}/kids/no_console_child.sh}" [rollback]="${rollback_kid:-${tmp}/kids/no_rollback_child.sh}" [osc]="${osc_kid:-${tmp}/kids/no_osc_child.sh}" [osc_launch]="${osc_launch_kid:-${tmp}/kids/no_osc_launch_child.sh}" [osc_receipt]="${osc_receipt_kid:-${tmp}/kids/no_osc_receipt_child.sh}" [osh_core]="${osh_core_kid:-${tmp}/kids/no_osh_core_child.sh}" [osh_op]="${osh_op_kid:-${tmp}/kids/no_osh_op_child.sh}" [slots]="${slots_kid:-${tmp}/kids/no_slots_child.sh}" [native_pipe]="${native_pipe_kid:-${tmp}/kids/no_native_pipe_child.sh}")
         run_children 2>/dev/null
         evaluate_table >"${tmp}/${scen}.out"
     }
@@ -464,8 +518,8 @@ self_test() {
         "$(fake smpA 0 'PASS  3 secondary cores checked in' 'AIENOS_CK_SMP_MUTATION: FAIL' 'AIENOS_CK_SMP: PASS')"
     expect M1 PASS; expect M3 PASS; expect M4_NVME PASS; expect M4_STORE PASS; expect ARGUS1_REVOKE PASS; expect SMMU PASS; expect NVME_SHUTDOWN PASS; expect NET PASS; expect SMP PASS; expect_missing_all
     count_rows
-    [[ "${n_pass}/${n_fail}/${n_notrun}/${n_total}" == "9/0/18/27" && ${overall} == NOT_ALL_GATES_PASS ]] \
-        && ok "A: counts 9/0/18 of 27, verdict NOT_ALL_GATES_PASS" || bad "A: counts ${n_pass}/${n_fail}/${n_notrun}/${n_total} ${overall}"
+    [[ "${n_pass}/${n_fail}/${n_notrun}/${n_total}" == "9/0/21/30" && ${overall} == NOT_ALL_GATES_PASS ]] \
+        && ok "A: counts 9/0/21 of 30, verdict NOT_ALL_GATES_PASS" || bad "A: counts ${n_pass}/${n_fail}/${n_notrun}/${n_total} ${overall}"
     [[ "$(nvme_dma_mode)" == "Confined (QEMU SMMUv3 stage 1, out-of-window DMA faulted); no-SMMU boot denied (NoSmmu); TEST-ONLY bypass image checked separately" ]] && ok "A: confined DMA mode recorded from the store PASS lines" || bad "A: dma mode '$(nvme_dma_mode)'"
     grep -qxF "AIENOS_CK_M4_NVME: PASS (${M4_NVME_PASS_NOTE})" "${tmp}/A.out" \
         && ok "A: M4_NVME PASS line carries the confined-mode note" || bad "A: M4_NVME PASS line lacks the note"
@@ -477,7 +531,7 @@ self_test() {
         && ok "a missing-source row is NOT_RUN (MISSING_IMPLEMENTATION: reason)" || bad "missing-source row not NOT_RUN"
     grep -q '^AIENOS_CK_KEYBOARD: NOT_RUN' "${tmp}/A.out" \
         && ok "A: KEYBOARD claimed PASS by the store child stays NOT_RUN without its own child" || bad "A: KEYBOARD line wrong"
-    [[ "$(grep -c '^AIENOS_CK_[A-Z0-9_]*: ' "${tmp}/A.out")" == 27 ]] && ok "A: exactly 27 verdict lines" || bad "A: verdict line count"
+    [[ "$(grep -c '^AIENOS_CK_[A-Z0-9_]*: ' "${tmp}/A.out")" == 30 ]] && ok "A: exactly 30 verdict lines" || bad "A: verdict line count"
 
     # B: boot FAIL; store script missing -> its three gates NOT_RUN, never PASS.
     scenario B "$(fake bootB 1 'FAIL  kernel: alive' 'AIENOS_CK_M3: FAIL' 'AIENOS_CK_M1: FAIL')" "${tmp}/kids/does_not_exist.sh"
@@ -638,6 +692,34 @@ self_test() {
     expect OSH_CORE FAIL
     unset osh_core_kid
 
+    # NA..ND (aienos-mv#432): PIPE, TASK and NATIVE_PIPE come only from the native_pipe child
+    # (scripts/ck_native_pipe_gate.sh). A physical PASS claimed by any log stays NOT_RUN: physical rows are never read.
+    native_pipe_kid="$(fake npA 0 'AIENOS_CK_PIPE: PASS' 'AIENOS_CK_TASK: PASS' 'NATIVE_PIPE_CATEGORY host_unit: PASS (x)' \
+        'NATIVE_PIPE_CATEGORY qemu_integration: PASS (x)' 'AIENOS_CK_NATIVE_PIPE_PI5: PASS' 'AIENOS_CK_NATIVE_PIPE_GB10: PASS' \
+        'AIENOS_CK_NATIVE_PIPE: PASS (host_unit PASS, qemu_integration PASS)')"
+    scenario NA "$(fake bootNA 0 'AIENOS_CK_M1: PASS')" "$(fake storeNA 0 'AIENOS_CK_PIPE: FAIL' 'AIENOS_CK_NATIVE_PIPE_IMAC: PASS')"
+    expect PIPE PASS; expect TASK PASS; expect NATIVE_PIPE PASS
+    evaluate_physical >"${tmp}/NA.phys"
+    [[ "$(grep -c ": NOT_RUN (${PHYSICAL_WHY})\$" "${tmp}/NA.phys")" == 3 && "${#phys_rows[@]}" == 3 ]] \
+        && ok "NA: the three physical rows stay NOT_RUN although logs claim PASS" || bad "NA: a physical row was not NOT_RUN"
+    [[ "$(native_category host_unit)/$(native_category qemu_integration)/$(native_category pi5_physical)" == PASS/PASS/FAIL ]] \
+        && ok "NA: qualification host/qemu read from the child, a missing category line is FAIL" || bad "NA: native_category wrong"
+    ( parse_selection "NATIVE_PIPE_PI5" ) >/dev/null 2>&1
+    [[ $? == 2 ]] && ok "NA: a physical row cannot be selected with --only (not a QEMU gate)" || bad "NA: physical row selectable"
+    native_pipe_kid="$(fake npB 1 'AIENOS_CK_PIPE: PASS' 'AIENOS_CK_TASK: PASS' 'AIENOS_CK_NATIVE_PIPE: FAIL (mutation NOT all classes killed)')"
+    scenario NB "$(fake bootNB 0 'AIENOS_CK_M1: PASS')" "$(fake storeNB 0 'AIENOS_CK_M4_NVME: PASS')"
+    expect NATIVE_PIPE FAIL; expect PIPE PASS; expect TASK PASS
+    native_pipe_kid="$(fake npC 3 'AIENOS_CK_PIPE: PASS' 'AIENOS_CK_TASK: NOT_RUN' 'AIENOS_CK_NATIVE_PIPE: NOT_RUN (gate lock)')"
+    scenario NC "$(fake bootNC 0 'AIENOS_CK_M1: PASS')" "$(fake storeNC 0 'AIENOS_CK_M4_NVME: PASS')"
+    expect NATIVE_PIPE NOT_RUN; expect TASK NOT_RUN; expect PIPE PASS
+    native_pipe_kid="$(fake npE 3 'AIENOS_CK_PIPE: PASS' 'AIENOS_CK_TASK: PASS')"
+    scenario NE "$(fake bootNE 0 'AIENOS_CK_M1: PASS')" "$(fake storeNE 0 'AIENOS_CK_M4_NVME: PASS')"
+    expect PIPE FAIL; expect NATIVE_PIPE FAIL
+    native_pipe_kid="$(fake npD 0 'AIENOS_CK_PIPE: PASS' 'AIENOS_CK_TASK: PASS')"
+    scenario ND "$(fake bootND 0 'AIENOS_CK_M1: PASS')" "$(fake storeND 0 'AIENOS_CK_NATIVE_PIPE: PASS')"
+    expect NATIVE_PIPE FAIL; expect PIPE PASS
+    unset native_pipe_kid
+
     # SEL: gate selection (--only). Selected-out gates are NOT_SELECTED, their
     # child scripts do not run, and a selection never reads as ALL_GATES_PASS.
     sel_gate=(); sel_gate[M1]=1; sel_gate[M3]=1; selection_active=1; want_sources
@@ -648,10 +730,10 @@ self_test() {
         && ok "SEL1: the store child was not run, the boot child was" || bad "SEL1: child selection wrong"
     grep -qxF "AIENOS_CK_SMMU: NOT_SELECTED (not in this run's --only list)" "${tmp}/SEL1.out" \
         && ok "SEL1: selected-out gate prints an explicit NOT_SELECTED line" || bad "SEL1: no NOT_SELECTED line"
-    [[ "$(grep -c '^AIENOS_CK_' "${tmp}/SEL1.out")" == 27 ]] && ok "SEL1: all 27 gates still reported (none dropped)" || bad "SEL1: gate lines dropped"
+    [[ "$(grep -c '^AIENOS_CK_' "${tmp}/SEL1.out")" == 30 ]] && ok "SEL1: all 30 gates still reported (none dropped)" || bad "SEL1: gate lines dropped"
     count_rows
-    [[ "${n_pass}/${n_fail}/${n_notrun}/${n_notsel}/${n_total}" == "2/0/0/25/27" && ${overall} == SELECTED_GATES_PASS_QEMU_ONLY ]] \
-        && ok "SEL1: counts 2 pass, 25 not selected, never ALL_GATES_PASS" || bad "SEL1: counts ${n_pass}/${n_fail}/${n_notrun}/${n_notsel}/${n_total} ${overall}"
+    [[ "${n_pass}/${n_fail}/${n_notrun}/${n_notsel}/${n_total}" == "2/0/0/28/30" && ${overall} == SELECTED_GATES_PASS_QEMU_ONLY ]] \
+        && ok "SEL1: counts 2 pass, 28 not selected, never ALL_GATES_PASS" || bad "SEL1: counts ${n_pass}/${n_fail}/${n_notrun}/${n_notsel}/${n_total} ${overall}"
     # SEL2: a selected gate that FAILs fails the run; a selected gate with no
     # verdict is FAIL, not dropped.
     scenario SEL2 "$(fake bootS2 1 'AIENOS_CK_M1: FAIL' 'AIENOS_CK_M3: PASS')" "$(fake storeS2 0 'AIENOS_CK_SMMU: PASS')"
@@ -689,6 +771,7 @@ self_test() {
     out_dir="${tmp}/out"; mkdir -p "${out_dir}"
     started_utc=x; head_sha=x; head_subject='quote " backslash \ tab	end'; tree_clean_before=true; tree_clean_after=true; quiet_at_start=false
     h_host=h; h_arch=a; h_kernel=k; h_cpu=c; q_path=q; q_version=v; fw_code_sha=x; fw_vars_sha=y; dma_mode="$(nvme_dma_mode)"
+    t_cc=cc; t_make=make; evaluate_physical >/dev/null
     write_receipt
     if [[ -f "${receipt_path}" && "$(sha_of <"${receipt_path}")" == "${receipt_sha}" && "${receipt_path}" == *"/ck_gates_${receipt_sha}.json" ]]; then
         ok "receipt name is the sha256 of its content"
@@ -704,10 +787,13 @@ self_test() {
     # Restore the clean-tree receipt as the one the checks below look at.
     write_receipt
     if command -v jq >/dev/null; then
-        jq -e '.physical == "NOT_RUN" and (.gates | length) == 27 and .verdict == "NOT_ALL_GATES_PASS"
+        jq -e '.physical == "NOT_RUN" and (.gates | length) == 30 and (.physical_gates | length) == 3
+               and ([.physical_gates[] | select(.verdict != "NOT_RUN")] | length) == 0
+               and .qualification[0].pi5 == "NOT_RUN" and .qualification[0].imac == "NOT_RUN" and .qualification[0].gb10 == "NOT_RUN"
+               and .qualification[0].host_unit == "NOT_RUN" and (.toolchain.cc | length) > 0 and .verdict == "NOT_ALL_GATES_PASS"
                and ([.gates[] | select(.id == "M1")][0].verdict == "PASS")
                and ([.gates[] | select(.id == "ARGUS1_REVOKE")][0].verdict == "FAIL")
-               and (.children | length) == 22 and .commit_subject == "quote \" backslash \\ tab\tend"' "${receipt_path}" >/dev/null \
+               and (.children | length) == 23 and .commit_subject == "quote \" backslash \\ tab\tend"' "${receipt_path}" >/dev/null \
             && ok "receipt is valid JSON (jq) with expected fields" || bad "receipt JSON invalid or fields wrong"
     else
         echo "NOT_RUN  jq not installed; JSON validity not machine-checked"; jq_skipped=1
@@ -726,12 +812,12 @@ self_test() {
         [[ -n "${g}" ]] || continue
         rows=$((rows + 1))
         case "${s}" in
-            boot|store|net|artifact|smp|crash|disk|cont|recov|allen|kbd|fpu|infer|screen|console|rollback|osc|osc_launch|osc_receipt|osh_core|osh_op|slots) [[ "${w}" == - ]] || tbad=1 ;;
+            boot|store|net|artifact|smp|crash|disk|cont|recov|allen|kbd|fpu|infer|screen|console|rollback|osc|osc_launch|osc_receipt|osh_core|osh_op|slots|native_pipe) [[ "${w}" == - ]] || tbad=1 ;;
             missing) [[ -n "${w}" && "${w}" != - ]] || tbad=1 ;;
             *) tbad=1 ;;
         esac
     done <<<"${CK_GATE_TABLE}"
-    [[ ${tbad} == 0 && ${rows} == 27 ]] && ok "gate table: 27 rows well-formed" || bad "gate table malformed (${rows} rows)"
+    [[ ${tbad} == 0 && ${rows} == 30 ]] && ok "gate table: 30 rows well-formed" || bad "gate table malformed (${rows} rows)"
 
     # Dirty-tree refusal, end to end, on a private clone (never this tree).
     # Both runs stop before any child script (no QEMU).
@@ -752,6 +838,13 @@ self_test() {
     fi
     bash "${BASH_SOURCE[0]}" --bogus >/dev/null 2>&1; rc=$?
     [[ ${rc} == 2 ]] && ok "unknown argument -> exit 2" || bad "unknown argument gave exit ${rc}"
+    # The native_pipe child parses its own sub-results; its self-test runs here so the gate self-test covers it.
+    if bash "${repo_root}/scripts/ck_native_pipe_gate.sh" --self-test >"${tmp}/np_self.log" 2>&1 \
+        && grep -qxF 'AIENOS_CK_NATIVE_PIPE_SELF_TEST: PASS' "${tmp}/np_self.log"; then
+        ok "scripts/ck_native_pipe_gate.sh --self-test PASS ($(grep -c '^PASS' "${tmp}/np_self.log") checks)"
+    else
+        bad "scripts/ck_native_pipe_gate.sh --self-test did not PASS"; sed 's/^/      /' "${tmp}/np_self.log" | grep FAIL
+    fi
 
     rm -rf --one-file-system "${tmp}"
     if [[ ${st_fail} == 0 ]]; then echo "AIENOS_CK_GATES_SELF_TEST: PASS${jq_skipped:+ (jq NOT_RUN: JSON validity of the receipt not machine-checked)}"; exit 0; fi
@@ -795,6 +888,7 @@ main() {
     run_children
     dma_mode="$(nvme_dma_mode)"
     evaluate_table
+    evaluate_physical
     count_rows
 
     local after; after="$(tree_state "${repo_root}")"
