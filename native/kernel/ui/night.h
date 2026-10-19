@@ -1,11 +1,14 @@
 /* night.h -- the night sky AIENOS opens on, and the two black holes that
  * merge in it.
  *
- * The sky is made once, into RAM: a near-black field, a faint Milky Way with
- * dust lanes across the middle, faint coloured nebulae, some ten thousand
- * stars and six galaxies. Each galaxy also keeps, per pixel, how bright it is
- * and where along its spiral that pixel sits, so a band of light can later
- * sweep along its arms (while Allen answers) without the galaxy itself
+ * The sky is made once, into RAM, and it is the real sky (ui/sky_real.h):
+ * by default the piece of it GW150914, the first black-hole merger ever
+ * heard, came from; the Milky Way from a photograph, the catalogue's stars
+ * to the naked-eye limit at their true places, brightness and colour, and
+ * the galaxies in the view the eye can see (there: the Large and Small
+ * Magellanic Clouds). Each galaxy also keeps, per pixel, how bright it is
+ * and where along its long axis that pixel sits, so a band of light can
+ * later sweep along it (while Allen answers) without the galaxy itself
  * changing.
  *
  * The startup, on the clock from ck_night_init (ms):

@@ -1,9 +1,11 @@
 /* night.c -- the night sky and the merging black holes; see night.h.
  *
- * The sky is worked out at a quarter of the screen's resolution for the
- * soft parts (the Milky Way, dust and nebulae: smooth anyway), scaled up
- * with a 4 x 4 ordered dither so the faint gradients show no bands, and the
- * stars and galaxies are then drawn at full resolution on top.
+ * The sky is the real one (ui/sky_real.c, from ui/sky_data.c): the
+ * Milky Way from a photograph of the whole sky, worked out at a quarter of
+ * the screen's resolution (it is smooth anyway; the photograph's own
+ * stars are taken out), scaled up with a 4 x 4 ordered dither so the faint
+ * gradients show no bands; then the catalogue's stars, at full resolution,
+ * on top.
  *
  * Bent light: a point mass moves the image of a star seen at angle theta
  * from it to where the star really is, beta = theta - E^2 / theta (E the
@@ -16,74 +18,27 @@
  * that stretches one way and squeezes the other (cos 2 theta), the pattern
  * a gravitational wave makes. */
 #include "night.h"
+#include "sky_real.h"
 
 #define S(v) ((int32_t)(((int64_t)(v) * (int64_t)n->k + 128) / 256))
 #define Q30 (1ull << 30)
 
-/* ---- the galaxies ---- */
-
-enum { SPIRAL, ROUND, EDGE };
-static const struct {
-    uint16_t fx, fy; /* thousandths of the width and height */
-    uint16_t radius; /* design px */
-    int16_t tilt, turn; /* degrees: how far it leans from face-on, and the angle of its long axis */
-    uint8_t kind, bright;
-    uint32_t tint;
-    uint16_t period;
-} gdef[CK_NIGHT_GALAXIES] = {
-    {150, 205, 112, 38, 30, SPIRAL, 160, CK_RGB(190, 205, 255), 3400},
-    {805, 135, 76, 62, -25, SPIRAL, 140, CK_RGB(200, 212, 255), 2900},
-    {265, 705, 42, 45, 60, ROUND, 130, CK_RGB(255, 228, 196), 2600},
-    {870, 750, 88, 84, 15, EDGE, 150, CK_RGB(210, 216, 255), 3800},
-    {60, 545, 40, 22, 0, SPIRAL, 120, CK_RGB(190, 205, 255), 3100},
-    {600, 95, 28, 52, 70, SPIRAL, 110, CK_RGB(200, 212, 255), 2700},
-};
+/* ---- the galaxies: the real ones in the view (sky_real.c) ---- */
 
 static uint8_t band_t[256]; /* the sweeping band: ((1 + cos) / 2)^6, 0..255 */
 
-static int32_t half_box(uint32_t k, unsigned i) { return (int32_t)((gdef[i].radius * 13 / 10 * k + 128) / 256) + 1; }
-
-static void galaxy_box(uint32_t w, uint32_t h, uint32_t k, unsigned i, ck_rect *b)
-{
-    int32_t hb = half_box(k, i), gx = (int32_t)(w * gdef[i].fx / 1000), gy = (int32_t)(h * gdef[i].fy / 1000);
-    ck_rect all = {0, 0, (int32_t)w, (int32_t)h};
-    *b = (ck_rect){gx - hb, gy - hb, 2 * hb + 1, 2 * hb + 1};
-    if (!ck_clip(b, &all))
-        *b = (ck_rect){0, 0, 0, 0};
-}
-
 size_t ck_night_mem_bytes(uint32_t w, uint32_t h, uint32_t k)
 {
+    (void)k;
     size_t n = (size_t)w * h * 4 + (size_t)(w / 4 + 1) * (h / 4 + 1) + 64;
     for (unsigned i = 0; i < CK_NIGHT_GALAXIES; i++) {
-        ck_rect b;
-        galaxy_box(w, h, k, i, &b);
+        ck_rect b = ck_sky_galaxy_bound(w, i);
         n += (size_t)b.w * (size_t)b.h * 2;
     }
     return n;
 }
 
-/* ---- the Milky Way's geometry, shared by the clouds and the stars ---- */
-
-struct band {
-    int64_t x0, y0, dx, dy, len, half;
-};
-
-static struct band band_of(const ck_night *n)
-{
-    struct band b = {-(int64_t)n->w / 20, (int64_t)n->h * 90 / 100, (int64_t)n->w * 110 / 100,
-                     -(int64_t)n->h * 92 / 100, 0, (int64_t)n->h * 16 / 100};
-    b.len = (int64_t)ck_isqrt((uint64_t)(b.dx * b.dx + b.dy * b.dy));
-    return b;
-}
-
-/* signed distance across the band and distance along it, px */
-static void band_at(const struct band *b, int64_t x, int64_t y, int64_t *across, int64_t *along)
-{
-    *across = ((x - b->x0) * b->dy - (y - b->y0) * b->dx) / b->len;
-    *along = ((x - b->x0) * b->dx + (y - b->y0) * b->dy) / b->len;
-}
-
+/* exp(-(v / width)^2), Q16 */
 static uint32_t gauss(int64_t v, int64_t width) /* exp(-(v/width)^2), Q16 */
 {
     int64_t q = v * 256 / (width ? width : 1);
@@ -92,50 +47,7 @@ static uint32_t gauss(int64_t v, int64_t width) /* exp(-(v/width)^2), Q16 */
     return ck_exp_neg((uint32_t)(q * q >> 8));
 }
 
-/* ---- the soft layer: a quarter of the resolution, 16ths of a level ---- */
-
-static void clouds(ck_night *n, uint16_t *q, int32_t qw, int32_t qh)
-{
-    struct band b = band_of(n);
-    int64_t H = n->h;
-    for (int32_t qy = 0; qy < qh; qy++)
-        for (int32_t qx = 0; qx < qw; qx++) {
-            int64_t x = (int64_t)qx * 4, y = (int64_t)qy * 4, across, along;
-            band_at(&b, x, y, &across, &along);
-            int32_t u3 = (int32_t)(x * 768 / H), v3 = (int32_t)(y * 768 / H);
-            uint64_t core = gauss(across, b.half), wide = gauss(across, b.half * 2);
-            uint64_t n1 = ck_fbm(u3, v3, 101, 5);
-            uint64_t n2 = ck_fbm((int32_t)(x * 1792 / H), (int32_t)(y * 1792 / H), 202, 4);
-            /* dark dust: a lane just off the middle of the band, broken up by noise */
-            uint64_t lane = gauss(across - H * 2 / 100, H * 5 / 100);
-            uint64_t dust = lane * ck_smooth((int32_t)(((int64_t)n2 - 22000) * 256 / 26000)) >> 8;
-            uint64_t bright = gauss(along - b.len * 40 / 100, b.len * 38 / 100);
-            uint64_t mw = core * (32768 + n1 / 2) >> 16;
-            mw = mw * (65536 - dust * 52428 / 65536) >> 16;
-            mw = mw * (29491 + bright * 36045 / 65536) >> 16;
-            uint64_t halo = wide * (39321 + n1 * 26214 / 65536) >> 16;
-            /* nebulae: faint violet, blue and rose clouds where the noise runs high */
-            uint32_t n4 = ck_fbm((int32_t)(x * 512 / H), (int32_t)(y * 512 / H), 404, 4);
-            uint32_t n5 = ck_fbm((int32_t)(x * 666 / H), (int32_t)(y * 666 / H), 505, 4);
-            uint32_t n6 = ck_fbm((int32_t)(x * 1024 / H), (int32_t)(y * 1024 / H), 606, 4);
-            uint64_t vi = ck_smooth((int32_t)(((int64_t)n4 - 36000) * 256 / 29535));
-            uint64_t bl = ck_smooth((int32_t)(((int64_t)n5 - 35000) * 256 / 30535));
-            uint64_t ro = (uint64_t)ck_smooth((int32_t)(((int64_t)n6 - 33000) * 256 / 32535)) * wide >> 16;
-            vi = vi * vi >> 8, bl = bl * bl >> 8;
-            /* level x 16 per channel */
-            int64_t top = 256 - y * 256 / H;
-            int64_t r = 26 + top / 32 + (int64_t)(mw * 44 * 16 >> 16) + (int64_t)(halo * 6 * 16 >> 16) +
-                        (int64_t)(vi * 22 * 16 >> 8) + (int64_t)(bl * 5 * 16 >> 8) + (int64_t)(ro * 22 * 16 >> 8);
-            int64_t g = 34 + top / 32 + (int64_t)(mw * 40 * 16 >> 16) + (int64_t)(halo * 8 * 16 >> 16) +
-                        (int64_t)(vi * 8 * 16 >> 8) + (int64_t)(bl * 12 * 16 >> 8) + (int64_t)(ro * 7 * 16 >> 8);
-            int64_t bb = 92 + top / 16 + (int64_t)(mw * 46 * 16 >> 16) + (int64_t)(halo * 16 * 16 >> 16) +
-                         (int64_t)(vi * 28 * 16 >> 8) + (int64_t)(bl * 30 * 16 >> 8) + (int64_t)(ro * 15 * 16 >> 8);
-            uint16_t *c = q + ((size_t)qy * (size_t)qw + (size_t)qx) * 3;
-            c[0] = (uint16_t)ck_clamp((int32_t)r, 0, 4080);
-            c[1] = (uint16_t)ck_clamp((int32_t)g, 0, 4080);
-            c[2] = (uint16_t)ck_clamp((int32_t)bb, 0, 4080);
-        }
-}
+/* ---- the soft layer (the Milky Way): a quarter of the resolution, 16ths of a level ---- */
 
 static void scale_up(ck_night *n, const uint16_t *q, int32_t qw)
 {
@@ -156,139 +68,6 @@ static void scale_up(ck_night *n, const uint16_t *q, int32_t qw)
             row[x] = c;
         }
     }
-}
-
-/* ---- stars ---- */
-
-static uint32_t star_color(uint32_t h)
-{
-    uint32_t p = h % 100;
-    return p < 10 ? CK_RGB(170, 192, 255) : p < 55 ? CK_RGB(218, 228, 255) : p < 85 ? CK_RGB(255, 250, 242)
-         : p < 97 ? CK_RGB(255, 234, 196) : CK_RGB(255, 204, 160);
-}
-
-static void stars(ck_night *n)
-{
-    ck_canvas cv = {n->sky, n->w, n->h};
-    ck_rect all = {0, 0, n->w, n->h};
-    struct band b = band_of(n);
-    uint32_t k = n->k, area = (uint32_t)n->w * (uint32_t)n->h;
-    /* field stars: many faint, few bright; more of them along the band */
-    for (uint32_t i = 0; i < area / 800; i++) {
-        int32_t x = (int32_t)(ck_hash((int32_t)i, 1, 77) % (uint32_t)(n->w * 16));
-        int32_t y = (int32_t)(ck_hash((int32_t)i, 2, 77) % (uint32_t)(n->h * 16));
-        int64_t across, along;
-        band_at(&b, x >> 4, y >> 4, &across, &along);
-        if ((ck_hash((int32_t)i, 3, 77) & 65535u) > 36000u + gauss(across, b.half) * 29535u / 65536u)
-            continue;
-        uint64_t u = ck_hash((int32_t)i, 4, 77) & 255u;
-        uint32_t lv = 14u + (uint32_t)(241u * (u * u * u * u) >> 32);
-        int32_t r = (int32_t)((20u + 16u * lv / 255u) * k / 256u);
-        ck_glow(&cv, &all, x, y, r, star_color(ck_hash((int32_t)i, 5, 77)), lv);
-    }
-    /* star dust in the band: faint points where it is densest */
-    for (uint32_t i = 0; i < area / 170; i++) {
-        int32_t x = (int32_t)(ck_hash((int32_t)i, 6, 78) % (uint32_t)(n->w * 16));
-        int32_t y = (int32_t)(ck_hash((int32_t)i, 7, 78) % (uint32_t)(n->h * 16));
-        int64_t across, along;
-        band_at(&b, x >> 4, y >> 4, &across, &along);
-        uint64_t c = gauss(across, b.half * 8 / 10);
-        if ((ck_hash((int32_t)i, 8, 78) & 65535u) > (c * c >> 16))
-            continue;
-        ck_glow(&cv, &all, x, y, (int32_t)(20u * k / 256u), CK_RGB(226, 230, 255),
-                10u + ck_hash((int32_t)i, 9, 78) % 44u);
-    }
-    /* the bright stars: a soft halo each; these twinkle */
-    uint32_t nb = area / 50000u;
-    nb = nb < 24 ? 24 : nb > CK_NIGHT_TWINKLES ? CK_NIGHT_TWINKLES : nb;
-    for (uint32_t i = 0; i < nb; i++) {
-        ck_night_star *s = &n->tw[n->ntw++];
-        s->x = (int32_t)(ck_hash((int32_t)i, 1, 91) % (uint32_t)(n->w * 16));
-        s->y = (int32_t)(ck_hash((int32_t)i, 2, 91) % (uint32_t)(n->h * 16));
-        s->color = star_color(ck_hash((int32_t)i, 3, 91) | 1u);
-        uint32_t lv = 190u + ck_hash((int32_t)i, 4, 91) % 66u;
-        int32_t r = (int32_t)(34u * k / 256u);
-        ck_glow(&cv, &all, s->x, s->y, r, s->color, lv);
-        ck_glow(&cv, &all, s->x, s->y, r * 5, s->color, 22);
-        s->r = r * 2;
-        s->period = (uint16_t)(2600u + ck_hash((int32_t)i, 5, 91) % 4200u);
-        s->phase = (uint16_t)(ck_hash((int32_t)i, 6, 91) % s->period);
-    }
-}
-
-/* ---- galaxies: light added to the sky, and the maps the sweep follows ---- */
-
-static void galaxy(ck_night *n, unsigned i, uint8_t **pool)
-{
-    ck_night_galaxy *g = &n->gal[i];
-    galaxy_box((uint32_t)n->w, (uint32_t)n->h, n->k, i, &g->box);
-    g->light = *pool;
-    g->phase = *pool + (size_t)g->box.w * (size_t)g->box.h;
-    *pool += (size_t)g->box.w * (size_t)g->box.h * 2;
-    g->tint = gdef[i].tint;
-    g->period = gdef[i].period;
-    int64_t gx = (int64_t)n->w * gdef[i].fx / 1000 * 16 + 8, gy = (int64_t)n->h * gdef[i].fy / 1000 * 16 + 8;
-    int64_t rg = (int64_t)S(gdef[i].radius) * 16;
-    uint32_t turn = (uint32_t)((int32_t)gdef[i].turn * 65536 / 360);
-    int64_t ct = ck_cos(turn), st = ck_sin(turn), ci = ck_cos((uint32_t)(gdef[i].tilt * 65536 / 360));
-    if (ci < 600)
-        ci = 600;
-    uint32_t kind = gdef[i].kind, bright = gdef[i].bright;
-    for (int32_t y = g->box.y; y < g->box.y + g->box.h; y++)
-        for (int32_t x = g->box.x; x < g->box.x + g->box.w; x++) {
-            size_t at = (size_t)(y - g->box.y) * (size_t)g->box.w + (size_t)(x - g->box.x);
-            int64_t dx = (int64_t)x * 16 + 8 - gx, dy = (int64_t)y * 16 + 8 - gy;
-            int64_t u = (dx * ct + dy * st) >> 14, v = (dy * ct - dx * st) >> 14;
-            int64_t vd = v * 16384 / ci; /* back to face-on */
-            int64_t rq = (int64_t)ck_isqrt((uint64_t)(u * u + vd * vd)) * 256 / rg; /* radius, 256 = the galaxy's */
-            g->light[at] = 0;
-            g->phase[at] = 0;
-            if (rq > 330)
-                continue;
-            uint32_t th = ck_atan2((int32_t)vd, (int32_t)u);
-            uint32_t nz = ck_fbm((int32_t)(u * 1536 / rg), (int32_t)(vd * 1536 / rg), 700 + i, 3);
-            uint32_t fine = ck_fbm((int32_t)(u * 5120 / rg), (int32_t)(vd * 5120 / rg), 750 + i, 2);
-            /* the bulge is rounder than the disc: flattened only half as much */
-            int64_t vb = v * 32768 / (16384 + ci), rb = (int64_t)ck_isqrt((uint64_t)(u * u + vb * vb)) * 256 / rg;
-            int64_t lb, ld, knot = 0; /* bulge and disc light, Q16 of full */
-            uint32_t ph;
-            if (kind == ROUND) {
-                lb = (int64_t)gauss(rb, 30) * 8 / 10;
-                ld = (int64_t)ck_exp_neg((uint32_t)(rb * 1075 / 256)) * 6 / 10;
-                ph = (uint32_t)(rb * 512);
-            } else {
-                int64_t lr = (int64_t)ck_log2_q16((uint64_t)(rq < 4 ? 4 : rq)) - 8 * 65536; /* log2(r) */
-                ph = (uint32_t)(2 * th + (uint32_t)(lr * 30000 >> 16)); /* two arms, wound about a turn and a half */
-                int64_t arm = (16384 + ck_cos(ph)) >> 1;
-                arm = arm * arm >> 14; /* Q14 */
-                /* the arms begin outside the core; inside it the light is even */
-                int64_t from = ck_smooth((int32_t)(rq - 34) * 256 / 90);
-                arm = 16384 - ((16384 - arm) * from >> 8);
-                int64_t clump = 32768 + (int64_t)nz * 22000 / 65536 + (int64_t)fine * 10768 / 65536;
-                lb = (int64_t)gauss(rb, 58) * 9 / 10;
-                ld = (int64_t)ck_exp_neg((uint32_t)(rq * 12 / 5)) * (8192 + (arm * 57344 >> 14) * clump / 65536) >> 16;
-                if (arm > 11468 && nz > 44000 && rq > 50)
-                    knot = ld * (int64_t)(nz - 44000) / 21535;
-                if (kind == EDGE) { /* the dust lane along the middle of a disc seen edge-on */
-                    int64_t lane = gauss(v, rg * 5 / 100);
-                    if (rq < 240)
-                        ld = ld * (65536 - lane * 56000 / 65536) >> 16, lb = lb * (65536 - lane * 40000 / 65536) >> 16;
-                    ph = (uint32_t)(u * 32768 / rg);
-                }
-            }
-            /* a soft edge at 1.3 radii */
-            int64_t edge = 65536 - (int64_t)ck_smooth((int32_t)(rq - 250) * 256 / 80) * 256;
-            lb = lb * edge >> 16, ld = ld * edge >> 16, knot = knot * edge >> 16;
-            uint32_t ab = (uint32_t)(lb * bright >> 16), ad = (uint32_t)(ld * bright >> 16),
-                     ak = (uint32_t)(knot * bright >> 16);
-            uint32_t *p = n->sky + (size_t)y * (size_t)n->w + x;
-            *p = ck_add(*p, CK_RGB(255, 222, 178), ab);
-            *p = ck_add(*p, CK_RGB(150, 170, 255), ad);
-            *p = ck_add(*p, CK_RGB(255, 140, 190), ak / 2);
-            uint32_t l = ab + ad;
-            g->light[at] = (uint8_t)(l > 255 ? 255 : l);
-            g->phase[at] = (uint8_t)(ph >> 8);
-        }
 }
 
 /* ---- coming out of the dark ---- */
@@ -349,11 +128,18 @@ int ck_night_init(ck_night *n, uint32_t w, uint32_t h, uint32_t k, int32_t cx, i
     n->aw = (int32_t)(w / 4 + 1);
     p += (size_t)(w / 4 + 1) * (h / 4 + 1);
     int32_t qw = (int32_t)(w / 4 + 2), qh = (int32_t)(h / 4 + 2);
-    clouds(n, scratch, qw, qh);
+    ck_sky_milkyway_q(scratch, qw, qh, n->w, cx, cy);
     scale_up(n, scratch, qw);
-    stars(n);
-    for (unsigned i = 0; i < CK_NIGHT_GALAXIES; i++)
-        galaxy(n, i, &p);
+    ck_canvas cv = {n->sky, n->w, n->h};
+    ck_sky_draw_stars(&cv, k, cx, cy, n->tw, CK_NIGHT_TWINKLES, &n->ntw);
+    for (unsigned i = 0; i < CK_NIGHT_GALAXIES; i++) {
+        ck_night_galaxy *g = &n->gal[i];
+        g->box = ck_sky_galaxy_box(w, h, cx, cy, i);
+        g->light = p;
+        g->phase = p + (size_t)g->box.w * (size_t)g->box.h;
+        p += (size_t)g->box.w * (size_t)g->box.h * 2;
+        ck_sky_galaxy_maps(g, i, w, cx, cy);
+    }
     appear_map(n);
     ck_night_at(n, 0);
     return 0;
