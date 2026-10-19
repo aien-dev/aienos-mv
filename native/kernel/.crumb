@@ -93,21 +93,21 @@
           "purpose": "Directory native/kernel/tests. Purpose not yet described by a human."
         },
         {
-          "digest": "e86cf77a02347c4d7888f0bfe05223b350a4c4fc6d72931c778d7f6a0acc06ec",
-          "last_commit": "2fd82ce",
+          "digest": "d9959840ab310e5d95e7857e1328c6186fc4d94b7c62fd7bd217a84182944c43",
+          "last_commit": "9997853",
           "name": "tools",
           "purpose": "Hosted (Linux-built) checkers for the native kernel, run by `make -C native/kernel test`; nothin"
         }
       ],
-      "children_root": "sha256:302fc7e17ad3f4c1a41f43ed280eff202da7ff0db48714d693aec5507dd725db",
-      "compiled_at": "2026-10-18T18:24:02Z",
+      "children_root": "sha256:bec1b63e56a291190eba4818ed5b89aacca3c479c85116f889322030de03b7ec",
+      "compiled_at": "2026-10-19T23:05:18Z",
       "compiler": "crumb-compile/1",
-      "digest": "sha256:b10f7dae96935cfe83172cba73fcf7c35818323da7e8551bffcbbf811c2e73b9",
+      "digest": "sha256:ea1e43e38526f8493e2170795342f6f734f0a33d5366e8fcfda6988d491ecf90",
       "evidence_files": 0,
       "evidence_root": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "files": 458,
-      "generated_at_commit": "f913a63a78c6fe298c99761337b75cfd261748a5",
-      "source_tree": "sha256:5503850c9247308b4918c1ffeee21fe5de6d72c9db58ae3842a887d5f0153b69"
+      "files": 466,
+      "generated_at_commit": "0216929ad61ef0b9b57e7ad8029f7ae9cde4506d",
+      "source_tree": "sha256:4b43532003858b4df8a89bb24115dcaebcfc7799a8260f5816cbf2faf9ba9499"
     },
     "owner_lane": "",
     "provenance": {
