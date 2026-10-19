@@ -777,6 +777,13 @@ static void allen_window(void)
     }
 }
 
+static int same_text(const char *a, const char *b)
+{
+    while (*a && *a == *b)
+        a++, b++;
+    return *a == *b;
+}
+
 /* Allen's note of an exchange he had through the far side: what was asked,
  * what he said, one note on disk (svc/allen_reply.h ck_allen_note_exchange),
  * so his memory grows with every answer. The cost is printed in ms. */
@@ -826,8 +833,14 @@ static void courier_step(void)
         if (!ck_allen_say_line(line, &seq, &part, &total, text, sizeof text) || !job_t || seq != job_seq)
             continue;
         job_last = ck_rdtsc() | 1;
-        if (part == 0) /* WAIT */
+        if (part == 0) { /* WAIT: the far side is held up (a busy model); the silence clock starts over */
+            static uint32_t waited_job;
+            if (waited_job != seq) {
+                waited_job = seq;
+                ck_printf("screen: the far side is busy, Allen waits for job %u\n", (unsigned)seq);
+            }
             continue;
+        }
         if (part == 1) {
             said_n = 0;
             parts = 0;
@@ -845,14 +858,15 @@ static void courier_step(void)
         }
         if (total && part >= total) { /* the last part: the answer is whole */
             if (!said_n) {
-                ck_snprintf(said, sizeof said, "The far side had nothing to say.");
+                ck_snprintf(said, sizeof said, "%s", ck_allen_lost_thread);
                 ck_allen_ui_said(0, said, ck_rdtsc());
             }
             ck_printf("allen: %s\n", said);
             ck_printf("screen: the far side answered job %u (%u characters out, %u parts, %llu ms)\n", (unsigned)seq,
                       (unsigned)strlen(said), parts, (unsigned long long)((ck_rdtsc() - job_t) * 1000 / tsc_hz));
             job_t = 0;
-            allen_note_exchange(said);
+            if (!same_text(said, ck_allen_lost_thread)) /* no note of an exchange that got no answer */
+                allen_note_exchange(said);
         }
     }
     if (job_t && ck_rdtsc() - job_last > 30 * tsc_hz) {

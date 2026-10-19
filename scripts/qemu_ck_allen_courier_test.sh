@@ -6,12 +6,16 @@
 # serial port (COM2) joined to a Unix socket. The relay crates/allen-courier
 # sits on that socket and carries Allen's job lines to the language-model
 # server on this machine (127.0.0.1:18091 by default, the OpenAI chat shape)
-# and the answers back. Keys go in through the QEMU monitor: "hello allen",
-# then "write a haiku about rain". The far side answers BOTH (the model answers
-# first; only goodbye and the naming are Allen's own), so Allen writes a job for
-# each, keeps thinking, and says what came back. After the first exchange he
-# keeps a note of it, and the second job carries that note to the model; the
-# relay keeps every exchange in its learning log. The real Ethernet wire cannot
+# and the answers back. Keys go in through the QEMU monitor: "hello allen"
+# (the very first meeting: Allen answers that himself, the naming exchange),
+# then "write a haiku about rain" and "what did i just ask you". The model
+# answers BOTH of those (only goodbye and the naming are Allen's own), so
+# Allen writes a job for each, keeps thinking, and says what came back. After
+# the first exchange he keeps a note of it, and the second job carries that
+# note to the model; the relay keeps every exchange in its learning log. The
+# model server is shared and answers "busy" (503) while other jobs run, so the
+# relay keeps asking (ALLEN_BUSY_WAIT seconds, default 900) and the test waits
+# as long (ALLEN_WAIT seconds per answer, default 900). The real Ethernet wire cannot
 # run in QEMU (no Broadcom chip): scripts/ck_courier_udp_test.sh covers it.
 #
 # Needs qemu-system-x86_64, OVMF, mtools, an x86_64 gcc, cargo, and the model
@@ -24,6 +28,8 @@ tag="AIENOS_ALLEN_COURIER"
 code_fd="${OVMF_CODE:-/usr/share/OVMF/OVMF_CODE_4M.fd}"
 vars_fd="${OVMF_VARS:-/usr/share/OVMF/OVMF_VARS_4M.fd}"
 model="${ALLEN_MODEL:-127.0.0.1:18091}"
+busy_wait="${ALLEN_BUSY_WAIT:-900}"
+answer_wait="${ALLEN_WAIT:-900}"
 cross=""
 if [ "$(uname -m)" != "x86_64" ]; then cross="x86_64-linux-gnu-"; fi
 for t in qemu-system-x86_64 mformat mmd mcopy cargo curl "${cross}gcc" "${cross}ld"; do
@@ -111,7 +117,7 @@ qemu-system-x86_64 -M q35 -accel tcg -cpu max -smp 2 -m 1024 \
 pids+=($!)
 cat "${work}/one.mon.out" >/dev/null &
 pids+=($!)
-"${relay}" --socket "${work}/wire.sock" --model "${model}" --work "${work}/answers" --log-dir "${work}/log" >"${work}/relay.log" 2>&1 &
+"${relay}" --socket "${work}/wire.sock" --model "${model}" --work "${work}/answers" --log-dir "${work}/log" --busy-wait "${busy_wait}" >"${work}/relay.log" 2>&1 &
 pids+=($!)
 
 typed=0
@@ -121,10 +127,12 @@ if wait_for 300 '^keyboard: type a line and press Enter'; then
     wait_for 60 '^screen: night: .* by 20 s after Allen woke' || true # he has formed; the picture will show him
     say "hello allen"
     typed=1
-    wait_for 180 '^screen: the far side (answered job 1|did not answer job 1)' || true
-    sleep 1
+    wait_for 60 '^allen: Hello Humanity\.$' || true
     say "write a haiku about rain"
-    wait_for 180 '^screen: the far side (answered job 2|did not answer job 2)' || true
+    wait_for "${answer_wait}" '^screen: the far side (answered job 1|did not answer job 1)' || true
+    sleep 1
+    say "what did i just ask you"
+    wait_for "${answer_wait}" '^screen: the far side (answered job 2|did not answer job 2)' || true
     sleep 2.5 # his words are still coming when the picture is taken
     echo "screendump ${work}/one.png -f png" >&3
     for _ in $(seq 1 50); do [[ -s "${work}/one.png" ]] && break; sleep 0.2; done
@@ -139,22 +147,23 @@ txt >"${work}/one.txt"
 [[ ${typed} == 1 ]] && echo "PASS  keys typed from outside the guest" || { echo "FAIL  the keyboard never came up"; fails=$((fails + 1)); }
 chk "a second serial port found at boot" "${work}/one.txt" '^courier: a second serial port answers'
 chk "the far side said hello" "${work}/one.txt" '^courier: ready, the far side said hello$'
-chk "the greeting goes to the far side as job 1" "${work}/one.txt" '^allen: \(asking the far side, job 1\)$'
-chk "the second line goes as job 2" "${work}/one.txt" '^allen: \(asking the far side, job 2\)$'
-chk "job 1 reported by lengths only" "${work}/one.txt" '^screen: Allen asked the far side \(11 characters in, [0-9]+ in the job\)$'
-chk "job 2 reported by lengths only" "${work}/one.txt" '^screen: Allen asked the far side \(24 characters in, [0-9]+ in the job\)$'
+chk "Allen answers the very first greeting himself" "${work}/one.txt" '^allen: Hello Humanity\.$'
+chk "the first question goes to the far side as job 1" "${work}/one.txt" '^allen: \(asking the far side, job 1\)$'
+chk "the second question goes as job 2" "${work}/one.txt" '^allen: \(asking the far side, job 2\)$'
+chk "job 1 reported by lengths only" "${work}/one.txt" '^screen: Allen asked the far side \(24 characters in, [0-9]+ in the job\)$'
+chk "job 2 reported by lengths only" "${work}/one.txt" '^screen: Allen asked the far side \(23 characters in, [0-9]+ in the job\)$'
 chk "the far side began job 1" "${work}/one.txt" '^screen: the far side began job 1 after [0-9]+ ms$'
 chk "the far side answered job 1" "${work}/one.txt" '^screen: the far side answered job 1 \([1-9][0-9]* characters out, [1-9][0-9]* parts, [0-9]+ ms\)$'
 chk "the far side answered job 2" "${work}/one.txt" '^screen: the far side answered job 2 \([1-9][0-9]* characters out, [1-9][0-9]* parts, [0-9]+ ms\)$'
 chk "Allen said an answer (not the empty one)" "${work}/one.txt" '^allen: [^(].*'
 chk "Allen kept a note of the first exchange" "${work}/one.txt" '^allen_memory: note [0-9]+ \(the exchange\) (saved|kept until power off) in [0-9]+ ms$'
 if grep -aqE '^allen: (The far side had nothing to say\.|I lost my thread)' "${work}/one.txt"; then echo "FAIL  the far side had nothing to say"; fails=$((fails + 1)); fi
-chk "the relay carried job 1 and said it back" "${work}/relay.log" '^courier: serial job 1 \(chat, 11 chars asked, [0-9]+ in the instruction, [0-9]+ memory lines\) -> [1-9][0-9]* chars, [1-9][0-9]* parts, first in [0-9]+ ms, whole in [0-9]+ ms, waits [0-9]+, status 200$'
-chk "the relay carried job 2 and said it back" "${work}/relay.log" '^courier: serial job 2 \(chat, 24 chars asked, [0-9]+ in the instruction, [0-9]+ memory lines\) -> [1-9][0-9]* chars, [1-9][0-9]* parts, first in [0-9]+ ms, whole in [0-9]+ ms, waits [0-9]+, status 200$'
+chk "the relay carried job 1 and said it back" "${work}/relay.log" '^courier: serial job 1 \(make, 24 chars asked, [0-9]+ in the instruction, [0-9]+ memory lines\) -> [1-9][0-9]* chars, [1-9][0-9]* parts, first in [0-9]+ ms, whole in [0-9]+ ms, waits [0-9]+, status 200$'
+chk "the relay carried job 2 and said it back" "${work}/relay.log" '^courier: serial job 2 \(chat, 2[23] chars asked, [0-9]+ in the instruction, [0-9]+ memory lines\) -> [1-9][0-9]* chars, [1-9][0-9]* parts, first in [0-9]+ ms, whole in [0-9]+ ms, waits [0-9]+, status 200$'
 log="$(ls "${work}"/log/*.jsonl 2>/dev/null | head -1)"
 [[ -n "${log}" && "$(wc -l <"${log}")" == 2 ]] && echo "PASS  the learning log holds both exchanges" || { echo "FAIL  the learning log does not hold two exchanges"; fails=$((fails + 1)); }
 [[ -n "${log}" ]] && chk "the learning log keeps the questions" "${log}" '"ask":"write a haiku about rain"'
-[[ -n "${log}" ]] && chk "the second job carried the first exchange as a note" <(sed -n 2p "${log}") '"memory":\[[^]]*note asked: hello allen'
+[[ -n "${log}" ]] && chk "the second job carried the first exchange as a note" <(sed -n 2p "${log}") '"memory":\[[^]]*note asked: write a haiku about rain'
 [[ -n "${log}" ]] && { mkdir -p "${out}/log"; cp "${log}" "${out}/log/"; }
 chk "Allen says goodbye" "${work}/one.txt" '^allen: Goodbye\. Until next time\.$'
 [[ -s "${out}/allen-far-side.png" ]] && echo "PASS  screenshot kept (${out}/allen-far-side.png)" || { echo "FAIL  no screenshot"; fails=$((fails + 1)); }

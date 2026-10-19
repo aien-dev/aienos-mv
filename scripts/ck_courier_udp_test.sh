@@ -3,10 +3,11 @@
 #
 # The kernel's own courier code (native/kernel/x86/courier_udp_x86.c, built with
 # -DCK_COURIER_HOST) talks UDP to the real relay (crates/allen-courier --udp),
-# which asks a model server. Three runs: a clean wire, a wire that loses every
-# 3rd frame in each direction, and a model server that answers "busy" (503)
-# twice before it answers. The model here is a small stand-in so the run is
-# exact and quick (the lossy runs lose about 1 frame in 3 and 1 in 2, each way); with ALLEN_MODEL=host:port (the real server) a fourth run
+# which asks a model server. Five runs: a clean wire; wires that lose about 1 frame
+# in 3 and 1 in 2 each way; a model server that answers "busy" (503) twice before
+# it answers; and one that sits silent for 4 s before it starts (the relay must
+# keep sending WAIT meanwhile). The model here is a small stand-in so the run is
+# exact and quick. With ALLEN_MODEL=host:port (the real server) a last run
 # sends the same job to the real model. The real kernel cannot run this in QEMU
 # (QEMU has no Broadcom chip), so this is the check of the courier's protocol.
 # Ends with "AIENOS_COURIER_UDP: PASS" or "AIENOS_COURIER_UDP: FAIL <why>".
@@ -36,11 +37,13 @@ fi
 
 free_port() { python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1])'; }
 
-# a stand-in model server: 503 (Retry-After: 1) for the first BUSY requests, then a streamed answer
+# a stand-in model server: 503 (Retry-After: 1) for the first BUSY requests, then (after DELAY seconds
+# of silence, like a server whose GPU is held by another job) a streamed answer
 cat >"$W/fake_model.py" <<'EOF'
 import json, sys, time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 busy = int(sys.argv[2])
+delay = float(sys.argv[3]) if len(sys.argv) > 3 else 0.0  # seconds the server sits on a request before it answers
 seen = [0]
 WORDS = ("I am here. The rain is soft tonight and I like listening to it with you. "
          "Tell me more about your day when you are ready.").split(" ")
@@ -51,6 +54,8 @@ class H(BaseHTTPRequestHandler):
         n = int(self.headers.get("Content-Length", "0"))
         body = json.loads(self.rfile.read(n))
         seen[0] += 1
+        if delay and seen[0] > busy:
+            time.sleep(delay)
         if seen[0] <= busy:
             self.send_response(503); self.send_header("Retry-After", "1"); self.send_header("Content-Length", "0")
             self.send_header("Connection", "close"); self.end_headers(); return
@@ -75,6 +80,7 @@ run() { # label model drop_every
     sleep 0.5
     "$W/test" "$rp" "$drop" "$W/job.txt" 90 | tee "$W/test-$label.log" | grep -a -E "hello after|first part|PASS|FAIL" | sed "s/^/[$label] /"
     grep -aq "COURIER_UDP: PASS" "$W/test-$label.log" || fail "run $label"
+    sleep 0.4 # the relay writes its log line a moment after the last part
     kill "$rpid" 2>/dev/null || true
     wait "$rpid" 2>/dev/null
 }
@@ -97,6 +103,13 @@ sleep 0.5
 run busy "127.0.0.1:$mp2" 0
 grep -aqE "waits 2|waits [2-9]" "$W/relay-busy.log" || fail "the relay did not wait out the busy answers"
 echo "[busy] relay waited out the busy answers: $(grep -a 'waits' "$W/relay-busy.log" | head -1 | sed 's/.*first in/first in/')"
+mp3=$(free_port)
+python3 "$W/fake_model.py" "$mp3" 0 4 &
+pids+=("$!")
+sleep 0.5
+run slow "127.0.0.1:$mp3" 0
+grep -aqE "[1-9][0-9]* waits" "$W/test-slow.log" || fail "the relay kept no word going while the model sat on the request"
+echo "[slow] the relay sent WAIT while the model sat silent: $(grep -aoE '[0-9]+ waits' "$W/test-slow.log" | head -1)"
 [ -s "$W"/log-clean/*.jsonl ] || fail "no line in the learning log"
 grep -aq '"ask":"hello allen, how was your day"' "$W"/log-clean/*.jsonl || fail "the learning log lacks the question"
 echo "learning log line: $(head -c 300 "$W"/log-clean/*.jsonl)"

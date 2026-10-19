@@ -27,11 +27,15 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{SocketAddr, TcpStream, UdpSocket};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const PORT: u16 = 47033; // x86/courier_udp.h CK_COURIER_PORT
 const HEAD: &str = "ALLEN-COURIER v=1 run=";
+/// What Allen says when the model cannot be reached or says nothing (the kernel compares it
+/// with ck_allen_lost_thread and keeps no note of such an exchange).
+const LOST: &str = "I lost my thread there. Ask me again in a moment.";
 
 /// Allen's rules for the worker, from docs/ALLEN_PRESENCE_RESEARCH.md section 5
 /// (Austin: say who speaks to whom; Gollwitzer: the shape of the act; Weiser and
@@ -52,12 +56,13 @@ struct Args {
     log_dir: PathBuf,
     max_tokens: u32,
     say_max: usize,
+    busy_wait: u64, // seconds to keep asking a busy (503) model
 }
 
 fn usage() -> ! {
     eprintln!(
         "usage: allen-courier [--socket PATH] [--udp PORT] [--udp-answer IP:PORT] [--model HOST:PORT] \
-         [--work DIR] [--log-dir DIR] [--max-tokens N] [--say-max N]   (one wire at least)"
+         [--work DIR] [--log-dir DIR] [--max-tokens N] [--say-max N] [--busy-wait SECONDS]   (one wire at least)"
     );
     std::process::exit(2)
 }
@@ -73,6 +78,7 @@ fn parse_args() -> Args {
         log_dir: PathBuf::from(home).join(".local/state/aienos/allen/conversations"),
         max_tokens: 220,
         say_max: 150,
+        busy_wait: 900,
     };
     let mut it = std::env::args().skip(1);
     while let Some(k) = it.next() {
@@ -86,6 +92,7 @@ fn parse_args() -> Args {
             "--log-dir" => a.log_dir = PathBuf::from(v),
             "--max-tokens" => a.max_tokens = v.parse().unwrap_or_else(|_| usage()),
             "--say-max" => a.say_max = v.parse().unwrap_or_else(|_| usage()),
+            "--busy-wait" => a.busy_wait = v.parse().unwrap_or_else(|_| usage()),
             _ => usage(),
         }
     }
@@ -324,10 +331,12 @@ fn is_word(line: &str, word: &str) -> bool {
     line == word || line.strip_prefix(word).is_some_and(|r| r.starts_with(' '))
 }
 
-/// How long to wait after the n-th busy answer (503): 0.5 s, 1 s, 2 s, then 4 s at most;
-/// a Retry-After the server names (whole seconds, at most 4) is used when it is longer.
+/// How long to wait after the n-th busy answer (503): 0.25 s, 0.5 s, then 1 s at most (the
+/// server answers a busy 503 in under a millisecond and its own hint is "retry in 1 s", and
+/// other clients poll that fast, so a slower poll would never win a free moment); a
+/// Retry-After the server names (whole seconds, at most 4) is used when it is longer.
 fn backoff(n: u32, head: &str) -> Duration {
-    let own = 500u64 << (n.saturating_sub(1)).min(3);
+    let own = 250u64 << (n.saturating_sub(1)).min(2);
     let named = head
         .lines()
         .find_map(|l| {
@@ -456,6 +465,7 @@ struct Brain {
     model: String,
     max_tokens: u32,
     say_max: usize,
+    busy_wait: Duration,
     work: PathBuf,
     log_dir: PathBuf,
     lock: Mutex<()>,
@@ -472,7 +482,9 @@ impl Brain {
             self.max_tokens
         );
         let mut s = TcpStream::connect(&self.model)?;
-        s.set_read_timeout(Some(Duration::from_secs(120)))?;
+        // a server that takes the request but starts it late (another job holds the GPU) may
+        // keep us waiting for its head as long as we are willing to wait for a busy one
+        s.set_read_timeout(Some(self.busy_wait.max(Duration::from_secs(1))))?;
         write!(
             s,
             "POST /v1/chat/completions HTTP/1.1\r\nHost: {}\r\nContent-Type: application/json\r\n\
@@ -493,6 +505,7 @@ impl Brain {
                 return Err(std::io::Error::other("a head too long"));
             }
         }
+        s.set_read_timeout(Some(Duration::from_secs(120)))?;
         let head = String::from_utf8_lossy(&head).to_string();
         let status: u16 = head
             .split_whitespace()
@@ -502,13 +515,39 @@ impl Brain {
         Ok((status, head, s))
     }
 
-    /// Asks the model and emits the answer in parts. Blocks until the answer is whole.
-    fn answer(&self, job: &Job, mut emit: impl FnMut(String)) -> Outcome {
+    /// Asks the model and emits the answer in parts. Blocks until the answer is whole. While no
+    /// word has come yet a "WAIT" goes out every 2 s (first after 1 s), so the kernel, which gives
+    /// a silent job up after 30 s, keeps waiting for a busy or late model.
+    fn answer(&self, job: &Job, emit: impl FnMut(String) + Send) -> Outcome {
         let _one = self.lock.lock().unwrap_or_else(|e| e.into_inner());
+        let waiting = AtomicBool::new(true);
+        let done = AtomicBool::new(false);
+        let wire = Mutex::new(emit);
+        std::thread::scope(|sc| {
+            sc.spawn(|| {
+                let mut tick = 0u32;
+                while !done.load(Ordering::Relaxed) {
+                    std::thread::sleep(Duration::from_millis(20));
+                    tick += 1;
+                    if tick % 100 == 50 && waiting.load(Ordering::Relaxed) {
+                        let mut w = wire.lock().unwrap_or_else(|e| e.into_inner());
+                        (*w)(format!("WAIT {}", job.seq));
+                    }
+                }
+            });
+            let out = self.ask(job, &waiting, |l| {
+                let mut w = wire.lock().unwrap_or_else(|e| e.into_inner());
+                (*w)(l)
+            });
+            done.store(true, Ordering::Relaxed);
+            out
+        })
+    }
+
+    fn ask(&self, job: &Job, waiting: &AtomicBool, mut emit: impl FnMut(String)) -> Outcome {
         let system = job.system();
         let t0 = Instant::now();
         let mut waits = 0u32;
-        let mut last_wait = Instant::now();
         let mut out = Outcome {
             reply: String::new(),
             said: Vec::new(),
@@ -542,12 +581,8 @@ impl Brain {
         }
         loop {
             match self.open(&system, &job.ask) {
-                Ok((503, head, _)) if t0.elapsed() < Duration::from_secs(120) => {
+                Ok((503, head, _)) if t0.elapsed() < self.busy_wait => {
                     waits += 1;
-                    if last_wait.elapsed() >= Duration::from_secs(2) || waits == 1 {
-                        emit(format!("WAIT {}", job.seq));
-                        last_wait = Instant::now();
-                    }
                     std::thread::sleep(backoff(waits, &head));
                     continue;
                 }
@@ -565,6 +600,7 @@ impl Brain {
                         }
                         if first.is_none() {
                             first = Some(Instant::now());
+                            waiting.store(false, Ordering::Relaxed);
                         }
                         full.push_str(piece);
                         // a part goes out once 36 more chars have settled, cut at the last space,
@@ -661,14 +697,7 @@ impl Brain {
                     if !tail.is_empty() {
                         part_out(&mut emit, job.seq, &tail, true, &mut parts, &mut out.said);
                     } else if parts == 0 {
-                        part_out(
-                            &mut emit,
-                            job.seq,
-                            "The far side had nothing to say.",
-                            true,
-                            &mut parts,
-                            &mut out.said,
-                        );
+                        part_out(&mut emit, job.seq, LOST, true, &mut parts, &mut out.said);
                     } else {
                         // close the answer with an empty last part
                         part_out(&mut emit, job.seq, "", true, &mut parts, &mut out.said);
@@ -677,30 +706,17 @@ impl Brain {
                 }
                 Ok((code, _, _)) => {
                     out.status = code;
-                    part_out(
-                        &mut emit,
-                        job.seq,
-                        "The far side had nothing to say.",
-                        true,
-                        &mut parts,
-                        &mut out.said,
-                    );
+                    part_out(&mut emit, job.seq, LOST, true, &mut parts, &mut out.said);
                     break;
                 }
                 Err(_) => {
                     out.status = 0;
-                    part_out(
-                        &mut emit,
-                        job.seq,
-                        "The far side had nothing to say.",
-                        true,
-                        &mut parts,
-                        &mut out.said,
-                    );
+                    part_out(&mut emit, job.seq, LOST, true, &mut parts, &mut out.said);
                     break;
                 }
             }
         }
+        waiting.store(false, Ordering::Relaxed);
         out.waits = waits;
         out.ms_total = t0.elapsed().as_millis();
         if out.ms_first == 0 {
@@ -1068,6 +1084,7 @@ fn main() {
         model: a.model.clone(),
         max_tokens: a.max_tokens,
         say_max: a.say_max,
+        busy_wait: Duration::from_secs(a.busy_wait),
         work: a.work.clone(),
         log_dir: a.log_dir.clone(),
         lock: Mutex::new(()),
@@ -1207,7 +1224,7 @@ mod tests {
         let ms: Vec<u128> = (1..=6)
             .map(|n| backoff(n, "HTTP/1.1 503\r\n\r\n").as_millis())
             .collect();
-        assert_eq!(ms, vec![500, 1000, 2000, 4000, 4000, 4000]);
+        assert_eq!(ms, vec![250, 500, 1000, 1000, 1000, 1000]);
         // the server names a wait: used when longer, never past 4 s
         assert_eq!(
             backoff(1, "HTTP/1.1 503\r\nRetry-After: 3\r\n\r\n").as_millis(),

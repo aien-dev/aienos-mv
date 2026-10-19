@@ -214,7 +214,7 @@ int main(int argc, char **argv)
            "lines taken %u, job resends %u, dropped %u; lost out %u in %u\n",
            (unsigned long long)t_first, (unsigned long long)t_whole, parts, waits, in, out, lines, resends, dropped,
            d.lost_out, d.lost_in);
-    if (!said[0] || strstr(said, "had nothing to say"))
+    if (!said[0] || strstr(said, "lost my thread"))
         return fail("the answer had no words (the model was not reached)");
     if (d.drop_every && !d.lost_out && !d.lost_in)
         return fail("loss was asked for and none happened");
