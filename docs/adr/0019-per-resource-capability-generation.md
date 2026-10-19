@@ -1,6 +1,6 @@
 # ADR 0019: Per-resource capability generation (OSC unit `required_generation`, domain 1)
 
-Status: Accepted, Option 3 (operator, 2026-10-08). The counter is not built yet; its trigger is tracked in aienos#285.
+Status: Accepted, Option 3 (operator, 2026-10-08). The counter is built (aienos#285, see "Implementation"); the kernel does not trust its table yet, so every nonzero pin is still refused.
 Date: 2026-10-08
 Amends: [ADR 0013](0013-aienos-abi-v1.md) (adds a resource generation beside the handle generation), [ADR 0014](0014-binary-artifact-v0-and-native-admission.md) (replaces amendment "the OSC unit is a second container type", point 5).
 Governing: [ADR 0012](0012-self-construction-capability-growth-and-generations.md) (rule 5: no native admission without enforcement), [aien-protocols](https://github.com/aien-spark/aien-protocols) `specs/osc-unit-artifact/OSC_UNIT_ARTIFACT.md` (v1 FROZEN, read at `666100969cedb97eded6533906c42307320ea61c`), sections 6.3, 8.2 step 15 and 15.3 C1.
@@ -95,3 +95,10 @@ Until aienos#285 is done, every nonzero pin stays refused (`CAP_GENERATION_STALE
 - This ADR changes no code, vector or gate. Kernel behavior stays: every nonzero pin refused.
 - The kernel's refusal of a nonzero pin is run, not only read: aienos#284 (`fa209e45`) added `a02` to the QEMU gate. Red first: with the lookup made permissive (uncommitted), the gate failed on exactly the a02 line and the totals; with the real lookup it passed 34 of 34 checks (QEMU aarch64 virt, TEST signer, not physical).
 - QEMU is the only place the OSC unit path has run; nothing here is a physical-Spark result.
+
+## Implementation (aienos#285, 2026-10-19)
+
+- The counter: `native/kernel/artifact/osc_resgen.{h,c}`, the rules of Option 2 as written above. A floor record (every counter, no resource state) is written before any counter is issued; a restore after a reboot or rollback starts every counter at its floor, brings a persistent resource back live only at its floor counter, and gives a rolled-back incarnation (snapshot counter below the floor) a new counter, floor + 1, written ahead (or leaves the number retired at `u32::MAX`). A missing or corrupt record, or a floor behind its snapshot, leaves the table untrusted: no counter is issued and every lookup answers "no such resource".
+- The kernel: `core/osc_admit.c` passes `osc_resgen_lookup` over its own table as `gen_lookup` (it replaces `no_resource`). No kernel path yet stores or restores a floor, and no channel or object number is reused or persisted, so the table is never made trusted and every nonzero pin is refused `CAP_GENERATION_STALE` exactly as before. No pin refused before becomes admissible in any production or release build (invariant 5).
+- The trigger cut still owes: a durable floor that rollback does not touch (outside the rolled-back Store history), restoring the kernel table from it at boot, and registering its channels or objects through `osc_resgen_create`/`osc_resgen_destroy`. That cut makes pins admissible and must say so in its PR with the operator's approval.
+- Evidence: host test `tests/test_osc_resgen.c` and its mutation run (`make osc-resgen-mutants`); QEMU boot 3 of `scripts/qemu_ck_osc_unit_test.sh` (TEST-only `CK_RESGEN_TEST=1` image, floor in RAM, reboot and rollback as restores within one boot). QEMU (aarch64 virt), TEST signer, not physical.

@@ -716,18 +716,29 @@ magic `OSCUNIT\0` is judged by this module instead of the Binary Artifact v0 pat
   and `state.txt` (3) from `tests/fixtures/osc_unit` (provenance there) and requires the stated verdict; also
   every single-byte flip and every truncation of the valid vector is refused. Part of `make test` and
   `make sanitize`.
-- QEMU gate: two boots (TEST-anchor qualification build; ordinary release build) of five vectors staged in the
+- Per-resource generation (ADR 0019, aienos#285): `artifact/osc_resgen.{h,c}` is the incarnation counter (u32, 0
+  never issued, first holder 1, +1 per reuse, retired at `UINT32_MAX`, floor written ahead of every issue, restore
+  never below the floor, untrusted table answers "no such resource"). `tests/test_osc_resgen.c` checks every rule,
+  reboot and rollback restores, and a02 through the kernel's own policy (match ACCEPT, mismatch 29, reused number
+  29, reboot ACCEPT, rollback 29 with the counter re-issued above the floor); `make osc-resgen-mutants` removes each
+  of its 10 guards in turn and requires the test to fail. Part of `make test` and `make sanitize`.
+- QEMU gate: three boots (TEST-anchor qualification build; ordinary release build) of five vectors staged in the
   sealed Store. Qualification: valid TEST unit ACCEPT with the frozen UnitDigest; OWNER unit UNTRUSTED_SIGNER;
   bad signature; SVC word; a02 (one domain-1 request pinning generation 7, staged as `a02_valid_caps_kernel.unit`
   because Store names are at most 32 bytes) CAP_GENERATION_STALE, which runs the kernel's own generation lookup.
   Release: TEST units TEST_SIGNER_IN_RELEASE (also for the bad-signature and a02 vectors: class is
   checked first); OWNER unit UNTRUSTED_SIGNER; SVC word CODE_INSTRUCTION; nothing accepted. The release image is
-  checked not to carry the TEST public key.
+  checked not to carry the TEST public key. Boot 3 is the TEST-only `CK_RESGEN_TEST=1` qualification image: a02 is
+  refused 29 at admission, then the kernel's own counter table is scripted (mismatch 29, match ACCEPT, reboot
+  restore ACCEPT, reused number 29, rollback re-issued at 9 and 29, corrupt floor 29, reset 29). Its floor is in RAM:
+  reboot and rollback are the restore path within one boot, not a power cycle with the record on disk.
 - Labels: QEMU (aarch64 virt), TEST signer, not physical. Admission only: nothing is mapped, launched or
   scheduled (launch is a later cut; launch code 41 and `launch.txt` are not covered here). OWNER anchors are empty
   until TRUST-1 provisions one.
-- Kernel policy: capability domain 1 only (32-bit generation); the kernel holds no resource state yet, so any
-  pinned generation is refused CAP_GENERATION_STALE.
+- Kernel policy: capability domain 1 only (32-bit generation); the lookup is `osc_resgen_lookup` over the kernel's
+  table, which no production path makes trusted yet (no durable floor, no reusable or persistent resource), so any
+  pinned generation is still refused CAP_GENERATION_STALE. The cut that reuses or persists a domain-1 resource
+  number restores the table from a durable floor and must state which pins become admissible (ADR 0019 invariant 5).
 
 Spec status: OSC_UNIT_ARTIFACT is v1 FROZEN (aien-protocols#17, 2026-10-08; bytes and vectors unchanged by the freeze). Passing the host vectors
 is not evidence of the native loader; only the QEMU gate row exercises the in-kernel path, and nothing here is physical.
