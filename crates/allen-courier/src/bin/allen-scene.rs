@@ -10,9 +10,9 @@
 //! (the question) and one line of `log.tsv` (status, time, tokens, finish).
 //!
 //! The server makes one answer at a time and says 503 while it is busy with
-//! someone else's: this waits as Retry-After asks (held between 3 and 15 s;
-//! 5 s without it) for at most --wait-max seconds per question, and never
-//! sends two requests at once. A reply already kept is not asked again, so a
+//! someone else's: this waits exactly as its Retry-After asks (1 to 15 s; 2 s
+//! without one) for at most --wait-max seconds per question, and never sends
+//! two requests at once. A reply already kept is not asked again, so a
 //! round that was cut off resumes where it stopped. A server that is not
 //! listening (restarting) is waited for the same way.
 //! Standard library only: hand-built HTTP and JSON, as in the relay.
@@ -321,9 +321,9 @@ fn main() {
             match http(&a.model, "POST", "/v1/chat/completions", &body) {
                 Ok((503, head, _)) if waited < a.wait_max => {
                     busy += 1;
-                    // as the server asks (Retry-After, held between 3 and 15 s), else 5 s: a busy answer
-                    // costs it nothing, and a slower poll only loses the free moment to other callers
-                    let w = retry_after(&head).unwrap_or(5).clamp(3, 15);
+                    // exactly as the server asks (its Retry-After, 1 s today; 2 s without one; at most 15 s): a busy
+                    // answer costs it nothing, and a slower poll loses every free moment to faster callers
+                    let w = retry_after(&head).unwrap_or(2).clamp(1, 15);
                     std::thread::sleep(Duration::from_secs(w));
                     waited += w;
                 }

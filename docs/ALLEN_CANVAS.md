@@ -127,9 +127,32 @@ ASCII, at most three things, be honest about what Allen cannot do yet: no weathe
 media of his own) and three short examples that are not the test questions. `allen-scene`
 (`crates/allen-courier/src/bin/allen-scene.rs`) builds it in with `include_str!`, so the relay can use the
 same file the same way. The live test asks the model one question at a time and waits out the server's 503
-(busy) answers, as Retry-After asks (3 to 15 s), for up to thirty minutes per question.
+(busy) answers, honouring Retry-After, for up to five minutes per question.
 
-## 5. What is not done
+## 5. Measured
+
+All on the Spark (GB10 host CPU, one core, 3840 x 2160), evidence in `evidence/allen-canvas/`.
+
+- **Real model replies** (Qwen3.8-27B FP8 on our own server, 127.0.0.1:18091, temperature 0.3, ten questions
+  in `questions.txt`, raw replies kept as written): round 1, prompt v1: **10 of 10 parsed cleanly** and 10 of
+  10 used the canvas (`round-1/parse-report.txt`). Round 2, prompt v2 (one more rule: watch or play means a
+  video line, see means a picture line): **3 of 4 clean**; the fourth wrote two say lines (the second is
+  dropped, the first is spoken), and the round was stopped after four questions when other jobs held the GPU
+  lock for good (`round-2/run.log`). Together: **13 of 14 real replies clean**, every one of them understood
+  and painted. The server is shared and answers one request at a time; a reply took 1.5 to 14 minutes of
+  waiting (Retry-After honoured, never two requests at once).
+- **Fuzz**: 300,000 replies per run (random bytes, mutated scenes, word soup), each in a buffer of exactly its
+  length, under AddressSanitizer and UndefinedBehaviorSanitizer: no overrun, no undefined behaviour, no scene
+  outside its limits. It found one real bug outside the parser: `ck_atan2` in `ui/paint.c` shifted a negative
+  number left (undefined in C); fixed by multiplying.
+- **Frame cost** (`frame-times-final.txt`, held under the quiet lock): the existing window test averages
+  19.8 and 19.1 ms per frame on the base commit and 20.9 and 18.3 ms with the canvas hooked in (two pairs, the
+  machine's load fell from 43 to 9 during the run): no cost that rises above the noise. In the canvas test, frames
+  while plain answers are spoken average 19.2 ms and frames while scenes arrive and rest average 24.1 ms (worst
+  45 ms, during an arrival, when the spark and a whole thing are redrawn).
+- **Image size**: IMACKERN.EFI 307,200 bytes (274,432 before); the zeroed memory grows by the 384 KiB pool.
+
+## 6. What is not done
 
 - The courier does not carry scenes to the iMac yet: the relay (`crates/allen-courier/src/main.rs`) and the
   kernel's answer path belong to the "Allen through the model" branch; the hook they need is
