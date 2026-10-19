@@ -1,0 +1,35 @@
+# Agent guidance manifest, schema v1 (aien-architecture ADR 0038, Proposed).
+# Agent-agnostic: `aien agents sync` (aien-sovereign-core) turns it into the
+# files each coding agent reads. Hooks are bash, exit 0 to allow, 2 to block.
+schema = 1
+
+[component]
+name = "aienos"
+tree = "core"
+
+[[skills]]
+path = "skills/aienos-basics"
+
+[[hooks]]
+event = "pre-command"
+command = "tools/agent-hooks/no-admin-merge.sh"
+
+[[hooks]]
+event = "pre-command"
+command = "tools/agent-hooks/no-force-push.sh"
+
+[[hooks]]
+event = "pre-command"
+command = "tools/agent-hooks/no-kill-jobs.sh"
+
+[[hooks]]
+event = "pre-edit"
+command = "tools/agent-hooks/protected-paths.sh"
+
+[[hooks]]
+event = "pre-edit"
+command = "tools/agent-hooks/skill-context.sh"
+
+[attachments]
+# Core repo. An attachment's agents.toml is loaded only if its name is listed here.
+allow = []

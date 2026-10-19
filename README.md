@@ -53,6 +53,8 @@ bash scripts/ck_pi5_build_check.sh  # builds the Raspberry Pi 5 image and checks
 
 The legacy Rust workspace is still checked by `bash scripts/verify_all.sh` (needs a Rust toolchain with the `aarch64-unknown-uefi` and `aarch64-unknown-none` targets) until it is retired. Anything that needs the real DGX Spark is labelled `needs-hardware` and is run by maintainers.
 
+Coding agents: `agents.toml` (aien-architecture ADR 0038, proposed) names the skill to read first, [skills/aienos-basics/SKILL.md](skills/aienos-basics/SKILL.md), and the hooks in `tools/agent-hooks/` that block admin merges, force pushes, killing running jobs and edits to pipeline paths (`bash tools/agent-hooks/test.sh` checks them). These are guidance files only; nothing in the kernel or the gates changed.
+
 ## Contributing
 
 Start with [issues labelled `good first issue`](https://github.com/aien-spark/aienos/labels/good%20first%20issue) or [`emulator-ok`](https://github.com/aien-spark/aienos/labels/emulator-ok): they need no special hardware. Read [CONTRIBUTING.md](CONTRIBUTING.md) first. Open pull requests against `main` (protected; five checks must pass: `Analyze (c-cpp)`, `Analyze (actions)`, `crumb`, `AIEN Verification` and `workflow files accepted`) and lead with the commands you ran and their output. Questions go in [Discussions](https://github.com/aien-spark/aienos/discussions). Report vulnerabilities privately through GitHub security advisories.
