@@ -651,6 +651,10 @@ static void night_stats(const char *when)
     ck_printf("screen: night: %u frames %s, average %u.%u ms, slowest %u.%u ms (drawn by %s)\n", n, when,
               average / 1000, average / 100 % 10, slowest / 1000, slowest / 100 % 10,
               draw_on ? "a secondary core" : "the boot core");
+    ck_allen_ui_dusk_stats(&n, &slowest, &average);
+    if (n)
+        ck_printf("screen: dusk: %u frames, average %u.%u ms, slowest %u.%u ms\n", n, average / 1000,
+                  average / 100 % 10, slowest / 1000, slowest / 100 % 10);
 }
 
 /* Time since the power button for each step. The TSC counts from power-on
