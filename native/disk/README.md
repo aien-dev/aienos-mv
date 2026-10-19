@@ -100,6 +100,12 @@ SDSC, block for SDHC), and any unaligned or out-of-window register access.
 | lba/count inside the card, refused before any command (sdhci-range) | DISK_ERANGE |
 | after a write, CMD13 until the card is back in transfer state (sdhci-tran) | SDHCI_ETIMEOUT |
 
-Not done yet: high-speed (50 MHz) and UHS modes, 1.8 V signalling, ADMA, card
-removal while running, and the Pi 5 binding (base address and base clock come
-from the ACPI tables dumped by AIENOS-PI5-ACPI-0).
+Not done yet: high-speed (50 MHz) and UHS modes, 1.8 V signalling, ADMA, and card
+removal while running.
+
+Where these drivers run on real hardware: the Pi 5 kernel binds the SD driver at
+a fixed base address with a 200 MHz base clock (`native/kernel/core/pi5.c`; the
+ACPI method that gives the range is not run by the kernel) and has used it to
+write its log and the Store on the card (`evidence/pi5_hardware_runs_2026-10-13/`).
+The 2017 iMac kernel uses `disk_nvme.c` read-only; its build refuses any write or
+flush call from `native/kernel/x86/` (`evidence/imac_kernel1_2026-10-17/`).

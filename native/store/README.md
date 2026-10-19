@@ -119,7 +119,10 @@ collision).
 
 ## Not done
 
-* Kernel binding: nothing here is linked into the kernel or a boot path.
+* Kernel binding: done. The C kernel links the sealed Store (`native/kernel/stage.mk`,
+  `svc/store_boot.c`). It runs in the QEMU Store gates and on the Raspberry Pi 5
+  SD card with throwaway secrets (`docs/native/PI5-4-UNLOCK-RUNS.md`,
+  `docs/native/PI5-6-AGENT-RUNS.md`).
 * Physical NVMe qualification: not run; nothing here claims it.
 * Whole-disk rollback: the anchor is on the same disk, so rolling back both
   regions together is not detected (a test records this). That needs TPM NV

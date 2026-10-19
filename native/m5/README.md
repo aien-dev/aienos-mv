@@ -16,8 +16,11 @@ make mutants    # each GUARD-tagged refusal removed in turn; tests must fail
 make clean
 ```
 
-All tests are host-only (hosted libc test program); nothing here runs in QEMU
-or on the Spark, and nothing measures time or energy.
+All tests in this folder are host-only (hosted libc test program), and nothing
+measures time or energy. The library itself is linked into the C kernel
+through the sealed Store, so it also runs in the QEMU Store gates and on the
+Raspberry Pi 5 with throwaway secrets (`docs/native/PI5-4-UNLOCK-RUNS.md`). It
+has not run on the Spark.
 
 ## What is covered
 
@@ -139,8 +142,10 @@ HMAC-SHA-256 under K_root_auth over `domain || bytes`, compared in constant time
 - **Owner-signature binding: host-tested with TEST keys only; the real
   owner signature is BLOCKED_OPERATOR on the Gate 3 offline key ceremony.**
   The signature primitive is `native/sig` (in-house Ed25519, #188). The
-  record and the tool exist and are tested, but no record has been signed
-  with the real owner key, nothing in the Store or boot path calls
+  record and the tool exist and are tested. An owner key was created on a
+  YubiKey on 2026-10-14 for the Pi 5 work (`docs/native/PI5-8-OWNER-CEREMONY.md`,
+  run online by owner decision); that document does not say it is the Gate 3
+  ceremony. No migration record has been signed with an owner key, nothing in the Store or boot path calls
   `m5_migration_authorize_owner` yet (it is host-only), and no
   trusted owner public key is provisioned anywhere.
 - **Binding to the Gate 3 Owner Root**: the hierarchy carries an owner
