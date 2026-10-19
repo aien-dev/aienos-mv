@@ -106,7 +106,8 @@ int main(int argc, char **argv)
         top = v > top ? v : top;
     }
     check(same, "left and right the same");
-    check(top <= CK_CHIRP_PEAK && top > CK_CHIRP_PEAK * 98 / 100, "loudest sample at the peak level");
+    /* the plateau is under a millisecond and the ring dies in 4 ms, so a sine crest may fall up to a quarter period (1 ms at 250 Hz) after the level's peak */
+    check(top <= CK_CHIRP_PEAK && top > CK_CHIRP_PEAK * 75 / 100, "loudest sample near the peak level");
 
     /* no jump big enough to click: a sine at TO_HZ moves at most 2 pi f / rate of its height a frame */
     int jump = 0;
@@ -150,12 +151,12 @@ int main(int argc, char **argv)
 
     /* what is heard matches: zero crossings */
     const uint32_t mid = CK_CHIRP_START_MS + CK_CHIRP_RISE_MS / 2;
-    double h0 = heard_hz(s, ms(CK_CHIRP_START_MS - CK_CHIRP_IN_MS / 2), ms(CK_CHIRP_START_MS)),
+    double h0 = heard_hz(s, ms(CK_CHIRP_START_MS), ms(CK_CHIRP_START_MS + 80)),
            h1 = heard_hz(s, ms(mid - 50), ms(mid + 50)),
-           h2 = heard_hz(s, ms(CK_NIGHT_MERGE_MS), ms(CK_NIGHT_MERGE_MS) + ms(100));
-    printf("note: heard %.1f Hz as it comes in, %.1f Hz mid-sweep (asked %u), %.1f Hz in the ring\n", h0, h1,
+           h2 = heard_hz(s, ms(CK_NIGHT_MERGE_MS), ms(CK_NIGHT_MERGE_MS + 15)); /* the ring is gone in about 20 ms */
+    printf("note: heard %.1f Hz in the first 80 ms of the sweep, %.1f Hz mid-sweep (asked %u), %.1f Hz in the ring\n", h0, h1,
            ck_chirp_hz(ms(mid)), h2);
-    check(h0 > CK_CHIRP_FROM_HZ - 3.0 && h0 < CK_CHIRP_FROM_HZ + 3.0, "heard pitch as it comes in");
+    check(h0 > CK_CHIRP_FROM_HZ - 3.0 && h0 < ck_chirp_hz(ms(CK_CHIRP_START_MS + 80)) + 3.0, "heard pitch at the start of the sweep");
     check(h1 > ck_chirp_hz(ms(mid - 50)) - 2.0 && h1 < ck_chirp_hz(ms(mid + 50)) + 2.0, "heard pitch in the sweep");
     check(h2 > CK_CHIRP_TO_HZ - 5.0 && h2 < CK_CHIRP_TO_HZ + 5.0, "heard pitch in the ring");
 

@@ -15,7 +15,7 @@
 #define F1_FRAME (CK_CHIRP_RATE / 1000u * CK_CHIRP_START_MS)                    /* the sweep begins */
 #define F2_FRAME (CK_CHIRP_RATE / 1000u * CK_NIGHT_MERGE_MS)  /* the merger */
 #define Q30 (1ull << 30)
-#define DECAY 1072996429ull /* exp(-1 / (30 ms * 48 kHz)) in Q30: the fade's time constant is 30 ms */
+#define DECAY 1068163957ull /* exp(-1 / (4 ms * 48 kHz)) in Q30: the ring dies with a 4.0 ms time constant, the final black hole's damping time */
 
 static int16_t sin_t[4096]; /* Q14 */
 static uint32_t cap_frame;  /* the pitch stops rising here */

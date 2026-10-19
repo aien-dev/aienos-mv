@@ -1,0 +1,8 @@
+note: sound from 11795 ms to 12040 ms (244 ms)
+note: largest step between frames 752 (a 250 Hz sine at the peak: 750)
+note: pitch mid-sweep 45 Hz, 100 ms before the merger 42 Hz; the top reached 0 ms before it
+note: heard 39.2 Hz in the first 80 ms of the sweep, 47.3 Hz mid-sweep (asked 45), 250.0 Hz in the ring
+note: wrote target/native-kernel-chirp/chirp.wav (578880 frames, 12060 ms)
+CHIRP_TEST: PASS (26 checks)
+sound: target/native-kernel-chirp/chirp.wav
+AIENOS_CHIRP: PASS
