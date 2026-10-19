@@ -24,5 +24,18 @@ unsigned ck_allen_job(const ck_allen_mind *m, uint32_t seq, const char *line, ch
  * 1 with the seq and the text (at most cap - 1 bytes, "\n" back to a space),
  * 0 when the line is not an answer. */
 int ck_allen_answer_line(const char *in, uint32_t *seq, char *text, unsigned cap);
+/* Allen's memory for the worker, appended to a job line as tab-separated
+ * fields: "self=<his name>", "name=<the person's>", "starts=<n>", one
+ * "fact <key> is|are <val>" per taught fact, one "note <text>" per live note
+ * among the newest `notes_max`. Returns the bytes written at out (no leading
+ * tab is missing: the first byte is a tab), 0 when cap is too small. */
+unsigned ck_allen_job_memory(const ck_allen_mind *m, unsigned notes_max, char *out, unsigned cap);
+/* Reads one answer part "SAY <seq> <part>/<total> <text>" (parts count from
+ * 1; total is 0 until the last part, which carries its own number as the
+ * total) or a whole answer "SAY <seq> <text>" (part 1 of 1): 1 with seq,
+ * part, total and the text folded as ck_allen_answer_line does; 0 when the
+ * line is not an answer. "WAIT <seq>" (the worker is waiting on a busy
+ * model) is 1 with part 0, total 0 and an empty text. */
+int ck_allen_say_line(const char *in, uint32_t *seq, unsigned *part, unsigned *total, char *text, unsigned cap);
 
 #endif

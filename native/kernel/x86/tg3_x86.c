@@ -693,4 +693,45 @@ int ck_x86_tg3_drain(unsigned ms)
     }
     return -1;
 }
+/* Receive (lab image only, like send): the next frame the chip has put in
+ * one of the 64 standard buffers, read from the return ring and the buffer
+ * handed back. tg3.h struct tg3_hw_status: idx[0].rx_producer at +0x10 of the
+ * status block; tg3.c tg3_rx: desc_idx = opaque & RXD_OPAQUE_INDEX_MASK,
+ * len = (idx_len & RXD_LEN_MASK) - ETH_FCS_LEN, a frame with err_vlan &
+ * RXD_ERR_MASK dropped, then the consumer mailbox and the standard producer
+ * mailbox written (recorded with docs-read 2026-10-19). Bytes copied, 0 when
+ * none waits or the frame does not fit. */
+static unsigned rx_ret_cons, rx_std_prod = RX_POSTED;
+size_t ck_x86_tg3_recv(uint8_t *out, size_t cap)
+{
+    if (!ready || !out)
+        return 0;
+    wr(HOSTCC_MODE, 0x702 | 0x8); /* status block now: interrupts are masked, coalescing would wait */
+    __asm__ volatile("" ::: "memory");
+    unsigned prod = *(volatile uint16_t *)(uintptr_t)(dma + OFF_STATUS + 0x10) & (RX_RET - 1);
+    size_t got = 0;
+    while (rx_ret_cons != prod && !got) {
+        volatile uint32_t *d = (volatile uint32_t *)(uintptr_t)(dma + OFF_RX_RET + (uint64_t)rx_ret_cons * 32);
+        unsigned len = d[2] & 0xffffu, idx = d[7] & 0xffffu;
+        uint32_t err = d[4] & 0x01ef0000u; /* RXD_ERR_MASK: every error but ODD_NIBBLE_RCVD_MII */
+        if (len > 4 && !err && len - 4 <= cap) {
+            got = len - 4;
+            memcpy(out, (const void *)(uintptr_t)(dma + OFF_RX_BUF + (uint64_t)(idx % RX_POSTED) * BUF_SZ), got);
+        }
+        /* the buffer goes back on the standard ring at its next slot */
+        uint64_t b = dma + OFF_RX_BUF + (uint64_t)(idx % RX_POSTED) * BUF_SZ;
+        volatile uint32_t *s = (volatile uint32_t *)(uintptr_t)(dma + OFF_RX_STD + (uint64_t)rx_std_prod * 32);
+        s[0] = (uint32_t)(b >> 32);
+        s[1] = (uint32_t)b;
+        s[2] = RX_BUF_SZ;
+        s[3] = 0x4;
+        s[7] = 0x10000u | rx_std_prod;
+        __asm__ volatile("sfence" ::: "memory");
+        rx_std_prod = (rx_std_prod + 1) & (RX_STD - 1);
+        rx_ret_cons = (rx_ret_cons + 1) & (RX_RET - 1);
+        wr(MBOX_RX_RET_CONS0, rx_ret_cons);
+        wr(MBOX_RX_STD_PROD, rx_std_prod);
+    }
+    return got;
+}
 #endif /* CK_X86_REPORT */

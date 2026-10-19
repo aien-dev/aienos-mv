@@ -7,6 +7,37 @@ const char ck_allen_goodbye[] = "Goodbye. Until next time.";
 const char ck_allen_save_failed[] = "I couldn't save that to my disk, so I'll only remember it until this computer turns off.";
 const char ck_allen_not_yet[] = "I don't know that yet. Type help to see what I can talk about.";
 #define not_yet ck_allen_not_yet
+const char ck_allen_lost_thread[] = "I lost my thread there. Ask me again in a moment.";
+
+int ck_allen_note_exchange(ck_allen_mind *m, const char *asked, const char *said)
+{
+    ck_allen_notes *ns = m ? m->notes : 0;
+    if (!ns || !asked || !said || !*asked || ns->n >= CK_ALLEN_NOTES_MAX)
+        return -1;
+    /* "asked: <line> / said: <words>", the line cut to its first 48 printable bytes, the words to the room left */
+    char text[CK_ALLEN_NOTE_MAX];
+    unsigned n = 0;
+    const char *heads[2] = {"asked: ", " / said: "}, *bodies[2] = {asked, said};
+    for (int k = 0; k < 2; k++) {
+        unsigned limit = k == 0 ? 7 + 48 : (unsigned)sizeof text - 1;
+        for (const char *p = heads[k]; *p && n < limit; p++)
+            text[n++] = *p;
+        for (const char *p = bodies[k]; *p && n < limit; p++)
+            text[n++] = (*p < 32 || *p == 127) ? ' ' : *p;
+    }
+    while (n && text[n - 1] == ' ')
+        n--;
+    text[n] = 0;
+    if (ck_allen_note_set(&ns->note[ns->n], text, m->mem.starts))
+        return -1;
+    uint32_t i = ns->n++;
+    m->mem.nnotes = ns->n;
+    m->changed = 1;
+    m->note_dirty = (int)i + 1;
+    m->lit = (int)i + 1;
+    m->map_changed = 1;
+    return 0;
+}
 
 /* Lowercases letters, keeps digits, turns every other run into one space,
  * trims. Returns the folded length (at most cap - 1). */
@@ -802,6 +833,17 @@ const char *ck_allen_answer(ck_allen_mind *m, const char *line, uint64_t awake_s
     }
     if (naming && eq(f, "allen"))
         return "Allen it is. Hello Humanity.";
+    /* A far-off worker is listening: it answers everything from here on, in
+     * Allen's voice, with his memory in the job (svc/allen_intent.h). What
+     * the person teaches or saves is still kept here, quietly, so the memory
+     * is real and the worker sees it in the next job; the answer is the
+     * worker's. Everything below this line is the offline fallback. */
+    if (m->far) {
+        if (!note_forget(m, &s, f) && !note_save(m, &s, f, line ? line : ""))
+            (void)(teach(m, &s, f) || forget(m, &s, f));
+        m->out[0] = 0;
+        return not_yet;
+    }
     /* Notes, then what Allen has been taught, before anything else can claim the line. */
     if (note_forget(m, &s, f) || note_save(m, &s, f, line ? line : "") || note_find(m, &s, f))
         return m->out;
