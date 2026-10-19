@@ -41,6 +41,8 @@ native_suite() {
 }
 
 case "$step" in
+  # Retired: crumbs are advisory (RFC-0003 Am2). Kept so the CRUMB-VERIFY manifest still resolves.
+  crumb-verify)        echo "CRUMB-VERIFY retired: crumbs are advisory notes (RFC-0003 Am2); nothing to check" ;;
   # ck-kernel.yml, host steps (ubuntu-24.04-arm there, AArch64 here)
   ck-host-tests)      make -C native/kernel test sanitize ;;
   ck-stage-tests)     make -C native/kernel stage-test stage-sanitize ;;
