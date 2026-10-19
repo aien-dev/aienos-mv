@@ -26,6 +26,7 @@
 #include "osh_fixtures.h"
 #ifdef CK_OSH_OP_TEST
 #include "osh_op.h"
+#include "task_osc.h"
 #endif
 
 #define LABEL "QEMU (aarch64 virt), TEST signer, not physical"
@@ -81,8 +82,32 @@ static struct {
     struct osc_accept acc;
 } spin_unit;
 
+#ifdef CK_OSH_OP_TEST
+/* aienos-mv#430: the task gate's three admitted stage units (tests/fixtures/task), the adapter's native operations */
+enum { SU_GEN = 0, SU_XFORM = 1, SU_SINK = 2, SU_COUNT = 3 };
+static const char *const su_file[SU_COUNT] = { "tgen.unit", "txform.unit", "tsink.unit" };
+static const char *const su_rcpt[SU_COUNT] = { "tgen.rcpt", "txform.rcpt", "tsink.rcpt" };
+static const char *const su_entry[SU_COUNT] = { "gen_step", "xform_step", "sink_step" };
+#define STAGE_UNIT_MAX 8192u
+static struct {
+    uint8_t bytes[STAGE_UNIT_MAX];
+    size_t len;
+    int have;
+    struct osc_accept acc;
+} sunit[SU_COUNT];
+#endif
+
 void ck_osh_save(const char *name, const uint8_t *b, size_t len, const struct osc_accept *acc)
 {
+#ifdef CK_OSH_OP_TEST
+    for (unsigned u = 0; u < SU_COUNT; u++)
+        if (streq(name, su_file[u]) && len <= STAGE_UNIT_MAX) {
+            memcpy(sunit[u].bytes, b, len);
+            sunit[u].len = len;
+            sunit[u].acc = *acc;
+            sunit[u].have = 1;
+        }
+#endif
     if (streq(name, "l01_launch_fns.unit") && len <= sizeof spin_unit.bytes) {
         memcpy(spin_unit.bytes, b, len);
         spin_unit.len = len;
@@ -586,7 +611,9 @@ static void negatives(void)
  * The fixture driver above is unchanged and is NOT run in this build (the OSH_CORE gate runs it). Here each script goes
  * through the same lex/parse/expand EL0 tasks; on PIPELINE_READY the request record goes to core/osh_op.c instead of
  * a fake status. Operation: `klog <words>` writes "osh_op_out: <words>" to the console; it needs WRITE on the console-log
- * resource in the session's kernel capability table. QEMU (aarch64 virt), TEST signer, not physical. */
+ * resource in the session's kernel capability table. aienos-mv#430 adds native stage pipelines (below): gen, xform and sink
+ * are admitted stage units run as EL0 tasks over native pipes, with redirections into TEST locations. QEMU (aarch64 virt),
+ * TEST signer, not physical. */
 static struct osh_session sess;
 static const char *case_name;
 static unsigned sink_calls;
@@ -607,7 +634,72 @@ static void op_log(void *ctx, const char *line)
     ck_printf("%s case=%s; %s\n", line, case_name, LABEL);
 }
 
-static const struct osh_env op_env = { 0, op_sink, op_log };
+/* ---- aienos-mv#430: native stage pipelines through the same shell units ----
+ * Registry: gen (tgen.unit), xform (txform.unit), sink (tsink.unit), each admitted with its own receipt (the task gate's
+ * stages, tests/fixtures/task); nounit is tsink presented with NO receipt (refused at its spawn: RECEIPT_MISSING); foreign
+ * names a class this adapter does not provide (UNAVAILABLE for the whole pipeline). Every stage is an EL0 task of the
+ * kernel runner (core/task_osc.c) over native pipes (core/pipe.c). The last command's stdout comes back through
+ * op_stdout. QEMU (aarch64 virt), TEST signer, not physical. */
+enum { SI_GEN = 0, SI_XFORM = 1, SI_SINK = 2, SI_NORCPT = 3, SI_COUNT = 4 };
+static struct ck_task_osc_image simg[SI_COUNT];
+static const struct osh_op_def sops[] = {
+    { "gen", OSH_CLASS_NATIVE_OP, 2, SI_GEN, 0 },     { "xform", OSH_CLASS_NATIVE_OP, 3, SI_XFORM, 0 },
+    { "sink", OSH_CLASS_NATIVE_OP, 2, SI_SINK, 512 }, { "nounit", OSH_CLASS_NATIVE_OP, 2, SI_NORCPT, 512 },
+    { "foreign", OSH_CLASS_LINUX, 0, 0, 0 },
+};
+static struct ck_task_tab stab;
+static struct ck_pipe_pool spool;
+static struct osh_native snat;
+static struct ck_task_osc_stats sost;
+static uint8_t case_key;
+
+static void stage_image(unsigned i, unsigned u, int with_rcpt)
+{
+    simg[i].unit = sunit[u].bytes;
+    simg[i].unit_len = sunit[u].len;
+    simg[i].acc = &sunit[u].acc;
+    simg[i].rcpt_len = 0;
+    simg[i].rcpt = with_rcpt ? ck_osc_receipt_find(su_rcpt[u], &simg[i].rcpt_len) : 0;
+    if (!simg[i].rcpt)
+        simg[i].rcpt_len = 0;
+    simg[i].entry = su_entry[u];
+}
+
+static uint8_t pat(uint64_t i) /* tgen.osc byte i, computed here independently of the unit */
+{
+    return i % 5 == 0 ? 0 : (uint8_t)((((i * 2654435761ull) & 0xFFFFFFFFull) >> 13) & 255u);
+}
+
+static uint64_t fnv(uint64_t total, uint8_t key) /* what tsink reports for `total` bytes of tgen through xform `key` */
+{
+    uint64_t h = 14695981039346656037ull;
+    for (uint64_t i = 0; i < total; i++)
+        h = (h ^ (uint8_t)(pat(i) ^ key)) * 1099511628211ull;
+    return h;
+}
+
+static uint64_t le64(const uint8_t *b)
+{
+    uint64_t v = 0;
+    for (int i = 7; i >= 0; i--)
+        v = (v << 8) | b[i];
+    return v;
+}
+
+/* the session's stdout: the byte count and the first 16 bytes (tsink's count and hash) */
+static uint64_t so_bytes;
+static uint8_t so_head[16];
+
+static int op_stdout(void *ctx, const uint8_t *b, size_t n)
+{
+    (void)ctx;
+    for (size_t i = 0; i < n && so_bytes + i < sizeof so_head; i++)
+        so_head[so_bytes + i] = b[i];
+    so_bytes += n;
+    return 0;
+}
+
+static const struct osh_env op_env = { 0, op_sink, op_log, op_stdout };
 
 static void hex32(const uint8_t d[32], char o[65])
 {
@@ -619,14 +711,62 @@ static void hex32(const uint8_t d[32], char o[65])
     o[64] = 0;
 }
 
+static char sl[640];
+
+static void sl_add(const char *s)
+{
+    size_t n = strlen(sl), k = strlen(s);
+    if (n + k < sizeof sl) {
+        memcpy(sl + n, s, k + 1);
+    }
+}
+
+/* one line per stage pipeline: how each command ended, the stdout, the TEST locations */
+static void stages_line(const struct osh_result *r)
+{
+    char t[96];
+    sl[0] = 0;
+    for (unsigned k = 0; k < r->ncmds && k < OSH_MAX_CMDS; k++) {
+        ck_snprintf(t, sizeof t, " c%u=%d/%s/%s", k, r->cmd_status[k], osh_outcome_name(r->cmd_outcome[k]),
+                    osh_err_name(r->cmd_error[k]));
+        sl_add(t);
+    }
+    for (unsigned i = 0; i < OSH_LOC_MAX; i++) {
+        const struct osh_loc *l = &sess.locs[i];
+        if (!l->used)
+            continue;
+        char nm[OSH_LOC_NAME + 1];
+        memcpy(nm, l->name, l->name_len);
+        nm[l->name_len] = 0;
+        ck_snprintf(t, sizeof t, " loc_%s=%u", nm, (unsigned)l->len);
+        sl_add(t);
+    }
+    uint64_t cnt = so_bytes == 16 ? le64(so_head) : 0;
+    int hash_ok = so_bytes == 16 && le64(so_head + 8) == fnv(cnt, case_key);
+    ck_printf("osh_op_stages: case=%s n=%u launch=%s started=%u cmds=%u%s stdout_bytes=%llu sink_count=%llu "
+              "sink_hash_ok=%d max_in_pipes=%llu mid_alive=%u mid_in_flight=%llu; %s\n",
+              case_name, (unsigned)r->seq, osh_err_name(r->launch_error), r->started, r->ncmds, sl,
+              (unsigned long long)so_bytes, (unsigned long long)cnt, hash_ok, (unsigned long long)r->max_resident, r->mid_alive,
+              (unsigned long long)r->mid_in_flight, LABEL);
+}
+
+static void pipeline_line(const struct osh_result *r)
+{
+    char h[65];
+    hex32(r->digest, h);
+    ck_printf("osh_op_pipeline: case=%s n=%u status=%d error=%s outcome=%s stop=%d crashed=%d request_digest=%s; %s\n", case_name,
+              (unsigned)r->seq, r->status, osh_err_name(r->error), osh_outcome_name(r->outcome), r->stop, r->crashed, h, LABEL);
+    if (sess.nat)
+        stages_line(r);
+}
+
 static int real_pipeline(void)
 {
     struct osh_result r;
-    char h[65];
+    so_bytes = 0;
+    memset(so_head, 0, sizeof so_head);
     osh_op_exec(&sess, &op_env, w + OSH_REQUEST, w + OSH_OUT, (size_t)(CKOSH_WS_CELLS - OSH_OUT), &r);
-    hex32(r.digest, h);
-    ck_printf("osh_op_pipeline: case=%s n=%u status=%d error=%s outcome=%s stop=%d crashed=%d request_digest=%s; %s\n", case_name,
-              (unsigned)r.seq, r.status, osh_err_name(r.error), osh_outcome_name(r.outcome), r.stop, r.crashed, h, LABEL);
+    pipeline_line(&r);
     if (r.stop)
         real_stop = 1;
     if (r.crashed)
@@ -634,10 +774,41 @@ static int real_pipeline(void)
     return r.status;
 }
 
-static void scenario(const char *name, unsigned rights, const char *script, struct osh_hooks hk)
+/* a native session: the spawn capability (rights, 0 = none), the location capability, a deadline, xform's key */
+struct ncfg {
+    unsigned spawn, loc;
+    uint64_t deadline;
+    uint8_t key;
+};
+
+static void native_attach(const struct ncfg *nc)
+{
+    if (nc->spawn)
+        (void)osh_session_grant_spawn(&sess, nc->spawn);
+    if (nc->loc)
+        (void)osh_session_grant_loc(&sess, nc->loc);
+    memset(&snat, 0, sizeof snat);
+    snat.tab = &stab;
+    snat.pool = &spool;
+    ck_task_osc_runner(&snat.run, &sost);
+    for (unsigned i = 0; i < SI_COUNT; i++)
+        snat.images[i] = &simg[i];
+    snat.ops = sops;
+    snat.nops = (unsigned)(sizeof sops / sizeof sops[0]);
+    snat.step_ticks = 100; /* per step: 1 s of 10 ms ticks, far above what a step needs (as the task gate) */
+    snat.deadline_ticks = nc->deadline;
+    case_key = nc->key;
+    osh_session_attach(&sess, &snat);
+}
+
+static struct osh_session fresh; /* static: a session carries its TEST locations */
+
+static void run_case(const char *name, unsigned rights, const char *script, struct osh_hooks hk, const struct ncfg *nc)
 {
     case_name = name;
     osh_session_init(&sess, rights);
+    if (nc)
+        native_attach(nc);
     sess.hooks = hk;
     sink_calls = 0;
     real_mode = 1;
@@ -652,15 +823,19 @@ static void scenario(const char *name, unsigned rights, const char *script, stru
     src_pos = 0;
     unsigned long l0 = launches, s0 = slots_held;
     ck_printf("osh_op_begin: case=%s cap_rights=%u; %s\n", name, rights, LABEL);
-    int rc = run_src();
+    int rc = script[0] ? run_src() : 0;
     struct ck_handle held = sess.console_cap;
     int empty = osh_session_close(&sess);
     int released = ck_cap_lookup(&sess.caps, held, 0, 0) != CK_CAP_OK;
     ck_printf("osh_op_end: case=%s rc=%d final_status=%d sink_calls=%u launches=%lu slots_held=%lu cap_table_empty=%d cap_released=%d; %s\n",
               name, rc, last_status, sink_calls, launches - l0, slots_held - s0, empty, released, LABEL);
+    if (nc)
+        ck_printf("osh_op_native_end: case=%s tasks_empty=%d pipes_empty=%d stage_steps=%llu not_torn_down=%llu "
+                  "admit_refused=%llu; %s\n",
+                  name, ck_task_tab_empty(&stab), ck_pipe_pool_empty(&spool), (unsigned long long)sost.launches,
+                  (unsigned long long)sost.not_torn_down, (unsigned long long)sost.admit_refused, LABEL);
     if (real_crashed) {
         /* the adapter was lost after the effect: a restart keeps only the intent records and holds no capability */
-        struct osh_session fresh;
         unsigned before = sink_calls;
         osh_session_restart(&fresh, &sess);
         unsigned n = osh_op_recover(&fresh, &op_env);
@@ -671,10 +846,80 @@ static void scenario(const char *name, unsigned rights, const char *script, stru
     real_mode = 0;
 }
 
+static void scenario(const char *name, unsigned rights, const char *script, struct osh_hooks hk)
+{
+    run_case(name, rights, script, hk, 0);
+}
+
+/* the direct-argv route (section 11): a record built here, not by the shell units, into the same executor */
+static uint64_t dreq[OSH_REQ_HDR + 2u * OSH_REQ_CMD_CELLS];
+static uint64_t dout[64];
+static uint64_t dused;
+
+static void dword(uint64_t *blk, const char *s)
+{
+    size_t l = strlen(s);
+    blk[4 + 2 * blk[0]] = dused;
+    blk[5 + 2 * blk[0]] = l;
+    blk[0]++;
+    for (size_t i = 0; i < l; i++)
+        dout[dused++] = (uint8_t)s[i];
+}
+
+static void direct_record(void) /* gen 4096 512 | sink, flagged DIRECT */
+{
+    memset(dreq, 0, sizeof dreq);
+    memset(dout, 0, sizeof dout);
+    dused = 0;
+    dreq[0] = OSH_REQ_MAGIC;
+    dreq[1] = 2;
+    dreq[3] = OSH_REQ_F_DIRECT;
+    dreq[5] = 1;
+    uint64_t *c0 = dreq + OSH_REQ_HDR, *c1 = c0 + OSH_REQ_CMD_CELLS;
+    dword(c0, "gen");
+    dword(c0, "4096");
+    dword(c0, "512");
+    dword(c1, "sink");
+    dreq[4] = dused;
+}
+
+static void direct_exec(void)
+{
+    struct osh_result r;
+    so_bytes = 0;
+    memset(so_head, 0, sizeof so_head);
+    osh_op_exec(&sess, &op_env, dreq, dout, sizeof dout / sizeof dout[0], &r);
+    pipeline_line(&r);
+}
+
+/* direct: the record as submitted; malicious: the same record with a builtin on command 0 (malformed on the direct
+ * route), then with command 1's argv[0] outside OUT; direct_no_cap: the same record, no spawn capability */
+static void direct_case(const char *name, int variant, const struct ncfg *nc)
+{
+    case_name = name;
+    osh_session_init(&sess, CK_R_WRITE);
+    native_attach(nc);
+    ck_printf("osh_op_begin: case=%s cap_rights=%u; %s\n", name, (unsigned)CK_R_WRITE, LABEL);
+    direct_record();
+    if (variant == 1) {
+        dreq[OSH_REQ_HDR + 3] = 3;
+        direct_exec();
+        direct_record();
+        dreq[OSH_REQ_HDR + OSH_REQ_CMD_CELLS + 4] = 9999;
+    }
+    direct_exec();
+    int empty = osh_session_close(&sess);
+    ck_printf("osh_op_native_end: case=%s tasks_empty=%d pipes_empty=%d stage_steps=%llu not_torn_down=%llu "
+              "admit_refused=%llu cap_table_empty=%d; %s\n",
+              name, ck_task_tab_empty(&stab), ck_pipe_pool_empty(&spool), (unsigned long long)sost.launches,
+              (unsigned long long)sost.not_torn_down, (unsigned long long)sost.admit_refused, empty, LABEL);
+}
+
 static void op_scenarios(void)
 {
-    struct osh_hooks none = { 0, 0, 0, 0 };
-    struct osh_hooks rv = { 1, 0, 0, 0 }, ir = { 0, 2, 0, 0 }, cr = { 0, 0, 1, 0 };
+    struct osh_hooks none = { 0 };
+    struct osh_hooks rv = { .revoke_before_perm_at = 1 }, ir = { .interrupt_before_effect_at = 2 },
+                     cr = { .crash_after_effect_at = 1 };
     scenario("allow", CK_R_WRITE, "klog hello from osh\nklog \"status=$?\"\n", none);
     scenario("deny_no_cap", 0, "klog SECRET-no-cap\n", none);
     scenario("deny_read_only", CK_R_READ, "klog SECRET-read-only\n", none);
@@ -683,7 +928,55 @@ static void op_scenarios(void)
     scenario("lost", CK_R_WRITE, "klog LOST-MARKER\n", cr);
     scenario("after_restart", CK_R_WRITE, "klog fresh decision\n", none);
     scenario("unsupported", CK_R_WRITE, "klog a | klog SECRET-pipe\nklog SECRET-redir >f\nnosuchcmd\n", none);
-    ck_printf("osh_op_done: cases=8; %s\n", LABEL);
+
+    /* aienos-mv#430: native stage pipelines */
+    unsigned have = 0;
+    for (unsigned u = 0; u < SU_COUNT; u++)
+        have += (unsigned)sunit[u].have;
+    if (have != SU_COUNT) {
+        ck_printf("osh_op_stages: NOT_RUN (a stage unit was not admitted, %u of %u); %s\n", have, SU_COUNT, LABEL);
+        ck_printf("osh_op_done: cases=8; %s\n", LABEL);
+        return;
+    }
+    stage_image(SI_GEN, SU_GEN, 1);
+    stage_image(SI_XFORM, SU_XFORM, 1);
+    stage_image(SI_SINK, SU_SINK, 1);
+    stage_image(SI_NORCPT, SU_SINK, 0);
+    const unsigned RW = CK_R_READ | CK_R_WRITE;
+    const struct ncfg k90 = { CK_R_WRITE, RW, 0, 90 }, k7 = { CK_R_WRITE, RW, 0, 7 }, k0 = { CK_R_WRITE, RW, 0, 0 };
+    const struct ncfg nospawn = { 0, RW, 0, 0 }, roloc = { CK_R_WRITE, CK_R_READ, 0, 0 }, dl = { CK_R_WRITE, RW, 20, 0 };
+    /* three distinct admitted stages at once, 2.5 pipe capacities through the middle one; $? is the last command's */
+    struct osh_hooks snap = { .snapshot_at = 1, .snapshot_after_turns = 20 }; /* who is alive mid-run */
+    run_case("stream3", CK_R_WRITE, "gen 163840 4096 | xform 90 | sink\nklog \"stream3 status=$?\"\n", snap, &k90);
+    /* the pipeline status is the last command's: 3 when xform (stopping after 1000 bytes with 3) is last, 0 when sink follows */
+    run_case("last_status", CK_R_WRITE, "gen 4096 | xform 0 1000 3\nklog \"last=$?\"\ngen 4096 | xform 0 1000 3 | sink\n"
+                                        "klog \"last=$?\"\n", none, &k0);
+    /* redirections in record order, then a location round trip through a second pipeline */
+    run_case("redir", CK_R_WRITE, "gen 100 >p >o\ngen 1000 >o\nxform 7 <o | sink\ngen 10 >>o\n", none, &k7);
+    run_case("redir_dup", CK_R_WRITE, "gen 100 2>&1 >o\n", none, &k0);
+    /* refusals of one command or of the whole pipeline */
+    run_case("not_found", CK_R_WRITE, "gen 4096 | nosuch | sink\n", none, &k0);
+    run_case("nounit", CK_R_WRITE, "gen 4096 | nounit\n", none, &k0);
+    run_case("foreign", CK_R_WRITE, "gen 10 | foreign\n", none, &k0);
+    run_case("no_spawn_cap", CK_R_WRITE, "gen 10 | sink\n", none, &nospawn);
+    run_case("loc_read_only", CK_R_WRITE, "gen 10 >o\n", none, &roloc);
+    struct osh_hooks rs = { .revoke_spawn_at = 1, .revoke_spawn_cmd = 1 };
+    run_case("revoke_between", CK_R_WRITE, "gen 4096 | sink\n", rs, &k0);
+    /* a launch failure after two commands started: they are cancelled and reaped, PARTIAL_LAUNCH, status 1 */
+    struct osh_hooks fs = { .fail_spawn_at = 1, .fail_spawn_cmd = 2, .fail_spawn_err = OSH_E_LIMIT };
+    run_case("partial", CK_R_WRITE, "gen 0 | xform 1 | sink\n", fs, &k0);
+    /* lost right after the first spawn: OUTCOME_UNKNOWN, the kernel reaps the stage, a restart never replays */
+    struct osh_hooks cs = { .crash_after_effect_at = 1, .crash_cmd = 0 };
+    run_case("lost_stage", CK_R_WRITE, "gen 0 | sink\nklog SECRET-after-loss\n", cs, &k0);
+    /* an endless producer: an interrupt after 30 scheduler turns, then a deadline of 20 ticks */
+    struct osh_hooks it = { .interrupt_at = 1, .interrupt_after_turns = 30 };
+    run_case("interrupt_stages", CK_R_WRITE, "gen 0 | sink\nklog SECRET-after-interrupt\n", it, &k0);
+    run_case("deadline", CK_R_WRITE, "gen 0 | sink\n", none, &dl);
+    /* the direct-argv route */
+    direct_case("direct", 0, &k0);
+    direct_case("malicious", 1, &k0);
+    direct_case("direct_no_cap", 0, &nospawn);
+    ck_printf("osh_op_done: cases=25; %s\n", LABEL);
 }
 #endif
 

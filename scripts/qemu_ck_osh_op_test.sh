@@ -15,7 +15,23 @@
 #   interrupt       interrupt before pipeline 2 of 3: pipeline 1 done, 2 CANCELLED, 3 never runs, status 130
 #   lost            adapter lost after the effect: bytes appear once; restart reports OUTCOME_UNKNOWN with the digest, never replays
 #   after_restart   a new request after the loss is a new decision and runs
-#   unsupported     pipe, redirection, unknown command: NOT_SUPPORTED / NOT_FOUND before any effect
+#   unsupported     klog in a pipe, klog with a redirection, unknown command: NOT_SUPPORTED / NOT_FOUND before any effect
+# aienos-mv#430 native stage pipelines (gen = tgen.unit, xform = txform.unit, sink = tsink.unit, admitted with receipts):
+#   stream3         gen | xform | sink, 160 KiB through 64 KiB pipes: all three alive at once, backpressure, sink's count and
+#                   hash checked against an independent computation, $? = the last command's status
+#   last_status     the pipeline status is the last command's (xform exits 3 when last, sink's 0 when it follows)
+#   redir           >p >o in record order, truncate, a location read back by a second pipeline, append
+#   redir_dup       2>&1 >o through the real shell units: o gets stdout (the fd mapping itself is checked by test_osh_op)
+#   not_found       a missing middle command: 127 for it only, its pipe ends closed, the others run
+#   nounit          a stage unit with no receipt: refused at its spawn (126), the launcher counts the refusal
+#   foreign         a name of a class this adapter does not provide: UNAVAILABLE for the whole pipeline, nothing starts
+#   no_spawn_cap    no spawn capability: DENIED before any spawn
+#   loc_read_only   a write redirection with READ only on the location capability: DENIED, status 1
+#   revoke_between  the spawn capability revoked after command 0 started: command 1 REVOKED
+#   partial         a launch failure after two spawns: PARTIAL_LAUNCH, both cancelled and reaped, status 1
+#   lost_stage      the adapter lost after a spawn: OUTCOME_UNKNOWN, the kernel reaps the stage, a restart never replays
+#   interrupt_stages, deadline   an endless producer stopped by an interrupt or by the session deadline
+#   direct, malicious, direct_no_cap   the direct-argv route: same executor, malformed records refused, same authority
 # every case: capability released at the end, no EL0 task slot left held.
 # Last line: AIENOS_CK_OSH_OP: PASS|FAIL|NOT_RUN.
 set -euo pipefail
@@ -59,6 +75,9 @@ simg="${out_prod}/host/ck_store_image"
 
 # aienos#383: each launch needs the unit's realization receipt
 files=("${fix}/osh_lex.unit" "${fix}/osh_parse.unit" "${fix}/osh_expand.unit" "${fix}/../osc_receipt/osh_lex.rcpt" "${fix}/../osc_receipt/osh_parse.rcpt" "${fix}/../osc_receipt/osh_expand.rcpt")
+# aienos-mv#430: the three stage units of the task gate and their receipts (the native operations gen, xform, sink)
+tfix="native/kernel/tests/fixtures/task"
+files+=("${tfix}/tgen.unit" "${tfix}/txform.unit" "${tfix}/tsink.unit" "${tfix}/tgen.rcpt" "${tfix}/txform.rcpt" "${tfix}/tsink.rcpt")
 disk="${work}/nvme.img"
 "${out_prod}/host/ck_gpt_image" create "${disk}" 512 64 aienos-middle >/dev/null || fail "GPT boot disk image created"
 if "${simg}" build "${disk}" 512 "${files[@]}" >"${work}/build.txt" 2>&1; then pass "boot disk built: $(head -1 "${work}/build.txt")"
@@ -103,7 +122,7 @@ exact() { # description, regex, expected count
     if [[ "${n}" == "$3" ]]; then pass "$1 (${n})"; else fail "$1: expected $3, got ${n}"; fi
 }
 check "${serial}" "left firmware and entered the kernel" "kernel: alive"
-check "${serial}" "kernel read all six candidates (three units, three receipts) from the boot disk Store" "^artifact_candidates: 6$"
+check "${serial}" "kernel read all twelve candidates (three shell units, three stage units, six receipts) from the boot disk Store" "^artifact_candidates: 12$"
 for u in osh_lex osh_parse osh_expand; do
     check "${serial}" "${u} admitted (real oscc output, TEST signer)" "^osc_unit: ${u}\\.unit ACCEPT unit_digest=[0-9a-f]{64} program_id=[0-9a-f]{64} funcs=[0-9]+ caps=0 signer=TEST$"
 done
@@ -112,7 +131,7 @@ check "${serial}" "report reached the console" "report_kind: final"
 if has "${serial}" "report_kind: (panic|fault)"; then fail "panic or fault reported"; else pass "no kernel panic or fault report"; fi
 if has "${serial}" "^osh_fault:"; then fail "a shell launch did not return"; else pass "every shell launch returned"; fi
 exact "no fixture trace ran in this build" "^osh_script_begin" 0
-check "${serial}" "all eight cases ran" "^osh_op_done: cases=8; ${label}\$"
+check "${serial}" "all 25 cases ran (8 klog, 17 native stage pipelines)" "^osh_op_done: cases=25; ${label}\$"
 
 P="^osh_op_pipeline: case="
 E="^osh_op_end: case="
@@ -151,15 +170,67 @@ check "${serial}" "unsupported: a pipe is NOT_SUPPORTED before any effect" "${P}
 check "${serial}" "unsupported: a redirection is NOT_SUPPORTED" "${P}unsupported n=2 status=126 error=NOT_SUPPORTED outcome=NOT_STARTED "
 check "${serial}" "unsupported: an unknown command is NOT_FOUND (127)" "${P}unsupported n=3 status=127 error=NOT_FOUND outcome=NOT_STARTED "
 check "${serial}" "unsupported: no console write, no task slot held" "${E}unsupported rc=0 final_status=127 sink_calls=0 launches=[0-9]+ slots_held=0 cap_table_empty=1 cap_released=1; "
+# ---- aienos-mv#430: native stage pipelines (gen = tgen.unit, xform = txform.unit, sink = tsink.unit) ----
+for u in tgen txform tsink; do
+    check "${serial}" "${u} admitted (real oscc output, TEST signer)" "^osc_unit: ${u}\\.unit ACCEPT unit_digest=[0-9a-f]{64} program_id=[0-9a-f]{64} funcs=[0-9]+ caps=0 signer=TEST$"
+done
+exact "every stage case started (no NOT_RUN)" "^osh_op_stages: NOT_RUN" 0
+S="^osh_op_stages: case="
+N="^osh_op_native_end: case="
+check "${serial}" "stream3: three distinct admitted stages, COMPLETED, status 0" "${P}stream3 n=1 status=0 error=OK outcome=COMPLETED stop=0 crashed=0 "
+check "${serial}" "stream3: all three ran at once; sink counted 163840 bytes and its hash matches gen then xform 90, computed independently" "${S}stream3 n=1 launch=OK started=3 cmds=3 c0=0/COMPLETED/OK c1=0/COMPLETED/OK c2=0/COMPLETED/OK stdout_bytes=16 sink_count=163840 sink_hash_ok=1 max_in_pipes=[0-9]+ mid_alive=3 mid_in_flight=[0-9]+; "
+check "${serial}" "stream3: backpressure: a 64 KiB pipe filled to capacity while the consumers were slower" "${S}stream3 n=1 .* max_in_pipes=65536 "
+exact "stream3: \$? = 0 flows back into the shell" "^osh_op_out: stream3 status=0\$" 1
+exact "stream3: three spawn receipts, each after its grant" "^osh_op_receipt: seq=1 cmd=[012] op=task_spawn result=OK .* case=stream3; " 3
+check "${serial}" "last_status: xform last exits 3, the pipeline status is 3" "${P}last_status n=1 status=3 error=OK outcome=COMPLETED "
+exact "last_status: \$? = 3 in the shell" "^osh_op_out: last=3\$" 1
+check "${serial}" "last_status: with sink after it, the pipeline status is sink's 0" "${P}last_status n=3 status=0 error=OK outcome=COMPLETED "
+exact "last_status: \$? = 0 in the shell" "^osh_op_out: last=0\$" 1
+check "${serial}" "redir: >p >o in record order: p created empty, o gets the 100 bytes" "${S}redir n=1 launch=OK started=1 cmds=1 c0=0/COMPLETED/OK loc_[op]=[0-9]+ loc_[op]=[0-9]+ stdout_bytes=0 " 
+check "${serial}" "redir: p is 0 bytes" "${S}redir n=1 .* loc_p=0 "
+check "${serial}" "redir: o is 100 bytes" "${S}redir n=1 .* loc_o=100 "
+check "${serial}" "redir: >o truncates, then holds 1000 bytes" "${S}redir n=2 .* loc_o=1000 "
+check "${serial}" "redir: xform 7 <o | sink reads the location back: 1000 bytes, hash matches" "${S}redir n=3 launch=OK started=2 cmds=2 c0=0/COMPLETED/OK c1=0/COMPLETED/OK .* stdout_bytes=16 sink_count=1000 sink_hash_ok=1 "
+check "${serial}" "redir: >>o appends 10 bytes" "${S}redir n=4 .* loc_o=1010 "
+check "${serial}" "redir_dup: 2>&1 >o: stdout to o (100 bytes), stderr where stdout was" "${S}redir_dup n=1 launch=OK started=1 cmds=1 c0=0/COMPLETED/OK .*loc_o=100 "
+check "${serial}" "not_found: the missing middle command is 127 and ends only itself" "${S}not_found n=1 launch=OK started=2 cmds=3 c0=[0-9]+/COMPLETED/[A-Z_]+ c1=127/FAILED_NO_EFFECT/NOT_FOUND c2=0/COMPLETED/OK stdout_bytes=16 sink_count=0 sink_hash_ok=1 "
+check "${serial}" "not_found: the pipeline status is the last command's (0)" "${P}not_found n=1 status=0 "
+check "${serial}" "nounit: a unit with no receipt is refused at its spawn (126), nothing of it runs" "${S}nounit n=1 launch=OK started=1 cmds=2 c0=[0-9]+/COMPLETED/[A-Z_]+ c1=126/FAILED_NO_EFFECT/DENIED "
+check "${serial}" "nounit: pipeline status 126" "${P}nounit n=1 status=126 "
+check "${serial}" "nounit: the launcher refused the receipt" "${N}nounit tasks_empty=1 pipes_empty=1 stage_steps=[0-9]+ not_torn_down=0 admit_refused=1; "
+check "${serial}" "foreign: a name of a class this adapter does not provide refuses the whole pipeline (UNAVAILABLE, 126), nothing started" "${P}foreign n=1 status=126 error=UNAVAILABLE outcome=NOT_STARTED "
+check "${serial}" "foreign: no stage started" "${S}foreign n=1 launch=UNAVAILABLE started=0 "
+check "${serial}" "no_spawn_cap: no spawn capability: DENIED before any spawn (126)" "${P}no_spawn_cap n=1 status=126 error=DENIED outcome=FAILED_NO_EFFECT "
+check "${serial}" "no_spawn_cap: nothing started" "${S}no_spawn_cap n=1 launch=DENIED started=0 "
+exact "no_spawn_cap: the spawn denial has its receipt" "^osh_op_receipt: seq=1 cmd=0 op=task_spawn result=DENIED .* case=no_spawn_cap; " 1
+check "${serial}" "loc_read_only: a write redirection needs WRITE on the location capability: DENIED, status 1, no location made" "${S}loc_read_only n=1 launch=OK started=0 cmds=1 c0=1/FAILED_NO_EFFECT/DENIED stdout_bytes=0 "
+check "${serial}" "revoke_between: the spawn capability revoked after command 0 started: command 1 REVOKED (126)" "${S}revoke_between n=1 launch=OK started=1 cmds=2 c0=[0-9]+/COMPLETED/[A-Z_]+ c1=126/FAILED_NO_EFFECT/REVOKED "
+check "${serial}" "revoke_between: pipeline status 126" "${P}revoke_between n=1 status=126 "
+check "${serial}" "partial: a launch failure after two started: PARTIAL_LAUNCH, status 1" "${P}partial n=1 status=1 error=PARTIAL_LAUNCH "
+check "${serial}" "partial: both started stages CANCELLED, the failing one FAILED_NO_EFFECT" "${S}partial n=1 launch=PARTIAL_LAUNCH started=2 cmds=3 c0=[0-9]+/CANCELLED/[A-Z_]+ c1=[0-9]+/CANCELLED/[A-Z_]+ c2=1/FAILED_NO_EFFECT/LIMIT "
+check "${serial}" "lost_stage: lost after the first spawn: OUTCOME_UNKNOWN, the list stops" "${P}lost_stage n=1 status=70 error=OUTCOME_UNKNOWN outcome=OUTCOME_UNKNOWN stop=1 crashed=1 "
+check "${serial}" "lost_stage: the restart reports the open spawn intent once, never replays, holds no capability" "^osh_op_restart: case=lost_stage open_intents=1 second_scan=0 sink_calls_before=0 sink_calls_after=0 held_cap=0; "
+check "${serial}" "interrupt_stages: an interrupt on an endless producer: INTERRUPTED, CANCELLED, the list stops" "${P}interrupt_stages n=1 status=[0-9]+ error=INTERRUPTED outcome=CANCELLED stop=1 crashed=0 "
+check "${serial}" "interrupt_stages: both stages CANCELLED" "${S}interrupt_stages n=1 launch=OK started=2 cmds=2 c0=[0-9]+/CANCELLED/[A-Z_]+ c1=[0-9]+/CANCELLED/[A-Z_]+ "
+check "${serial}" "deadline: the session deadline stops an endless producer the same way" "${P}deadline n=1 status=[0-9]+ error=INTERRUPTED outcome=CANCELLED stop=1 "
+exact "no line after a loss or an interrupt ran" "^osh_op_out: SECRET-after-" 0
+check "${serial}" "direct: the direct-argv route runs the same stages" "${S}direct n=1 launch=OK started=2 cmds=2 c0=0/COMPLETED/OK c1=0/COMPLETED/OK stdout_bytes=16 sink_count=4096 sink_hash_ok=1 "
+check "${serial}" "malicious: a builtin on a direct record is malformed: INVALID_ARG, nothing started" "${S}malicious n=1 launch=INVALID_ARG started=0 "
+check "${serial}" "malicious: an argv outside OUT: INVALID_ARG, nothing started" "${S}malicious n=2 launch=INVALID_ARG started=0 "
+check "${serial}" "malicious: nothing ran" "${N}malicious tasks_empty=1 pipes_empty=1 stage_steps=0 "
+check "${serial}" "direct_no_cap: a direct record without a spawn capability is DENIED like the shell's" "${P}direct_no_cap n=1 status=126 error=DENIED "
+exact "every native case ended with no task, no pipe, every EL0 slot torn down" "${N}[a-z_0-9]+ tasks_empty=1 pipes_empty=1 stage_steps=[0-9]+ not_torn_down=0 " 17
+exact "no native case left a task, a pipe or an EL0 slot" "${N}.*(tasks_empty=0|pipes_empty=0|not_torn_down=[1-9])" 0
 # totals
 G="^osh_op_receipt: seq=[0-9]+ op=console_write result=OK request_digest=[0-9a-f]{64} effect=console_write principal=[0-9a-f]{64} cap_domain=1 cap_index=[0-9]+ cap_generation=[0-9]+ resource_class=1 operation=1"
-exact "grant used: one security receipt per console write, 5 in all" "${G} case=[a-z_]+; ${label}\$" 5
+exact "grant used: one security receipt per console write, 8 in all" "${G} case=[a-z_0-9]+; ${label}\$" 8
 exact "grant used: allow wrote 2 lines, 2 receipts" "${G} case=allow; " 2
 exact "grant used: even the lost-after-effect case has its receipt" "${G} case=lost; " 1
 exact "grant used: no receipt for a refused case" "^osh_op_receipt: .* result=OK .* case=(deny_no_cap|deny_read_only|revoked|unsupported); " 0
-exact "the whole boot wrote exactly five console lines through the operation" "^osh_op_out: " 5
+exact "the whole boot wrote exactly eight console lines through the operation" "^osh_op_out: " 8
 exact "no case leaked a task slot" "^osh_op_end: .* slots_held=[1-9]" 0
-exact "every case released its capability" "^osh_op_end: .* cap_released=1; " 8
+exact "every shell case released its capability (8 klog, 14 native)" "^osh_op_end: .* cap_released=1; " 22
+exact "every shell case left the session table empty" "^osh_op_end: .* cap_table_empty=1 " 22
 # control: a wrong expectation must turn the check red, then the right one green
 if has "${serial}" "^osh_op_out: hello from osh DOES-NOT-APPEAR\$"; then fail "control: the gate cannot go red"; else pass "control: a deliberately wrong expected console line is not found (red), the real one is (above)"; fi
 
