@@ -127,7 +127,7 @@ ASCII, at most three things, be honest about what Allen cannot do yet: no weathe
 media of his own) and three short examples that are not the test questions. `allen-scene`
 (`crates/allen-courier/src/bin/allen-scene.rs`) builds it in with `include_str!`, so the relay can use the
 same file the same way. The live test asks the model one question at a time and waits out the server's 503
-(busy) answers, honouring Retry-After, for up to five minutes per question.
+(busy) answers, waiting as its Retry-After asks (1 to 15 s), for up to thirty minutes per question.
 
 ## 5. Measured
 
