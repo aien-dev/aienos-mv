@@ -12,6 +12,7 @@ QEMU qualifies nothing physical: a PASS here says nothing about real hardware.
 | `arch/` | Vectors, EL2 -> EL1h entry (ADR 0009), recoverable probe, exception and IRQ dispatch, GICv3 or GICv2 (picked from the MADT; GICv2 is the Raspberry Pi 5 GIC-400 shape, QEMU gate `AIENOS_QEMU_GIC=2 scripts/qemu_ck_boot_test.sh`), EL1 physical timer. |
 | `mm/` | Frame allocator (UEFI map), 4 KiB-granule page-table builder, heap, the kernel address space (`mmu.c`). |
 | `core/` | Console, printf, ACPI, reports/panic/PSCI reset, M3 (threads, scheduler, EL0, capabilities, IPC), `kmain.c`. |
+| `core/ktap.c` | Records the in-kernel self tests (mm, irq, entropy, m3, stages) and prints them once as a KTAP version 1 block in the final report; read by `scripts/ktap_summary.sh` (`docs/qualification/KTAP_RECEIPTS.md`). Shown in QEMU only so far. |
 | `tests/` | Host unit tests. |
 | `third_party/omega/` | The canonical Omega Cortex store, byte for byte from the omega commit in `omega.lock` (checked by `scripts/omega_lock_check.sh`); built freestanding by `svc/cortex_store.c` over the sealed Store through `svc/cortex_journal.c` (native v1 plan P06). |
 | `x86/` | x86_64 port, first cut (AIENOS-IMAC-KERNEL-0, 2017 iMac): UEFI stub, descriptor tables and interrupt stubs, page tables, local APIC timer, ACPI power off, console, secondary-core start, PCI walk, read-only AHCI and NVMe disks, transmit-only BCM57766 Ethernet report. |
@@ -24,7 +25,8 @@ QEMU qualifies nothing physical: a PASS here says nothing about real hardware.
     make -C native/kernel sanitize   # same under ASan + UBSan
     make -C native/kernel full       # + stages: target/native-kernel/full/BOOTAA64.EFI
     make -C native/kernel stage-test # stage host tests (also stage-sanitize, stage-free)
-    scripts/qemu_ck_boot_test.sh     # QEMU boot of the core-only image, ends AIENOS_CK_M1: PASS
+    scripts/qemu_ck_boot_test.sh     # QEMU boot of the core-only image, prints the KTAP block and
+                                     # its summary, ends AIENOS_CK_M1: PASS
     scripts/qemu_ck_store_test.sh    # QEMU NVMe + Store gate (full image, QEMU-only
                                      # CK_QEMU_UNSAFE_DMA=1 build), ends AIENOS_CK_M4_NVME,
                                      # AIENOS_CK_M4_STORE, AIENOS_CK_ARGUS1_REVOKE

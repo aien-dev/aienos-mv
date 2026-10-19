@@ -14,6 +14,7 @@ The kernel is being rewritten in C (the `native/` directory) and is IMPLEMENTED 
 
 - [ROADMAP.md](ROADMAP.md): component status (its newest status block is dated 2026-10-01)
 - [native/kernel/GATES.md](native/kernel/GATES.md): what each emulator gate checks
+- [ASSUMPTIONS.md](ASSUMPTIONS.md): the kernel code and hardware behaviour no test covers yet (boot assembly, drivers, DMA, cache and TLB, firmware), with line counts
 - [docs/TRUST-1-M5-GATE-MATRIX.md](docs/TRUST-1-M5-GATE-MATRIX.md) and [docs/TRUST-1-OPERATOR-STEPS.md](docs/TRUST-1-OPERATOR-STEPS.md)
 - [docs/PLAN_AUTHORITY.md](docs/PLAN_AUTHORITY.md): how this repository's plans relate to the whole-system plan in [aien-architecture](https://github.com/aien-spark/aien-architecture)
 
@@ -48,6 +49,7 @@ The emulator gates need `qemu-system-aarch64` and the AAVMF firmware (Ubuntu pac
 
 ```bash
 bash scripts/ck_gates.sh          # runs the C gates, writes a content-addressed receipt; refuses a dirty tree; its child scripts take a gate lock and report NOT_RUN while another gate run holds it or the machine quiet flag is set
+bash scripts/ktap_summary.sh <serial log>  # reads the kernel's own self-test results (a KTAP block, docs/qualification/KTAP_RECEIPTS.md) from any console log; exit 0 only if all passed (emulator so far; no hardware log read yet)
 bash scripts/ck_pi5_build_check.sh  # builds the Raspberry Pi 5 image and checks the default image carries none of it (build only; the Pi image cannot boot in QEMU)
 ```
 
