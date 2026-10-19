@@ -242,6 +242,12 @@ run_children() {
         child_log_sha[${c}]="$(sha_of <"${log}")"
         child_lines[${c}]="$(wc -l <"${log}")"
         echo "--- [${c}] exit ${child_rc[${c}]} after ${child_secs[${c}]} s" >&2
+        # A failing child's own FAIL lines go to stderr (the evidence blob), so a red gate can be read
+        # without rerunning it: the child log itself lives in a temp folder that is removed at exit.
+        if [[ "${child_rc[${c}]}" != 0 ]]; then
+            { grep -aE '^(FAIL|ALLEN: |CONTINUITY: )' "${log}" | tail -n 40 | sed "s/^/    [${c}] /" >&2; } || true
+            { tail -n 5 "${log}" | sed "s/^/    [${c}] tail: /" >&2; } || true
+        fi
     done
 }
 
