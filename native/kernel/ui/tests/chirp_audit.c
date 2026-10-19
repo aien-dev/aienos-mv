@@ -58,8 +58,9 @@ int main(void)
     printf("ring after the merger: level falls to %.2f of itself in 30 ms (time constant %.1f ms; physics: %.1f ms), held at %u Hz "
            "(physics: %.0f Hz)\n", l1 / l0, -30.0 / log(l1 / l0), 1000 * q / (M_PI * fr), CK_CHIRP_TO_HZ, fr);
     /* the ratios if the sound were the signal sped up uniformly */
-    printf("pitch ratio, sound over signal: start %.2f (200 / 35), top %.2f (1000 / 250); time ratio, sound over signal: %.2f "
-           "(0.6 s over 0.2 s)\n", 200.0 / 35, 1000.0 / 250, 0.6 / 0.2);
+    printf("pitch ratio, sound over signal: start %.2f (%u / 35), top %.2f (%u / 250); sweep length over the law's %.3f s: %.2f\n",
+           CK_CHIRP_FROM_HZ / 35.0, CK_CHIRP_FROM_HZ, CK_CHIRP_TO_HZ / 250.0, CK_CHIRP_TO_HZ, tau0,
+           (double)(mf_frame - (mf_frame - CK_CHIRP_RATE / 1000u * CK_CHIRP_RISE_MS)) / CK_CHIRP_RATE / tau0);
 
     /* ---- the picture: the black holes in ui/night.c, in design pixels (1920 wide) ---- */
     const double E = 60, shadow = 20, a0 = 270, orbit_ms = 5200, spiral_s = 6.0; /* night.c: e_full, rs_full, a0, ORBIT_MS */

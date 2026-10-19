@@ -18,7 +18,7 @@ the chirp in the kernel (ui/chirp.c), pitch by time before the merger:
 the pitch reaches 1000 Hz 8.2 ms before the merger and holds; the sweep 200 to 1000 Hz lasts 592 ms
 cycles in the sweep: 179 (published signal: about 8 between 35 and 150 Hz, perhaps 10 to the peak)
 ring after the merger: level falls to 0.37 of itself in 30 ms (time constant 30.0 ms; physics: 4.0 ms), held at 1000 Hz (physics: 250 Hz)
-pitch ratio, sound over signal: start 5.71 (200 / 35), top 4.00 (1000 / 250); time ratio, sound over signal: 3.00 (0.6 s over 0.2 s)
+pitch ratio, sound over signal: start 5.71 (200 / 35), top 4.00 (1000 / 250); sweep length over the law's 0.165 s: 3.64
 
 black-hole picture (ui/night.c): Einstein radius 60 px, shadow radius 20 px, ratio 3.00
   a hole's shadow is sqrt(27)/2 = 2.5981 Rs; the point-lens Einstein angle (source far behind) is sqrt(2 Rs / D). A ratio of 3.00 means the viewer is D = 30.4 Rs from the hole (3229 km for 36 solar masses)
