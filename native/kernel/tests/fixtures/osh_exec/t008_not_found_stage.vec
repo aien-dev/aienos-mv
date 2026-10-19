@@ -1,0 +1,15 @@
+case not_found_stage
+kind negative
+exec native-qemu
+domain 1
+needs tasks launch test-authority
+# a name not found fails only its own command (127); its neighbours still run and see end of stream (ST7.5)
+cap C => OK
+bind B cap=C => OK
+launch P bind=B : nosuch ! cat => OK
+run => OK
+waitp P => OK status=0 outcomes=FAILED_NO_EFFECT,COMPLETED statuses=127,0 out=""
+launch Q bind=B : exit 2 ! nosuch => OK
+run => OK
+waitp Q => OK status=127 outcomes=COMPLETED,FAILED_NO_EFFECT statuses=2,127 out=""
+check empty

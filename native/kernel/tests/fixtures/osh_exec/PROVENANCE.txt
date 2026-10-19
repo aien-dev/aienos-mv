@@ -1,0 +1,27 @@
+OSH stream and task launch vectors (aienos-mv#430), copied byte for byte, not edited.
+Label: host only (tests/test_osh_op.c part 3); nothing here ran on a Spark, Pi 5, iMac or any real machine.
+
+Source:  aien-dev/aien-protocols-mv, branch feat/osh-stream-abi-43, commit 181855c9ff3ec9bcc635d2043d5d7d213cee6021
+         (STREAM_TASK.md revision 2), directory specs/osh-platform/vectors.
+Runner:  test_osh_op part 3 drives each vector through osh_op_exec over the C stand-in stages and prints
+         OSHSV1_RUN and OSHSV1_CONFORMANCE lines. A vector is NOT_RUN, with its reason printed, when it needs something
+         this adapter does not provide: the domain 2 binding (this adapter's spawn authority is the kernel IPC table,
+         domain 1), the `streams` feature, a binding override or a stream slot the runner does not drive, or a command
+         the runner does not implement. Run on 2026-10-18: pass=3 (t002, t008, t009), fail=0, not_run=13.
+Hashes (sha256):
+  190745970fb22fff8e7d0a1f301b7df51b1dadf39fa8cd2453c11f035583c438  t001_task_stream_binding.vec
+  d1fbc5c34784ef6014dba1347d51e8f497b4c66e11007f354d316ed376e9d686  t002_stage_nonzero_exit.vec
+  b2f28779e2ba7232cd8178e5b4e559aa6c9ae14b8c83077f1c41a9e132215b07  t003_pipeline_broken_pipe.vec
+  f4d9bcf8a7197c8c274964a279f816dc2695c8ac0c0a972f3614f5da97c3b486  t004_task_cancel.vec
+  68791afe4da62efa6a37014455947541060936f4e59298e072ec119bb1b15ccd  t005_cancel_blocked_task.vec
+  142a78a9f32fa9c9ad5e1f829ad55574adada9ee0c0469417acf2a08650ec115  t006_partial_launch.vec
+  7fcc1b2283567a424cdf7181b259128f93d32b52dd6dae5ac9d17fcd70d76932  t007_refusal_before_effects.vec
+  4093f3b6b9578f8abaa4b1bfc61d05f37e523b27f442e284e7c75bb6eeca3ed1  t008_not_found_stage.vec
+  ac9203b625701aa8bbb94d19ed1169d8ee5b2765c53fa2e4c94a598a5d535a9e  t009_revoke_between_stages.vec
+  e83e982b4eeb0d2cb48d9860f88c2b578b477579f7328899daab8a817351611e  t010_domain1_generation.vec
+  479b490a2a14fbebc0f5d0c775935be6a6cc589e6ddf4d86779976837f0873be  t011_domain2_generation.vec
+  530972e54d2c1e49c15cf68ca143fbeec1be4d009e1fc9ff7f4265df8c29d124  t012_outcome_unknown_crash.vec
+  f889b2ffd29b666f1b7c029711e430afe6d70825795fe2b74bb5ba32871f5b0b  t013_outcome_unknown_lost.vec
+  fb3270220bd70023431b35361c441e3c2394a65923f20b1eef0dfd17089d6b43  t014_reset_cleanup.vec
+  fa9578da4fa51c0b023781ef7cfd9bedee5714248911ad9b78b4f2ed955633f1  t015_spawn_argument_refusals.vec
+  450220dd9412f8b68e35ebd1a25440ff8cf5f68c0bab0465b37107f09524761d  t016_eof_all_task_writers.vec

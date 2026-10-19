@@ -1,0 +1,22 @@
+case eof_all_task_writers
+kind positive
+exec native-qemu
+domain 1
+needs streams tasks test-authority
+# end of stream waits for writers held by tasks too; a task's ends close when it ends (ST4.4, ST6.1)
+cap C => OK
+bind B cap=C => OK
+create R W A => OK
+spawn T1 emit "a" out=W bind=B => OK
+spawn T2 hang out=W bind=B => OK
+close W => OK
+run => OK
+read R 8 => OK n=1 data="a"
+read R 8 => WOULD_BLOCK
+tcancel T2 interrupt => OK
+run => OK
+read R 8 => OK n=0
+wait T1 => OK status=0 outcome=COMPLETED
+wait T2 => OK status=130 outcome=CANCELLED
+close R => OK
+check empty

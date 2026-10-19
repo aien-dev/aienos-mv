@@ -1,0 +1,18 @@
+case stage_nonzero_exit
+kind positive
+exec native-qemu
+domain 1
+needs tasks launch test-authority
+# pipeline status is the last command's status; an earlier nonzero exit does not change it (ST7.7)
+cap C => OK
+bind B cap=C => OK
+launch P bind=B : exit 3 ! cat => OK
+run => OK
+waitp P => OK status=0 outcomes=COMPLETED,COMPLETED statuses=3,0 out=""
+launch Q bind=B : exit 0 ! exit 5 => OK
+run => OK
+waitp Q => OK status=5 outcomes=COMPLETED,COMPLETED statuses=0,5 out=""
+launch S bind=B in="a\x00b" : cat ! cat ! cat => OK
+run => OK
+waitp S => OK status=0 outcomes=COMPLETED,COMPLETED,COMPLETED statuses=0,0,0 out="a\x00b"
+check empty

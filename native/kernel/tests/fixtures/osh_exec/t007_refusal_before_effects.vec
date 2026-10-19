@@ -1,0 +1,16 @@
+case refusal_before_effects
+kind negative
+exec host-logic
+domain 2
+needs tasks launch test-authority
+# refusals of the whole pipeline happen before any effect: nothing starts, no intent is written (ST7 steps 1 to 3)
+cap C => OK
+bind B cap=C => OK
+bind N none => OK
+bind X cap=C domain=3 => OK
+launch P bind=B : cat ! foreign => UNAVAILABLE status=126 outcomes=FAILED_NO_EFFECT,FAILED_NO_EFFECT statuses=126,126
+check empty
+launch Q bind=N : exit 0 => DENIED status=126 outcomes=FAILED_NO_EFFECT statuses=126
+check empty
+launch S bind=X : exit 0 ! exit 0 => CAP_DOMAIN_MISMATCH status=126 outcomes=FAILED_NO_EFFECT,FAILED_NO_EFFECT statuses=126,126
+check empty

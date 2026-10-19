@@ -1,0 +1,28 @@
+case domain1_generation
+kind negative
+exec host-logic
+domain 1
+needs tasks test-authority
+# domain 1 (kernel IPC table): 32-bit generations; a wider one is refused, never truncated (ST5)
+cap C => OK
+bind B cap=C => OK
+bind WIDE cap=C gen=0x100000007 => OK
+bind OLD cap=C gen=8 => OK
+bind D2 cap=C domain=2 => OK
+bind D0 cap=C domain=0 => OK
+bind GONE cap=C index=99 => OK
+bind N none => OK
+spawn T1 exit 0 bind=WIDE => CAP_GEN_NARROW
+spawn T2 exit 0 bind=OLD => STALE
+spawn T3 exit 0 bind=D2 => CAP_DOMAIN_MISMATCH
+spawn T4 exit 0 bind=D0 => CAP_DOMAIN_MISMATCH
+spawn T5 exit 0 bind=GONE => STALE
+spawn T6 exit 0 bind=N => DENIED
+launch P bind=WIDE : exit 0 => CAP_GEN_NARROW status=126 outcomes=FAILED_NO_EFFECT statuses=126
+check empty
+spawn T exit 0 bind=B => OK
+run => OK
+wait T => OK status=0 outcome=COMPLETED
+revokecap C => OK
+spawn T7 exit 0 bind=B => REVOKED
+check empty

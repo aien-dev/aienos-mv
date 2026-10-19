@@ -1,0 +1,27 @@
+case task_cancel
+kind negative
+exec native-qemu
+domain 1
+needs tasks test-authority
+# interrupt can be handled, terminate cannot; cancelling an ended task changes nothing; a reaped id is STALE (ST6.3, ST6.5)
+cap C => OK
+bind B cap=C => OK
+spawn T hang bind=B => OK
+run => OK
+state T => OK state=RUNNING
+wait T => WOULD_BLOCK
+tcancel T interrupt => OK
+run => OK
+wait T => OK status=130 outcome=CANCELLED
+tcancel T interrupt => STALE
+spawn S stubborn bind=B => OK
+tcancel S interrupt => OK
+run => OK
+state S => OK state=RUNNING
+tcancel S terminate => OK
+wait S => OK status=137 outcome=CANCELLED
+spawn U exit 4 bind=B => OK
+run => OK
+tcancel U terminate => OK
+wait U => OK status=4 outcome=COMPLETED
+check empty

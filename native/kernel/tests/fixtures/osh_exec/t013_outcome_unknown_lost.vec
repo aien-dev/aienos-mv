@@ -1,0 +1,14 @@
+case outcome_unknown_lost
+kind negative
+exec native-qemu
+domain 2
+needs tasks test-authority fault-lose
+# a started task whose fate the adapter can no longer learn is OUTCOME_UNKNOWN, never success (ST8.4)
+cap C => OK
+bind B cap=C => OK
+spawn T exit 0 bind=B => OK
+run => OK
+lose T => OK
+wait T => OUTCOME_UNKNOWN status=1 outcome=OUTCOME_UNKNOWN
+wait T => STALE
+check empty

@@ -1,0 +1,15 @@
+case partial_launch
+kind negative
+exec native-qemu
+domain 2
+needs tasks launch test-authority fault-spawn
+# a spawn that fails after others started: they are interrupted, then terminated, reaped, every pipe closed;
+# with nothing started the error is the spawn's own (ST7.6, ABI section 10)
+cap C => OK
+bind B cap=C => OK
+launch P bind=B inject=3:LIMIT : hang ! stubborn ! cat => PARTIAL_LAUNCH status=1 outcomes=CANCELLED,CANCELLED,FAILED_NO_EFFECT statuses=130,137,1
+check empty
+launch Q bind=B inject=2:IO : hang ! cat ! cat => PARTIAL_LAUNCH status=1 outcomes=CANCELLED,FAILED_NO_EFFECT,NOT_STARTED statuses=130,1,-
+check empty
+launch S bind=B inject=1:LIMIT : hang ! cat => LIMIT status=1 outcomes=FAILED_NO_EFFECT,NOT_STARTED statuses=1,-
+check empty

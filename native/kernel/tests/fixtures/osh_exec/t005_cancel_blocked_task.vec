@@ -1,0 +1,24 @@
+case cancel_blocked_task
+kind negative
+exec native-qemu
+domain 2
+needs streams tasks launch test-authority
+# a task parked in a stream read is interrupted out of it; pipeline cancel reaches every stage (ST4.7, ST6.5)
+cap C => OK
+bind B cap=C => OK
+create R W A => OK
+spawn T cat in=R bind=B => OK
+run => OK
+state T => OK state=RUNNING
+tcancel T interrupt => OK
+run => OK
+wait T => OK status=130 outcome=CANCELLED
+close R => OK
+close W => OK
+launch P bind=B : hang ! cat => OK
+run => OK
+waitp P => WOULD_BLOCK
+cancelp P interrupt => OK
+run => OK
+waitp P => OK status=130 outcomes=CANCELLED,CANCELLED statuses=130,130 out=""
+check empty

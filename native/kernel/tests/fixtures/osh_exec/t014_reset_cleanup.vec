@@ -1,0 +1,17 @@
+case reset_cleanup
+kind negative
+exec native-qemu
+domain 1
+needs streams tasks reset test-authority
+# section 12 cleanup on a session reset: interrupt, grace, terminate, reap, close; every id STALE after (ST6.5)
+cap C => OK
+bind B cap=C => OK
+create R W A => OK
+spawn T hang bind=B => OK
+spawn S stubborn out=W bind=B => OK
+run => OK
+reset => OK cancelled=2
+wait T => STALE
+wait S => STALE
+read R 1 => STALE
+check empty

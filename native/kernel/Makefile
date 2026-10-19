@@ -889,8 +889,12 @@ ifeq ($(strip $(CK_OSH_OP_TEST)),1)
 ifneq ($(strip $(CK_HARDWARE_STAGING)),)
 $(error CK_OSH_OP_TEST (test-only OSH adapter with injection hooks) cannot be combined with CK_HARDWARE_STAGING)
 endif
+ifneq ($(strip $(CK_PIPE_TEST)),)
+$(error CK_OSH_OP_TEST (it links the native pipes and tasks itself) cannot be combined with CK_PIPE_TEST)
+endif
 ART_TRUST_FLAGS += -DCK_OSH_OP_TEST=1
-OSH_TEST_C += $(KDIR)/core/osh_op.c
+# aienos-mv#430: stage pipelines run the admitted stage units as tasks (core/task.c, core/task_osc.c) over native pipes.
+OSH_TEST_C += $(KDIR)/core/osh_op.c $(KDIR)/core/task.c $(KDIR)/core/task_osc.c $(KDIR)/core/pipe.c
 endif
 endif
 
@@ -1409,26 +1413,40 @@ $(OUT)/host-san/%: $(KDIR)/tests/%.c $(HOST_SRCS) $(KDIR)/tests/ck_test.h $(HDRS
 	@mkdir -p $(dir $@)
 	$(HOSTCC) $(HCFLAGS) $(SANFLAGS) -o $@ $< $(HOST_SRCS)
 
-# OSH adapter operation layer (core/osh_op.c, aien-architecture#158): pure logic over ipc.c capabilities, SHA-256 for the
-# request digest. Its own rule because it needs the argus SHA-256 source.
-OSH_OP_SRCS := $(KDIR)/core/osh_op.c $(KDIR)/core/ipc.c $(KDIR)/core/fmt.c $(NATIVE)/argus/sha256.c
-$(OUT)/host/test_osh_op: $(KDIR)/tests/test_osh_op.c $(OSH_OP_SRCS) $(KDIR)/tests/ck_test.h $(HDRS)
+# OSH adapter operation layer (core/osh_op.c, aien-architecture#158, aienos-mv#430): pure logic over ipc.c capabilities,
+# the native pipes and tasks (pipe.c, task.c, sched.c) and SHA-256 for the request digest. Its own rule because it needs
+# the argus SHA-256 source. The test also runs the shared OSH launch vectors copied into tests/fixtures/osh_exec/.
+OSH_OP_SRCS := $(KDIR)/core/osh_op.c $(KDIR)/core/ipc.c $(KDIR)/core/fmt.c $(KDIR)/core/pipe.c $(KDIR)/core/task.c \
+	$(KDIR)/core/sched.c $(NATIVE)/argus/sha256.c
+OSH_OP_DEPS := $(KDIR)/tests/test_osh_op.c $(OSH_OP_SRCS) $(KDIR)/tests/ck_test.h $(HDRS) \
+	$(wildcard $(KDIR)/tests/fixtures/osh_exec/*)
+OSH_OP_VEC := -DOSH_EXEC_VEC_DIR='"$(KDIR)/tests/fixtures/osh_exec"' \
+	-DOSH_EXEC_IMPL='"$(shell git -C $(KDIR) rev-parse HEAD 2>/dev/null || echo unknown)"'
+$(OUT)/host/test_osh_op: $(OSH_OP_DEPS)
 	@mkdir -p $(dir $@)
-	$(HOSTCC) $(HCFLAGS) -DCK_OSH_OP_TEST -I$(NATIVE)/argus -o $@ $< $(OSH_OP_SRCS)
+	$(HOSTCC) $(HCFLAGS) -DCK_OSH_OP_TEST $(OSH_OP_VEC) -I$(NATIVE)/argus -o $@ $< $(OSH_OP_SRCS)
 
-$(OUT)/host-san/test_osh_op: $(KDIR)/tests/test_osh_op.c $(OSH_OP_SRCS) $(KDIR)/tests/ck_test.h $(HDRS)
+$(OUT)/host-san/test_osh_op: $(OSH_OP_DEPS)
 	@mkdir -p $(dir $@)
-	$(HOSTCC) $(HCFLAGS) $(SANFLAGS) -DCK_OSH_OP_TEST -I$(NATIVE)/argus -o $@ $< $(OSH_OP_SRCS)
+	$(HOSTCC) $(HCFLAGS) $(SANFLAGS) -DCK_OSH_OP_TEST $(OSH_OP_VEC) -I$(NATIVE)/argus -o $@ $< $(OSH_OP_SRCS)
 
-# TEST-ONLY mutant of core/osh_op.c: the permission check always says OK. test_osh_op must FAIL against it (red before
-# green); "make test" fails if the test stops catching it. Host only (osh_op.c refuses the flag freestanding).
-$(OUT)/host/test_osh_op_mutant: $(KDIR)/tests/test_osh_op.c $(OSH_OP_SRCS) $(KDIR)/tests/ck_test.h $(HDRS)
+# TEST-ONLY mutants of core/osh_op.c (red before green). Each must make test_osh_op FAIL; "make test" fails if one passes.
+# Host only (osh_op.c refuses the flags freestanding).
+#   SKIP_PERM       the console permission check always says OK
+#   FIRST_STATUS    the pipeline status is the first command's, not the last's
+#   REDIR_REVERSE   a command's redirections apply right to left
+#   KEEP_GAP_ENDS   a command that does not start keeps its pipe ends open (its neighbours never see EOF)
+#   LOC_NO_PERM     a location open skips the location capability check
+OSH_OP_MUTANTS := SKIP_PERM FIRST_STATUS REDIR_REVERSE KEEP_GAP_ENDS LOC_NO_PERM
+$(OUT)/host/test_osh_op_mut_%: $(OSH_OP_DEPS)
 	@mkdir -p $(dir $@)
-	$(HOSTCC) $(HCFLAGS) -DCK_OSH_OP_TEST -I$(NATIVE)/argus -DCK_OSH_OP_MUTANT_SKIP_PERM -o $@ $< $(OSH_OP_SRCS)
+	$(HOSTCC) $(HCFLAGS) -DCK_OSH_OP_TEST $(OSH_OP_VEC) -I$(NATIVE)/argus -DCK_OSH_OP_MUTANT_$* -o $@ $< $(OSH_OP_SRCS)
 
-osh-op-mutant: $(OUT)/host/test_osh_op_mutant
-	@if $< > $<.log 2>&1; then cat $<.log; echo "test_osh_op mutant (permission check always OK): PASSED, test does not catch it"; exit 1; \
-	else grep -F "test_osh_op: FAIL" $<.log && echo "test_osh_op mutant (permission check always OK): FAILS as required"; fi
+osh-op-mutant: $(addprefix $(OUT)/host/test_osh_op_mut_,$(OSH_OP_MUTANTS))
+	@fail=0; for m in $(OSH_OP_MUTANTS); do b=$(OUT)/host/test_osh_op_mut_$$m; \
+	  if $$b > $$b.log 2>&1; then echo "test_osh_op mutant $$m: PASSED, test does not catch it"; fail=1; \
+	  elif grep -qF "test_osh_op: FAIL" $$b.log; then echo "test_osh_op mutant $$m: FAILS as required ($$(tail -1 $$b.log))"; \
+	  else echo "test_osh_op mutant $$m: did not end with a verdict"; fail=1; fi; done; exit $$fail
 
 # Native pipe primitive (core/pipe.c, aienos-mv#428): pure logic over ipc.c capability tables, driven through sched.c by
 # core/pipe_drive.h. Own rule: the test reads the fixture corpus in tests/fixtures/pipe/.

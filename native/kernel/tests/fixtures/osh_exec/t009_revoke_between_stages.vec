@@ -1,0 +1,14 @@
+case revoke_between_stages
+kind negative
+exec native-qemu
+domain 1
+needs tasks launch test-authority
+# authority is checked at the moment of each effect: a capability revoked after the first command started
+# refuses the second (126, REVOKED), and later spawns (ABI 9.2, ST7.5)
+cap C => OK
+bind B cap=C => OK
+launch P bind=B revoke=2:C : exit 4 ! exit 5 => OK
+run => OK
+waitp P => OK status=126 outcomes=COMPLETED,FAILED_NO_EFFECT statuses=4,126 out=""
+spawn T exit 0 bind=B => REVOKED
+check empty

@@ -1,0 +1,12 @@
+case pipeline_broken_pipe
+kind negative
+exec native-qemu
+domain 2
+needs tasks launch test-authority
+# no readers: a writer that does not handle BROKEN_PIPE ends with status 141; pipeline status stays the last's (ST4.5, ST6.3)
+cap C => OK
+bind B cap=C => OK
+launch P bind=B : flood ! exit 0 => OK
+run => OK
+waitp P => OK status=0 outcomes=COMPLETED,COMPLETED statuses=141,0 out=""
+check empty

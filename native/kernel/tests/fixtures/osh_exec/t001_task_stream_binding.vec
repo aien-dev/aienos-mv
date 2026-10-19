@@ -1,0 +1,22 @@
+case task_stream_binding
+kind positive
+exec native-qemu
+domain 2
+needs streams tasks test-authority
+# a task gets its own duplicate of its stream; the caller closing its copy is what lets end of stream arrive;
+# a reaped task id is released (ST6.1, ST6.2)
+cap C => OK
+bind B cap=C => OK
+create R W A => OK
+spawn T emit "hi" out=W bind=B => OK
+run => OK
+read R 8 => OK n=2 data="hi"
+read R 8 => WOULD_BLOCK
+close W => OK
+read R 8 => OK n=0
+state T => OK state=ENDED
+wait T => OK status=0 outcome=COMPLETED
+wait T => STALE
+state T => STALE
+close R => OK
+check empty

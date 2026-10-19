@@ -1,0 +1,15 @@
+case spawn_argument_refusals
+kind negative
+exec host-logic
+domain 2
+needs streams tasks test-authority
+# a standard-stream slot needs the right end and a live handle; refused before the task exists (ST6.1)
+cap C => OK
+bind B cap=C => OK
+create R W A => OK
+spawn T1 cat in=W bind=B => INVALID_ARG
+spawn T2 emit "x" out=R bind=B => INVALID_ARG
+close W => OK
+spawn T3 emit "x" out=W bind=B => STALE
+close R => OK
+check empty

@@ -1,0 +1,17 @@
+case outcome_unknown_crash
+kind negative
+exec native-qemu
+domain 2
+needs tasks launch journal test-authority
+# after an adapter crash every intent without an outcome is OUTCOME_UNKNOWN, nothing is replayed,
+# and every earlier task id is STALE (ST8.3)
+cap C => OK
+bind B cap=C => OK
+launch P bind=B : hang ! cat => OK
+spawn T exit 0 bind=B => OK
+run => OK
+crash => OK
+recover => OK unknown=3 replayed=0
+wait T => STALE
+waitp P => STALE
+check empty

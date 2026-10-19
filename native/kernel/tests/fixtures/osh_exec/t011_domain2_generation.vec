@@ -1,0 +1,23 @@
+case domain2_generation
+kind negative
+exec host-logic
+domain 2
+needs tasks test-authority
+# domain 2 (hosted authority): 64-bit generations compared in all 64 bits; a domain-1 binding cannot carry them (ST5)
+cap C => OK
+bind B cap=C => OK
+bind LOW cap=C gen=0x7 => OK
+bind HIGH cap=C gen=0x200000007 => OK
+bind AS1 cap=C domain=1 => OK
+bind AS1LOW cap=C domain=1 gen=7 => OK
+spawn T1 exit 0 bind=LOW => STALE
+spawn T2 exit 0 bind=HIGH => STALE
+spawn T3 exit 0 bind=AS1 => CAP_GEN_NARROW
+spawn T4 exit 0 bind=AS1LOW => CAP_DOMAIN_MISMATCH
+check empty
+spawn T exit 0 bind=B => OK
+run => OK
+wait T => OK status=0 outcome=COMPLETED
+revokecap C => OK
+spawn T5 exit 0 bind=B => REVOKED
+check empty
