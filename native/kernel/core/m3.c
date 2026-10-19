@@ -17,6 +17,7 @@
 #include "ipc.h"
 #include "pt.h"
 #include "sched.h"
+#include "ktap.h"
 
 #define DENIED 0xffffffffffffffffull
 
@@ -117,8 +118,9 @@ static void check_threads(void)
     char seen[sizeof trace + 1];
     memcpy(seen, trace, trace_len);
     seen[trace_len] = 0;
-    ck_printf("threads: %s interleave=%s\n",
-              trace_len == 10 && !memcmp(seen, "ABABABABAB", 10) ? "ok" : "unexpected", seen);
+    int interleaved = trace_len == 10 && !memcmp(seen, "ABABABABAB", 10);
+    ck_printf("threads: %s interleave=%s\n", interleaved ? "ok" : "unexpected", seen);
+    ck_ktap_check("threads", interleaved, "interleave is not ABABABABAB, see the threads line");
 }
 
 /* ======================= timer preemption (thread.rs) ====================== */
@@ -225,6 +227,7 @@ static void check_preempt(void)
     int ok = !timed_out && a > 0 && b > 0 && preempt_switches >= 4;
     ck_printf("preempt: %s a=%llu b=%llu switches=%llu\n", ok ? "ok" : "failed",
               (unsigned long long)a, (unsigned long long)b, (unsigned long long)preempt_switches);
+    ck_ktap_check("preempt", ok, "see the preempt line");
 }
 
 /* ============================ placement (MADT) ============================= */
@@ -234,10 +237,12 @@ static void check_placement(void)
     struct ck_cpu_topology topo;
     if (!madt || ck_madt_cpu_topology(madt, &topo)) {
         ck_puts("placement: unavailable\n");
+        ck_ktap_check("placement", 0, "no MADT CPU topology");
         return;
     }
     char line[128];
     size_t n = 0;
+    int placed = 1;
     static const char *const names[2] = { "worker0", "worker1" };
     n += (size_t)ck_snprintf(line, sizeof line, "placement:");
     for (uint32_t i = 0; i < 2; i++) {
@@ -246,10 +251,15 @@ static void check_placement(void)
         if (ck_place_task(&topo, i, &cls, &core) == 0)
             n += (size_t)ck_snprintf(line + n, sizeof line - n, " %s=class%u/core%u", names[i],
                                      (unsigned)cls, (unsigned)core);
-        else
+        else {
             n += (size_t)ck_snprintf(line + n, sizeof line - n, " %s=unplaced", names[i]);
+            placed = 0;
+        }
     }
     ck_printf("%s\n", line);
+    /* In-kernel: both workers placed. The exact class and core the gate
+     * expects stay checked by scripts/lib_ck_m1_checks.sh. */
+    ck_ktap_check("placement", placed, "a worker was not placed, see the placement line");
 }
 
 /* ===================== EL0 address spaces (user.rs) ======================== */
@@ -413,6 +423,7 @@ static void check_el0(uint64_t kroot)
                                  (size_t)(ck_el0_demo_end - ck_el0_demo_start), kroot);
     if (ck_cap_insert(&user_caps, CONSOLE_RESOURCE, CK_R_WRITE, &h) || !base) {
         ck_puts("el0: failed setup\n");
+        ck_ktap_check("el0", 0, "setup failed");
         return;
     }
     authorized_raw = ck_handle_raw(h);
@@ -425,6 +436,7 @@ static void check_el0(uint64_t kroot)
     ck_printf("el0: %s write=%s forged=%s fault=%s exit=%llu\n", ok ? "ok" : "failed",
               write_granted ? "granted" : "denied", forged_denied ? "denied" : "accepted",
               fault_contained ? "contained" : "uncontained", (unsigned long long)code);
+    ck_ktap_check("el0", ok, "see the el0 line");
 }
 
 /* ---- ipc check (user.rs run_ipc_demo) ---- */
@@ -574,6 +586,7 @@ static void check_ipc(uint64_t kroot)
     uint64_t base_b = build_window(&ipc_window[1], ck_ipc_prog_start, len, kroot);
     if (!base_a || !base_b) {
         ck_puts("ipc: failed setup\n");
+        ck_ktap_check("ipc", 0, "setup failed");
         return;
     }
     uint64_t root_a = (uint64_t)(uintptr_t)ipc_window[0].l0;
@@ -612,10 +625,12 @@ static void check_ipc(uint64_t kroot)
     ck_printf("ipc_detail: exit_a=0x%llx exit_b0=0x%llx exit_b1=0x%llx child=0x%llx revoke=%d\n",
               (unsigned long long)exit_a, (unsigned long long)exit_b0,
               (unsigned long long)exit_b1, (unsigned long long)child_raw, revoke);
+    ck_ktap_check("ipc", ok, "see the ipc and ipc_detail lines");
 }
 
 void ck_m3_run(void)
 {
+    ck_ktap_suite("m3");
     kernel_floor = ck_stack_floor;
     uint64_t kroot = ck_mm_report()->root;
     ck_lower_sync = lower_sync;

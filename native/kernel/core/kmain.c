@@ -14,6 +14,7 @@
 #include "cpufeat.h"
 #include "handoff_check.h"
 #include "frames.h"
+#include "ktap.h"
 #ifdef CK_PI5_NET
 #include "../dev/pi5_net.h"
 #endif
@@ -51,6 +52,7 @@ static void run_stage(const char *name, int (*fn)(void))
 {
     if (!fn) {
         ck_printf("stage %s: not linked\n", name);
+        ck_ktap_case(name, CK_KTAP_SKIP, "not linked");
         return;
     }
     ck_set_stage(name);
@@ -60,6 +62,14 @@ static void run_stage(const char *name, int (*fn)(void))
         ck_printf("stage %s: ok\n", name);
     else
         ck_printf("stage %s: FAIL rc=%d\n", name, rc);
+    ck_ktap_check(name, rc == 0, "stage returned nonzero, see the stage line");
+}
+
+/* KTAP lines (core/ktap.h) go to the serial console like every report line. */
+static void ktap_put(void *ctx, const char *line)
+{
+    (void)ctx;
+    ck_printf("%s\n", line);
 }
 
 /* CHANDOF3: put the console on the GOP framebuffer (mapped by ck_mm_build)
@@ -154,6 +164,9 @@ static __attribute__((noreturn)) void ck_el1_main(void *arg)
               (unsigned long long)mm->stack_lo, (unsigned long long)mm->stack_hi,
               (unsigned long long)mm->heap_lo, (unsigned long long)mm->heap_hi,
               (unsigned long long)mm->dma_lo, (unsigned long long)mm->dma_hi, h->exit_attempts);
+    ck_ktap_suite("mm");
+    ck_ktap_check("mmu_enabled", mmu_on, "SCTLR_EL1.M is 0");
+    ck_ktap_check("mmu_switched", switched, "TTBR0_EL1 is not the AIENOS root, see mmu_switch");
 
     /* Heap smoke test. */
     void *a = ck_alloc(100), *b = ck_alloc(5000);
@@ -161,16 +174,19 @@ static __attribute__((noreturn)) void ck_el1_main(void *arg)
         ck_panic("heap: allocation failed");
     ck_free(a);
     ck_free(b);
+    ck_ktap_check("heap_smoke", 1, 0); /* a failure panics above */
 
     /* Addition over the Rust kernel: the guard pages really fault, and the
      * fault is contained (handled and resumed, no reset). */
     char detail[160];
     ck_set_stage("guard_page");
-    if (ck_mm_guard_selftest(detail, sizeof detail) == 0)
+    int guard_ok = ck_mm_guard_selftest(detail, sizeof detail) == 0;
+    if (guard_ok)
         ck_printf("guard_page: ok fault=contained (%s) [C kernel addition, not in the Rust kernel]\n",
                   detail);
     else
         ck_printf("guard_page: FAIL %s\n", detail);
+    ck_ktap_check("guard_page", guard_ok, "see the guard_page line");
 
     /* GICv3 or GICv2 (arch/gic.c) from the MADT, then the EL1 physical timer window. */
     ck_set_stage("gic");
@@ -203,6 +219,17 @@ static __attribute__((noreturn)) void ck_el1_main(void *arg)
               (unsigned long long)ck_counter_to_us(tw.min_interval, f),
               (unsigned long long)(tw.ticks ? ck_counter_to_us(tw.span / tw.ticks, f) : 0),
               (unsigned long long)ck_counter_to_us(tw.max_interval, f));
+    {
+        /* The same bounds scripts/lib_ck_m1_checks.sh applies to these lines. */
+        uint64_t period_us = ck_counter_to_us(f / 100, f), min_us = ck_counter_to_us(tw.min_interval, f);
+        uint64_t avg_us = tw.ticks ? ck_counter_to_us(tw.span / tw.ticks, f) : 0;
+        uint64_t max_us = ck_counter_to_us(tw.max_interval, f);
+        ck_ktap_suite("irq");
+        ck_ktap_check("gic_init", 1, 0); /* a failure panics above */
+        ck_ktap_check("timer_ticks", tw.ticks >= 5, "fewer than five ticks in the window");
+        ck_ktap_check("timer_stats", period_us > 0 && min_us * 2 >= period_us && min_us <= avg_us && avg_us <= max_us,
+                      "tick intervals out of range, see timer_stats");
+    }
 
     uint64_t spsel = ck_rd(spsel);
     ck_printf("exception_level: EL%u\n", el);
@@ -245,6 +272,8 @@ static __attribute__((noreturn)) void ck_el1_main(void *arg)
                   : ent == CK_RNG_FAILED ? "RNDR returned no number within the retry bound"
                   : ent == CK_RNG_STUCK ? "RNDR repeated a 64-bit word"
                                         : "probe error");
+    ck_ktap_suite("entropy");
+    ck_ktap_check("source_probe", ent == CK_RNG_OK, "no entropy source, see the entropy line");
 
 #ifdef CK_PI5_PCIE
     /* Pi 5 PCIe2 root complex / RP1 enumerator (dev/pi5_pcie.c): read-only boot report, CK_PI5_PCIE image only. */
@@ -282,6 +311,7 @@ static __attribute__((noreturn)) void ck_el1_main(void *arg)
     /* M3 isolation checks (core/m3.c), before any stage registers an IRQ. */
     ck_m3_run();
 
+    ck_ktap_suite("stages");
     run_stage("devices", ck_stage_devices);
     run_stage("security", ck_stage_security);
     run_stage("store", ck_stage_store);
@@ -311,6 +341,7 @@ static __attribute__((noreturn)) void ck_el1_main(void *arg)
         int crc = ck_stage_console_session();
         ck_irq_cpu_enable(0);
         ck_printf("stage console: %s rc=%d\n", crc == 0 ? "ok" : "FAIL", crc);
+        ck_ktap_check("console", crc == 0, "stage returned nonzero, see the stage line");
     }
 
     /* Resident production lifecycle (core/lifecycle.c; only a CK_SERVICE=1
@@ -322,12 +353,16 @@ static __attribute__((noreturn)) void ck_el1_main(void *arg)
         int lrc = ck_lifecycle_run();
         ck_irq_cpu_enable(0);
         ck_printf("stage lifecycle: %s rc=%d\n", lrc == 0 ? "ok" : "FAIL", lrc);
+        ck_ktap_check("lifecycle", lrc == 0, "stage returned nonzero, see the stage line");
     }
 
     ck_set_stage("final");
     ck_puts("\n");
     ck_report_header("final");
     ck_artifact_final();
+    /* Every in-kernel self test above, once more as one KTAP block (core/ktap.h),
+     * read by scripts/ktap_summary.sh. The report lines above are unchanged. */
+    (void)ck_ktap_emit(ktap_put, 0);
     ck_puts("note: QEMU qualifies nothing physical\n");
     ck_reset();
 }

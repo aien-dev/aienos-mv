@@ -29,6 +29,9 @@
 #  - AIENOS_QEMU_GIC=2 boots QEMU with gic-version=2 (the Raspberry Pi 5 GIC-400
 #    shape: GICv2, memory-mapped CPU interface) and the checks expect "gic: v2";
 #    default 3 (GB10 shape).
+#  - the kernel prints its own self-test verdicts as one KTAP block in the final
+#    report (native/kernel/core/ktap.h); scripts/ktap_summary.sh reads it and a
+#    missing, cut or failing block fails M1.
 # Needs qemu-system-aarch64 and AAVMF (Ubuntu: qemu-system-arm qemu-efi-aarch64).
 set -euo pipefail
 
@@ -98,6 +101,19 @@ echo "qemu exit ${qemu_status} after ${elapsed} s (commit ${commit:0:12}, -cpu $
 ck_m1_checks
 m3_failed=0
 ck_m3_checks
+# The kernel's own verdicts on its self tests, as one KTAP block
+# (native/kernel/core/ktap.h) read by scripts/ktap_summary.sh. A missing,
+# cut or failing block fails M1. The block is printed so a receipt can embed
+# it (docs/qualification/KTAP_RECEIPTS.md).
+echo "---- ktap ----"
+bash "${repo_root}/scripts/ktap_summary.sh" --block "${work}/serial.txt" || true
+echo "---- ktap summary ----"
+if bash "${repo_root}/scripts/ktap_summary.sh" "${work}/serial.txt"; then
+    echo "PASS  in-kernel self tests all ok in the KTAP block"
+else
+    echo "FAIL  in-kernel self tests KTAP block missing, cut or failing"
+    failed=1
+fi
 
 if [[ "${failed}" != 0 || "${m3_failed}" != 0 || -n "${AIENOS_QEMU_VERBOSE:-}" ]]; then
     echo "---- serial console ----"
