@@ -55,7 +55,7 @@ The legacy Rust workspace is still checked by `bash scripts/verify_all.sh` (need
 
 ## Contributing
 
-Start with [issues labelled `good first issue`](https://github.com/aien-spark/aienos/labels/good%20first%20issue) or [`emulator-ok`](https://github.com/aien-spark/aienos/labels/emulator-ok): they need no special hardware. Read [CONTRIBUTING.md](CONTRIBUTING.md) first. Open pull requests against `main` (protected; five checks must pass: `Analyze (c-cpp)`, `Analyze (actions)`, `crumb`, `AIEN Verification` and `workflow files accepted`) and lead with the commands you ran and their output. Questions go in [Discussions](https://github.com/aien-spark/aienos/discussions). Report vulnerabilities privately through GitHub security advisories.
+Start with [issues labelled `good first issue`](https://github.com/aien-spark/aienos/labels/good%20first%20issue) or [`emulator-ok`](https://github.com/aien-spark/aienos/labels/emulator-ok): they need no special hardware. Read [CONTRIBUTING.md](CONTRIBUTING.md) first. Open pull requests against `main` (protected; four checks must pass: `Analyze (c-cpp)`, `Analyze (actions)`, `AIEN Verification` and `workflow files accepted`) and lead with the commands you ran and their output. Questions go in [Discussions](https://github.com/aien-spark/aienos/discussions). Report vulnerabilities privately through GitHub security advisories.
 
 ## License
 

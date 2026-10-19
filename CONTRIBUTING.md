@@ -74,6 +74,5 @@ contribution you agree that it is licensed under the same terms.
 
 ## Crumbs
 
-This repo uses the Crumb Protocol (RFC-0001). Each directory carries a `.crumb` file (what the directory is for, its rules, and a backfilled history). Live coordination between agents goes in `.crumb.local`, which is never committed.
-Before editing a directory, read its `.crumb`. Rules and the `crumb` tool: https://github.com/aien-spark/aien-architecture/blob/main/docs/CRUMB_PROTOCOL.md
-Backfilled history (marked as such, not live whispers) is in `docs/crumbs/BACKFILL.md`.
+A `.crumb` file is a short note a person writes about a directory: what it is for and any rules that hold there. Crumbs are advisory (RFC-0003 Amendment 2). They are never a merge check, and nothing in them is generated. File lists and history come from git when you need them.
+Read the nearest `.crumb` before you edit a directory. If you learn something that would help the next person, write it in plain words. Format: https://github.com/aien-spark/aien-architecture/blob/main/docs/CRUMB_PROTOCOL.md

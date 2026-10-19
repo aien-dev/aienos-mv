@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # tests/gates/run.sh: the one entry point for the local verification gates of aienos.
 # Every step runs the SAME command as the hosted job it mirrors (.github/workflows/ck-kernel.yml,
-# native-suites.yml, crypto-boundary.yml, infer-crate.yml, crumb.yml; ci.yml is disabled on
+# native-suites.yml, crypto-boundary.yml, infer-crate.yml; ci.yml is disabled on
 # GitHub and its two surviving suites are declared here too). Manifests under tests/gates/ name
 # this script plus one step word, so no manifest needs shell expansion (ADR 0028 P6).
 set -euo pipefail
@@ -41,20 +41,6 @@ native_suite() {
 }
 
 case "$step" in
-  crumb-verify)
-    # Hosted crumb.yml builds the crumb tool from the aien-architecture commit in crumb.lock.
-    # Same here, from the sibling checkout ../aien-architecture into a temp dir outside the
-    # tree, so a newer crumb on PATH can never change the verdict.
-    if [ ! -d ../aien-architecture ]; then
-      echo "run.sh: ../aien-architecture is missing; the hosted job checks out aien-dev/aien-architecture at crumb.lock" >&2
-      exit 3
-    fi
-    pin=$(tr -d '[:space:]' < crumb.lock)
-    git -C ../aien-architecture archive "$pin" tools/crumb | tar -x -C "$TMP"
-    make -s -C "$TMP/tools/crumb" crumb
-    obs crumb_tool_commit "\"$pin\""
-    "$TMP/tools/crumb/crumb" verify .
-    ;;
   # ck-kernel.yml, host steps (ubuntu-24.04-arm there, AArch64 here)
   ck-host-tests)      make -C native/kernel test sanitize ;;
   ck-stage-tests)     make -C native/kernel stage-test stage-sanitize ;;
