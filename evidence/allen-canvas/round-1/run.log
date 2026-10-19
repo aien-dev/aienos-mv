@@ -6,3 +6,9 @@ allen-scene: 03-show-me-something-beautiful already answered, kept
 allen-scene: 04-whats-17-of-240 -> 72 chars, 41 tokens, 417107 ms (122 busy)
 allen-scene: 05-tell-my-friend-sam-im -> 123 chars, 34 tokens, 167562 ms (52 busy)
 allen-scene: 06-play-a-video-about-black -> 139 chars, 35 tokens, 280673 ms (90 busy)
+allen-scene: 07-give-me-25-minutes-to -> 119 chars, 33 tokens, 220664 ms (70 busy)
+allen-scene: 08-what-should-i-pack-for -> 219 chars, 52 tokens, 194396 ms (57 busy)
+allen-scene: 09-who-wrote-the-odyssey -> 163 chars, 37 tokens, 80295 ms (23 busy)
+allen-scene: 10-i-feel-a-bit-lonely -> 126 chars, 33 tokens, 119000 ms (36 busy)
+allen-scene: 10 of 10 questions answered
+end 2026-10-19T21:41:31Z load 53.24 41.56 28.28 64/3906 2703403 rc=0

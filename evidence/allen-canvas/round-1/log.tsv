@@ -14,3 +14,7 @@
 04-whats-17-of-240	200	417107 ms	41 tokens	finish stop	122 busy answers waited out	what's 17% of 240
 05-tell-my-friend-sam-im	200	167562 ms	34 tokens	finish stop	52 busy answers waited out	tell my friend Sam I'm running late
 06-play-a-video-about-black	200	280673 ms	35 tokens	finish stop	90 busy answers waited out	play a video about black holes
+07-give-me-25-minutes-to	200	220664 ms	33 tokens	finish stop	70 busy answers waited out	give me 25 minutes to focus
+08-what-should-i-pack-for	200	194396 ms	52 tokens	finish stop	57 busy answers waited out	what should I pack for a weekend at the lake
+09-who-wrote-the-odyssey	200	80295 ms	37 tokens	finish stop	23 busy answers waited out	who wrote the odyssey
+10-i-feel-a-bit-lonely	200	119000 ms	33 tokens	finish stop	36 busy answers waited out	I feel a bit lonely tonight
