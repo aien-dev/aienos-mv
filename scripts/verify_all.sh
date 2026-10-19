@@ -25,6 +25,10 @@ cd "${REPO_ROOT}"
 # UEFI image check fail with "No such file or directory", and a shared directory can hand
 # a test binary built from another checkout. Build into this checkout's own target/.
 export CARGO_TARGET_DIR="${REPO_ROOT}/target"
+# The Spark judge runs gates with PATH=/var/lib/aien-run/cargo/bin:/usr/local/bin:/usr/bin:/bin, without the sbin
+# directories. Unprivileged tools from there are still needed (the recovery initrd build runs
+# `modprobe --show-depends`), so append them; earlier PATH entries keep precedence.
+export PATH="${PATH}:/usr/sbin:/sbin"
 
 # shellcheck source=scripts/lib_verify_summary.sh
 source "${REPO_ROOT}/scripts/lib_verify_summary.sh"
