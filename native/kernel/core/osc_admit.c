@@ -7,15 +7,18 @@
  *   - qualification build (CK_SEED0B_TEST_ANCHOR=1): qualification mode with
  *     the throwaway TEST key of the conformance vectors as the only TEST
  *     anchor, announced TEST ONLY. OWNER anchors stay empty.
- *   - capability domain 1 only (kernel IPC table, 32-bit generations); the
- *     kernel holds no resource state at admission, so any pinned generation is
- *     STALE (the lookup finds nothing). No reservation: launch is a later cut.
+ *   - capability domain 1 only (kernel IPC table, 32-bit generations); a pin is
+ *     checked against the per-resource incarnation counter (artifact/osc_resgen.h,
+ *     ADR 0019, aienos#285). The kernel has no floor storage yet, so its table
+ *     stays untrusted: the lookup finds nothing and every pin is STALE, exactly
+ *     as before. No reservation: launch is a later cut.
  * QEMU qualifies nothing physical. */
 #include "ck_internal.h"
 #include "osc_admit.h"
 #include "osc_unit.h"
 #include "osc_receipt.h"
 #include "osc_receipt_anchor.h"
+#include "osc_resgen.h"
 #include "sha256.h"
 #ifdef CK_OSH_TEST
 void ck_osh_save(const char *name, const uint8_t *b, size_t len, const struct osc_accept *acc);
@@ -29,10 +32,15 @@ void ck_osh_all(void);
 static unsigned seen, accepted, refused, oversize, announced;
 static struct osc_accept acc; /* ~5 KB: static, not on the kernel stack */
 
-static int no_resource(void *ctx, unsigned domain, unsigned kind, uint32_t id, uint64_t *cur)
+/* The kernel's domain-1 resource counters. No kernel path creates, reuses or persists a channel or object
+ * number yet, and no floor record is stored or restored, so the table is never made trusted (no
+ * osc_resgen_restore, no osc_resgen_genesis): every lookup answers "no such resource". The cut that makes
+ * resource numbers reusable or persistent must restore this table from a durable floor (aienos#285). */
+static struct osc_resgen kres;
+
+struct osc_resgen *ck_osc_resgen(void)
 {
-    (void)ctx; (void)domain; (void)kind; (void)id; (void)cur;
-    return 1;
+    return &kres;
 }
 
 /* The Store and the native staging area hold at most 160 pages per artifact (= CK_ART_MAX_BYTES in
@@ -75,7 +83,8 @@ void ck_osc_policy(struct osc_policy *p)
     p->abi_versions = OSC_PROFILE_ABI;
     p->cap_domains = 1u << 1;
     p->staging_max = OSC_STAGING_MAX;
-    p->gen_lookup = no_resource;
+    p->gen_lookup = osc_resgen_lookup;
+    p->ctx = &kres;
     osc_receipt_target_hash(OSC_RCPT_TARGET_NAME, sizeof OSC_RCPT_TARGET_NAME - 1, rcpt_target);
     p->rcpt_checkers = osc_rcpt_checker_ids;
     p->n_rcpt_checkers = OSC_RCPT_N_CHECKERS;
@@ -423,6 +432,95 @@ static void lt_all(void)
 }
 #endif
 
+#ifdef CK_RESGEN_TEST
+/* ======================================================================================================
+ * aienos#285 resource-generation self-test (TEST ONLY, qualification build with CK_RESGEN_TEST=1).
+ * Admits the bytes of vector a02 (domain 1, object 1, pin 7) through the kernel's own policy and lookup while
+ * a fixed script drives the kernel's own counter table: as booted (untrusted), counter below the pin, at the
+ * pin, after the number is reused, after a reboot (snapshot and floor encoded, table reset, restored) and after
+ * a rollback (an older snapshot restored with the newer floor), then a corrupt floor. The floor lives in RAM
+ * here: the reboot and rollback are the restore path within one boot, not a power cycle with the record on
+ * disk. The table is put back untrusted at the end. QEMU (aarch64 virt), TEST signer, not physical.
+ * ==================================================================================================== */
+static uint8_t rg_floor[OSC_RESGEN_REC_MAX], rg_snap_old[OSC_RESGEN_REC_MAX], rg_snap[OSC_RESGEN_REC_MAX];
+static size_t rg_floor_len, rg_snap_old_len, rg_snap_len;
+static unsigned rg_floor_writes;
+
+static int rg_floor_write(void *ctx, const uint8_t *rec, size_t len)
+{
+    (void)ctx;
+    if (len > sizeof rg_floor)
+        return 1;
+    memcpy(rg_floor, rec, len);
+    rg_floor_len = len;
+    rg_floor_writes++;
+    return 0;
+}
+
+static void rg_admit(const char *step, const uint8_t *b, size_t len)
+{
+    struct osc_policy p;
+    struct osc_accept *a = &acc;
+    uint64_t cur = 0;
+    ck_osc_policy(&p);
+    int found = osc_resgen_lookup(&kres, 1, OSC_RESGEN_KIND_OBJECT, 1, &cur) == 0;
+    unsigned rc = osc_unit_admit(b, len, &p, a);
+    char c[24] = "none";
+    if (found)
+        ck_snprintf(c, sizeof c, "%llu", (unsigned long long)cur);
+    if (rc == OSC_OK)
+        ck_printf("osc_resgen: %s object=1 counter=%s pin=7 -> ACCEPT; QEMU (aarch64 virt), TEST signer, not physical\n",
+                  step, c);
+    else
+        ck_printf("osc_resgen: %s object=1 counter=%s pin=7 -> REFUSED code=%u name=%s; QEMU (aarch64 virt), TEST "
+                  "signer, not physical\n", step, c, rc, osc_code_name(rc));
+}
+
+static void rg_bump_to(uint32_t want)
+{
+    uint32_t g = 0;
+    uint64_t cur = 0;
+    if (osc_resgen_lookup(&kres, 1, OSC_RESGEN_KIND_OBJECT, 1, &cur) == 0)
+        osc_resgen_destroy(&kres, OSC_RESGEN_KIND_OBJECT, 1);
+    while (osc_resgen_create(&kres, OSC_RESGEN_KIND_OBJECT, 1, 1, &g) == OSC_RESGEN_OK && g < want)
+        osc_resgen_destroy(&kres, OSC_RESGEN_KIND_OBJECT, 1);
+}
+
+static void rg_reboot(const uint8_t *snap, size_t snap_len)
+{
+    osc_resgen_init(&kres, rg_floor_write, 0);
+    unsigned rc = osc_resgen_restore(&kres, snap, snap_len, rg_floor, rg_floor_len);
+    ck_printf("osc_resgen: restore -> %u trusted=%u\n", rc, (unsigned)kres.trusted);
+}
+
+static void rg_selftest(const uint8_t *b, size_t len)
+{
+    ck_printf("osc_resgen_selftest: unit=a02 domain=1 kind=3 id=1 pin=7 floor=ram; QEMU (aarch64 virt), TEST signer, "
+              "not physical\n");
+    rg_admit("booted_untrusted", b, len);
+    osc_resgen_init(&kres, rg_floor_write, 0);
+    ck_printf("osc_resgen: genesis -> %u\n", osc_resgen_genesis(&kres));
+    rg_bump_to(6);
+    rg_admit("mismatch_below", b, len);
+    rg_bump_to(7);
+    rg_admit("match", b, len);
+    rg_snap_old_len = osc_resgen_encode(&kres, OSC_RESGEN_ROLE_SNAPSHOT, rg_snap_old, sizeof rg_snap_old);
+    rg_reboot(rg_snap_old, rg_snap_old_len);
+    rg_admit("reboot_same_incarnation", b, len);
+    rg_bump_to(8);
+    rg_admit("reused_number", b, len);
+    rg_snap_len = osc_resgen_encode(&kres, OSC_RESGEN_ROLE_SNAPSHOT, rg_snap, sizeof rg_snap);
+    rg_reboot(rg_snap_old, rg_snap_old_len);
+    rg_admit("rollback_old_snapshot", b, len);
+    rg_floor[20] ^= 1;
+    rg_reboot(rg_snap, rg_snap_len);
+    rg_admit("corrupt_floor", b, len);
+    osc_resgen_init(&kres, 0, 0);
+    rg_admit("reset_untrusted", b, len);
+    ck_printf("osc_resgen_floor_writes: %u\n", rg_floor_writes);
+}
+#endif
+
 int ck_osc_is_unit(const uint8_t *b, size_t len)
 {
     return b && len >= 8 && memcmp(b, "OSCUNIT\0", 8) == 0;
@@ -469,6 +567,10 @@ unsigned ck_osc_candidate(const char *name, const uint8_t *b, size_t len)
         refused++;
         ck_printf("osc_unit: %s REFUSED code=%u name=%s\n", name, rc, osc_code_name(rc));
     }
+#ifdef CK_RESGEN_TEST
+    if (name_eq(name, "a02_valid_caps_kernel.unit"))
+        rg_selftest(b, len);
+#endif
     return rc;
 }
 

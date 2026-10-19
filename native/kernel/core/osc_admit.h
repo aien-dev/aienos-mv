@@ -21,6 +21,9 @@ void ck_osc_oversize(const char *name, uint64_t len);
 /* Print the "osc_units:" summary line if any OSC candidate or oversize entry was seen. */
 void ck_osc_summary(void);
 
+/* The kernel's domain-1 resource counters (artifact/osc_resgen.h, ADR 0019), the ctx of its gen_lookup. Untrusted
+ * until a cut restores it from a durable floor (aienos#285): every pin is STALE. */
+struct osc_resgen *ck_osc_resgen(void);
 /* The kernel's local admission and receipt policy (release or qualification build). */
 void ck_osc_policy(struct osc_policy *p);
 /* Nonzero if the bytes begin with the receipt magic "OMRCPT1\0" (omega receipt v1). */
