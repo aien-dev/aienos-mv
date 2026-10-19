@@ -11,7 +11,7 @@
  *   3. Frames at 3840 x 2160: Allen forms, each sample scene arrives after a
  *      line; drawing only what changed must match drawing everything; the
  *      things light the sky beside him; pictures to argv[1].
- *   4. With --replies DIR: every .txt file there (raw replies from the model) is
+ *   4. With --replies DIR: every NN-slug.txt file there (raw replies from the model) is
  *      parsed, counted and drawn the same way (live-*.png).
  * Frame times (this host, one core) are printed for the plain answers and
  * the scenes. Final line: CANVAS_TEST: PASS|FAIL (N checks). */
@@ -276,6 +276,7 @@ static void show(const char *tag, const char *line, const char *reply, size_t le
     run_to(t1 + 3600);
     snprintf(what, sizeof what, "%s: drawn whole once they rest", tag);
     CHECK(stale(fb, cpy, (size_t)W * H) < 60, what);
+    run_to(t1 + 5400); /* and Allen has finished speaking */
     timing = 0;
     if (expect_things) {
         uint32_t cx = W / 2, cy = H * 40 / 100;
@@ -594,7 +595,7 @@ int main(int argc, char **argv)
         struct dirent *e;
         while (d && (e = readdir(d)) && nn < 64) {
             size_t l = strlen(e->d_name);
-            if (l > 4 && !strcmp(e->d_name + l - 4, ".txt") && strncmp(e->d_name, "ask-", 4))
+            if (l > 4 && !strcmp(e->d_name + l - 4, ".txt") && e->d_name[0] >= '0' && e->d_name[0] <= '9') /* NN-slug.txt */
                 names[nn++] = strdup(e->d_name);
         }
         if (d)

@@ -15,7 +15,8 @@
 #     waiting politely while it is busy) the questions in
 #     evidence/allen-canvas/questions.txt with the prompt in
 #     crates/allen-courier/scene_prompt.txt, keeps every raw reply in
-#     evidence/allen-canvas/replies/, then parses and paints each one
+#     $LIVE_DIR (default evidence/allen-canvas/replies; a round cut off part
+#     way resumes there), then parses and paints each one
 #     (live-*.png) and reports how many parsed cleanly.
 #     --replies DIR: the same from replies already kept (no model needed).
 # Ends with "AIENOS_ALLEN_CANVAS: PASS" or "AIENOS_ALLEN_CANVAS: FAIL <why>".
@@ -60,10 +61,10 @@ $CC -std=gnu11 -O1 -g -fsanitize=address,undefined -fno-sanitize-recover=all -fn
 # 4a. live: ask the model first (its replies are kept as evidence)
 if [ "$LIVE" = 1 ]; then
     cargo build -q --release -p allen-courier --bin allen-scene || fail "allen-scene does not build"
-    REPLIES="$EVID/replies"
+    REPLIES="${LIVE_DIR:-$EVID/replies}"
     mkdir -p "$REPLIES"
     target/release/allen-scene --questions "$EVID/questions.txt" --out "$REPLIES" \
-        --prompt crates/allen-courier/scene_prompt.txt || fail "the model could not be asked"
+        --prompt crates/allen-courier/scene_prompt.txt --wait-max 1800 || fail "the model could not be asked"
 fi
 
 # 3 (and 4b). frames, at full speed
@@ -73,7 +74,7 @@ if [ -n "$REPLIES" ]; then
     rc=$?
     cat "$W/log"
     [ $rc = 0 ] || fail "canvas checks"
-    grep -E '^(live |LIVE:|note: frames|note: startup)' "$W/log" > "$OUT/live-report.txt"
+    grep -E '^(live |LIVE:|note: frames|note: startup)' "$W/log" > "$REPLIES/parse-report.txt"
 else
     "$W/test" "$OUT" --fuzz 20000 || fail "canvas checks"
 fi
