@@ -867,8 +867,31 @@ task seam, and part 3 runs the 16 shared vectors of that branch (`tests/fixtures
 with their reasons printed (domain 2 bindings, the `streams` feature, overrides this runner does not drive). Five mutants must
 fail it (`make osh-op-mutant`): the permission check skipped, the first command's status reported, redirections applied in
 reverse, a refused command's pipe ends kept, the location permission skipped.
-Limits: (1) intent and outcome records are RAM only: the loss case is simulated by a hook and a restart that keeps the record array;
-a durable store is not exercised (integration point: `struct osh_intent` and `osh_op_recover`, for omega's durable records).
+Effect journal (aienos-mv#431; OSH_PLATFORM_ABI sections 9, 10, 13 at aien-protocols-mv `fb5fca98e667`, STREAM_TASK ST8 at
+`181855c9ff3e`). Every spawn, write-class open and console write writes a durable INTENT first (request digest, principal,
+capability domain, index, generation, resource class and operation, the stage's UnitDigest, input and target hashes, session
+epoch), a STARTED record after the effect, an OUTCOME after the stage is reaped and one RECEIPT per pipeline listing the outcome
+digests (`core/osh_journal.c`). The records live in the canonical Omega Cortex; in this image that is the Cortex over the boot
+disk's sealed TEST-key Store (`svc/cortex_journal.c`, one record = one sealed transaction), kept open for the test only
+(`svc/store_boot.c` under `CK_OSH_OP_TEST`, own image `full-osh-op-test`, refused with CK_SERVICE, CK_HARDWARE_STAGING,
+CK_PI5_STORE, CK_PI5_UNLOCK, CK_TEST_STORE_CRASH and CK_TEST_CONTINUITY). The #429/#430 cases run on a labelled RAM journal
+(`durable=0`, accepted only on request) and are never counted as durable. Three boots of the same disk: boot 1 runs the old cases,
+then d_ok, d_write and a loss at each crash point of a one-stage pipeline (before intent, after intent, after spawn, after
+STARTED, after finish, during cancellation, during the receipt), each followed by a read-only look with no OSH session (writes
+refused), recovery (OUTCOME_UNKNOWN once per open intent, a second scan writes nothing, nothing re-spawned) and exact chunk counts
+(38 at the end), plus an operator reconciliation (a non-operator DENIED, one RECONCILE record, a second verdict refused); boot 2
+loses the adapter of `gen | sink` after both spawns are STARTED and the host kills QEMU (a real power cut, 42 chunks); boot 3 looks
+read-only before any shell unit runs, recovers both spawns as UNKNOWN_STARTED with no spawn, runs a fresh decision once, fills the
+journal to its 64-chunk limit and then refuses effects by name (`osh_op_refused: ... reason=intent_not_durable`, then
+`reason=journal_failed`: FAILED_NO_EFFECT, IO, status 1, nothing spawned). Over the three boots 15 spawns were granted for 16
+durable spawn intents (one lost before its spawn): no duplicate effect. 208 gate checks. Host `test_osh_op` (534 checks) covers
+the same rules on a RAM backend with fault injection (append failure, unavailable device, read-only, poisoning) and eleven crash
+cases of `gen 4096 512 | sink >o`; four more mutants must fail it: an effect without its intent, a non-durable journal accepted,
+a failed append not poisoning the journal, recovery writing COMPLETED.
+Limits: (1) the loss is injected by hooks at named points of the adapter (the power cut is real only in boot 2, at one point);
+the Store journal holds 64 chunks (CK_CJ_MAX_CHUNKS), after which every effect is refused; the record encodings, the recovery
+categories, reconciliation and the three-boot sequence are this layer's choices (UNVERIFIED J1..J5, U18..U22 in the headers);
+nothing is undone and nothing is exactly-once.
 (2) `klog` stays a single-command operation (in a pipe or with a redirection it is NOT_SUPPORTED); assignments and builtins are
 NOT_SUPPORTED; at most 8 commands, a pool of 4 pipes and 8 session table slots (below the ST9 minimums). Locations are TEST RAM
 (4 of 16 KiB), not files. Several choices the spec leaves open are marked UNVERIFIED in `core/osh_op.h` (for example the

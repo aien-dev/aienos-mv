@@ -609,8 +609,20 @@ section 7.1) of up to 8 commands as a pipeline of admitted Omega stages, in the 
 - **Redirections.** `<`, `>`, `>>`, `N>&M` in record order, into TEST RAM locations behind their own location capability,
   checked at every open; a failed redirection gives the command status 1 and it does not run. Bytes are pumped by the
   adapter, never cut silently (a full location is LIMIT and the writer sees BROKEN_PIPE).
-- **Effects.** Every spawn and every write-class open writes an intent before and an outcome after (ST8); after a loss a
-  restart reports OUTCOME_UNKNOWN and never replays.
+- **Effects (aienos-mv#431).** Every spawn, every write-class open and every console write is preceded by a durable INTENT
+  record and followed by a STARTED record (provisional), an OUTCOME record (finished, after the stage is reaped) and one
+  RECEIPT per pipeline (immutable, it lists the outcome records' digests). An intent binds the request digest, the
+  principal, the capability (domain, index, generation, resource class, operation), the stage's UnitDigest, the input and
+  target hashes and the session epoch. The records go into the canonical Omega Cortex (`third_party/omega/rx_cortex.c`,
+  `core/osh_journal.c`); on a device that is the Cortex over the sealed Store (`svc/cortex_journal.c`: one record = one
+  sealed transaction, durable on return), no second ledger. No usable durable journal (none, read-only, in memory under
+  the default policy, or a failed append, which poisons it) means the effect is refused BY NAME before it happens
+  (`osh_op_refused: ... error=IO outcome=FAILED_NO_EFFECT reason=...`, status 1); there is no silent downgrade. After a
+  loss a restart moves to a new epoch and recovery writes OUTCOME_UNKNOWN once for every open intent and seals the
+  pipeline; it never re-runs anything. The journal is readable with no OSH session at all (`oshj_inspect`, read-only
+  open). An operator holding WRITE on the reconcile capability may state one verdict about an unknown effect (a RECONCILE
+  record); nothing is undone. This is at-most-once with honest unknowns, not exactly-once. Limits: the Store journal holds
+  64 chunks (CK_CJ_MAX_CHUNKS), then every effect is refused; journal records are TEST-label in QEMU only.
 - **Tests.** `make test` runs `test_osh_op` (with the 16 shared vectors in `tests/fixtures/osh_exec`) and `osh-op-mutant`;
   `make sanitize` runs it under ASan+UBSan; `scripts/qemu_ck_osh_op_test.sh` runs the real shell units and stage units in
   QEMU (GATES.md, OSH_OP). Host and QEMU evidence qualify nothing physical.
