@@ -75,5 +75,10 @@ void ck_allen_ui_stats(uint32_t *frames, uint32_t *slowest_us, uint32_t *average
 #define CK_ALLEN_UI_MAP_LINKS 160u
 void ck_allen_ui_map(unsigned n, const uint8_t *ea, const uint8_t *eb, unsigned ne, int lit, const char *label,
                      unsigned total, unsigned links);
+/* The model answered with a scene (svc/allen_scene.h, docs/ALLEN_CANVAS.md: len bytes, at most
+ * CK_SCENE_BYTES are read): Allen speaks its say line, as ck_allen_ui_said(NULL, say) would, and the things
+ * it asks for come round him as he starts to speak (ui/canvas.c); what was shown before goes. A reply in
+ * plain words, with no scene lines, is simply spoken. */
+void ck_allen_ui_scene(const char *scene, unsigned len, uint64_t now);
 
 #endif
