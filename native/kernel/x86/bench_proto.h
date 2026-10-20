@@ -47,17 +47,21 @@
  *  32 hmac[32]     total = 64 bytes */
 #define BENCH_RESP_BYTES 64u
 
-/* BAR5 write allowlist (DWORD-index ranges, inclusive). */
-#define BENCH_BAR5_WRITE_LO0  0x4800u   /* DCE 11.2 panel power sequencer */
+/* BAR5 write allowlist (DWORD-index ranges, inclusive). Register numbers: AMD's MIT headers in
+ * Linux, drivers/gpu/drm/amd/include/asic_reg/ (dce/dce_11_2_d.h, smu/smu_7_1_3_d.h). */
+#define BENCH_BAR5_WRITE_LO0  0x4800u   /* DCE 11.2 UNIPHY link control, LVTMA panel power sequencer, backlight PWM */
 #define BENCH_BAR5_WRITE_HI0  0x4900u
-#define BENCH_BAR5_WRITE_LO1  0x4A00u   /* DCE 11.2 CRTC / display engine */
+#define BENCH_BAR5_WRITE_LO1  0x4A00u   /* DCE 11.2 DIG 0/1 front ends (HDMI and DP encoder blocks) */
 #define BENCH_BAR5_WRITE_HI1  0x4C00u
-/* GRPH primary surface, flip and update (dce_11_2_d.h: mmGRPH_PRIMARY_SURFACE_ADDRESS 0x5045 .. mmGRPH_UPDATE 0x5048). */
-#define BENCH_BAR5_WRITE_LO2  0x5040u
-#define BENCH_BAR5_WRITE_HI2  0x5050u
-/* SMU 7.1.3 SMC message registers (smu_7_1_3_d.h: mmSMC_MSG 0x0178, mmSMC_MSG_ARG_0 0x0179, mmSMC_MSG_RESP_0 0x0180). */
-#define BENCH_BAR5_WRITE_LO3  0x0170u
-#define BENCH_BAR5_WRITE_HI3  0x0180u
+/* DCP0 graphics surface: mmGRPH_PRIMARY_SURFACE_ADDRESS 0x1a04 .. mmGRPH_UPDATE 0x1a11, mmGRPH_FLIP_CONTROL 0x1a12. */
+#define BENCH_BAR5_WRITE_LO2  0x1A04u
+#define BENCH_BAR5_WRITE_HI2  0x1A12u
+/* SMC mailbox 0: mmSMC_MESSAGE_0 0x94, mmSMC_RESP_0 0x95 (the pair smu7_send_msg_to_smc uses). */
+#define BENCH_BAR5_WRITE_LO3  0x0094u
+#define BENCH_BAR5_WRITE_HI3  0x0095u
+/* SMC message argument: mmSMC_MSG_ARG_0 0xa4. */
+#define BENCH_BAR5_WRITE_LO4  0x00A4u
+#define BENCH_BAR5_WRITE_HI4  0x00A4u
 
 /* BAR5 read range: any DWORD index in [0, 65535]. */
 #define BENCH_BAR5_READ_MAX   0xFFFFu

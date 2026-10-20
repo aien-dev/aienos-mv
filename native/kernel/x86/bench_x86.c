@@ -8,7 +8,7 @@
  * counter gives replay protection. Every response is HMAC'd, auth errors included.
  *
  * Safety invariants enforced here:
- *   - BAR5 writes restricted to the panel/DCE allowlist (bench_proto.h).
+ *   - BAR5 writes restricted to the display and SMC-mailbox allowlist (bench_proto.h).
  *   - Any read returning 0xFFFFFFFF is "device gone" (status BENCH_ERR_ALLONES).
  *     The kernel answers that request and carries on with the next packet; the
  *     Spark tool is what stops the batch (ck_gpu_bench stops at ALLONES).
@@ -109,7 +109,8 @@ static int bar5_write_allowed(uint32_t reg_idx)
     return (reg_idx >= BENCH_BAR5_WRITE_LO0 && reg_idx <= BENCH_BAR5_WRITE_HI0) ||
            (reg_idx >= BENCH_BAR5_WRITE_LO1 && reg_idx <= BENCH_BAR5_WRITE_HI1) ||
            (reg_idx >= BENCH_BAR5_WRITE_LO2 && reg_idx <= BENCH_BAR5_WRITE_HI2) ||
-           (reg_idx >= BENCH_BAR5_WRITE_LO3 && reg_idx <= BENCH_BAR5_WRITE_HI3);
+           (reg_idx >= BENCH_BAR5_WRITE_LO3 && reg_idx <= BENCH_BAR5_WRITE_HI3) ||
+           (reg_idx >= BENCH_BAR5_WRITE_LO4 && reg_idx <= BENCH_BAR5_WRITE_HI4);
 }
 
 /* ---- Command execution ---- */

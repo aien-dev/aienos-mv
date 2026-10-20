@@ -112,12 +112,18 @@ expired); `0x05` ERR_NODEV; `0x06` ERR_BUSY; `0x07` ERR_CMD.
 The kernel answers an ALLONES read and carries on. The Spark tool is what stops the
 batch: `ck_gpu_bench` sends nothing after an ERR_ALLONES reply.
 
-BAR5 write allowlist (DWORD indexes, inclusive): `0x4800`-`0x4900` (DCE 11.2 panel
-power sequencer and backlight), `0x4A00`-`0x4C00` (DCE 11.2 CRTC / display engine),
-`0x5040`-`0x5050` (DCE 11.2 GRPH primary surface address, flip control and update:
-`mmGRPH_PRIMARY_SURFACE_ADDRESS` 0x5045 to `mmGRPH_UPDATE` 0x5048) and `0x0170`-`0x0180`
-(SMU 7.1.3 SMC message, argument and response: `mmSMC_MSG` 0x0178, `mmSMC_MSG_ARG_0` 0x0179,
-`mmSMC_MSG_RESP_0` 0x0180).
+BAR5 write allowlist (DWORD indexes, inclusive). Every number is from AMD's MIT register
+headers in Linux, `drivers/gpu/drm/amd/include/asic_reg/dce/dce_11_2_d.h` and
+`smu/smu_7_1_3_d.h`:
+
+| Range | What sits there |
+|---|---|
+| `0x4800`-`0x4900` | UNIPHY link control, LVTMA panel power sequencer (`mmLVTMA_PWRSEQ_CNTL` 0x481b), backlight PWM (`mmBL_PWM_CNTL` 0x4820) |
+| `0x4A00`-`0x4C00` | DIG 0 and DIG 1 front ends: the HDMI and DisplayPort encoder blocks (`mmDIG_FE_CNTL` 0x4a00, `mmDIG1_DIG_FE_CNTL` 0x4b00, `mmDIG2_DIG_FE_CNTL` 0x4c00). Not the CRTC (`mmCRTC_STATUS` is 0x1ba3, not writable here). |
+| `0x1A04`-`0x1A12` | DCP0 graphics surface: `mmGRPH_PRIMARY_SURFACE_ADDRESS` 0x1a04, `mmGRPH_PITCH` 0x1a06, `mmGRPH_PRIMARY_SURFACE_ADDRESS_HIGH` 0x1a07, `mmGRPH_UPDATE` 0x1a11, `mmGRPH_FLIP_CONTROL` 0x1a12 (controller 0 only) |
+| `0x0094`-`0x0095` | SMC mailbox 0: `mmSMC_MESSAGE_0` 0x94, `mmSMC_RESP_0` 0x95 (the pair Linux `smu7_send_msg_to_smc` uses) |
+| `0x00A4` | `mmSMC_MSG_ARG_0` 0xa4 (the message argument) |
+
 BAR5 reads: any index 0..65535. BAR0 (VRAM): words 0..65535 (the first 256 KiB only).
 
 ## Build

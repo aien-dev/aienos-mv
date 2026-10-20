@@ -62,6 +62,10 @@ mcopy -i "${img}" "${out}/IMACKERN-LAB.EFI" ::/EFI/BOOT/BOOTX64.EFI
 
 # The script. Register numbers are DWORD indexes: 18432 = 0x4800 (panel allowlist),
 # 256 = 0x100 (not allowlisted), 4095 = 0x0FFF (the emulated all-ones register).
+# Allowlist edges (dce_11_2_d.h, smu_7_1_3_d.h): 6660 = 0x1A04 GRPH_PRIMARY_SURFACE_ADDRESS and
+# 6674 = 0x1A12 GRPH_FLIP_CONTROL (both ends of the DCP0 surface range), 148 = 0x94 SMC_MESSAGE_0,
+# 149 = 0x95 SMC_RESP_0, 164 = 0xA4 SMC_MSG_ARG_0; refused neighbours 6659 = 0x1A03 GRPH_SWAP_CNTL,
+# 6675 = 0x1A13, 150 = 0x96 SMC_MESSAGE_1, 165 = 0xA5 SMC_MSG_ARG_1.
 cat > "${work}/test.bench" <<'BENCH'
 ping
 pci_cfg 0
@@ -74,6 +78,15 @@ bar0_read 5
 bar5_poll 18432 0xFFFF0000 0xABCD0000 100
 bar5_poll 18432 0x0000FFFF 0x00000001 50
 bar5_rmw 18432 0x0000FF00 0x00005500
+bar5_write 6660 0x11110001
+bar5_write 6674 0x11110002
+bar5_write 148 0x11110003
+bar5_write 149 0x11110004
+bar5_write 164 0x11110005
+bar5_write 6659 1
+bar5_write 6675 1
+bar5_write 150 1
+bar5_write 165 1
 pci_cfg 256
 replay
 badauth ping
@@ -120,6 +133,14 @@ chk "BAR5 write on the allowlist (before 0, after ABCD0001)" "^bar5_write OK: re
 chk "kernel logged the write before and after" "bench: bar5_write reg=0x4800 0x00000000 -> 0xabcd0001" "${work}/transcript.txt"
 chk "BAR5 read back the written value" "^bar5_read OK: result=0xabcd0001" "${work}/tool.txt"
 chk "BAR5 write off the allowlist refused (RANGE)" "^bar5_write ERR_RANGE: result=0x00000000" "${work}/tool.txt"
+chk "GRPH primary surface address 0x1A04 writable" "^bar5_write OK: result=0x11110001 before=0x00000000" "${work}/tool.txt"
+chk "GRPH flip control 0x1A12 writable (top of the range)" "^bar5_write OK: result=0x11110002 before=0x00000000" "${work}/tool.txt"
+chk "SMC_MESSAGE_0 0x94 writable" "^bar5_write OK: result=0x11110003 before=0x00000000" "${work}/tool.txt"
+chk "SMC_RESP_0 0x95 writable" "^bar5_write OK: result=0x11110004 before=0x00000000" "${work}/tool.txt"
+chk "SMC_MSG_ARG_0 0xA4 writable" "^bar5_write OK: result=0x11110005 before=0x00000000" "${work}/tool.txt"
+chk "kernel logged the GRPH write" "bench: bar5_write reg=0x1a04 0x00000000 -> 0x11110001" "${work}/transcript.txt"
+ranges=$(grep -ac "^bar5_write ERR_RANGE" "${work}/tool.txt" || true)
+if [[ "${ranges}" == "5" ]]; then pass "writes just outside each new range refused (0x1A03, 0x1A13, 0x96, 0xA5, plus 0x100): 5 RANGE"; else fail "bar5_write RANGE refusals: ${ranges} (expected 5)"; fi
 chk "BAR0 write and read back" "^bar0_read OK: result=0x00000042" "${work}/tool.txt"
 chk "TSC poll satisfied" "^bar5_poll OK: result=0xabcd0001" "${work}/tool.txt"
 chk "TSC poll timed out" "^bar5_poll ERR_TIMEOUT" "${work}/tool.txt"
