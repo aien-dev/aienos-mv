@@ -1,13 +1,14 @@
 //! The program's behaviour: run, --update, --reset, --where.
 
 use crate::backend::{self, VmExit, VmSpec};
+use crate::bundle;
 use crate::cli::{self, Action, Options};
 use crate::console::{self, Console, RawTerminal, DEFAULT_READY_MARKERS};
+use crate::disk;
 use crate::fetch;
 use crate::manifest::{hex_encode, Arch, ImageEntry, ImageKind, Manifest, SignatureState, Trust};
 use crate::net;
 use crate::paths::Paths;
-use crate::disk;
 use std::io::{IsTerminal, Write};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -57,7 +58,10 @@ pub fn main(args: Vec<String>) -> i32 {
         Action::Where => where_cmd(&opts, &paths),
         Action::Reset => reset_cmd(&opts, &paths),
         Action::Update => match update(&opts, &paths, true) {
-            Ok(_) => EXIT_OK,
+            Ok(_) => match qemu_runtime(&opts, &paths) {
+                Ok(()) => EXIT_OK,
+                Err(code) => code,
+            },
             Err(code) => code,
         },
         Action::Run => run_cmd(&opts, &paths),
@@ -65,10 +69,52 @@ pub fn main(args: Vec<String>) -> i32 {
     }
 }
 
+/// The guest arch's QEMU runtime: on Windows (or with `AIENOS_RUN_FETCH_QEMU=1`) the pinned
+/// bundle is downloaded and unpacked when the qemu backend may run and no QEMU is found.
+fn qemu_runtime(opts: &Options, paths: &Paths) -> Result<(), i32> {
+    let forced = std::env::var("AIENOS_RUN_FETCH_QEMU").is_ok_and(|v| v == "1");
+    if !(cfg!(windows) || forced) || !matches!(opts.backend.as_str(), "auto" | "qemu") {
+        return Ok(());
+    }
+    if guest_arch(opts) != Ok(Arch::X86_64) {
+        return Ok(());
+    }
+    let q = backend::qemu::QemuBackend::from_env();
+    if !forced && backend::qemu::find_qemu(Arch::X86_64, &q.search_dirs).is_some() {
+        return Ok(());
+    }
+    let override_url = std::env::var("AIENOS_RUN_QEMU_BUNDLE").ok();
+    let url = bundle::source_url(
+        override_url.as_deref(),
+        &manifest_url(opts),
+        &bundle::QEMU_BUNDLE,
+    );
+    match bundle::ensure(
+        &paths.cache,
+        &url,
+        &bundle::QEMU_BUNDLE,
+        &bundle::tar_extract,
+        &say,
+    ) {
+        Ok(d) => {
+            say(&format!("QEMU runtime ready in {}", d.display()));
+            Ok(())
+        }
+        Err(e) => {
+            say(&e);
+            Err(EXIT_FETCH)
+        }
+    }
+}
+
 fn manifest_url(opts: &Options) -> String {
     opts.manifest
         .clone()
-        .or_else(|| std::env::var("AIENOS_RUN_MANIFEST").ok().filter(|s| !s.is_empty()))
+        .or_else(|| {
+            std::env::var("AIENOS_RUN_MANIFEST")
+                .ok()
+                .filter(|s| !s.is_empty())
+        })
         .unwrap_or_else(|| DEFAULT_MANIFEST_URL.to_string())
 }
 
@@ -85,6 +131,13 @@ fn where_cmd(opts: &Options, paths: &Paths) -> i32 {
     println!("store disk:    {}", paths.store_disk().display());
     println!("efi variables: {}", paths.firmware_vars().display());
     println!("manifest url:  {}", manifest_url(opts));
+    let q = paths.cache.join(bundle::DIR);
+    let state = if bundle::installed(&paths.cache, &bundle::QEMU_BUNDLE) {
+        "installed"
+    } else {
+        "not downloaded"
+    };
+    println!("qemu runtime:  {} ({state})", q.display());
     let mut table = if opts.default_forwards {
         net::default_forwards()
     } else {
@@ -101,7 +154,9 @@ fn reset_cmd(opts: &Options, paths: &Paths) -> i32 {
     let p = paths.store_disk();
     if !opts.yes {
         if !std::io::stdin().is_terminal() {
-            say("--reset erases the AienOS Store disk; add --yes to confirm when not at a terminal");
+            say(
+                "--reset erases the AienOS Store disk; add --yes to confirm when not at a terminal",
+            );
             return EXIT_USAGE;
         }
         eprint!("Erase the AienOS Store disk at {}? Type yes: ", p.display());
@@ -172,17 +227,23 @@ fn update(opts: &Options, paths: &Paths, force: bool) -> Result<(ImageEntry, Pat
         EXIT_FETCH
     })?;
     match &m.signature {
-        SignatureState::Unsigned => say("manifest is UNSIGNED: integrity rests on the sha256 lines only"),
-        SignatureState::TestKey => say("manifest signed with the public TEST key (not a release signature)"),
-        SignatureState::Pinned(k) => say(&format!("manifest signed by pinned key {}", hex_encode(k))),
+        SignatureState::Unsigned => {
+            say("manifest is UNSIGNED: integrity rests on the sha256 lines only")
+        }
+        SignatureState::TestKey => {
+            say("manifest signed with the public TEST key (not a release signature)")
+        }
+        SignatureState::Pinned(k) => {
+            say(&format!("manifest signed by pinned key {}", hex_encode(k)))
+        }
     }
     let entry = m.image(arch, wanted_kinds(arch)).cloned().ok_or_else(|| {
         say(&format!("the manifest has no {} image", arch.as_str()));
         EXIT_FETCH
     })?;
     let file_url = crate::manifest::resolve_url(&url, &entry.file.url);
-    let (path, downloaded) =
-        fetch::fetch_verified(&file_url, &entry.file, &paths.images()).map_err(|e| {
+    let (path, downloaded) = fetch::fetch_verified(&file_url, &entry.file, &paths.images())
+        .map_err(|e| {
             say(&format!("{}: {e}", entry.file.name));
             EXIT_FETCH
         })?;
@@ -194,7 +255,11 @@ fn update(opts: &Options, paths: &Paths, force: bool) -> Result<(ImageEntry, Pat
         entry.file.name,
         entry.kind.as_str(),
         hex_encode(&entry.file.sha256),
-        if downloaded { "downloaded and verified" } else { "verified (cached)" }
+        if downloaded {
+            "downloaded and verified"
+        } else {
+            "verified (cached)"
+        }
     ));
     Ok((entry, path))
 }
@@ -225,6 +290,9 @@ fn run_cmd(opts: &Options, paths: &Paths) -> i32 {
             Err(code) => return code,
         },
     };
+    if let Err(code) = qemu_runtime(opts, paths) {
+        return code;
+    }
     let mut forwards = if opts.default_forwards {
         net::default_forwards()
     } else {
@@ -238,7 +306,10 @@ fn run_cmd(opts: &Options, paths: &Paths) -> i32 {
     let store_disk = if opts.store {
         let p = paths.store_disk();
         match disk::ensure(&p, disk::DEFAULT_STORE_BYTES) {
-            Ok(true) => say(&format!("created the persistent Store disk {}", p.display())),
+            Ok(true) => say(&format!(
+                "created the persistent Store disk {}",
+                p.display()
+            )),
             Ok(false) => {}
             Err(e) => {
                 say(&format!("cannot create {}: {e}", p.display()));
@@ -290,9 +361,18 @@ fn boot(opts: &Options, spec: &VmSpec) -> i32 {
     for f in &spec.forwards {
         say(&format!("forward {f}"));
     }
-    let markers: Vec<String> = DEFAULT_READY_MARKERS.iter().map(|s| s.to_string()).collect();
+    let mut markers: Vec<String> = DEFAULT_READY_MARKERS
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    markers.extend(opts.ready_markers.iter().cloned());
     let t0 = Instant::now();
-    let out: Box<dyn Write + Send> = Box::new(std::io::stdout());
+    // The Windows console refuses writes that are not valid UTF-8; guest bytes are anything.
+    let out: Box<dyn Write + Send> = if cfg!(windows) {
+        Box::new(console::Utf8Lossy::new(std::io::stdout()))
+    } else {
+        Box::new(std::io::stdout())
+    };
     let mut c = Console::new(Some(out), &markers, t0);
     if let Some(p) = &opts.serial_log {
         match std::fs::File::create(p) {
@@ -326,6 +406,7 @@ fn boot(opts: &Options, spec: &VmSpec) -> i32 {
         });
     }
     let result = b.run(spec, &console);
+    console::mark_session_done();
     drop(raw);
     let times = console.times();
     if opts.receipt {
@@ -334,10 +415,18 @@ fn boot(opts: &Options, spec: &VmSpec) -> i32 {
             None => "NOT_SEEN".to_string(),
         };
         eprintln!();
-        say(&format!("receipt backend={} arch={}", b.name(), spec.arch.as_str()));
+        say(&format!(
+            "receipt backend={} arch={}",
+            b.name(),
+            spec.arch.as_str()
+        ));
+        say(&format!("receipt vmm_started={}", ms(times.vmm_started)));
         say(&format!("receipt first_output={}", ms(times.first_byte)));
         match times.ready() {
-            Some((m, t)) => say(&format!("receipt console_ready={} marker={m:?}", ms(Some(t)))),
+            Some((m, t)) => say(&format!(
+                "receipt console_ready={} marker={m:?}",
+                ms(Some(t))
+            )),
             None => say("receipt console_ready=NOT_SEEN"),
         }
         say(&format!("receipt total={}", ms(Some(console.elapsed()))));

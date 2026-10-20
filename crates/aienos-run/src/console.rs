@@ -18,13 +18,39 @@ use std::time::{Duration, Instant};
 pub const ESCAPE_BYTE: u8 = 0x1d;
 
 /// Lines that mean "AienOS is at its console". `console> ` is the interactive prompt;
-/// `report_kind: final` is the end-of-boot report of the core image (which then resets).
-pub const DEFAULT_READY_MARKERS: &[&str] = &["console> ", "report_kind: final"];
+/// `report_kind: final` is the end-of-boot report of the core image (which then resets);
+/// `console: ready` is the PC edition's ready line (L260 serial contract, prompt `aienos> `).
+pub const DEFAULT_READY_MARKERS: &[&str] = &["console> ", "report_kind: final", "console: ready"];
 
 static SIGNAL_STOP: AtomicBool = AtomicBool::new(false);
+static SESSION_DONE: AtomicBool = AtomicBool::new(false);
+static PUMP_ALIVE: AtomicBool = AtomicBool::new(false);
 
-/// Installs SIGINT/SIGTERM handlers that request a clean stop (Unix).
+/// Marks the VM session finished (the Windows close-window handler waits for this).
+pub fn mark_session_done() {
+    SESSION_DONE.store(true, Ordering::SeqCst);
+}
+
+/// Installs handlers that request a clean stop: SIGINT/SIGTERM on Unix; Ctrl+C,
+/// Ctrl+Break and closing the console window on Windows. Windows ends a process about
+/// 5 s after its window is closed, so that handler waits up to 4.5 s for the stop.
 pub fn install_signal_stop() {
+    #[cfg(windows)]
+    unsafe {
+        unsafe extern "system" fn on_ctrl(ev: crate::win::DWORD) -> crate::win::BOOL {
+            SIGNAL_STOP.store(true, Ordering::SeqCst);
+            if ev == crate::win::CTRL_CLOSE_EVENT {
+                let t0 = std::time::Instant::now();
+                while !SESSION_DONE.load(Ordering::SeqCst)
+                    && t0.elapsed() < Duration::from_millis(4500)
+                {
+                    std::thread::sleep(Duration::from_millis(20));
+                }
+            }
+            1
+        }
+        crate::win::SetConsoleCtrlHandler(Some(on_ctrl), 1);
+    }
     #[cfg(unix)]
     unsafe {
         extern "C" fn on_signal(_: libc::c_int) {
@@ -38,6 +64,9 @@ pub fn install_signal_stop() {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct BootTimes {
+    /// When the backend reported the VM started (process spawned and connected, or
+    /// partition and vCPUs created): the startup cost before any guest code runs.
+    pub vmm_started: Option<Duration>,
     pub first_byte: Option<Duration>,
     /// (marker, time it was first seen)
     pub markers: Vec<(String, Option<Duration>)>,
@@ -59,6 +88,7 @@ pub struct Console {
     stop: AtomicBool,
     out: Mutex<Option<Box<dyn Write + Send>>>,
     log: Mutex<Option<File>>,
+    vmm_started: OnceLock<Duration>,
     first_byte: OnceLock<Duration>,
     markers: Vec<(String, OnceLock<Duration>)>,
     tail: Mutex<Vec<u8>>,
@@ -76,8 +106,12 @@ impl Console {
             stop: AtomicBool::new(false),
             out: Mutex::new(out),
             log: Mutex::new(None),
+            vmm_started: OnceLock::new(),
             first_byte: OnceLock::new(),
-            markers: markers.iter().map(|m| (m.clone(), OnceLock::new())).collect(),
+            markers: markers
+                .iter()
+                .map(|m| (m.clone(), OnceLock::new()))
+                .collect(),
             tail: Mutex::new(Vec::new()),
             stop_on_ready: false,
             transcript: Mutex::new(Vec::new()),
@@ -145,6 +179,11 @@ impl Console {
         }
     }
 
+    /// Backends call this once the VM is created and about to run guest code.
+    pub fn vmm_started(&self) {
+        let _ = self.vmm_started.set(self.t0.elapsed());
+    }
+
     pub fn push_input(&self, bytes: &[u8]) {
         self.input.lock().unwrap().extend(bytes.iter().copied());
     }
@@ -167,6 +206,7 @@ impl Console {
 
     pub fn times(&self) -> BootTimes {
         BootTimes {
+            vmm_started: self.vmm_started.get().copied(),
             first_byte: self.first_byte.get().copied(),
             markers: self
                 .markers
@@ -185,10 +225,14 @@ fn find(hay: &[u8], needle: &[u8]) -> bool {
     !needle.is_empty() && hay.windows(needle.len()).any(|w| w == needle)
 }
 
-/// Raw terminal mode for the session (Unix). Restores the old mode on drop.
+/// Raw terminal mode for the session (Unix termios; Windows console modes). Restores the
+/// old mode on drop.
 pub struct RawTerminal {
     #[cfg(unix)]
     saved: Option<libc::termios>,
+    /// (input handle, old input mode, output handle, old output mode)
+    #[cfg(windows)]
+    saved: Option<(crate::win::HANDLE, u32, crate::win::HANDLE, u32)>,
 }
 
 impl RawTerminal {
@@ -209,20 +253,53 @@ impl RawTerminal {
             libc::tcsetattr(0, libc::TCSANOW, &t);
             RawTerminal { saved: Some(saved) }
         }
-        #[cfg(not(unix))]
+        #[cfg(windows)]
+        unsafe {
+            use crate::win::*;
+            SetConsoleTitleW(wide("AienOS").as_ptr());
+            SetConsoleOutputCP(CP_UTF8);
+            SetConsoleCP(CP_UTF8);
+            let (Some((hi, mi)), Some((ho, mo))) = (
+                console_mode(STD_INPUT_HANDLE),
+                console_mode(STD_OUTPUT_HANDLE),
+            ) else {
+                return RawTerminal { saved: None };
+            };
+            // Keys go to AienOS one at a time as VT sequences; Ctrl+C stays a console
+            // event (processed input) so it becomes the clean stop, not a byte.
+            let raw_in = (mi & !(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT))
+                | ENABLE_VIRTUAL_TERMINAL_INPUT
+                | ENABLE_PROCESSED_INPUT;
+            SetConsoleMode(hi, raw_in);
+            SetConsoleMode(
+                ho,
+                mo | ENABLE_PROCESSED_OUTPUT | ENABLE_VIRTUAL_TERMINAL_PROCESSING,
+            );
+            RawTerminal {
+                saved: Some((hi, mi, ho, mo)),
+            }
+        }
+        #[cfg(not(any(unix, windows)))]
         RawTerminal {}
     }
 
     pub fn is_raw(&self) -> bool {
-        #[cfg(unix)]
+        #[cfg(any(unix, windows))]
         return self.saved.is_some();
-        #[cfg(not(unix))]
+        #[cfg(not(any(unix, windows)))]
         false
     }
 }
 
 impl Drop for RawTerminal {
     fn drop(&mut self) {
+        #[cfg(windows)]
+        if let Some((hi, mi, ho, mo)) = self.saved {
+            unsafe {
+                crate::win::SetConsoleMode(hi, mi);
+                crate::win::SetConsoleMode(ho, mo);
+            }
+        }
         #[cfg(unix)]
         if let Some(t) = self.saved {
             unsafe {
@@ -235,12 +312,15 @@ impl Drop for RawTerminal {
 /// Starts a thread that copies stdin into the console. Ctrl+] (raw terminal) or end of
 /// input requests a stop; end of input only stops when `eof_stops` is set.
 pub fn spawn_stdin_pump(console: std::sync::Arc<Console>, eof_stops: bool) {
+    PUMP_ALIVE.store(true, Ordering::SeqCst);
     std::thread::spawn(move || {
         use std::io::Read;
         let mut stdin = std::io::stdin();
         let mut buf = [0u8; 256];
+        let _alive = PumpAlive;
         loop {
             match stdin.read(&mut buf) {
+                _ if SESSION_DONE.load(Ordering::SeqCst) => return,
                 Ok(0) | Err(_) => {
                     if eof_stops {
                         console.request_stop();
@@ -260,9 +340,129 @@ pub fn spawn_stdin_pump(console: std::sync::Arc<Console>, eof_stops: bool) {
     });
 }
 
+/// Clears PUMP_ALIVE however the pump thread ends.
+struct PumpAlive;
+
+impl Drop for PumpAlive {
+    fn drop(&mut self) {
+        PUMP_ALIVE.store(false, Ordering::SeqCst);
+    }
+}
+
+/// A writer that passes UTF-8 through and turns every invalid byte sequence into U+FFFD.
+/// A sequence split across two writes is held back until it completes. The Windows
+/// console rejects a whole write that is not valid UTF-8, so guest output (which may hold
+/// any bytes) goes through this on Windows.
+pub struct Utf8Lossy<W: Write> {
+    inner: W,
+    pending: Vec<u8>,
+}
+
+impl<W: Write> Utf8Lossy<W> {
+    pub fn new(inner: W) -> Utf8Lossy<W> {
+        Utf8Lossy {
+            inner,
+            pending: Vec::new(),
+        }
+    }
+
+    pub fn into_inner(self) -> W {
+        self.inner
+    }
+}
+
+impl<W: Write> Write for Utf8Lossy<W> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.pending.extend_from_slice(buf);
+        let mut out = Vec::with_capacity(self.pending.len());
+        let mut rest: &[u8] = &self.pending;
+        loop {
+            match std::str::from_utf8(rest) {
+                Ok(s) => {
+                    out.extend_from_slice(s.as_bytes());
+                    rest = &[];
+                    break;
+                }
+                Err(e) => {
+                    let (good, bad) = rest.split_at(e.valid_up_to());
+                    out.extend_from_slice(good);
+                    match e.error_len() {
+                        Some(n) => {
+                            out.extend_from_slice("\u{FFFD}".as_bytes());
+                            rest = &bad[n..];
+                        }
+                        // An unfinished sequence at the end: keep it for the next write.
+                        None => {
+                            rest = bad;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        let keep = rest.to_vec();
+        self.pending = keep;
+        self.inner.write_all(&out)?;
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
+    }
+}
+
+/// When aienos-run was started by a double click (Windows: it is the only process on its
+/// console), the window would vanish with the last message; this asks for Enter first.
+/// Returns at once everywhere else.
+pub fn hold_window_on_exit() {
+    #[cfg(windows)]
+    if crate::win::owns_console_window() {
+        eprint!("\r\nPress Enter to close this window.");
+        if PUMP_ALIVE.load(Ordering::SeqCst) {
+            // The session's input thread owns stdin; its next read (this Enter) ends it.
+            while PUMP_ALIVE.load(Ordering::SeqCst) {
+                std::thread::sleep(Duration::from_millis(20));
+            }
+        } else {
+            let mut line = String::new();
+            let _ = std::io::stdin().read_line(&mut line);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn lossy(chunks: &[&[u8]]) -> Vec<u8> {
+        let mut w = Utf8Lossy::new(Vec::new());
+        for c in chunks {
+            assert_eq!(w.write(c).unwrap(), c.len());
+        }
+        w.into_inner()
+    }
+
+    #[test]
+    fn utf8_lossy_passes_text_and_replaces_garbage() {
+        assert_eq!(lossy(&[b"console: ready\r\n"]), b"console: ready\r\n");
+        // 0xff is never valid; a lone continuation byte neither.
+        assert_eq!(lossy(&[b"a\xffb\x80c"]), "a\u{FFFD}b\u{FFFD}c".as_bytes());
+        // "é" (c3 a9) split across writes stays one character.
+        assert_eq!(lossy(&[b"caf\xc3", b"\xa9!"]), "café!".as_bytes());
+        // A three-byte sequence cut by an ASCII byte is one replacement, then the byte.
+        assert_eq!(lossy(&[b"\xe2\x82", b"x"]), "\u{FFFD}x".as_bytes());
+    }
+
+    #[test]
+    fn pc_edition_ready_line_is_a_marker() {
+        let m: Vec<String> = DEFAULT_READY_MARKERS
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let c = Console::new(None, &m, Instant::now());
+        c.guest_output(b"kernel: alive\r\nconsole: ready\r\naienos> ");
+        assert_eq!(c.times().ready().unwrap().0, "console: ready");
+    }
 
     #[test]
     fn markers_across_chunks_and_first_byte() {

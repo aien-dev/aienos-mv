@@ -28,6 +28,7 @@ options:
   --serial-log <file>     also write everything the guest prints to <file>
   --receipt               print boot timings (first output, console ready) when the VM ends
   --exit-on-ready         stop the VM as soon as AienOS reaches its console (measurements)
+  --ready-marker <text>   also count <text> in the guest output as console ready (repeatable)
   --timeout <seconds>     stop the VM after this long
   --headless              do not attach the terminal (output still logged/printed)
 
@@ -63,6 +64,7 @@ pub struct Options {
     pub serial_log: Option<PathBuf>,
     pub receipt: bool,
     pub exit_on_ready: bool,
+    pub ready_markers: Vec<String>,
     pub timeout_s: Option<u64>,
     pub headless: bool,
     pub yes: bool,
@@ -86,6 +88,7 @@ impl Default for Options {
             serial_log: None,
             receipt: false,
             exit_on_ready: false,
+            ready_markers: Vec::new(),
             timeout_s: None,
             headless: false,
             yes: false,
@@ -146,6 +149,13 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Options, String>
             "--serial-log" => o.serial_log = Some(PathBuf::from(val("--serial-log")?)),
             "--receipt" => o.receipt = true,
             "--exit-on-ready" => o.exit_on_ready = true,
+            "--ready-marker" => {
+                let m = val("--ready-marker")?;
+                if m.is_empty() {
+                    return Err("--ready-marker needs a non-empty text".into());
+                }
+                o.ready_markers.push(m);
+            }
             "--timeout" => {
                 o.timeout_s = Some(
                     val("--timeout")?
@@ -189,11 +199,29 @@ mod tests {
     #[test]
     fn options() {
         let o = p(&[
-            "--image", "/x.efi", "--backend", "kvm", "--cpus", "4", "--mem", "2048",
-            "--forward", "tcp:2222:22", "--no-default-forwards", "--receipt", "--exit-on-ready",
-            "--timeout", "30",
+            "--image",
+            "/x.efi",
+            "--backend",
+            "kvm",
+            "--cpus",
+            "4",
+            "--mem",
+            "2048",
+            "--forward",
+            "tcp:2222:22",
+            "--no-default-forwards",
+            "--receipt",
+            "--exit-on-ready",
+            "--timeout",
+            "30",
+            "--ready-marker",
+            "AIENOS-IMAC-KERNEL-0 DONE",
         ])
         .unwrap();
+        assert_eq!(
+            o.ready_markers,
+            vec!["AIENOS-IMAC-KERNEL-0 DONE".to_string()]
+        );
         assert_eq!(o.image, Some(PathBuf::from("/x.efi")));
         assert_eq!(o.backend, "kvm");
         assert_eq!((o.cpus, o.mem_mib), (4, 2048));
@@ -213,6 +241,8 @@ mod tests {
             &["--frob"],
             &["--kind", "iso"],
             &["--timeout", "0"],
+            &["--ready-marker", ""],
+            &["--ready-marker"],
         ] {
             assert!(p(bad).is_err(), "{bad:?}");
         }

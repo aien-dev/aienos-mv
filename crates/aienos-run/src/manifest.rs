@@ -218,7 +218,9 @@ fn file_entry(fields: &[&str], line: usize) -> Result<FileEntry, ManifestError> 
         || name.starts_with('.')
         || name.contains("..")
     {
-        return Err(bad("file name must be a plain name (no path, no leading dot)"));
+        return Err(bad(
+            "file name must be a plain name (no path, no leading dot)",
+        ));
     }
     let size: u64 = size.parse().map_err(|_| bad("size is not a number"))?;
     let sha256 = hex_decode::<32>(sha).ok_or_else(|| bad("sha256 is not 64 hex digits"))?;
@@ -357,13 +359,22 @@ fn verify_signature(
     Err(ManifestError::UntrustedKey(pk_hex.to_string()))
 }
 
+/// `C:\x` or `C:/x` or `\\server\share`.
+fn is_windows_absolute(s: &str) -> bool {
+    let b = s.as_bytes();
+    (b.len() > 2 && b[0].is_ascii_alphabetic() && b[1] == b':' && (b[2] == b'\\' || b[2] == b'/'))
+        || s.starts_with("\\\\")
+}
+
 /// Resolves a manifest entry URL against the manifest's own location.
 pub fn resolve_url(base: &str, url: &str) -> String {
-    if url.contains("://") || url.starts_with('/') {
+    if url.contains("://") || url.starts_with('/') || is_windows_absolute(url) {
         return url.to_string();
     }
-    match base.rfind('/') {
-        Some(i) => format!("{}/{}", &base[..i], url),
+    // A local Windows manifest path (`C:\dl\manifest.txt`) separates with backslashes.
+    let sep = |c: char| c == '/' || (!base.contains("://") && c == '\\');
+    match base.rfind(sep) {
+        Some(i) => format!("{}{}", &base[..=i], url),
         None => url.to_string(),
     }
 }
@@ -430,10 +441,7 @@ mod tests {
             Manifest::parse(&path_name, &t),
             Err(ManifestError::BadLine { .. })
         ));
-        let dup = format!(
-            "{}image aarch64 uefi-app B.EFI 4 {SHA} B.EFI\n",
-            body()
-        );
+        let dup = format!("{}image aarch64 uefi-app B.EFI 4 {SHA} B.EFI\n", body());
         assert!(matches!(
             Manifest::parse(&dup, &t),
             Err(ManifestError::Duplicate { .. })
@@ -513,5 +521,15 @@ mod tests {
             "file:///x"
         );
         assert_eq!(resolve_url("/srv/m.txt", "a.efi"), "/srv/a.efi");
+        assert_eq!(
+            resolve_url(r"C:\dl\manifest.txt", "aienos-qemu-win64.zip"),
+            r"C:\dl\aienos-qemu-win64.zip"
+        );
+        assert_eq!(resolve_url(r"C:\dl\m.txt", r"D:\x.qcow2"), r"D:\x.qcow2");
+        assert_eq!(
+            resolve_url("https://h/a\\b/m.txt", "x"),
+            "https://h/a\\b/x",
+            "backslashes in a URL are not separators"
+        );
     }
 }

@@ -15,6 +15,7 @@ use std::fmt;
 use std::path::PathBuf;
 
 pub mod qemu;
+pub mod qmp;
 
 #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
 pub mod kvm;
@@ -92,12 +93,13 @@ pub trait Backend {
 }
 
 /// Backends this build knows, in `auto` preference order.
+#[allow(clippy::vec_init_then_push)] // the pushes are per-host cfg
 pub fn all() -> Vec<Box<dyn Backend>> {
     #[allow(unused_mut)]
     let mut v: Vec<Box<dyn Backend>> = Vec::new();
     #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
     v.push(Box::new(kvm::KvmBackend::default()));
-    v.push(Box::new(qemu::QemuBackend::default()));
+    v.push(Box::new(qemu::QemuBackend::from_env()));
     v
 }
 

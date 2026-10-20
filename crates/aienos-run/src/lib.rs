@@ -5,6 +5,7 @@
 
 pub mod app;
 pub mod backend;
+pub mod bundle;
 pub mod cli;
 pub mod console;
 pub mod disk;
@@ -12,3 +13,5 @@ pub mod fetch;
 pub mod manifest;
 pub mod net;
 pub mod paths;
+#[cfg(windows)]
+pub mod win;
