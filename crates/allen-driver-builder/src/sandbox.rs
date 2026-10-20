@@ -3,16 +3,17 @@
 //! Everything runs on the host in a fresh directory, against simulated
 //! devices only; no step opens a device node or touches a PCI function.
 //! Steps, each a separate process with its command and exit code recorded:
-//!   1. `aienos-devc check`    the contract compiler's own checks
-//!   2. `aienos-devc gen`      driver + chip model + fuzzer from the contract
-//!   3. compile                the generated C with -Werror
-//!   4. selftest               a hand-written class test (never generated, never
-//!                             written by a language model) drives the generated
-//!                             driver against the generated chip model
-//!   5. fuzz                   the generated state-machine fuzzer
-//!   6. reference (optional)   the same class test drives the candidate driver
-//!                             against the chip model generated from a reference
-//!                             contract the language model never saw
+//!
+//! 1-2. `aienos-devc gen`: the contract compiler's own checks, then driver +
+//!    chip model + fuzzer from the contract.
+//! 3. compile: the generated C with -Werror.
+//! 4. selftest: a hand-written class test (never generated, never written by a
+//!    language model) drives the generated driver against the generated chip model.
+//! 5. fuzz: the generated state-machine fuzzer.
+//! 6. reference (optional): the same class test drives the candidate driver
+//!    against the chip model generated from a reference contract the language
+//!    model never saw.
+//!
 //! Each process runs with a CPU-time, file-size and core-file limit and a wall
 //! clock timeout (no address-space limit: AddressSanitizer reserves terabytes
 //! of virtual memory), under ASan + UBSan. What it is NOT: a namespace or seccomp jail (unprivileged
@@ -129,8 +130,7 @@ fn compile(
     t: &Tools,
     dir: &Path,
     name: &str,
-    drv: &Path,
-    model: &Path,
+    (drv, model): (&Path, &Path),
     main: &Path,
     prefix: &str,
     out: &str,
@@ -205,16 +205,12 @@ pub fn test(
     }
     let gen = dir.join("gen");
     let devc = s(&t.devc);
-    for (name, argv) in [
-        ("check", vec![devc.clone(), "check".into(), s(&cpath)]),
-        ("gen", vec![devc.clone(), "gen".into(), s(&cpath), s(&gen)]),
-    ] {
-        let st = run(t, dir, name, &argv);
-        let ok = st.exit == 0;
-        r.steps.push(st);
-        if !ok {
-            return r;
-        }
+    // `gen` parses and checks first and writes nothing on a refusal
+    let st = run(t, dir, "check-gen", &[devc.clone(), "gen".into(), s(&cpath), s(&gen)]);
+    let ok = st.exit == 0;
+    r.steps.push(st);
+    if !ok {
+        return r;
     }
     let (drv, model) = (gen.join("driver"), gen.join("model"));
     let selftest = class_test(&t.repo, prefix);
@@ -223,7 +219,7 @@ pub fn test(
         ("compile-selftest", &selftest, "selftest"),
         ("compile-fuzz", &fuzz_src, "fuzz"),
     ] {
-        let st = compile(t, dir, name, &drv, &model, main, prefix, out);
+        let st = compile(t, dir, name, (&drv, &model), main, prefix, out);
         let ok = st.exit == 0;
         r.steps.push(st);
         if !ok {
@@ -248,8 +244,7 @@ pub fn test(
                 t,
                 dir,
                 "compile-reference",
-                &drv,
-                &rgen.join("model"),
+                (&drv, &rgen.join("model")),
                 &selftest,
                 prefix,
                 "reference",
@@ -301,7 +296,7 @@ mod tests {
         };
         let r = test(&t, &dir, "devc 1\n", "vrng", None);
         assert!(!r.passed());
-        assert_eq!(r.steps[0].name, "check");
+        assert_eq!(r.steps[0].name, "check-gen");
         assert_ne!(r.steps[0].exit, 0);
         let _ = std::fs::remove_dir_all(&dir);
     }
