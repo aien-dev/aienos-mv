@@ -520,6 +520,26 @@ stack and resets; it never returns or touches EL1 state. After the stages,
 `mm_usage:` prints the stack high-water mark (painted stack) and the heap
 low-water free bytes.
 
+## The boot sequence on the screen (L266)
+
+The night the iMac shows at power-on (the stars come out, two black holes circle and merge, a short rising
+chirp at the merger, 15.2 s in all) is one shared module, `ui/` (byte-identical to the iMac build `0930240`),
+plus `ui/boot_show.c`, which counts every frame against a 60 Hz beat and prints one receipt line:
+
+    boot-show: 1280x800 via virtio-gpu: N frames in 15200 ms, D of 912 slots at 60 Hz dropped, F fps, ...
+
+- `make full CK_BOOT_SHOW=1` (`$(OUT)/full-boot-show/`): the aarch64 image plays it once after the devices
+  stage. Screen: the VM's virtio-gpu (`dev/virtio_gpu.c`, the aienos-run window) first, else the GOP
+  framebuffer. Sound: the VM's virtio-sound (`dev/virtio_snd.c`), else silent. Both drivers sit on
+  `dev/virtio_q.c` and `dev/virtio_bind.c`; their DMA is confined through the SMMU like every other device's,
+  and refused without it. Default `CK_BOOT_SHOW=0` keeps the QEMU gates' timing.
+- Shown in the emulator only so far: `scripts/qemu_ck_boot_show_test.sh [tcg|kvm]` (screen, receipt,
+  screendump, and the captured sound compared sample by sample with the formula). Not yet on the Spark's own
+  screen; on real hardware the night uses the GOP framebuffer path, which no gate has exercised yet.
+- Host tests: `scripts/ck_boot_show_test.sh`, `scripts/ck_virtio_av_test.sh` (command layouts checked
+  against the virtio spec's Linux UAPI copy), `scripts/ck_allen_ui_test.sh`, `scripts/ck_chirp_test.sh`.
+- Frame rates, the x86 path and the GPU path: `docs/BOOT_EVERYWHERE.md`.
+
 ## Memory map the kernel builds
 
 - RAM (UEFI RAM types with the WB attribute): Normal write-back, RW,
