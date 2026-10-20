@@ -150,7 +150,43 @@ test (`tests/vnet_test.c`) and one self-contained QEMU gate with an SMMU fence
 (`scripts/qemu_ck_net_test.sh`). `disk_nvme.c` is 537 lines and feeds four or more gates (M4_NVME,
 M4_STORE, SMMU, NVME_SHUTDOWN), a larger blast radius for a first prototype.
 
-RESULTS-PLACEHOLDER
+All on the Spark (aarch64 host, QEMU), branch `feat/driver-contract-model`. Commands and exit codes:
+
+| Check | Command | Exit | Result |
+|---|---|---|---|
+| contract compiles, checker refuses 11 bad edits, trace inference | `cargo test -q -p aienos-devc` | 0 | OBSERVED: 5 tests pass |
+| lint | `cargo clippy -q -p aienos-devc --all-targets -- -D warnings` | 0 | OBSERVED: clean |
+| no drift; recording stays inside the contract | `make -C native/net contract-check` | 0 | OBSERVED: `AIENOS_DEVC_CHECK: PASS`, `AIENOS_DEVC_COVERS: PASS (3979 accesses, 25 registers, 0 outside)` |
+| same hosted test as the hand driver | `make -C native/net contract-test` | 0 | OBSERVED: `VIRTIO_PCI_QEMU822_CAPS`, `VNET_ACCESS_PLATFORM_SIM`, `VNET_M6A_UDP_ROUNDTRIP_SIM`, `VNET_SIM_DATAPATH` all PASS on the generated driver |
+| fuzzer, both drivers | (same) | 0 | OBSERVED: 20000 walks each, `VNET_FUZZ: PASS`, identical visit counts (tx 245090, rx 245077, hostile 30870, reset 15190) |
+| differential register + DMA trace | (same) | 0 | OBSERVED: `VNET_TRACE_DIFF: PASS (100952 lines identical, hand vs generated)` |
+| sanitizers | `make -C native/net contract-sanitize` | 0 | OBSERVED: all of the above under ASan + UBSan |
+| QEMU NET gate, hand driver | `scripts/qemu_ck_net_test.sh` | 0 | OBSERVED: `AIENOS_CK_NET: PASS`, 86 PASS, 0 FAIL |
+| QEMU NET gate, generated driver | `AIENOS_CK_NET_IMPL=contract scripts/qemu_ck_net_test.sh` | 0 | OBSERVED: `AIENOS_CK_NET: PASS`, the same 86 PASS lines plus `driver generated from the virtio-net contract, digest printed, UNPROVEN`, 0 FAIL. Includes the SMMU fence: RX descriptors redirected outside the window fault, the device recovers inside it. |
+
+Size: the contract is 114 statements (171 lines with comments); the generated driver is 377 lines
+against the hand driver's 345; `hand_logic_lines=0` (OBSERVED, `aienos-devc stats`).
+
+Two defects the process found and fixed (not waived): the first generated C failed the strict build
+(unused register accessors; a `length >= 0` test on an unsigned field in the model), and the first
+fuzzer judged a planted bad completion wrongly when the walk touched the other queue first (it failed
+the hand driver identically, which is how it was found to be the fuzzer's fault).
+
+Timing, three receipts in `native/net/contract/receipts/`, all under `quiet-measure` (fast cores, no
+builds running):
+
+| Receipt | What | Hand | Generated | Verdict |
+|---|---|---|---|---|
+| `vnet-timing-20261020T184324Z` | hosted twin, -O2, same chip model, 20 rounds x 5 reps interleaved; noise bound from hand odd vs even rounds | init 2210 ns, round trip 102 ns | init 2188 ns, round trip 102 ns | OBSERVED: `VNET_TIMING: WITHIN_NOISE` (bounds 44 ns and 2 ns), exit 0 |
+| `vnet-qemu-timing-20261020T184324Z` | QEMU NET gate, 5 rounds, hand always first | init median 1302 us, round trip 5472 us, gate wall 19.4 s | init 1479 us, round trip 4425 us, wall 20.1 s | OBSERVED: 10/10 gates PASS; init higher for the generated driver in 5/5 rounds |
+| `vnet-qemu-timing-abba-20261020T185822Z` | the control: 6 rounds, order hand, generated, generated, hand | init median 2412 us (spread 1980 to 3477), round trip 8529 us, wall 21.8 s | init 2101 us (spread 1412 to 3708), round trip 4367 us, wall 22.0 s | OBSERVED: 24/24 gates PASS; the init sign flipped |
+
+Reading (INFERRED): the 5-round gap in init was the run order and the box, not the driver. With the
+order balanced the generated driver came out faster, and the two init routines are 2712 and 2768
+bytes of machine code (`nm -S` on both kernel images). QEMU here is TCG (software emulation, one
+thread), so in-guest timings vary widely between identical runs of the same image (hand driver alone: init
+1.76x, calc:ca3c49b9, round trip 1.86x, calc:f38d479a, plus one 105783 us outlier); the in-guest numbers can show a large regression but not a small one. The hosted twin is
+the precise comparison and it is within noise. Rule (d) is met for QEMU; real hardware is U1.
 
 ## Options considered
 
@@ -172,6 +208,7 @@ RESULTS-PLACEHOLDER
 | U4 | How much of a GPU (L214) fits the declarative part? | Draft the MacBook GPU contract; count `logic` lines against total. |
 | U5 | Can Omegese stage 0 compile the contract with checker2 receipts? | After L184 K1/K2/K5 land: compile `gen/virtio_net.omegese`, verify the receipt with `osc_receipt_verify`. |
 | U6 | Interrupt-driven classes: what does `irq msix N` grant and how is it checked? | Add class `net-irq` with an MSI-X vector capability; negative test: a driver that unmasks an undeclared vector is refused. |
+| U7 | Why is the generated driver's in-guest round trip lower in both QEMU receipts (median 4425 vs 5472 us, 4367 vs 8529 us) when the hosted twin and the register trace are identical? | Same gate with `-accel kvm` on an aarch64 host, ABBA order, 12 rounds; if the gap holds, swap the link order of the two driver objects to test code placement. |
 
 ## What devc 2 must add (from the RTL8127 sketch)
 

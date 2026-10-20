@@ -224,7 +224,6 @@ mod tests {
                 "  kick RX\n  write DOORBELL 0\n",
                 "rung by `kick`",
             ),
-            ("  write Q_ENABLE 1\nend\n", "  write Q_ENABLE 1\nend\n", ""),
             (
                 "  write MSIX 0xffff\n",
                 "  write MSIX 0xffff\n  write Q_SIZE 4\n",
@@ -239,9 +238,6 @@ mod tests {
             ),
         ];
         for (from, to, want) in bad {
-            if want.is_empty() {
-                continue;
-            }
             assert!(VNET.contains(from), "fixture line missing: {from}");
             let src = VNET.replace(from, to);
             let e = contract::parse(&src, "t").expect_err(&format!("accepted: {to}"));

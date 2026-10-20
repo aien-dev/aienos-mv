@@ -1,0 +1,34 @@
+receipt vnet-qemu-timing-abba 20261020T185822Z
+host spark-b87b aarch64 qemu QEMU emulator version 8.2.2 (Debian 1:8.2.2+ds-0ubuntu1.18)
+commit 6c202f8bf152f58ba317d1e9fba7e17d66111104 dirty=3
+method scripts/qemu_ck_net_test.sh 6 rounds, order hand,contract,contract,hand each round, under quiet-measure; in-guest ck_time_us
+round=1 impl=hand gate_exit=0 gate=PASS wall_ms=21819 driver=hand init_us=2179 roundtrip_us=8059
+round=1 impl=contract gate_exit=0 gate=PASS wall_ms=25879 driver=contract init_us=3422 roundtrip_us=3795
+round=1 impl=contract gate_exit=0 gate=PASS wall_ms=21679 driver=contract init_us=2140 roundtrip_us=4162
+round=1 impl=hand gate_exit=0 gate=PASS wall_ms=26068 driver=hand init_us=2565 roundtrip_us=8915
+round=2 impl=hand gate_exit=0 gate=PASS wall_ms=25586 driver=hand init_us=2488 roundtrip_us=9379
+round=2 impl=contract gate_exit=0 gate=PASS wall_ms=23644 driver=contract init_us=1452 roundtrip_us=3544
+round=2 impl=contract gate_exit=0 gate=PASS wall_ms=29152 driver=contract init_us=2750 roundtrip_us=6512
+round=2 impl=hand gate_exit=0 gate=PASS wall_ms=24406 driver=hand init_us=3445 roundtrip_us=9037
+round=3 impl=hand gate_exit=0 gate=PASS wall_ms=22399 driver=hand init_us=1980 roundtrip_us=5861
+round=3 impl=contract gate_exit=0 gate=PASS wall_ms=21757 driver=contract init_us=1412 roundtrip_us=3672
+round=3 impl=contract gate_exit=0 gate=PASS wall_ms=19935 driver=contract init_us=1998 roundtrip_us=3297
+round=3 impl=hand gate_exit=0 gate=PASS wall_ms=21100 driver=hand init_us=2270 roundtrip_us=6738
+round=4 impl=hand gate_exit=0 gate=PASS wall_ms=21787 driver=hand init_us=2465 roundtrip_us=105783
+round=4 impl=contract gate_exit=0 gate=PASS wall_ms=21284 driver=contract init_us=2420 roundtrip_us=4572
+round=4 impl=contract gate_exit=0 gate=PASS wall_ms=21494 driver=contract init_us=1866 roundtrip_us=6295
+round=4 impl=hand gate_exit=0 gate=PASS wall_ms=20565 driver=hand init_us=2325 roundtrip_us=8040
+round=5 impl=hand gate_exit=0 gate=PASS wall_ms=22078 driver=hand init_us=2166 roundtrip_us=8254
+round=5 impl=contract gate_exit=0 gate=PASS wall_ms=23232 driver=contract init_us=1771 roundtrip_us=5599
+round=5 impl=contract gate_exit=0 gate=PASS wall_ms=22257 driver=contract init_us=2062 roundtrip_us=3649
+round=5 impl=hand gate_exit=0 gate=PASS wall_ms=21444 driver=hand init_us=2473 roundtrip_us=8804
+round=6 impl=hand gate_exit=0 gate=PASS wall_ms=21674 driver=hand init_us=3477 roundtrip_us=10919
+round=6 impl=contract gate_exit=0 gate=PASS wall_ms=22757 driver=contract init_us=3708 roundtrip_us=7010
+round=6 impl=contract gate_exit=0 gate=PASS wall_ms=21311 driver=contract init_us=2357 roundtrip_us=7046
+round=6 impl=hand gate_exit=0 gate=PASS wall_ms=21751 driver=hand init_us=2359 roundtrip_us=6946
+median hand init_us=2412 all: 1980 2166 2179 2270 2325 2359 2465 2473 2488 2565 3445 3477 
+median hand roundtrip_us=8529 all: 5861 6738 6946 8040 8059 8254 8804 8915 9037 9379 10919 105783 
+median hand wall_ms=21803 all: 20565 21100 21444 21674 21751 21787 21819 22078 22399 24406 25586 26068 
+median contract init_us=2101 all: 1412 1452 1771 1866 1998 2062 2140 2357 2420 2750 3422 3708 
+median contract roundtrip_us=4367 all: 3297 3544 3649 3672 3795 4162 4572 5599 6295 6512 7010 7046 
+median contract wall_ms=22007 all: 19935 21284 21311 21494 21679 21757 22257 22757 23232 23644 25879 29152 
