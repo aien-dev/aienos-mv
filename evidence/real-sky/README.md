@@ -38,7 +38,7 @@ generated tables at each gain (see `gain-measure.txt`).
 | Milky Way luma | 64980 |
 | Milky Way colour | 32580 |
 | `sky_data.c` as source text (level 7, and level 6) | 452276 |
-| `IMACKERN.EFI` (built from `962ee43` plus this change; see below) | 405504 |
+| `IMACKERN.EFI` (built at `4221f12`, `make -C native/kernel imac-kernel`, -Werror) | 405504 |
 
 ## Timings (Spark, one core, shared machine: not a quiet-lock timing, not the iMac)
 

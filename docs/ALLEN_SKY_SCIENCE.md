@@ -373,8 +373,8 @@ Sizes, timings and pictures are in `evidence/real-sky/README.md`. On one core of
   by the input. Level 7 uses all 196608 Gaia cells (the level-6 build used 49152). Its table differs
   from level 6 in 945 of its 5610 lines. The Galactic-centre luminance ratio is the same to two
   decimals (3.23 at gain 1.2).
-- `IMACKERN.EFI` is 405504 bytes, built from `962ee43` plus this change (it is rebuilt after the
-  commit; see the README for the final figure). The earlier real-sky figure was 348160.
+- `IMACKERN.EFI` is 405504 bytes, built by `make -C native/kernel imac-kernel` at `4221f12` (the code
+  commit; the docs commit after it changes no code). The earlier real-sky figure was 348160.
 - Host checks: the sky test 13 of 13 pass (`ck_sky_test.sh`); the Allen window test and its picture
   checks, the Allen place test (26 checks) and the Allen memory test are in
   `evidence/real-sky/README.md`. Not run: the full `make -C native/kernel test` suite and the QEMU
