@@ -1,0 +1,16 @@
+[package]
+name = "allen-driver-builder"
+description = "Allen's driver builder: inventory every device, load or stage a device contract, or have the user's language model write one and prove it in a sandbox (L268, ADR 0021)"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "allen-driver-builder"
+path = "src/main.rs"
+
+[dependencies]
+aienos-crypto = { workspace = true }
+serde_json = { workspace = true, features = ["std"] }

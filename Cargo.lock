@@ -132,6 +132,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "allen-driver-builder"
+version = "0.1.0"
+dependencies = [
+ "aienos-crypto",
+ "serde_json",
+]
+
+[[package]]
 name = "allen-reflex"
 version = "0.1.0"
 dependencies = [

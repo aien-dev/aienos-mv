@@ -942,6 +942,19 @@ FULL_NAME := full-test-console-mutation
 STAGE_DMA_FLAGS += -DCK_TEST_CONSOLE_MUTATION=1
 endif
 endif
+# Allen's driver builder (L268): CK_CONTRACT_RNG=<staged dir> links the entropy
+# driver generated from the staged contract (<dir>/driver/vrng_contract.c) and
+# dev/rng_bind.c. CK_CONTRACT_RNG_ATTENDED=1 lets an UNPROVEN contract bind; the
+# builder sets it only after a consent record. QEMU images only.
+ifneq ($(strip $(CK_CONTRACT_RNG)),)
+ifneq ($(strip $(CK_HARDWARE_STAGING)),)
+$(error CK_CONTRACT_RNG is for QEMU images; it cannot be combined with CK_HARDWARE_STAGING)
+endif
+FULL_NAME := $(FULL_NAME)-rng-contract
+STAGE_SRCS += $(KDIR)/dev/rng_bind.c $(abspath $(CK_CONTRACT_RNG))/driver/vrng_contract.c
+STAGE_DMA_FLAGS += -DCK_CONTRACT_RNG=1 -DCK_CONTRACT_RNG_ATTENDED=$(if $(filter 1,$(CK_CONTRACT_RNG_ATTENDED)),1,0) \
+                   -I$(abspath $(CK_CONTRACT_RNG))/driver
+endif
 ifneq ($(strip $(CK_HARDWARE_STAGING)),)
 # Own OUT subdirectory: stage objects built with these flags never mix with
 # the default full image's objects.

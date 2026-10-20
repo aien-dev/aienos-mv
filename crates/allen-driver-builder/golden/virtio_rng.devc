@@ -1,0 +1,134 @@
+# virtio_rng.devc -- the virtio entropy device contract (ADR 0021, format devc 1,
+# class entropy-poll). GOLDEN: hand-written by the builder's authors to prove
+# the pipe (generator -> chip model -> fuzzer -> kernel -> QEMU) before any
+# language model is involved. It is NEVER shown to a language model: the
+# builder's prompt carries virtio_net.devc as the example, never this file.
+
+devc 1
+device virtio-rng
+prefix vrng
+class entropy-poll
+transport virtio-pci
+ring-kind virtq-split
+
+# ---- identity ----
+match pci 0x1af4 0x1044
+
+# ---- evidence ----
+manual "OASIS virtio v1.2 cs01" "5.4.2 Entropy device: Virtqueues" "0 requestq"
+manual "OASIS virtio v1.2 cs01" "5.4.3 Entropy device: Feature bits" "None currently defined"
+manual "OASIS virtio v1.2 cs01" "5.4.6 Device Operation" "When the driver requires random bytes, it places the descriptor of one or more buffers in the queue. It will be completely filled by random data by the device."
+manual "OASIS virtio v1.2 cs01" "5.4.6.1 Driver Requirements: Device Operation" "The driver MUST NOT place device-readable buffers into the queue. The driver MUST examine the length written by the device to determine how many random bytes were received."
+manual "OASIS virtio v1.2 cs01" "3.1.1 Driver Requirements: Device Initialization" "Re-read device status to ensure the FEATURES_OK bit is still set: otherwise, the device does not support our subset of features and the device is unusable."
+manual "OASIS virtio v1.2 cs01" "2.7.8 The Virtqueue Used Ring" "The device MUST set len prior to updating the used idx."
+proven qemu-virt-aarch64 spark-gx10-qemu822 2026-10-20 AIENOS_CK_DRIVER_BUILDER pending
+
+# ---- constants ----
+const QUEUE_MAX 64
+const QUEUE_MIN 1
+const HDR_LEN 0
+const BUF_LEN 64
+const BUF_STRIDE 64
+const RESET_POLLS 100000
+
+# ---- register windows ----
+window common 0 virtio-cap 1 min 0x38 tag CC
+window notify 1 virtio-cap 2 min 2 multiplier
+window isr 2 virtio-cap 3 min 0
+window device 3 virtio-cap 4 min 0
+
+# ---- registers (common: virtio 1.2 4.1.4.3) ----
+reg common DFSELECT 0x00 4 rw reset 0
+reg common DF 0x04 4 ro bank DFSELECT role offer
+reg common GFSELECT 0x08 4 rw reset 0
+reg common GF 0x0c 4 rw bank GFSELECT role accept
+reg common MSIX 0x10 2 rw reset 0xffff
+reg common NUMQ 0x12 2 ro role numq
+reg common STATUS 0x14 1 rw reset 0 role status
+reg common CFGGEN 0x15 1 ro role cfggen
+reg common Q_SELECT 0x16 2 rw reset 0
+reg common Q_SIZE 0x18 2 rw bank Q_SELECT role qsize
+reg common Q_MSIX 0x1a 2 rw bank Q_SELECT reset 0xffff
+reg common Q_ENABLE 0x1c 2 rw bank Q_SELECT reset 0 role qenable
+reg common Q_NOFF 0x1e 2 ro bank Q_SELECT role qnoff
+reg common Q_DESCLO 0x20 4 rw bank Q_SELECT role qdesc
+reg common Q_DESCHI 0x24 4 rw bank Q_SELECT
+reg common Q_AVAILLO 0x28 4 rw bank Q_SELECT role qavail
+reg common Q_AVAILHI 0x2c 4 rw bank Q_SELECT
+reg common Q_USEDLO 0x30 4 rw bank Q_SELECT role qused
+reg common Q_USEDHI 0x34 4 rw bank Q_SELECT
+reg notify DOORBELL 0x00 2 wo queue-notify
+
+bits STATUS S ACK=0 DRIVER=1 DRIVER_OK=2 FEATURES_OK=3 NEEDS_RESET=6 FAILED=7
+
+# ---- features: the entropy device defines none of its own ----
+feature VERSION_1 32 require else NO_VERSION_1
+feature ACCESS_PLATFORM 33 accept required-by REQUIRE_ACCESS_PLATFORM else NO_ACCESS_PLATFORM
+features banks 2 offer DFSELECT DF accept GFSELECT GF
+
+flag REQUIRE_ACCESS_PLATFORM 1
+
+error ARG 1 Arg
+error CAPS 2 Caps
+error MEM 3 Mem
+error RESET_TIMEOUT 4 ResetTimeout
+error NO_VERSION_1 5 NoVersion1
+error FEATURES 6 FeaturesRefused
+error QUEUES 7 Queues
+error NOTIFY 8 NotifyOffset
+error DEVICE 11 HostileDevice
+error BROKEN 12 Broken
+error NO_ACCESS_PLATFORM 13 NoAccessPlatform
+
+# ---- resources ----
+dma region align 16
+irq none
+queue-size min QUEUE_MIN max QUEUE_MAX pow2
+
+# ---- the one ring: the device writes random bytes into our buffers ----
+ring REQ 0 virtq-split device-writes buf BUF_LEN stride BUF_STRIDE hdr HDR_LEN
+
+failmark STATUS FAILED
+init
+  write STATUS 0
+  poll STATUS == 0 tries RESET_POLLS else RESET_TIMEOUT nofail
+  write STATUS ACK
+  write STATUS ACK|DRIVER
+  armfail
+  negotiate
+  write STATUS ACK|DRIVER|FEATURES_OK
+  expect STATUS has FEATURES_OK else FEATURES
+  commit-features
+  write MSIX 0xffff
+  expect NUMQ >= 1 else QUEUES
+  queues REQ
+  post REQ
+  write STATUS ACK|DRIVER|FEATURES_OK|DRIVER_OK
+  expect STATUS has DRIVER_OK lacks NEEDS_RESET|FAILED else DEVICE
+  live
+  kick REQ
+end
+
+qsetup
+  write Q_SELECT ring
+  read Q_SIZE max
+  expect max != 0 else QUEUES
+  expect Q_ENABLE == 0 else QUEUES
+  fit max min QUEUE_MIN else QUEUES
+  write Q_SIZE size
+  write Q_MSIX 0xffff
+  notify-offset Q_NOFF else NOTIFY
+  write64 Q_DESCLO Q_DESCHI desc
+  write64 Q_AVAILLO Q_AVAILHI avail
+  write64 Q_USEDLO Q_USEDHI used
+  avail-flags NO_INTERRUPT
+  write Q_ENABLE 1
+end
+
+rule GF write requires-status DRIVER lacks FEATURES_OK
+rule Q_SIZE write requires-status FEATURES_OK lacks DRIVER_OK
+rule Q_ENABLE write requires-status FEATURES_OK lacks DRIVER_OK
+rule Q_DESCLO write requires-status FEATURES_OK lacks DRIVER_OK
+rule Q_AVAILLO write requires-status FEATURES_OK lacks DRIVER_OK
+rule Q_USEDLO write requires-status FEATURES_OK lacks DRIVER_OK
+rule DOORBELL write requires-status DRIVER_OK lacks FAILED

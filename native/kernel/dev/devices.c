@@ -9,6 +9,9 @@
 #include "net_bind.h"
 #include "xhci_fence.h"
 #include "usb_kbd.h"
+#if defined(CK_CONTRACT_RNG) && CK_CONTRACT_RNG
+#include "rng_bind.h"
+#endif
 #include "../../boot/slot_format.h"
 
 static pci_system g_pci;
@@ -85,6 +88,62 @@ void ck_dev_nvme_release(void)
     if (!g_nvme.bm_on && !g_nvme.confined && !g_nvme.stuck) g_nvme.claimed = 0;
 }
 
+/* Device inventory for Allen's driver builder (L268): one line per function
+ * after binding, in the format crates/allen-driver-builder/src/inventory.rs
+ * reads:
+ *   inventory: pci SSSS:BB:DD.F VVVV:DDDD class=CCCCCC subsys=VVVV:SSSS rev=RR
+ *              bars=<i>:<addr>:<size>[,..]|none driver=<name>|none
+ *              contract=<digest12>|none proven=yes|no|n/a
+ * Segment 0 functions (the enumeration that sized the BARs) plus the NVMe
+ * the bind took from any segment. A claim names the kernel driver that bound
+ * the function in this boot; report-only, nothing reads it back. */
+#define INV_CLAIMS 8u
+struct inv_claim {
+    uint16_t seg;
+    uint8_t bus, dev, fn;
+    const char *driver, *contract, *proven;
+};
+static struct inv_claim g_claims[INV_CLAIMS];
+static unsigned g_nclaims;
+static void inv_claim(const pci_func *f, const char *driver, const char *contract, const char *proven)
+{
+    if (!f || g_nclaims >= INV_CLAIMS) return;
+    g_claims[g_nclaims++] = (struct inv_claim){f->segment, f->bus, f->dev, f->fn, driver, contract, proven};
+}
+static const struct inv_claim *inv_find(const pci_func *f)
+{
+    for (unsigned i = 0; i < g_nclaims; i++)
+        if (g_claims[i].seg == f->segment && g_claims[i].bus == f->bus && g_claims[i].dev == f->dev &&
+            g_claims[i].fn == f->fn)
+            return &g_claims[i];
+    return 0;
+}
+static void inv_line(const pci_func *f)
+{
+    const struct inv_claim *c = inv_find(f);
+    ck_printf("inventory: pci %04x:%02x:%02x.%u %04x:%04x class=%06x subsys=%04x:%04x rev=%02x bars=", f->segment,
+              f->bus, f->dev, f->fn, f->vendor, f->device, f->class_code, f->subsys_vendor, f->subsys_id,
+              (unsigned)(pci_r32(f->cfg, 0x08) & 0xffu));
+    unsigned nb = 0;
+    for (unsigned b = 0; b < PCI_MAX_BARS; b++) {
+        if (f->bar[b].size == 0 || f->bar[b].io) continue;
+        ck_printf("%s%u:0x%llx:0x%llx", nb++ ? "," : "", b, (unsigned long long)f->bar[b].addr,
+                  (unsigned long long)f->bar[b].size);
+    }
+    ck_printf("%s driver=%s contract=%s proven=%s\n", nb ? "" : "none", c ? c->driver : "none",
+              c && c->contract ? c->contract : "none", c && c->proven ? c->proven : "n/a");
+}
+static void inventory_report(void)
+{
+    unsigned n = 0;
+    for (uint32_t i = 0; i < g_pci.n; i++, n++) inv_line(&g_pci.f[i]);
+    if (g_nvme.pf && g_nvme.pf->segment != 0) {
+        inv_line(g_nvme.pf);
+        n++;
+    }
+    ck_printf("inventory: end functions=%u\n", n);
+}
+
 int ck_stage_devices(void)
 {
     int rc = pci_stage_probe(&g_pci);
@@ -126,6 +185,18 @@ int ck_stage_devices(void)
      * devices-stage failure. */
     int xrc = ck_xhci_fence(&g_pci);
     ck_printf("devices: xhci=%s (rc=%d)\n", ck_xhci_state(), xrc);
+    if (g_nvme.claimed) inv_claim(g_nvme.pf, "nvme", 0, 0);
+    if (vrc == 0 && vf) inv_claim(vf, "virtio_net", 0, 0);
+    if (xrc == 0) inv_claim(pci_find_class(&g_pci, 0x0c0330u, 0xffffffu), "xhci_fence", 0, 0);
+#if defined(CK_CONTRACT_RNG) && CK_CONTRACT_RNG
+    /* A driver Allen's builder generated from a contract the user consented
+     * to (rng_bind.h). Reported, never a devices-stage failure. */
+    const pci_func *rf = 0;
+    int rrc = ck_rng_bind_selftest(&g_pci, &rf);
+    ck_printf("devices: virtio_rng=%s (rc=%d)\n", rrc == CK_RNG_OK ? "up" : rrc == CK_RNG_ABSENT ? "absent" : "refused", rrc);
+    if (rf && rrc != CK_RNG_E_UNPROVEN) inv_claim(rf, "vrng_contract", ck_rng_contract_short(), ck_rng_contract_proven());
+#endif
+    inventory_report();
     ck_kbd_recovery_report(ck_xhci_state());
     if (ck_kbd_recovery_requested()) {
         /* Recovery access chosen: the xHCI is already revoked; release every
@@ -149,6 +220,9 @@ void ck_stage_quiesce(void)
 {
     int net_live = ck_net_live();
     if (net_live) ck_net_release();
+#if defined(CK_CONTRACT_RNG) && CK_CONTRACT_RNG
+    if (ck_rng_live()) ck_rng_release();
+#endif
     int xhci_live = ck_xhci_live();
     if (xhci_live) ck_xhci_release();
     int was_live = g_nvme.pf && (g_nvme.bm_on || g_nvme.confined);
