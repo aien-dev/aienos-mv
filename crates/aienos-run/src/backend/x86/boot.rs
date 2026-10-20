@@ -248,8 +248,8 @@ pub fn load_pe(mem: &mut GuestMem, file: &[u8], base: u64) -> Result<Loaded, Str
             if bsize < 8 || blk + bsize > end {
                 return Err("bad relocation block".into());
             }
-            for e in img[blk + 8..blk + bsize].to_vec().chunks_exact(2) {
-                let e = u16::from_le_bytes([e[0], e[1]]);
+            for e in img[blk + 8..blk + bsize].to_vec().as_chunks::<2>().0 {
+                let e = u16::from_le_bytes(*e);
                 let at = page + usize::from(e & 0xfff);
                 match e >> 12 {
                     0 => {}

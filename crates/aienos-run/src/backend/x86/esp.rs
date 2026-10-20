@@ -89,8 +89,10 @@ impl<R: Read + Seek> Qcow2<R> {
         let mut raw = vec![0u8; l1_size * 8];
         Raw(&mut r).read_at(l1_off, &mut raw)?;
         let l1 = raw
-            .chunks_exact(8)
-            .map(|b| u64::from_be_bytes(b.try_into().expect("8")))
+            .as_chunks::<8>()
+            .0
+            .iter()
+            .map(|b| u64::from_be_bytes(*b))
             .collect();
         Ok(Qcow2 {
             r,
@@ -115,8 +117,10 @@ impl<R: Read + Seek> Qcow2<R> {
             let mut raw = vec![0u8; 1 << self.cluster_bits];
             Raw(&mut self.r).read_at(l2_off, &mut raw)?;
             let t = raw
-                .chunks_exact(8)
-                .map(|b| u64::from_be_bytes(b.try_into().expect("8")))
+                .as_chunks::<8>()
+                .0
+                .iter()
+                .map(|b| u64::from_be_bytes(*b))
                 .collect();
             self.l2.insert(l2_off, t);
         }
@@ -330,7 +334,7 @@ impl Fat {
     /// (first cluster, size, is_dir) of `name` in a directory's bytes.
     fn lookup(dir: &[u8], name: &str) -> Option<(u32, u64, bool)> {
         let short = short_name(name)?;
-        for e in dir.chunks_exact(32) {
+        for e in dir.as_chunks::<32>().0 {
             match e[0] {
                 0 => return None,
                 0xe5 => continue,
