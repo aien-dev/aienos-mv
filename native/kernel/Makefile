@@ -2295,10 +2295,12 @@ endif
 IMACKERN_HDRS := $(X86K)/x86.h $(BOOT)/handoff.h $(BOOT)/efi.h $(KDIR)/core/ck_internal.h $(KDIR)/include/ck.h
 GPU_DIR := $(KDIR)/gpu
 # CK_X86_GPU: drive the AMD GPU (DCE 11.2 page flip, GMC, SMU, gfx/SDMA/compute rings).
-# Default 1 for `make imac-kernel`; 0 builds stubs only. The chip is not present
-# in QEMU (says so once). CK_X86_GPU_UCODE=1 additionally embeds the polaris11
+# Default 0 (stubs) until each bring-up step has run on the real iMac through
+# the bench (feat/imac-gpu-bench): a wrong GPU register write can wedge the
+# PCIe link, and only a 4 s power hold (a firmware boot) recovers it. Lab
+# builds opt in with CK_X86_GPU=1. The chip is not present in QEMU (says so once). CK_X86_GPU_UCODE=1 additionally embeds the polaris11
 # firmware blobs fetched by scripts/fetch_gpu_ucode.sh (never committed).
-CK_X86_GPU ?= 1
+CK_X86_GPU ?= 0
 ifeq ($(CK_X86_GPU),1)
 IMACKERN_CFLAGS += -DCK_X86_GPU=1
 CK_X86_GPU_UCODE ?= 0
@@ -2308,7 +2310,7 @@ endif
 else ifeq ($(CK_X86_GPU),0)
 IMACKERN_CFLAGS += -DCK_X86_GPU=0
 else
-$(error CK_X86_GPU must be 1 (default: GPU driver) or 0 (stubs))
+$(error CK_X86_GPU must be 1 (GPU driver, lab) or 0 (default: stubs))
 endif
 $(IMACKERN_DIR)/efi_entry_x86_64.o: $(BOOT)/efi_entry_x86_64.S
 $(IMACKERN_DIR)/efi_x86.o: $(X86K)/efi_x86.c $(IMACKERN_HDRS) $(BOOT)/netboot_proto.h
