@@ -699,11 +699,12 @@ static ipj_status frame_to(ipj_node *n, const uint8_t pk[32], const uint8_t *fra
 
 static const uint8_t *next_hop(ipj_node *n, const uint8_t dest[32])
 {
-    /* An owner-configured route wins over a direct session (for example: reach
-     * the laptop through the Pi). */
+    /* An owner-configured route binds (for example: reach the laptop through the
+     * Pi). It wins over a direct session, and while its relay is not live the
+     * destination has no next hop: never a silent detour around the route. */
     for (unsigned i = 0; i < IPJ_ROUTES_MAX; i++)
-        if (n->route[i].used && memcmp(n->route[i].dest, dest, 32) == 0 && peer_by_pk(n, n->route[i].via))
-            return n->route[i].via;
+        if (n->route[i].used && memcmp(n->route[i].dest, dest, 32) == 0)
+            return peer_by_pk(n, n->route[i].via) ? n->route[i].via : 0;
     if (peer_by_pk(n, dest)) return dest;
     return 0;
 }

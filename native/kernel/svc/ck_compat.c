@@ -41,6 +41,13 @@ __attribute__((weak)) int memcmp(const void *x, const void *y, size_t n)
         if (*a != *b) return *a < *b ? -1 : 1;
     return 0;
 }
+__attribute__((weak)) size_t strnlen(const char *s, size_t max)
+{
+    size_t n = 0;
+    while (n < max && s[n])
+        n++;
+    return n;
+}
 
 /* ---- heap, clock, lock ------------------------------------------------- */
 void *ck_compat_malloc(size_t n) { return ck_alloc(n ? n : 1); }

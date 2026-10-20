@@ -1,0 +1,29 @@
+# tests/gates/aienos-ck-interplane.gate
+# Interplane join (ledger L263): scripts/qemu_ck_interplane_test.sh boots five CK_INTERPLANE=1 C kernels in QEMU
+# on one virtual LAN: three members join one owner-signed roster, a signed message goes spark -> pi -> mac,
+# a revoked machine is refused, a TEST roster entry is refused in production. No hosted counterpart.
+gate: AIENOS-CK-INTERPLANE
+manifest_version: 2
+owner: aienos
+requires:
+  - qemu
+inputs:
+  - native/net/
+  - native/kernel/
+  - native/boot/
+  - native/sig/
+  - native/crypto/
+  - native/argus/
+  - scripts/qemu_ck_interplane_test.sh
+  - scripts/lib_gate_hold.sh
+  - tests/gates/
+run:
+  exec: tests/gates/run.sh
+  args: ["ck-interplane"]
+expects:
+  exit: 0
+  observe: ["interplane_pass == true"]
+  verdict: PASS
+timeout: 30m
+exactness: EXACT
+cache_scope: machine

@@ -53,11 +53,11 @@ size_t ck_net_arp_reply(const ck_net_peer *p, const net_arp_packet *req, uint8_t
     return arp_frame(p, NET_ARP_REPLY, &req->sender_mac, req->sender_ip, &req->sender_mac, out, cap);
 }
 
-size_t ck_net_udp_frame(const ck_net_peer *p, uint16_t ip_id, const uint8_t *data, size_t n, uint8_t *out,
-                        size_t cap)
+static size_t udp_frame(const ck_net_peer *p, const net_mac *dst, uint16_t ip_id, const uint8_t *data, size_t n,
+                        uint8_t *out, size_t cap)
 {
     static uint8_t udp[1500], ip[1500];
-    if (!p || !out || (n && !data) || !mac_unicast(&p->gw_mac)) return 0;
+    if (!out || (n && !data)) return 0;
     net_udp_header uh = {p->lport, p->rport};
     size_t uw = 0, iw = 0;
     if (net_udp_build(&uh, data, n, p->ip, p->gw_ip, udp, sizeof udp, &uw) != NET_OK) return 0;
@@ -69,7 +69,21 @@ size_t ck_net_udp_frame(const ck_net_peer *p, uint16_t ip_id, const uint8_t *dat
     ih.source = p->ip;
     ih.destination = p->gw_ip;
     if (net_ipv4_build(&ih, udp, uw, ip, sizeof ip, &iw) != NET_OK) return 0;
-    return eth_wrap(&p->gw_mac, &p->mac, NET_ETHERTYPE_IPV4, ip, iw, out, cap);
+    return eth_wrap(dst, &p->mac, NET_ETHERTYPE_IPV4, ip, iw, out, cap);
+}
+
+size_t ck_net_udp_frame(const ck_net_peer *p, uint16_t ip_id, const uint8_t *data, size_t n, uint8_t *out,
+                        size_t cap)
+{
+    if (!p || !mac_unicast(&p->gw_mac)) return 0;
+    return udp_frame(p, &p->gw_mac, ip_id, data, n, out, cap);
+}
+
+size_t ck_net_udp_broadcast_frame(const ck_net_peer *p, uint16_t ip_id, const uint8_t *data, size_t n, uint8_t *out,
+                                  size_t cap)
+{
+    if (!p) return 0;
+    return udp_frame(p, &k_bcast, ip_id, data, n, out, cap);
 }
 
 ck_net_kind ck_net_classify(const ck_net_peer *p, const uint8_t *frame, size_t len, net_mac *mac,

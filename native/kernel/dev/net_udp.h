@@ -32,6 +32,11 @@ size_t ck_net_arp_reply(const ck_net_peer *p, const net_arp_packet *req, uint8_t
 /* Ethernet + IPv4 + UDP from p->ip:lport to p->gw_ip:rport via p->gw_mac. */
 size_t ck_net_udp_frame(const ck_net_peer *p, uint16_t ip_id, const uint8_t *data, size_t n, uint8_t *out,
                         size_t cap);
+/* The same datagram to every station on the LAN (Ethernet ff:ff:ff:ff:ff:ff) and
+ * to IPv4 p->gw_ip, which the caller sets to the subnet broadcast address;
+ * p->gw_mac is ignored. Used only by the Interplane beacon (net_join.c). */
+size_t ck_net_udp_broadcast_frame(const ck_net_peer *p, uint16_t ip_id, const uint8_t *data, size_t n, uint8_t *out,
+                                  size_t cap);
 
 typedef enum {
     CK_NET_IGNORED = 0,   /* not for us, malformed, or not what we wait for */

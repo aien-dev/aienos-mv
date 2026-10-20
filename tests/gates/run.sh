@@ -86,7 +86,15 @@ case "$step" in
     bash scripts/qemu_ck_b7b_probe_test.sh --positive
     ;;
   # native-suites.yml matrix
-  native-net)        native_suite net "test sanitize mutants" 'AIENOS_NET_SECURE_TESTS: PASS|NET_SANITIZE: PASS|NET_SECURE_MUTANTS: [0-9]+/[0-9]+ killed' ;;
+  native-net)        native_suite net "test sanitize mutants" 'AIENOS_NET_SECURE_TESTS: PASS|AIENOS_NET_IPJ: PASS|NET_SANITIZE: PASS|NET_SECURE_MUTANTS: [0-9]+/[0-9]+ killed' ;;
+  # Interplane join: five CK_INTERPLANE=1 kernels on one QEMU LAN (docs/INTERPLANE_JOIN.md)
+  ck-interplane)
+    set +e
+    bash scripts/qemu_ck_interplane_test.sh | tee "$TMP/ipj.txt"
+    rc=${PIPESTATUS[0]}
+    set -e
+    if [ "$rc" = 0 ] && grep -qx "AIENOS_CK_INTERPLANE: PASS" "$TMP/ipj.txt"; then obs interplane_pass true; else obs interplane_pass false; exit 1; fi
+    ;;
   native-sig)        native_suite sig "test sanitize mutants" 'AIENOS_SIG_NATIVE: PASS|AIENOS_SIG_MUTANTS: PASS' ;;
   native-crypto)     native_suite crypto "test sanitize mutants" 'AIENOS_CRYPTO_NATIVE: PASS|AIENOS_CRYPTO_MUTANTS: PASS' ;;
   native-m5)         native_suite m5 "test sanitize mutants" 'M5_NATIVE: PASS|M5_NATIVE_MUTANTS: PASS' ;;

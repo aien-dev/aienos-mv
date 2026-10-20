@@ -3,6 +3,10 @@
 #include "net_bind.h"
 #include "ck.h"
 #include "net_udp.h"
+#ifdef CK_INTERPLANE
+#include "net_join.h"
+#include "../core/join_boot.h"
+#endif
 #include <string.h>
 
 #define WIN_N 4
@@ -399,6 +403,16 @@ int ck_net_bind_selftest(const pci_func *f, const virtio_pci_caps *caps)
               f->bus, f->dev, f->fn, rid, n->dev.q[VNET_RX_QUEUE].size, n->dev.q[VNET_TX_QUEUE].size, m[0], m[1], m[2],
               m[3], m[4], m[5], (unsigned long long)n->dev.features,
               (n->dev.features >> VNET_F_ACCESS_PLATFORM & 1) ? "yes" : "no");
+#ifdef CK_INTERPLANE
+    /* Interplane join image with a bundle: run the join on this device instead
+     * of the slirp round trip (net_join.h). */
+    if (ck_join_boot.state == CK_JOIN_FOUND) {
+        int jrc = n->dev.has_mac ? ck_net_join_run(&n->dev) : CK_NET_E_INIT;
+        ck_printf("interplane: run %s (rc=%d)\n", jrc == CK_NET_OK ? "done" : "FAIL", jrc);
+        ck_net_release();
+        return jrc;
+    }
+#endif
     ck_net_peer peer;
     memset(&peer, 0, sizeof peer);
     int rc = n->dev.has_mac ? roundtrip(n, &peer) : CK_NET_E_INIT;

@@ -474,6 +474,39 @@ static void test_lan(void)
     (void)now;
 }
 
+/* An owner route binds: with a direct spark-mac session up and the pi not yet
+ * reachable, a message for the mac waits for the pi instead of going around it
+ * (seen in the QEMU gate: the spark sent before its pi session was up). */
+static void test_route_binding(void)
+{
+    static ipj_roster r;
+    static uint8_t g5[IPJ_ROSTER_MAX_BYTES];
+    ipj_roster_init(&r, own_pk);
+    for (int i = SPARK; i <= OLD; i++) ipj_roster_add(&r, mpk[i], nm[i], IPJ_KIND_PROD, plat[i]);
+    ipj_roster_revoke(&r, mpk[OLD]);
+    size_t n5 = sign_r(&r, g5);
+    memset(live, 0, sizeof live);
+    qn = 0;
+    cut_spark_mac = 0;
+    start(SPARK, g5, n5);
+    start(MAC, g5, n5);
+    uint64_t now = run(1000, 60, 10);
+    CHECK(ipj_node_established(&node[SPARK], mpk[MAC]));
+    CHECK_EQ(ipj_node_route(&node[SPARK], mpk[MAC], mpk[PI]), IPJ_OK);
+    CHECK_EQ(ipj_node_send(&node[SPARK], now, mpk[MAC], IPJ_MSG_TEXT, (const uint8_t *)"x", 1), IPJ_ERR_NO_ROUTE);
+    now = run(now, 10, 0);
+    CHECK_EQ(node[MAC].c.delivered, 0);
+    start(PI, g5, n5);
+    now = run(now, 60, 10);
+    CHECK(ipj_node_established(&node[SPARK], mpk[PI]) && ipj_node_established(&node[PI], mpk[MAC]));
+    CHECK_EQ(ipj_node_send(&node[SPARK], now, mpk[MAC], IPJ_MSG_TEXT, (const uint8_t *)"x", 1), IPJ_OK);
+    now = run(now, 10, 0);
+    CHECK_EQ(node[PI].c.relayed, 1);
+    CHECK_EQ(node[MAC].c.delivered, 1);
+    CHECK_EQ(node[MAC].inbox.ttl, IPJ_TTL_DEFAULT - 1);
+    (void)now;
+}
+
 static void test_bundle(void)
 {
     static ipj_roster r;
@@ -610,6 +643,7 @@ int main(int argc, char **argv)
     test_bundle();
     test_lan();
     test_node_edges();
+    test_route_binding();
     printf("ipj_test: %d checks, %d failed\n", checks, fails);
     printf("AIENOS_NET_IPJ: %s\n", fails ? "FAIL" : "PASS");
     return fails ? 1 : 0;

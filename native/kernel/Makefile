@@ -307,6 +307,17 @@ $(error CK_PI5_LIFECYCLE needs CK_INFER_LIB=<libaienos_infer_kernel.a> (use "mak
 endif
 CK_EXTRA_CFLAGS += -DCK_PI5_LIFECYCLE=1 -DCK_INFER_DISK_ONLY=1 -DCK_INFER_RESIDENT=1
 endif
+# Interplane join image (CK_INTERPLANE=1, used by scripts/qemu_ck_interplane_test.sh, QUALIFICATION ONLY): the full
+# image plus native/net/aienos_ipj.c and the M6-B secure transport; when \EFI\AIENOS\JOIN.BIN is on the boot volume
+# (boot/efi_join.c) the devices stage runs the join loop (dev/net_join.c) instead of the slirp UDP round trip. The bundle
+# carries the machine secret key in the clear (QEMU fixtures only; see docs/INTERPLANE_JOIN.md). Use its own OUT.
+CK_INTERPLANE ?=
+ifneq ($(strip $(CK_INTERPLANE)),)
+ifneq ($(strip $(CK_INTERPLANE)),1)
+$(error CK_INTERPLANE must be empty or 1)
+endif
+CK_EXTRA_CFLAGS += -DCK_INTERPLANE=1
+endif
 # EL0 artifact qualification image (CK_ARTIFACT_CARD=1, "make pi5-artifact" for the Pi, PI5-7 cut 3, QUALIFICATION ONLY, TEST keys only):
 # the plain core image (no Store stage, no NVMe) whose signed artifact candidates come from ONE card file, \EFI\AIENOS\ARTIFACT.BND
 # (core/artifact_card.h, read by native/boot/efi_artifact.c), and which trusts the RFC 8032 TEST 1 public key only
@@ -923,6 +934,11 @@ CORE_OBJS := $(patsubst $(NATIVE)/%.c,$(KOBJ)/%.o,$(CORE_C)) \
 
 # ---- boot stages (stage.mk: STAGE_SRCS, STAGE_CFLAGS, stage-* host targets) ----
 include $(KDIR)/stage.mk
+ifneq ($(strip $(CK_INTERPLANE)),)
+STAGE_SRCS += $(NATIVE)/net/x25519.c $(NATIVE)/net/aienos_sec.c $(NATIVE)/net/aienos_ipj.c $(KDIR)/dev/net_join.c
+CORE_C += $(BOOT)/efi_join.c
+CORE_OBJS += $(KOBJ)/boot/efi_join.o
+endif
 ifeq ($(strip $(CK_QEMU_UNSAFE_DMA)),1)
 FULL_NAME := full-qemu-unsafe-dma
 STAGE_DMA_FLAGS := -DCK_QEMU_UNSAFE_DMA=1
@@ -1499,6 +1515,10 @@ $(OUT)/host/ck_uefi_vars: $(KDIR)/tools/ck_uefi_vars.c
 	$(HOSTCC) -std=gnu11 -O2 -Wall -Wextra -Werror -o $@ $<
 
 # ---- host tool for the AIENOS_CK_NET gate (scripts/qemu_ck_net_test.sh) ----
+lan-hub: $(OUT)/host/ck_lan_hub
+$(OUT)/host/ck_lan_hub: $(KDIR)/tools/ck_lan_hub.c
+	@mkdir -p $(@D)
+	$(HOSTCC) -std=gnu11 -O2 -Wall -Wextra -Werror -o $@ $<
 udp-echo: $(OUT)/host/ck_udp_echo
 $(OUT)/host/ck_udp_echo: $(KDIR)/tools/ck_udp_echo.c
 	@mkdir -p $(dir $@)
@@ -2400,7 +2420,7 @@ $(OUT)/host-san/test_pi5_rng: $(KDIR)/tests/test_pi5_rng.c $(PI5_RNG_SRCS) $(KDI
 FORCE:
 .PHONY: uefi-vars slot-loader slot-loader-check pi5-diag imac-diag imac-kernel
 .PHONY: artifact-tier-pi5 artifact-tier-mutant
-.PHONY: osc-receipt-mutants osc-receipt-release all full pi5 pi5-store pi5-infer pi5-unlock pi5-unlock-card pi5-fact pi5-agent pi5-lifecycle pi5-artifact artifact-card-mutant test sanitize context-mutant agent-cmd-mutant cortex-image handoff-mutant acpi-dev-mutant iort-mutants smmu-l2-mutants acpi-scan clean print-kcflags udp-echo tool store-image gpt-image cont-tool owner-gen fb-check continuity-mutants continuity-resolve-mutants FORCE
+.PHONY: osc-receipt-mutants osc-receipt-release all full pi5 pi5-store pi5-infer pi5-unlock pi5-unlock-card pi5-fact pi5-agent pi5-lifecycle pi5-artifact artifact-card-mutant test sanitize context-mutant agent-cmd-mutant cortex-image handoff-mutant acpi-dev-mutant iort-mutants smmu-l2-mutants acpi-scan clean print-kcflags udp-echo lan-hub tool store-image gpt-image cont-tool owner-gen fb-check continuity-mutants continuity-resolve-mutants FORCE
 
 # AIENOS-PI5 step 3 marker + Pi card GPT test (hosted; a file stands in for the card, QEMU cannot model the Pi SD host).
 PI5_MARKER_SRCS := $(KDIR)/core/pi5_marker.c $(KDIR)/dev/disk_part.c $(NATIVE)/disk/disk.c $(NATIVE)/disk/disk_file.c \

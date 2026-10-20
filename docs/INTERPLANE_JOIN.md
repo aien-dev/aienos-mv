@@ -91,7 +91,7 @@ Format: `aienos_ipj.h` (64-byte header, 64 bytes per entry, owner signature). Ru
 
 | Capability | State |
 |---|---|
-| Signed messages, end to end | Built. Origin-signed (Ed25519), carried hop by hop inside secure sessions. A relay may lower the ttl byte and change nothing else; any other byte change is refused at the destination. Replay refused per origin sequence number. Owner-configured routes win over direct sessions ("reach the laptop through the Pi"). |
+| Signed messages, end to end | Built. Origin-signed (Ed25519), carried hop by hop inside secure sessions. A relay may lower the ttl byte and change nothing else; any other byte change is refused at the destination. Replay refused per origin sequence number. Owner-configured routes bind ("reach the laptop through the Pi"): they win over a direct session, and while the relay is not connected the message waits instead of going around it (found by the QEMU gate, test `test_route_binding`). |
 | Interplane envelopes | Message kind 2 carries an Interplane envelope (JCS JSON) to the destination runtime. Proposed binding text is on the interplane branch `feat/aienos-join` (`docs/bindings/AIENOS-SIGNED-TRANSPORT.md`). The signature proves which machine sent it, never that the action is authorized. |
 | Model requests | Message kind 3 is reserved for a model request to the destination's model service (for example the Spark's AIEN model). The service side is not built (UNKNOWN until a model service listens on the node). |
 | Control console | Message kind 4 is reserved for operator console commands. Design: only an owner-held operator key may send them, each command signed and counted, replacing the iMac lab console's shared HMAC key (aienos-mv `feat/imac-gpu-bench`, UDP 47035, observed in `~/handoffs/2026-10-19-imac-gpu-bench.md`). Not built (ledger L237). |
@@ -131,6 +131,12 @@ redialed.
   Aienux instances on one virtual LAN: spark, pi, mac join one generation-5 roster; spark->pi and pi->mac
   sessions; the signed message spark -> pi -> mac; old (revoked, holding generation 4) refused by everyone;
   tst (a TEST entry) refused to join in production mode.
+- Gate result (2026-10-20, Spark, QEMU TCG, run 4 of this change): `AIENOS_CK_INTERPLANE: PASS`. spark, pi and mac
+  joined one generation-5 roster in production mode; sessions spark<->pi and pi<->mac; the signed message went
+  spark -> pi -> mac (pi relayed, did not deliver; mac delivered with the origin signature verified, one hop);
+  old (generation 4) held no session and a member recorded the refusal; tst was refused (TEST_KEY).
+  Earlier runs failed for real causes that are fixed: a broadcast beacon refused by the unicast frame builder,
+  and a route that silently detoured around its relay (now an owner route binds; hosted `test_route_binding`).
 - Not proven: real NICs (QEMU only), real machine-key sealing, the gateway on a real hub, aienos-run's host
   forward, off-LAN reach, timing or speed (no measurement here).
 

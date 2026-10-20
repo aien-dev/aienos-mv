@@ -1623,6 +1623,28 @@ static void test_net_udp(void)
     w = ck_net_udp_frame(&p, 1, (const uint8_t *)ping, sizeof ping - 1, f, sizeof f);
     CHECK(w == 14 + 20 + 8 + sizeof ping - 1);
     CHECK(ck_net_udp_frame(&p, 1, f, 1473, f + 0, sizeof f) == 0); /* > 1500-byte IP datagram buffer */
+    /* Interplane beacon: broadcast to every station, unicast builder still refuses it. */
+    {
+        ck_net_peer b = p;
+        b.gw_mac = (net_mac){{0xff, 0xff, 0xff, 0xff, 0xff, 0xff}};
+        b.gw_ip = (net_ipv4){{10, 0, 2, 255}};
+        CHECK(ck_net_udp_frame(&b, 2, (const uint8_t *)ping, sizeof ping - 1, f, sizeof f) == 0);
+        memset(&b.gw_mac, 0, sizeof b.gw_mac);
+        size_t bw = ck_net_udp_broadcast_frame(&b, 2, (const uint8_t *)ping, sizeof ping - 1, f, sizeof f);
+        net_ipv4_header bih;
+        const uint8_t *bipl = 0;
+        size_t bipn = 0;
+        net_udp_header buh;
+        CHECK(bw == 14 + 20 + 8 + sizeof ping - 1 && net_eth_parse(f, bw, &e) == NET_OK &&
+              memcmp(e.destination.b, "\xff\xff\xff\xff\xff\xff", 6) == 0 && memcmp(e.source.b, p.mac.b, 6) == 0 &&
+              net_ipv4_parse(e.payload, e.payload_len, &bih, &bipl, &bipn) == NET_OK &&
+              memcmp(bih.destination.b, b.gw_ip.b, 4) == 0 &&
+              net_udp_parse(bipl, bipn, b.ip, b.gw_ip, &buh, &pl, &pn) == NET_OK && pn == sizeof ping - 1 &&
+              memcmp(pl, ping, pn) == 0);
+        CHECK(ck_net_udp_broadcast_frame(0, 2, (const uint8_t *)ping, 1, f, sizeof f) == 0);
+        CHECK(ck_net_udp_broadcast_frame(&b, 2, f, 1473, f, sizeof f) == 0);
+        w = ck_net_udp_frame(&p, 1, (const uint8_t *)ping, sizeof ping - 1, f, sizeof f);
+    }
     net_ipv4_header ih;
     const uint8_t *ipl = 0;
     size_t ipn = 0;
