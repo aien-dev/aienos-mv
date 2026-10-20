@@ -3,7 +3,6 @@
 #include "nvme_shutdown.h"
 #include "ck.h"
 #include "disk_layout.h"
-#include "vguest.h"
 
 /* NVMe DMA rule: no SMMU confinement means no DMA. The default build asks
  * the core for SMMU confinement (ck_dma_confine) and refuses NVMe DMA when

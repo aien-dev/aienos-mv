@@ -11,7 +11,13 @@ int ck_vcon_attach(void);
 int ck_vcon_on(void);
 void ck_vcon_where(uint8_t *bus, uint8_t *dev, uint8_t *fn);
 unsigned ck_vcon_tx_timeouts(void);
-/* '\n' is sent as CR LF. Drops the bytes while re-entered. */
+/* TX counters for the boot timeline: chunks posted, writes that found every
+ * slot in flight, bounded waits that ran out. */
+void ck_vcon_tx_stats(uint64_t *chunks, uint64_t *full_waits, unsigned *timeouts);
+/* Waits (bounded) until the device has used every posted chunk. */
+void ck_vcon_flush(void);
+/* '\n' is sent as CR LF. Does not wait for the device unless the ring is
+ * full. Drops the bytes while re-entered. */
 void ck_vcon_write(const char *s, size_t n);
 /* Next received byte, or -1 when none is waiting. */
 int ck_vcon_rx_poll(void);

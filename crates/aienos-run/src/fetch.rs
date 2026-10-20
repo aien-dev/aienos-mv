@@ -139,7 +139,12 @@ pub fn fetch_verified(
 ) -> Result<(PathBuf, bool), FetchError> {
     std::fs::create_dir_all(dir)?;
     let dest = dir.join(&entry.name);
+    let stamp = dir.join(format!("{}.verified", entry.name));
+    if dest.exists() && stamp_matches(&stamp, &dest, entry) {
+        return Ok((dest, false));
+    }
     if dest.exists() && verify(&dest, entry).is_ok() {
+        write_stamp(&stamp, &dest, entry);
         return Ok((dest, false));
     }
     let part = dir.join(format!("{}.part", entry.name));
@@ -149,7 +154,58 @@ pub fn fetch_verified(
         return Err(e);
     }
     std::fs::rename(&part, &dest)?;
+    write_stamp(&stamp, &dest, entry);
     Ok((dest, true))
+}
+
+/// What a verified cached image looked like on disk: size, modification and
+/// change times, inode, and the digest it was verified against. Any write to
+/// the file (or a replacement) changes one of them, and then the image is
+/// hashed again; an unchanged file is not re-read on every start.
+fn stamp_line(path: &Path, entry: &FileEntry) -> Option<String> {
+    let m = std::fs::metadata(path).ok()?;
+    let mtime = m
+        .modified()
+        .ok()?
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?
+        .as_nanos();
+    #[cfg(unix)]
+    let more = {
+        use std::os::unix::fs::MetadataExt;
+        format!(
+            " ctime={}.{} ino={}:{}",
+            m.ctime(),
+            m.ctime_nsec(),
+            m.dev(),
+            m.ino()
+        )
+    };
+    #[cfg(not(unix))]
+    let more = String::new();
+    Some(format!(
+        "size={} mtime_ns={mtime}{more} sha256={}\n",
+        m.len(),
+        hex_encode(&entry.sha256)
+    ))
+}
+
+fn stamp_matches(stamp: &Path, path: &Path, entry: &FileEntry) -> bool {
+    match (std::fs::read_to_string(stamp), stamp_line(path, entry)) {
+        (Ok(have), Some(now)) => have == now,
+        _ => false,
+    }
+}
+
+fn write_stamp(stamp: &Path, path: &Path, entry: &FileEntry) {
+    match stamp_line(path, entry) {
+        Some(l) => {
+            let _ = std::fs::write(stamp, l);
+        }
+        None => {
+            let _ = std::fs::remove_file(stamp);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -198,6 +254,16 @@ mod tests {
         assert_eq!(std::fs::read(&p).unwrap(), b"test");
         let (_, again) = fetch_verified(&url, &e, &cache).unwrap();
         assert!(!again, "a verified cached copy is reused");
+        assert!(cache.join("img.bin.verified").exists(), "stamp written");
+        // A changed cached file (same size) is hashed again, refused and fetched again.
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        std::fs::write(cache.join("img.bin"), b"TEST").unwrap();
+        let (p, refetched) = fetch_verified(&url, &e, &cache).unwrap();
+        assert!(
+            refetched,
+            "a modified cached copy is not trusted by its stamp"
+        );
+        assert_eq!(std::fs::read(&p).unwrap(), b"test");
 
         // Tampered source: the bad copy never lands in the cache.
         std::fs::write(&src, b"tesT").unwrap();

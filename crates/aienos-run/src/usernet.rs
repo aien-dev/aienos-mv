@@ -11,6 +11,8 @@
 //!   datagrams come back only from addresses that socket has sent to);
 //! - port forwards: host 127.0.0.1:H -> guest 10.0.2.15:G, with replies from
 //!   guest port G going back to the sender;
+//! - the kernel's network self-test (UDP to 10.0.2.2:47029) is answered here,
+//!   in-process, never sent to a host socket (crate::selfecho);
 //! - no TCP, no ICMP, no DHCP, no DNS, no IP fragments (dropped, counted).
 //!
 //! The frame code (`Nat`) is pure and unit-tested; `UserNet` runs it on
@@ -26,6 +28,7 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 use crate::net::{Forward, Proto};
+use crate::selfecho;
 
 pub const GUEST_IP: Ipv4Addr = Ipv4Addr::new(10, 0, 2, 15);
 pub const GATEWAY_IP: Ipv4Addr = Ipv4Addr::new(10, 0, 2, 2);
@@ -57,6 +60,8 @@ pub enum Action {
 pub struct Nat {
     pub guest_mac: Option<[u8; 6]>,
     ip_id: u16,
+    /// This run's self-test token; None leaves 10.0.2.2:47029 to the host.
+    pub selftest_token: Option<String>,
 }
 
 fn csum_add(mut sum: u32, b: &[u8]) -> u32 {
@@ -191,13 +196,31 @@ impl Nat {
         {
             return Action::Drop("udp: checksum");
         }
+        let (sport, dport) = (
+            u16::from_be_bytes([u[0], u[1]]),
+            u16::from_be_bytes([u[2], u[3]]),
+        );
+        if dst == GATEWAY_IP && dport == selfecho::SELFTEST_PORT {
+            let r = self
+                .selftest_token
+                .as_deref()
+                .and_then(|t| selfecho::pong(t, &u[8..]));
+            if let Some(r) = r {
+                self.guest_mac = Some(src_mac);
+                let from = SocketAddrV4::new(GATEWAY_IP, selfecho::SELFTEST_PORT);
+                return match self.to_guest(from, sport, &r) {
+                    Some(f) => Action::ToGuest(f),
+                    None => Action::Drop("selftest: reply does not fit a frame"),
+                };
+            }
+        }
         let Some(host) = Self::host_addr(dst) else {
             return Action::Drop("udp: destination not routable");
         };
         self.guest_mac = Some(src_mac);
         Action::Udp {
-            sport: u16::from_be_bytes([u[0], u[1]]),
-            dst: SocketAddrV4::new(host, u16::from_be_bytes([u[2], u[3]])),
+            sport,
+            dst: SocketAddrV4::new(host, dport),
             payload: u[8..].to_vec(),
         }
     }
@@ -313,7 +336,11 @@ const POLL: Duration = Duration::from_millis(200);
 impl UserNet {
     /// Binds every UDP forward on 127.0.0.1 and returns the network plus the
     /// socket end the hypervisor gets (one Ethernet frame per datagram).
-    pub fn start(forwards: &[Forward]) -> io::Result<(UserNet, UnixDatagram)> {
+    /// With `selftest_token` the kernel's self-test is answered in-process.
+    pub fn start(
+        forwards: &[Forward],
+        selftest_token: Option<String>,
+    ) -> io::Result<(UserNet, UnixDatagram)> {
         let (vm_end, ours) = UnixDatagram::pair()?;
         // VZ drains its end until EAGAIN: a blocking end hangs its network
         // queue after the first frame we send (OBSERVED, macOS 26.6.2).
@@ -346,7 +373,10 @@ impl UserNet {
             });
         }
         let sh = Arc::new(Shared {
-            nat: Mutex::new(Nat::default()),
+            nat: Mutex::new(Nat {
+                selftest_token,
+                ..Nat::default()
+            }),
             guest: ours,
             stop: AtomicBool::new(false),
             stats: Stats::default(),
@@ -561,7 +591,7 @@ mod tests {
     fn guest_udp(sport: u16, dst: SocketAddrV4, payload: &[u8]) -> Vec<u8> {
         let mut n = Nat {
             guest_mac: Some(GMAC),
-            ip_id: 0,
+            ..Nat::default()
         };
         // Build as if from `dst` to the guest, then swap direction fields.
         let mut f = n.to_guest(dst, sport, payload).unwrap();
@@ -692,7 +722,7 @@ mod tests {
             guest_port: 47030,
             label: "test".into(),
         }];
-        let (net, vm) = UserNet::start(&fw).unwrap();
+        let (net, vm) = UserNet::start(&fw, None).unwrap();
         // The guest speaks first (its ARP), so its MAC is known.
         vm.send(&arp_request(GATEWAY_IP)).unwrap();
         assert_eq!(&recv_frame(&vm)[20..22], &[0, 2]);
@@ -734,7 +764,7 @@ mod tests {
             guest_port: 47040,
             label: "test".into(),
         }];
-        let (net, vm) = UserNet::start(&fw).unwrap();
+        let (net, vm) = UserNet::start(&fw, None).unwrap();
         vm.send(&arp_request(GATEWAY_IP)).unwrap();
         assert_eq!(&recv_frame(&vm)[20..22], &[0, 2]);
 
@@ -766,7 +796,7 @@ mod tests {
         let echo = UdpSocket::bind("127.0.0.1:0").unwrap();
         let ep = echo.local_addr().unwrap().port();
         echo.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
-        let (net, vm) = UserNet::start(&[]).unwrap();
+        let (net, vm) = UserNet::start(&[], None).unwrap();
         vm.send(&guest_udp(
             47030,
             SocketAddrV4::new(GATEWAY_IP, ep),
@@ -794,9 +824,34 @@ mod tests {
         drop(net);
     }
 
+    /// The kernel's self-test is answered in the frame path: no host socket.
+    #[test]
+    fn selftest_ping_is_answered_in_process() {
+        let mut n = Nat {
+            selftest_token: Some("0123456789abcdef".into()),
+            ..Nat::default()
+        };
+        let ping = b"AIENOS-CK-NET ping nonce=5ece29f6";
+        let f = guest_udp(
+            47030,
+            SocketAddrV4::new(GATEWAY_IP, selfecho::SELFTEST_PORT),
+            ping,
+        );
+        let Action::ToGuest(r) = n.from_guest(&f) else {
+            panic!("not answered in-process")
+        };
+        assert_eq!(&r[26..30], &GATEWAY_IP.octets());
+        assert_eq!(u16::from_be_bytes([r[34], r[35]]), selfecho::SELFTEST_PORT);
+        assert_eq!(u16::from_be_bytes([r[36], r[37]]), 47030);
+        let want = selfecho::pong("0123456789abcdef", ping).unwrap();
+        assert_eq!(&r[42..42 + want.len()], &want[..]);
+        // Without a token (or for other payloads) it goes to the host as before.
+        assert!(matches!(Nat::default().from_guest(&f), Action::Udp { .. }));
+    }
+
     #[test]
     fn tcp_forward_is_refused_not_ignored() {
-        let e = UserNet::start(&[Forward::parse("tcp:1:1").unwrap()])
+        let e = UserNet::start(&[Forward::parse("tcp:1:1").unwrap()], None)
             .err()
             .unwrap();
         assert_eq!(e.kind(), io::ErrorKind::Unsupported);

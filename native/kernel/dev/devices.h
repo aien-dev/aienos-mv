@@ -18,4 +18,10 @@ const disk_dev *ck_dev_inbox_disk(int *rc_out);
  * Store stage) is done, or after a failed bind; prints the dma_gate line.
  * The boot disk is unavailable afterwards. */
 void ck_dev_nvme_release(void);
+/* VM edition with a console session: the devices stage leaves the virtio-net
+ * self-test for after the console prompt (it never delays the prompt). The
+ * console session calls this once, right after its first prompt; it runs the
+ * bounded self-test quietly, prints its "net_selftest:" line and returns 1,
+ * or returns 0 when nothing was left to run. */
+int ck_net_deferred_selftest(void);
 #endif

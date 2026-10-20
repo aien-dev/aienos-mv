@@ -209,6 +209,17 @@ uint32_t ck_boot_count_hint(void) { return 0; }
 int ck_compat_entropy_source(void) { return CK_ENTROPY_HOST; }
 /* Host: the kernel RNDR service is not in play (libc /dev/urandom above). */
 int ck_entropy_status(void) { return 0; }
+/* VM edition and boot timeline services: the host plays a machine without a
+ * hypervisor (no device gets DMA without an SMMU window) and keeps no timeline. */
+int ck_vguest_dma_device(uint16_t vendor, uint16_t device)
+{
+    (void)vendor;
+    (void)device;
+    return 0;
+}
+void ck_vpci_after_sweep(void) {}
+void ck_boot_mark(const char *name) { (void)name; }
+void ck_boot_timeline_report(void) {}
 const char *ck_entropy_reason(void) { return "host-urandom"; }
 /* Host: deterministic fill (a counter), so key-slot genesis tests are reproducible.
  * ck_host_entropy_refuse = 1 models an RNDR refusal (fill returns -1, buffer zeroed). */

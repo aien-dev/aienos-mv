@@ -12,6 +12,16 @@
 #include "vcon.h"
 #include "vguest.h"
 #include "ck_internal.h"
+
+/* The timer IRQ window proves the tick (gate: at least 5 ticks of 10 ms). The
+ * VM edition waits 70 ms (6 to 7 ticks) instead of 200 ms: under Apple
+ * Virtualization.framework the 200 ms window was the only boot stage over
+ * 100 ms (MEASURED on an M2, L291 boot timeline). */
+#if defined(CK_VM_GUEST) && CK_VM_GUEST
+#define CK_TIMER_WINDOW_MS 70u
+#else
+#define CK_TIMER_WINDOW_MS 200u
+#endif
 #include "entropy.h"
 #include "cpufeat.h"
 #include "handoff_check.h"
@@ -211,7 +221,7 @@ static __attribute__((noreturn)) void ck_el1_main(void *arg)
                  (unsigned long long)mg.gicd, (unsigned long long)mg.gicr);
     ck_set_stage("timer");
     struct ck_timer_window tw;
-    if (ck_timer_window(200, &tw))
+    if (ck_timer_window(CK_TIMER_WINDOW_MS, &tw))
         ck_panic("timer: counter frequency is zero");
     uint64_t f = tw.freq_hz;
     ck_printf("gic: v%u\n", gr.arch_rev);
@@ -358,6 +368,7 @@ static __attribute__((noreturn)) void ck_el1_main(void *arg)
     }
 
     ck_set_stage("final");
+    ck_boot_timeline_report(); /* once: a console session printed it already */
     ck_puts("\n");
     ck_report_header("final");
     ck_artifact_final();

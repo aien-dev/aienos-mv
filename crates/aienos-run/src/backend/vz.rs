@@ -131,8 +131,10 @@ impl Backend for VzBackend {
                                            // The runner's own user-mode network on a datagram socket pair, so the
                                            // guest sees the 10.0.2.x addresses its kernel expects (vmnet NAT would
                                            // hand it a DHCP subnet instead).
-        let (net, vm_end) =
-            UserNet::start(&spec.forwards).map_err(|e| vmm(format!("network: {e}")))?;
+                                           // It also answers the kernel's network self-test in-process (crate::selfecho).
+        let token = crate::selfecho::new_token().map_err(|e| vmm(format!("network: {e}")))?;
+        let (net, vm_end) = UserNet::start(&spec.forwards, Some(token))
+            .map_err(|e| vmm(format!("network: {e}")))?;
         let q = Queue::new("com.aienos.run.vz");
         let dev = Devices {
             boot: &boot,
@@ -148,6 +150,7 @@ impl Backend for VzBackend {
                 unsafe { build_and_start(spec, &q, &dev) }
             })
             .map_err(vmm)?;
+        console.vm_started();
         let mut vm = VzVm { q, vm };
         set_nonblocking(&out_r)?;
 

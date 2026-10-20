@@ -9,7 +9,6 @@
 #include "net_bind.h"
 #include "xhci_fence.h"
 #include "usb_kbd.h"
-#include "vpci.h"
 #include "../../boot/slot_format.h"
 
 static pci_system g_pci;
@@ -86,6 +85,23 @@ void ck_dev_nvme_release(void)
     if (!g_nvme.bm_on && !g_nvme.confined && !g_nvme.stuck) g_nvme.claimed = 0;
 }
 
+/* VM edition (console session image): the virtio-net function whose
+ * self-test runs after the console prompt (ck_net_deferred_selftest). */
+static const pci_func *g_net_deferred;
+static virtio_pci_caps g_net_deferred_caps;
+
+int ck_net_deferred_selftest(void)
+{
+    const pci_func *f = g_net_deferred;
+    if (!f) return 0;
+    g_net_deferred = 0;
+    ck_puts("\n");
+    ck_net_set_quiet(1);
+    (void)ck_net_bind_selftest(f, &g_net_deferred_caps);
+    ck_net_set_quiet(0);
+    return 1;
+}
+
 int ck_stage_devices(void)
 {
     int rc = pci_stage_probe(&g_pci);
@@ -107,25 +123,40 @@ int ck_stage_devices(void)
     ck_xhci_after_sweep(&g_pci); /* TEST-ONLY bm-left-on mutation hook; no-op otherwise */
     /* NVMe is bound from the multi-segment discovery result (aienos#31), any segment; the segment-0
      * enumeration above is only used for the other devices and for log wording. */
+    ck_boot_mark("nvme");
     uint32_t dn = 0;
     const pci_found *df = pci_stage_disc_found(&dn);
     int was_owned = g_nvme.claimed; /* a refusal as "already owned" must not tear the owner down */
     int nrc = ck_nvme_bind(&g_nvme, df, dn, &g_pci);
     if (nrc && !was_owned) ck_dev_nvme_release(); /* a failed bind never keeps DMA */
     (void)pci_nvme_disc_report(df, dn, g_nvme.claimed ? g_nvme.pf : 0);
+    ck_boot_mark("net");
     virtio_pci_caps caps;
     const pci_func *vf = 0;
     int vrc = ck_virtio_net_probe(&g_pci, &caps, &vf);
     /* virtio-net: SMMU-confined attach plus one bounded UDP round trip; the
      * device is always released again before this returns (net_bind.h). A
-     * net failure is reported, never a devices-stage failure. */
-    int netrc = (vrc == 0 && vf) ? ck_net_bind_selftest(vf, &caps) : 1;
+     * net failure is reported, never a devices-stage failure. In the VM
+     * edition with a console session the self-test waits for the prompt
+     * (the hypervisor's device, answered by aienos-run: nothing to wait for
+     * before the operator has a console). */
+    int deferred = 0;
+#if defined(CK_CONSOLE_SESSION) && CK_CONSOLE_SESSION
+    if (vrc == 0 && vf && ck_vguest_dma_device(vf->vendor, vf->device)) {
+        g_net_deferred = vf;
+        g_net_deferred_caps = caps;
+        deferred = 1;
+    }
+#endif
+    int netrc = (vrc == 0 && vf && !deferred) ? ck_net_bind_selftest(vf, &caps) : 1;
     ck_printf("devices: pci=ok nvme=%s virtio_net=%s\n", g_nvme.bound ? "bound" : "unbound",
-              vrc != 0 ? "caps-refused" : !vf ? "absent" : netrc == 0 ? "selftest-ok" : "selftest-failed");
+              vrc != 0 ? "caps-refused" : !vf ? "absent" : deferred ? "selftest-after-prompt"
+              : netrc == 0 ? "selftest-ok" : "selftest-failed");
     /* xHCI: DMA fence (bus master off before the gate, SMMU-confined grant or
      * fail-closed deny, halt, revoke, stream back to abort) with the operator
      * keyboard phase inside the grant (usb_kbd.c). Reported, never a
      * devices-stage failure. */
+    ck_boot_mark("xhci");
     int xrc = ck_xhci_fence(&g_pci);
     ck_printf("devices: xhci=%s (rc=%d)\n", ck_xhci_state(), xrc);
     ck_kbd_recovery_report(ck_xhci_state());
@@ -176,6 +207,7 @@ int ck_stage_console_session(void)
               "QEMU gate self-test only, never a PASS)\n");
 #endif
     ck_printf("console_session: begin (TEST-ONLY QEMU image, CK_CONSOLE_SESSION=1; QEMU only, hardware NOT_RUN)\n");
+    ck_boot_timeline_report();
     int xrc = ck_xhci_session(&g_pci);
     ck_printf("console_session: xhci fence returned rc=%d state=%s\n", xrc, ck_xhci_state());
     ck_console_session_serial_only(); /* no-op once the exit came inside the fence */

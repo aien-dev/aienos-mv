@@ -4,6 +4,7 @@
  * 6.2 contexts, 6.4 TRBs, 6.5 event ring segment table), USB 2.0 chapter 9
  * (standard requests), HID 1.11 (SET_PROTOCOL, SET_IDLE). */
 #include "usb_kbd.h"
+#include "devices.h"
 #include "usb_hid.h"
 #include "ck.h"
 
@@ -642,6 +643,8 @@ static void sess_begin(const char *usb)
     s_np = s_ip = 0;
     s_t0 = ck_time_us();
     ck_puts("console> ");
+    if (ck_net_deferred_selftest()) /* VM edition: after the prompt, never before it */
+        ck_puts("console> ");
 }
 
 static void sess_drops(int owner, unsigned dropped)

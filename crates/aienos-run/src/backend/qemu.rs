@@ -309,6 +309,13 @@ impl Backend for QemuBackend {
         } else {
             None
         };
+        // QEMU's user network hands the kernel's self-test ping to 127.0.0.1:47029:
+        // the runner answers it there (crate::selfecho). A taken port means
+        // someone else answers (the lab helper); the VM runs either way.
+        #[cfg(unix)]
+        let _echo = crate::selfecho::new_token()
+            .and_then(crate::selfecho::LoopbackEcho::start)
+            .ok();
         let accel = self.accel.unwrap_or_else(|| best_accel(spec.arch));
         let args = command_line(spec, accel, &code, &vars, esp.as_deref());
         let mut child = Command::new(qemu_binary(spec.arch))
@@ -318,6 +325,7 @@ impl Backend for QemuBackend {
             .stderr(Stdio::piped())
             .spawn()
             .map_err(|e| BackendError::Vmm(format!("cannot start QEMU: {e}")))?;
+        console.vm_started();
         let mut stdin = child.stdin.take().expect("piped stdin");
         let mut stdout = child.stdout.take().expect("piped stdout");
         let mut stderr = child.stderr.take().expect("piped stderr");

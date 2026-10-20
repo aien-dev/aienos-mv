@@ -188,6 +188,21 @@ int ck_entropy_fill(void *buf, size_t len);
 int ck_entropy_status(void);
 const char *ck_entropy_reason(void);
 
+/* VM edition (core/vguest.h, core/vpci.h; CK_VM_GUEST=1 images under a
+ * hypervisor). ck_vguest_dma_device is 1 when vendor:device is the
+ * hypervisor's own emulation, which this image may give DMA without an SMMU
+ * window (0 in every other image and machine). ck_vpci_after_sweep turns bus
+ * mastering back on for the kernel's own virtio console and entropy devices
+ * after the devices stage's bus-master sweep (no-op outside the VM edition). */
+int ck_vguest_dma_device(uint16_t vendor, uint16_t device);
+void ck_vpci_after_sweep(void);
+
+/* Boot timeline (core/report.c): ck_boot_mark stamps a named point (no
+ * output); ck_boot_timeline_report prints every stamp once as one
+ * "boot_timeline:" line (later calls print nothing). */
+void ck_boot_mark(const char *name);
+void ck_boot_timeline_report(void);
+
 /* ---- boot stages (implemented by the stage worker, all optional) -------- */
 /* Each returns 0 on success, negative on failure; core prints the result.
  * Declared weak so the core links and boots without them. */

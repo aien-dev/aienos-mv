@@ -38,6 +38,8 @@ pub fn install_signal_stop() {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct BootTimes {
+    /// When the backend handed the VM to the hypervisor ([`Console::vm_started`]).
+    pub vm_started: Option<Duration>,
     pub first_byte: Option<Duration>,
     /// (marker, time it was first seen)
     pub markers: Vec<(String, Option<Duration>)>,
@@ -59,6 +61,7 @@ pub struct Console {
     stop: AtomicBool,
     out: Mutex<Option<Box<dyn Write + Send>>>,
     log: Mutex<Option<File>>,
+    vm_started: OnceLock<Duration>,
     first_byte: OnceLock<Duration>,
     markers: Vec<(String, OnceLock<Duration>)>,
     tail: Mutex<Vec<u8>>,
@@ -76,6 +79,7 @@ impl Console {
             stop: AtomicBool::new(false),
             out: Mutex::new(out),
             log: Mutex::new(None),
+            vm_started: OnceLock::new(),
             first_byte: OnceLock::new(),
             markers: markers
                 .iter()
@@ -107,6 +111,12 @@ impl Console {
 
     pub fn elapsed(&self) -> Duration {
         self.t0.elapsed()
+    }
+
+    /// Backends call this once they have asked the hypervisor (or emulator) to
+    /// run the VM (receipt vm_started).
+    pub fn vm_started(&self) {
+        let _ = self.vm_started.set(self.t0.elapsed());
     }
 
     pub fn guest_output(&self, bytes: &[u8]) {
@@ -170,6 +180,7 @@ impl Console {
 
     pub fn times(&self) -> BootTimes {
         BootTimes {
+            vm_started: self.vm_started.get().copied(),
             first_byte: self.first_byte.get().copied(),
             markers: self
                 .markers

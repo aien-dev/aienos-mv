@@ -50,6 +50,12 @@ enum {
  * abort) before returning. */
 int ck_net_bind_selftest(const pci_func *f, const virtio_pci_caps *caps);
 
+/* VM edition (hypervisor device, no SMMU): the round trip uses the short VM
+ * bounds and ck_net_bind_selftest ends with one "net_selftest:" summary line
+ * (result, peer token, round trip and total time, the bound). With quiet set
+ * the detail lines are left out (the deferred run after the console prompt). */
+void ck_net_set_quiet(int quiet);
+
 /* Reset the device, revoke bus mastering and return the SMMU stream to
  * abort if still live; prints the dma_gate/smmu lines. Idempotent. */
 void ck_net_release(void);

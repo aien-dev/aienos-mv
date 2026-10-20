@@ -14,5 +14,6 @@ pub mod fetch;
 pub mod manifest;
 pub mod net;
 pub mod paths;
+pub mod selfecho;
 #[cfg(unix)]
 pub mod usernet;

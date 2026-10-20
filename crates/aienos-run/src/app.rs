@@ -27,7 +27,12 @@ fn say(msg: &str) {
     eprintln!("aienos-run: {msg}");
 }
 
+/// When this process entered `main`: the receipt's runner_to_boot is the
+/// time from here to the backend start (manifest, image check, disks).
+static STARTED: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+
 pub fn main(args: Vec<String>) -> i32 {
+    let _ = STARTED.set(Instant::now());
     let opts = match cli::parse(args) {
         Ok(o) => o,
         Err(e) => {
@@ -360,6 +365,11 @@ fn boot(opts: &Options, spec: &VmSpec) -> i32 {
             "receipt backend={} arch={}",
             b.name(),
             spec.arch.as_str()
+        ));
+        say(&format!(
+            "receipt runner_to_boot={} vm_started={}",
+            ms(STARTED.get().map(|s| t0.duration_since(*s))),
+            ms(times.vm_started)
         ));
         say(&format!("receipt first_output={}", ms(times.first_byte)));
         match times.ready() {

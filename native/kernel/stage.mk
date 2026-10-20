@@ -70,7 +70,8 @@ STAGE_ALLOWED_U := ck_puts ck_printf ck_vprintf ck_panic ck_alloc ck_free ck_dma
   ck_acpi_platform_devices ck_dma_confine_named ck_mmio_try_map ck_mmio_map_exclusive ck_mmio_unmap_exclusive ck_mmio_is_mapped \
   ck_cap_init ck_cap_insert ck_cap_lookup ck_cap_revoke \
   ck_entropy_fill ck_entropy_status ck_entropy_reason \
-  ck_console_rx_ready ck_console_rx_poll ck_console_uart_name ck_console_uart_base
+  ck_console_rx_ready ck_console_rx_poll ck_console_uart_name ck_console_uart_base \
+  ck_vguest_dma_device ck_vpci_after_sweep ck_boot_mark ck_boot_timeline_report
 
 STAGE_FREE_OBJS := $(foreach s,$(STAGE_FREE_SRCS),$(STAGE_OUT)/free/$(subst /,_,$(subst $(STAGE_NATIVE)/,,$(s:.c=.o))))
 

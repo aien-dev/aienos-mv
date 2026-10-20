@@ -3,14 +3,10 @@
 #include "net_bind.h"
 #include "ck.h"
 #include "net_udp.h"
-#include "vguest.h"
+#include <stdarg.h>
 #include <string.h>
 
 #define WIN_N 4
-#define ARP_TRIES 4u
-#define ARP_WAIT_US 500000u
-#define UDP_TRIES 5u
-#define UDP_WAIT_US 1000000u
 #define RESET_WAIT_US 100000u
 #define PROBE_WAIT_US 3000000u
 #define CANARY_BYTE 0x5au
@@ -24,7 +20,43 @@ typedef struct {
     uint32_t stream_id;
 } ck_vnet;
 
+/* Round trip bounds. LAB: QEMU user networking with the echo helper
+ * (scripts/qemu_ck_net_test.sh, gate AIENOS_CK_NET). VM: the VM edition's
+ * peer is aienos-run itself, answering in-process (crates/aienos-run
+ * usernet.rs and selfecho.rs), so a reply that does not come within these
+ * bounds will not come at all (bounds from the round trips MEASURED on an M2
+ * under Virtualization.framework and QEMU-HVF, L291, docs/AIENOS_RUN_MACOS.md). */
+typedef struct {
+    unsigned arp_tries, arp_wait_us, udp_tries, udp_wait_us;
+} rt_plan;
+static const rt_plan PLAN_LAB = {4u, 500000u, 5u, 1000000u};
+static const rt_plan PLAN_VM = {3u, 20000u, 3u, 50000u};
+/* Worst case of one round trip: every ARP wait, and per UDP try the TX
+ * completion wait plus the reply wait. */
+static uint64_t plan_bound_us(const rt_plan *pl)
+{
+    return (uint64_t)pl->arp_tries * pl->arp_wait_us + (uint64_t)pl->udp_tries * 2u * pl->udp_wait_us;
+}
+
 static ck_vnet g_net;
+/* Detail lines off (ck_net_set_quiet): the deferred VM self-test prints only
+ * its summary unless it fails. */
+static int g_quiet;
+/* Last round trip: first datagram out to its matching reply, and the reply's token. */
+static uint64_t g_rtt_us;
+static char g_token[20];
+
+static void nlog(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+static void nlog(const char *fmt, ...)
+{
+    if (g_quiet) return;
+    va_list ap;
+    va_start(ap, fmt);
+    ck_vprintf(fmt, ap);
+    va_end(ap);
+}
+
+void ck_net_set_quiet(int quiet) { g_quiet = quiet; }
 /* ck_dma_alloc memory is never freed: allocate the shared region once and
  * reuse it on a later bind. */
 static uint8_t *g_dma_mem;
@@ -97,17 +129,17 @@ void ck_net_release(void)
             while ((st = o_read(n, VNET_WIN_COMMON, VNET_CC_STATUS, 1)) != 0 && ck_time_us() - t0 < RESET_WAIT_US)
                 ck_udelay(10);
         }
-        ck_printf("virtio_net: device reset status=0x%02x (%s)\n", st, st == 0 ? "stopped" : "TIMEOUT");
+        nlog("virtio_net: device reset status=0x%02x (%s)\n", st, st == 0 ? "stopped" : "TIMEOUT");
         if (pci_bus_master_off(n->pf) == 0) {
             n->bm_on = 0;
-            ck_printf("dma_gate: virtio_net bus master revoked\n");
+            nlog("dma_gate: virtio_net bus master revoked\n");
         } else
-            ck_printf("dma_gate: virtio_net bus master revoke FAILED (command register still has BME)\n");
+            nlog("dma_gate: virtio_net bus master revoke FAILED (command register still has BME)\n");
     }
     if (n->confined) {
         int urc = ck_dma_unconfine(n->stream_id);
         n->confined = 0;
-        ck_printf("smmu: virtio_net stream 0x%x %s (rc=%d)\n", n->stream_id,
+        nlog("smmu: virtio_net stream 0x%x %s (rc=%d)\n", n->stream_id,
                   urc == 0 ? "returned to abort" : "abort FAILED", urc);
     }
 }
@@ -124,7 +156,7 @@ static int wait_for(ck_vnet *n, ck_net_peer *p, ck_net_kind want, uint32_t us, s
         int got = 0;
         vnet_err e = vnet_rx(&n->dev, rxbuf, sizeof rxbuf, &len, &got);
         if (e != VNET_OK) {
-            ck_printf("net: rx error %s\n", vnet_err_name(e));
+            nlog("net: rx error %s\n", vnet_err_name(e));
             return -1;
         }
         (void)vnet_tx_reclaim(&n->dev, 0);
@@ -138,7 +170,7 @@ static int wait_for(ck_vnet *n, ck_net_peer *p, ck_net_kind want, uint32_t us, s
         if (k == CK_NET_ARP_ASK) {
             size_t w = ck_net_arp_reply(p, &req, frame, sizeof frame);
             if (w && vnet_tx(&n->dev, frame, w) == VNET_OK)
-                ck_printf("net: arp answered who-has %u.%u.%u.%u\n", p->ip.b[0], p->ip.b[1], p->ip.b[2], p->ip.b[3]);
+                nlog("net: arp answered who-has %u.%u.%u.%u\n", p->ip.b[0], p->ip.b[1], p->ip.b[2], p->ip.b[3]);
             continue;
         }
         if (k != (ck_net_kind)want) continue;
@@ -153,7 +185,7 @@ static int wait_for(ck_vnet *n, ck_net_peer *p, ck_net_kind want, uint32_t us, s
     return CK_NET_IGNORED;
 }
 
-static int roundtrip(ck_vnet *n, ck_net_peer *pp)
+static int roundtrip(ck_vnet *n, ck_net_peer *pp, const rt_plan *pl)
 {
     ck_net_peer p;
     memset(&p, 0, sizeof p);
@@ -168,17 +200,17 @@ static int roundtrip(ck_vnet *n, ck_net_peer *pp)
     size_t dummy = 0;
     int csum = 0, k = CK_NET_IGNORED;
 
-    for (tries = 1; tries <= ARP_TRIES && k != CK_NET_ARP_GW; tries++) {
+    for (tries = 1; tries <= pl->arp_tries && k != CK_NET_ARP_GW; tries++) {
         size_t w = ck_net_arp_request(&p, frame, sizeof frame);
         if (!w || vnet_tx(&n->dev, frame, w) != VNET_OK) return CK_NET_E_TX;
-        k = wait_for(n, &p, CK_NET_ARP_GW, ARP_WAIT_US, &dummy, &csum, &frames);
+        k = wait_for(n, &p, CK_NET_ARP_GW, pl->arp_wait_us, &dummy, &csum, &frames);
         if (k < 0) return CK_NET_E_RX;
     }
     if (k != CK_NET_ARP_GW) {
-        ck_printf("net: arp who-has 10.0.2.2 FAIL (no reply after %u tries, frames_seen=%u)\n", ARP_TRIES, frames);
+        nlog("net: arp who-has 10.0.2.2 FAIL (no reply after %u tries, frames_seen=%u)\n", pl->arp_tries, frames);
         return CK_NET_E_ARP;
     }
-    ck_printf("net: arp who-has 10.0.2.2 tell 10.0.2.15 -> %02x:%02x:%02x:%02x:%02x:%02x tries=%u\n", p.gw_mac.b[0],
+    nlog("net: arp who-has 10.0.2.2 tell 10.0.2.15 -> %02x:%02x:%02x:%02x:%02x:%02x tries=%u\n", p.gw_mac.b[0],
               p.gw_mac.b[1], p.gw_mac.b[2], p.gw_mac.b[3], p.gw_mac.b[4], p.gw_mac.b[5], tries - 1);
 
     static char msg[] = "AIENOS-CK-NET ping nonce=00000000";
@@ -186,44 +218,55 @@ static int roundtrip(ck_vnet *n, ck_net_peer *pp)
     const size_t mlen = sizeof msg - 1;
     unsigned reclaimed = 0;
     k = CK_NET_IGNORED;
-    for (tries = 1; tries <= UDP_TRIES && k != CK_NET_UDP_REPLY; tries++) {
+    uint64_t t_first = ck_time_us();
+    for (tries = 1; tries <= pl->udp_tries && k != CK_NET_UDP_REPLY; tries++) {
         size_t w = ck_net_udp_frame(&p, (uint16_t)(0x4e00u + tries), (const uint8_t *)msg, mlen, frame, sizeof frame);
         vnet_err e = w ? vnet_tx(&n->dev, frame, w) : VNET_E_ARG;
         if (e != VNET_OK) {
-            ck_printf("net: udp tx FAIL (%s)\n", vnet_err_name(e));
+            nlog("net: udp tx FAIL (%s)\n", vnet_err_name(e));
             return CK_NET_E_TX;
         }
         /* The device must hand the TX descriptor back (bounded). */
         uint64_t t0 = ck_time_us();
         unsigned r = 0;
-        while (ck_time_us() - t0 < UDP_WAIT_US) {
+        while (ck_time_us() - t0 < pl->udp_wait_us) {
             r = 0;
             if (vnet_tx_reclaim(&n->dev, &r) != VNET_OK) return CK_NET_E_TX;
             reclaimed += r;
             if (n->dev.q[VNET_TX_QUEUE].in_flight == 0) break;
         }
-        ck_printf("net: udp tx 10.0.2.15:%u -> 10.0.2.2:%u frame=%u bytes payload=\"%s\" try=%u completed=%s\n",
+        nlog("net: udp tx 10.0.2.15:%u -> 10.0.2.2:%u frame=%u bytes payload=\"%s\" try=%u completed=%s\n",
                   CK_NET_LOCAL_PORT, CK_NET_ECHO_PORT, (unsigned)w, msg, tries,
                   n->dev.q[VNET_TX_QUEUE].in_flight == 0 ? "yes" : "NO");
         size_t pn = 0;
-        k = wait_for(n, &p, CK_NET_UDP_REPLY, UDP_WAIT_US, &pn, &csum, &frames);
+        k = wait_for(n, &p, CK_NET_UDP_REPLY, pl->udp_wait_us, &pn, &csum, &frames);
         if (k < 0) return CK_NET_E_RX;
         if (k != CK_NET_UDP_REPLY) continue;
         static const char pong[] = "AIENOS-CK-NET pong token=";
         char shown[160];
         ck_net_printable(rxbuf, pn, shown, sizeof shown);
         int mine = has_prefix(rxbuf, pn, pong, sizeof pong - 1) && contains(rxbuf, pn, msg, mlen);
-        ck_printf("net: udp rx 10.0.2.2:%u -> 10.0.2.15:%u payload_len=%u udp_csum=%s parsed=m6a echo_of_ours=%s "
+        nlog("net: udp rx 10.0.2.2:%u -> 10.0.2.15:%u payload_len=%u udp_csum=%s parsed=m6a echo_of_ours=%s "
                   "payload=\"%s\"\n",
                   CK_NET_ECHO_PORT, CK_NET_LOCAL_PORT, (unsigned)pn, csum ? "verified" : "absent", mine ? "yes" : "NO",
                   shown);
         if (!mine) k = CK_NET_IGNORED; /* not the reply to our datagram: the next try sends again */
+        if (mine) {
+            g_rtt_us = ck_time_us() - t_first;
+            size_t tk = 0; /* token: the hex digits after "token=" */
+            while (tk + 1 < sizeof g_token && sizeof pong - 1 + tk < pn) {
+                uint8_t c = rxbuf[sizeof pong - 1 + tk];
+                if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) break;
+                g_token[tk++] = (char)c;
+            }
+            g_token[tk] = 0;
+        }
     }
     if (k != CK_NET_UDP_REPLY) {
-        ck_printf("net: udp round trip FAIL (no reply after %u tries, frames_seen=%u)\n", UDP_TRIES, frames);
+        nlog("net: udp round trip FAIL (no reply after %u tries, frames_seen=%u)\n", pl->udp_tries, frames);
         return CK_NET_E_RX;
     }
-    ck_printf("net: udp round trip ok tx_reclaimed=%u rx_frames=%u\n", reclaimed, frames);
+    nlog("net: udp round trip ok tx_reclaimed=%u rx_frames=%u\n", reclaimed, frames);
     *pp = p;
     return CK_NET_OK;
 }
@@ -246,11 +289,11 @@ static int smmu_negative_test(ck_vnet *n, const ck_net_peer *p, uint64_t win_lo,
     static uint64_t cphys;
     if (!canary) canary = ck_dma_alloc(4096, 4096, &cphys);
     if (!canary) {
-        ck_printf("net_smmu_negative: FAIL (no canary page)\n");
+        nlog("net_smmu_negative: FAIL (no canary page)\n");
         return -1;
     }
     if (!(cphys + 4096u <= win_lo || cphys >= win_lo + win_len)) {
-        ck_printf("net_smmu_negative: FAIL (canary page 0x%llx inside the window)\n", (unsigned long long)cphys);
+        nlog("net_smmu_negative: FAIL (canary page 0x%llx inside the window)\n", (unsigned long long)cphys);
         return -1;
     }
     for (uint32_t i = 0; i < 4096u; i++) canary[i] = CANARY_BYTE;
@@ -272,7 +315,7 @@ static int smmu_negative_test(ck_vnet *n, const ck_net_peer *p, uint64_t win_lo,
     hex8((uint32_t)ck_time_us() ^ 0x0badd0e5u, probe + sizeof probe - 9);
     size_t w = ck_net_udp_frame(p, 0x4f00u, (const uint8_t *)probe, sizeof probe - 1, frame, sizeof frame);
     vnet_err e = w ? vnet_tx(&n->dev, frame, w) : VNET_E_ARG;
-    ck_printf("net_smmu_negative: rx descriptors redirected=%u to iova=0x%llx (outside window 0x%llx+0x%llx); "
+    nlog("net_smmu_negative: rx descriptors redirected=%u to iova=0x%llx (outside window 0x%llx+0x%llx); "
               "probe datagram \"%s\" tx=%s\n",
               redirected, (unsigned long long)cphys, (unsigned long long)win_lo, (unsigned long long)win_len, probe,
               vnet_err_name(e));
@@ -294,7 +337,7 @@ static int smmu_negative_test(ck_vnet *n, const ck_net_peer *p, uint64_t win_lo,
     uint16_t rx_done = (uint16_t)(*(volatile uint16_t *)(n->dev.mem + q->used_off + 2) - used0);
     int ok = e == VNET_OK && before == 0 && faults >= 1 && fl.type == CK_DMA_FAULT_TRANSLATION &&
              fl.stream_id == n->stream_id && (fl.addr & ~(uint64_t)4095u) == cphys && intact;
-    ck_printf("net_smmu_negative: %s rx dma outside window iova=0x%llx faults=%d type=0x%x sid=0x%x addr=0x%llx "
+    nlog("net_smmu_negative: %s rx dma outside window iova=0x%llx faults=%d type=0x%x sid=0x%x addr=0x%llx "
               "page=%s rx_completed=%u device_status=0x%02x needs_reset=%s faults_during_roundtrip=%d overflow=%d\n",
               ok ? "refused" : "FAIL", (unsigned long long)cphys, faults, fl.type, fl.stream_id,
               (unsigned long long)fl.addr, intact ? "intact" : "MODIFIED", rx_done, st,
@@ -320,20 +363,20 @@ static int recovery(ck_vnet *n, const vnet_ops *ops, const virtio_pci_caps *caps
      * counts only the second round trip. */
     int late = ck_dma_faults(n->stream_id, 0);
     if (st != 0) {
-        ck_printf("net_smmu_recovery: FAIL (device reset timeout status=0x%02x)\n", st);
+        nlog("net_smmu_recovery: FAIL (device reset timeout status=0x%02x)\n", st);
         return -1;
     }
     vnet_err e =
         vnet_init_flags(&n->dev, ops, caps, mem, phys, need, CK_NET_QSIZE, VNET_INIT_REQUIRE_ACCESS_PLATFORM);
-    ck_printf("net_smmu_recovery: device reset + reinit %s (%s) access_platform=%s late_probe_faults=%d\n",
+    nlog("net_smmu_recovery: device reset + reinit %s (%s) access_platform=%s late_probe_faults=%d\n",
               e == VNET_OK ? "ok" : "FAIL", vnet_err_name(e),
               (n->dev.features >> VNET_F_ACCESS_PLATFORM & 1) ? "yes" : "no", late);
     if (e != VNET_OK) return -1;
     ck_net_peer p;
-    int rc = roundtrip(n, &p);
+    int rc = roundtrip(n, &p, &PLAN_LAB);
     int faults = ck_dma_faults(n->stream_id, 0);
     int ok = rc == CK_NET_OK && faults == 0;
-    ck_printf("net_smmu_recovery: round trip after the fault %s (rc=%d new_faults=%d)\n", ok ? "ok" : "FAIL", rc,
+    nlog("net_smmu_recovery: round trip after the fault %s (rc=%d new_faults=%d)\n", ok ? "ok" : "FAIL", rc,
               faults);
     return ok ? 0 : -1;
 }
@@ -344,11 +387,12 @@ int ck_net_bind_selftest(const pci_func *f, const virtio_pci_caps *caps)
     /* Never forget a device that may still do DMA: a live earlier bind
      * (bus master on or stream confined) must be released first. */
     if (ck_net_live()) {
-        ck_printf("virtio_net: not bound (previous bind still live; release it first)\n");
+        nlog("virtio_net: not bound (previous bind still live; release it first)\n");
         return CK_NET_E_ARG;
     }
     memset(n, 0, sizeof *n);
     if (!f || !caps) return CK_NET_E_ARG;
+    uint64_t t_bind = ck_time_us();
     n->pf = f;
     size_t need = vnet_mem_size(CK_NET_QSIZE);
     uint64_t win = ((uint64_t)need + 4095u) & ~(uint64_t)4095u;
@@ -356,7 +400,7 @@ int ck_net_bind_selftest(const pci_func *f, const virtio_pci_caps *caps)
     uint8_t *mem = need ? g_dma_mem : 0;
     uint64_t phys = g_dma_phys;
     if (!mem) {
-        ck_printf("virtio_net: unavailable (DMA allocation of %u bytes failed)\n", (unsigned)win);
+        nlog("virtio_net: unavailable (DMA allocation of %u bytes failed)\n", (unsigned)win);
         return CK_NET_E_DMA;
     }
     uint32_t rid = ((uint32_t)f->bus << 8) | ((uint32_t)f->dev << 3) | (uint32_t)f->fn;
@@ -365,22 +409,22 @@ int ck_net_bind_selftest(const pci_func *f, const virtio_pci_caps *caps)
     /* VM edition (core/vguest.h): the hypervisor's own virtio-net, no SMMU. */
     int hyp = src == CK_SMMU_ABSENT && ck_vguest_dma_device(f->vendor, f->device);
     if (src != 0 && !hyp) {
-        ck_printf("dma_gate: virtio_net denied (%s rc=%d), bus master stays off\n",
+        nlog("dma_gate: virtio_net denied (%s rc=%d), bus master stays off\n",
                   src == CK_SMMU_ABSENT ? "NoSmmu" : "SmmuNotReady", src);
-        ck_printf("virtio_net: not bound (SMMU DMA isolation not active)\n");
+        nlog("virtio_net: not bound (SMMU DMA isolation not active)\n");
         return CK_NET_E_DENIED;
     }
     if (!hyp) {
         n->confined = 1;
         n->stream_id = cf.stream_id;
-        ck_printf("smmu_dma_window: virtio_net only iova=0x%llx len=0x%llx rid=0x%x stream_id=0x%x\n",
+        nlog("smmu_dma_window: virtio_net only iova=0x%llx len=0x%llx rid=0x%x stream_id=0x%x\n",
                   (unsigned long long)cf.iova, (unsigned long long)cf.len, rid, cf.stream_id);
     }
     const virtio_pci_region *r[WIN_N] = {&caps->common_cfg, &caps->notify_cfg, &caps->isr_cfg, &caps->device_cfg};
     for (int i = 0; i < WIN_N; i++) {
         n->win[i] = map_window(n, r[i]);
         if (!n->win[i] && i != VNET_WIN_ISR) { /* ISR is unused (polled driver) */
-            ck_printf("virtio_net: not bound (capability window %d outside its BAR)\n", i);
+            nlog("virtio_net: not bound (capability window %d outside its BAR)\n", i);
             ck_net_release();
             return CK_NET_E_ARG;
         }
@@ -388,10 +432,10 @@ int ck_net_bind_selftest(const pci_func *f, const virtio_pci_caps *caps)
     pci_enable(f, 1);
     n->bm_on = 1;
     if (hyp)
-        ck_printf("dma_gate: virtio_net granted (HypervisorDevice: VM edition, %04x:%04x is the hypervisor's "
+        nlog("dma_gate: virtio_net granted (HypervisorDevice: VM edition, %04x:%04x is the hypervisor's "
                   "emulation, no SMMU), bus master on\n", f->vendor, f->device);
     else
-        ck_printf("dma_gate: virtio_net granted (Confined), bus master on\n");
+        nlog("dma_gate: virtio_net granted (Confined), bus master on\n");
     vnet_ops ops = {n, o_read, o_write, o_notify};
     /* Fail closed: without VIRTIO_F_ACCESS_PLATFORM QEMU (and a real device
      * behind a bypassing transport) would DMA around the SMMU window. With
@@ -399,28 +443,39 @@ int ck_net_bind_selftest(const pci_func *f, const virtio_pci_caps *caps)
     vnet_err e = vnet_init_flags(&n->dev, &ops, caps, mem, phys, need, CK_NET_QSIZE,
                                  hyp ? 0 : VNET_INIT_REQUIRE_ACCESS_PLATFORM);
     if (e != VNET_OK) {
-        ck_printf("virtio_net: init FAIL (%s) offered=%llx\n", vnet_err_name(e), (unsigned long long)n->dev.offered);
+        nlog("virtio_net: init FAIL (%s) offered=%llx\n", vnet_err_name(e), (unsigned long long)n->dev.offered);
         ck_net_release();
         return CK_NET_E_INIT;
     }
     const uint8_t *m = n->dev.mac;
-    ck_printf("virtio_net: attached %02x:%02x.%u rid=0x%x qsize=rx%u/tx%u mac=%02x:%02x:%02x:%02x:%02x:%02x "
+    nlog("virtio_net: attached %02x:%02x.%u rid=0x%x qsize=rx%u/tx%u mac=%02x:%02x:%02x:%02x:%02x:%02x "
               "features=0x%llx access_platform=%s\n",
               f->bus, f->dev, f->fn, rid, n->dev.q[VNET_RX_QUEUE].size, n->dev.q[VNET_TX_QUEUE].size, m[0], m[1], m[2],
               m[3], m[4], m[5], (unsigned long long)n->dev.features,
               (n->dev.features >> VNET_F_ACCESS_PLATFORM & 1) ? "yes" : "no");
     ck_net_peer peer;
     memset(&peer, 0, sizeof peer);
-    int rc = n->dev.has_mac ? roundtrip(n, &peer) : CK_NET_E_INIT;
+    const rt_plan *pl = hyp ? &PLAN_VM : &PLAN_LAB;
+    g_rtt_us = 0;
+    g_token[0] = 0;
+    int rc = n->dev.has_mac ? roundtrip(n, &peer, pl) : CK_NET_E_INIT;
     /* Prove the fence: device DMA outside the window is refused by the SMMU,
      * then the device recovers inside it (net_bind.h). */
     if (rc == CK_NET_OK && hyp)
-        ck_printf("net_smmu_fence: not applicable (HypervisorDevice, VM edition: no SMMU)\n");
+        nlog("net_smmu_fence: not applicable (HypervisorDevice, VM edition: no SMMU)\n");
     else if (rc == CK_NET_OK &&
              (smmu_negative_test(n, &peer, phys, win) != 0 || recovery(n, &ops, caps, mem, phys, need) != 0))
         rc = CK_NET_E_SMMU;
-    if (!n->dev.has_mac) ck_printf("net: no MAC offered by the device; round trip not attempted\n");
-    ck_printf("net: selftest %s (rc=%d)\n", rc == CK_NET_OK ? "PASS" : "FAIL", rc);
+    if (!n->dev.has_mac) nlog("net: no MAC offered by the device; round trip not attempted\n");
+    nlog("net: selftest %s (rc=%d)\n", rc == CK_NET_OK ? "PASS" : "FAIL", rc);
     ck_net_release();
+    if (hyp) /* VM edition: one summary line, printed even when quiet */
+        ck_printf("net_selftest: %s rc=%d peer=10.0.2.2:%u (aienos-run, in-process) token=%s rtt_us=%llu "
+                  "total_us=%llu bound_us=%llu\n",
+                  rc == CK_NET_OK ? "PASS" : "FAIL", rc, CK_NET_ECHO_PORT, g_token[0] ? g_token : "none",
+                  (unsigned long long)g_rtt_us, (unsigned long long)(ck_time_us() - t_bind),
+                  (unsigned long long)plan_bound_us(pl));
+    if (hyp && g_quiet) /* the detail lines (DMA grant and revoke among them) were left out */
+        ck_printf("net_selftest: device released=%s\n", ck_net_live() ? "NO" : "yes");
     return rc;
 }
