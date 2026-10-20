@@ -29,6 +29,10 @@ QEMU qualifies nothing physical: a PASS here says nothing about real hardware.
                                      # CK_QEMU_UNSAFE_DMA=1 build), ends AIENOS_CK_M4_NVME,
                                      # AIENOS_CK_M4_STORE, AIENOS_CK_ARGUS1_REVOKE
     scripts/qemu_ck_disk_layout_test.sh # QEMU GPT / AIENOS partition gate, ends AIENOS_CK_DISK_LAYOUT
+    make -C native/kernel full CK_MT7925=1 # attended Spark image only: + the MT7925 Wi-Fi
+                                     # binding (dev/mt7925_bind.c): probe, SMMU window, chip
+                                     # init and release, no firmware. Built, never booted;
+                                     # docs/SPARK_WIFI_MT7925.md section 7. Default images leave it out
 
 Toolchain: gcc, binutils (ld, objcopy, nm, readelf), make, shell. On a
 non-aarch64 host the Makefile uses the `aarch64-linux-gnu-` prefix.

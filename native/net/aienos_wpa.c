@@ -236,8 +236,11 @@ static wpa_err parse_keydata(const uint8_t *kd, uint32_t n, int need_rsne, const
             if (*rsne) return WPA_E_KEYDATA;
             *rsne = e;
         } else if (e[0] == 0xdd && el >= 4 && e[2] == 0x00 && e[3] == 0x0f && e[4] == 0xac && e[5] == 0x01) {
-            /* GTK KDE: Key ID/Tx byte, reserved byte, GTK (Figure 12-35). */
-            if (*gtk || el < 6u + 16u || el - 6u > WPA_GTK_MAX) return WPA_E_KEYDATA;
+            /* GTK KDE: Key ID/Tx byte, reserved byte, GTK (Figure 12-35). The
+             * group cipher is always CCMP-128 here (wifi_choose_security), so
+             * the GTK is exactly 16 bytes; group key ids are 1..3. Checked
+             * before any reply goes out. */
+            if (*gtk || el != 6u + WPA_TK_LEN || (e[6] & 3u) == 0) return WPA_E_KEYDATA;
             *gtk = e + 6;
             *gtk_len = el - 4u;
         }
@@ -297,7 +300,7 @@ static wpa_err rx_m3(wpa_supp *w, const uint8_t *p, const wpa_key_frame *k, uint
     const uint8_t *ptk = retransmit ? w->ptk : w->tptk;
     wpa_err e = verify_mic(w, ptk, p, k->total);
     if (e != WPA_OK) return e;
-    if (!(k->key_info & WPA_KI_ENC)) return WPA_E_FORMAT;
+    if (!(k->key_info & WPA_KI_ENC) || k->key_len != WPA_TK_LEN) return WPA_E_FORMAT;
     if ((e = unwrap_keydata(w, ptk + WPA_KCK_LEN, k, plain, &pl)) != WPA_OK) goto out;
     if ((e = parse_keydata(plain, pl, 1, &rsne, &gtk, &glen)) != WPA_OK) goto out;
     if (rsne[1] + 2u != w->ap_rsne_len || memcmp(rsne, w->ap_rsne, w->ap_rsne_len)) {

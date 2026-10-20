@@ -210,7 +210,7 @@ static void test_handshake(void) {
     authn a;
     toy_ctx t;
     wpa_crypto c;
-    uint8_t f[WPA_FRAME_MAX], r[WPA_FRAME_MAX], g[WPA_FRAME_MAX];
+    uint8_t f[WPA_FRAME_MAX], r[WPA_FRAME_MAX];
     wpa_action act;
     uint32_t n;
 
@@ -255,10 +255,10 @@ static void test_handshake(void) {
     CHECK(memcmp(&w, zero, sizeof w) == 0);
 }
 
-typedef enum { M3_ANONCE, M3_MIC, M3_RSNE, M3_NOENC, M3_VERSION, M3_NOGTK, M3_PAD, M3_WRAP, M3_REQUEST, M3_SHAPE } m3_bad;
+typedef enum { M3_ANONCE, M3_MIC, M3_RSNE, M3_NOENC, M3_VERSION, M3_NOGTK, M3_PAD, M3_WRAP, M3_REQUEST, M3_SHAPE, M3_GTKID, M3_KEYLEN } m3_bad;
 
 static void test_m3_attacks(void) {
-    for (int bad = M3_ANONCE; bad <= M3_SHAPE; bad++) {
+    for (int bad = M3_ANONCE; bad <= M3_KEYLEN; bad++) {
         wpa_supp w;
         authn a;
         toy_ctx t;
@@ -278,24 +278,27 @@ static void test_m3_attacks(void) {
         if (bad == M3_NOENC) { info &= (uint16_t)~WPA_KI_ENC; want = WPA_E_FORMAT; }
         if (bad == M3_REQUEST) { info |= WPA_KI_REQUEST; want = WPA_E_FORMAT; }
         if (bad == M3_SHAPE) { info &= (uint16_t)~WPA_KI_INSTALL; want = WPA_E_FORMAT; }
-        uint32_t kl = kd_build(kd, rsne, sizeof rsne, gtk, 1);
+        if (bad == M3_GTKID) want = WPA_E_KEYDATA; /* key id 0 is pairwise-only */
+        uint32_t kl = kd_build(kd, rsne, sizeof rsne, gtk, bad == M3_GTKID ? 0 : 1);
         if (bad == M3_PAD) { kd[kl - 1] = 1; want = WPA_E_KEYDATA; }
         if (bad == M3_ANONCE) { a.anonce[5] ^= 1; want = WPA_E_NONCE; }
         a.replay++;
-        if (bad == M3_WRAP) {
-            /* wrap under a different KEK, MIC still right: unwrap integrity fails */
-            a.ptk[16] ^= 1;
+        if (bad == M3_WRAP || bad == M3_KEYLEN) {
+            /* WRAP: wrapped under a different KEK, MIC still right, unwrap integrity
+             * fails. KEYLEN: a correct frame claiming a 32-byte pairwise key. */
+            if (bad == M3_WRAP) a.ptk[16] ^= 1;
             uint8_t wrapped[WPA_KEYDATA_MAX];
             uint32_t wl = toy_wrap(a.ptk + 16, kd, kl, wrapped);
-            a.ptk[16] ^= 1;
+            if (bad == M3_WRAP) a.ptk[16] ^= 1;
             wpa_key_frame k = {0};
             k.version = 2; k.key_info = (uint16_t)(info | WPA_VER_CMAC_AES);
+            k.key_len = bad == M3_KEYLEN ? 32 : WPA_TK_LEN;
             put_replay(k.replay, a.replay);
             memcpy(k.nonce, a.anonce, 32);
             k.data = wrapped; k.data_len = (uint16_t)wl;
             CHECK(wpa_key_build(&k, f, sizeof f, &n) == WPA_OK);
             toy_mic(0, a.ptk, f, n, f + WPA_MIC_OFF);
-            want = WPA_E_KEYDATA;
+            want = bad == M3_KEYLEN ? WPA_E_FORMAT : WPA_E_KEYDATA;
         } else {
             n = a_frame(&a, info, a.anonce, kd, kl, 1, f);
         }

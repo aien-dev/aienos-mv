@@ -67,6 +67,12 @@ Package [OBSERVED, `dpkg -S`, `dpkg-query -W`]: `linux-firmware-mediatek`
 version `20240318.git3b128b60-0ubuntu3.1`. File dates in the package are
 2026-07-14.
 
+[INFERRED] The package version names the 2024-03-18 upstream snapshot, but
+the blobs inside carry 2026-06-05 build dates (section 3) and 2026-07-14
+file dates: the Ubuntu "3.1" update replaced the MT7925 files with newer
+MediaTek builds without changing the upstream snapshot name. Pin the files by
+digest (section 1), never by package version.
+
 ## 3. Versions inside the files
 
 Read from the file headers [OBSERVED, `zstd -d -c | head -c 32 | xxd` and

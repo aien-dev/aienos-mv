@@ -32,6 +32,10 @@ typedef struct {
     void (*udelay)(void *ctx, uint32_t us);
     /* Hand a key to the chip: pairwise (key_id 0) or group (1..3). 0 = ok. */
     int (*set_key)(void *ctx, int pairwise, uint8_t key_id, const uint8_t *key, uint32_t len);
+    /* Platform entropy for the SNonce (the kernel: ck_entropy_fill), with its
+     * own context. NULL = none: RSN joins are refused. 0 = ok. */
+    int (*random)(void *rng_ctx, uint8_t *out, uint32_t n);
+    void *rng_ctx;
 } wifi_radio;
 
 typedef enum {
@@ -57,7 +61,8 @@ typedef struct {
     uint16_t rxq_len[WIFI_STA_RXQ];
     uint32_t rxq_head, rxq_n;
     uint32_t rx_frames, rx_dropped, rx_unprotected_dropped, deauths;
-    const wpa_crypto *crypto;
+    const wpa_crypto *crypto;   /* caller's table, or NULL = native */
+    wpa_crypto tbl;             /* the table this association uses */
     uint8_t pmk[WPA_PMK_LEN], has_pmk;
     wpa_supp wpa;
     uint8_t keys_done;      /* 1 = handshake complete and keys installed, 2 = key install failed */

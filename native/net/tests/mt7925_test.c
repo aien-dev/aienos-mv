@@ -519,6 +519,45 @@ static uint32_t rxbuf(uint8_t *b, uint32_t rxd0x, uint32_t rxd1, uint32_t rxd2, 
     return len;
 }
 
+/* A receive callback that polls the rings again (what a station reply does
+ * when the TX ring is full, or a key install waiting on the MCU): every
+ * frame arrives once, in order, the nesting stops at MT7925_CB_DEPTH with
+ * the rest counted as dropped, and the ring stays usable. */
+static mt7925_dev *NEST_D;
+static uint8_t nest_tag[16];
+static uint32_t nest_n;
+static void on_rx_nest(void *ctx, const uint8_t *buf, uint32_t len) {
+    (void)ctx;
+    if (len > 40 && nest_n < 16) nest_tag[nest_n++] = buf[40];
+    (void)mt7925_poll_rings(NEST_D);
+}
+
+static void test_rx_nested(void) {
+    mt7925_dev d;
+    uint8_t f[64], b[128];
+    static const uint8_t me[6] = {0x02, 0, 0, 0, 0, 0x25};
+    CHECK(bring_up(&d, 0) == MT7925_OK);
+    NEST_D = &d;
+    nest_n = 0;
+    d.on_rx = on_rx_nest;
+    uint32_t fl = mk_frame(f, 0x08, 0x02, me, 40);
+    for (uint8_t t = 0; t < 6; t++) {
+        f[8] = t; /* lands at buf[40]: 32 RXD bytes + 8 */
+        uint32_t n = rxbuf(b, 0, 0, 0, 0, 0, f, fl);
+        model_queue_rx(&M, MT7925_PKT_TYPE_NORMAL, b, n);
+    }
+    CHECK(mt7925_poll_rings(&d) >= 0 && !d.broken && d.cb_depth == 0);
+    CHECK(nest_n == MT7925_CB_DEPTH && d.rx_nest_dropped == 6u - MT7925_CB_DEPTH);
+    for (uint32_t i = 0; i < nest_n; i++) CHECK(nest_tag[i] == i);
+    /* the ring still moves: one more frame, one delivery */
+    d.on_rx = on_rx;
+    f[8] = 9;
+    uint32_t n = rxbuf(b, 0, 0, 0, 0, 0, f, fl);
+    uint32_t rx0 = CB.rx;
+    model_queue_rx(&M, MT7925_PKT_TYPE_NORMAL, b, n);
+    CHECK(mt7925_poll_rings(&d) == 1 && CB.rx == rx0 + 1u && !d.broken && M.dma_faults == 0);
+}
+
 static void test_rx_parse(void) {
     uint8_t f[200], b[600];
     mt7925_rx_info ri;
@@ -612,7 +651,6 @@ static void test_rx_parse(void) {
             for (uint32_t k = 0; k < len; k++) { x = x * 1664525u + 1013904223u; b[k] = (uint8_t)(x >> 24); }
             if (len >= 4 && (x & 1)) put_le32(b, (le32(b) & 0xffff0000u) | (x % (len + 8u)));
         }
-| (x % (len + 8u)));
         if (mt7925_rx_parse(b, len, &ri) == MT7925_RX_OK) {
             ok++;
             CHECK(ri.frame >= b + 32 && ri.frame_len >= 24 && ri.frame + ri.frame_len <= b + len);
@@ -841,6 +879,22 @@ static void test_station(void) {
     CHECK(M.sta_state == MT7925_STA_STATE_ASSOC && M.bss_has_rlm && M.bss_conn_state == 0 && M.bss_cipher == 0);
     CHECK(L.cfg.channel == 6 && L.cfg.band == 1 && L.cfg.aid == 1);
     CHECK(mt7925_join_authorized(&d) == MT7925_OK && !M.roc_active);
+    /* A data frame on the event ring while a command waits: held, not handed
+     * to the station inside the command, delivered by the next poll. */
+    {
+        uint8_t df[64] = {0x08, 0x02}, rb[128], mac[6];
+        memcpy(df + 4, S.mac, 6); memcpy(df + 10, AP_OPEN.bssid, 6); memcpy(df + 16, AP_OPEN.mac, 6);
+        static const uint8_t snap[8] = {0xaa, 0xaa, 0x03, 0, 0, 0, 0x08, 0x06};
+        memcpy(df + 24, snap, 8);
+        uint32_t rl = rxbuf(rb, 0, 1, 0, 6u << 8, 0, df, 60);
+        uint32_t before = S.rx_frames;
+        model_queue_evt_raw(&M, rb, rl);
+        CHECK(mt7925_read_mac(&d, mac) == MT7925_OK);
+        CHECK(d.rx_deferred == 1 && d.defer_n == 1 && S.rx_frames == before);
+        CHECK(mt7925_poll_rings(&d) >= 1 && d.defer_n == 0 && S.rx_frames == before + 1);
+        uint32_t n2 = 0;
+        CHECK(wifi_sta_recv_eth(&S, rx, sizeof rx, &n2) && n2 == 60u - 24u - 8u + 14u && rx[12] == 0x08 && rx[13] == 0x06);
+    }
 
     /* ARP for the gateway through aienos_net */
     net_arp_packet arp = {NET_ARP_REQUEST, {{0}}, me, {{0}}, gw};
@@ -932,6 +986,11 @@ static void test_station_wpa(void) {
     wifi_sta_set_psk(&S, pmk, 0);
     CHECK(wifi_sta_connect(&S, (const uint8_t *)"aiensha", 7, 200000) == WIFI_E_CRYPTO && M.auths == 0);
     CHECK(S.sec == WIFI_SEC_WPA2_PSK_SHA256);
+    /* with a platform entropy source the native table still lacks the MIC and key wrap */
+    S.r.random = toy_random;
+    S.r.rng_ctx = &t;
+    CHECK(wifi_sta_connect(&S, (const uint8_t *)"aiensha", 7, 200000) == WIFI_E_CRYPTO && M.auths == 0);
+    CHECK(S.tbl.random && S.tbl.prf && !S.tbl.mic && !S.tbl.unwrap);
     /* with a complete table */
     wifi_sta_set_psk(&S, pmk, &toy);
     CHECK(wifi_sta_connect(&S, (const uint8_t *)"aiensha", 7, 200000) == WIFI_OK);
@@ -961,6 +1020,24 @@ static void test_station_wpa(void) {
     memcpy(f + 24, snap, 8);
     wifi_sta_rx(&S, f, 60, 0, -30);
     CHECK(S.rx_unprotected_dropped == 1);
+    /* key messages forged from behind the AP, or in the clear after the PTK: dropped, link stays up */
+    uint32_t refused0 = S.eapol_refused;
+    M.eapol_protect = 1;
+    M.eapol_from_gw = 1;
+    model_ap_send_m1(&M);
+    CHECK(mt7925_poll_rings(&d) >= 0 && S.eapol_refused == refused0 + 1u && S.st == WIFI_STA_RUN);
+    M.eapol_protect = 0;
+    M.eapol_from_gw = 0;
+    model_ap_send_m1(&M);
+    CHECK(mt7925_poll_rings(&d) >= 0 && S.eapol_refused == refused0 + 2u && S.rx_unprotected_dropped == 2);
+    CHECK(S.st == WIFI_STA_RUN && S.ptk_set && M.deauth_rx == 0);
+    /* a real PTK rekey (protected message 1 from the AP) is not supported: the station leaves */
+    M.eapol_protect = 1;
+    model_ap_send_m1(&M);
+    M.eapol_protect = 0;
+    CHECK(mt7925_poll_rings(&d) >= 0 && S.st == WIFI_STA_IDLE && !S.ptk_set && S.wpa.st == WPA_ST_IDLE);
+    CHECK(M.deauth_rx == 1 && M.last_deauth_reason == WIFI_REASON_UNSPECIFIED && M.assoc_ap == -1);
+    CHECK(wifi_sta_send_eth(&S, eth, (uint32_t)n) == WIFI_E_STATE);
     CHECK(wifi_sta_disconnect(&S) == WIFI_OK && S.ptk_set == 0 && S.wpa.st == WPA_ST_IDLE && M.ap_wpa == 0);
 
     /* wrong PSK: the AP refuses message 2, nothing installed, no data port */
@@ -968,7 +1045,9 @@ static void test_station_wpa(void) {
     model_set_pmk(&M, pmk);
     wifi_sta_set_psk(&S, bad_pmk, &toy);
     CHECK(wifi_sta_connect(&S, (const uint8_t *)"aiensha", 7, 50000) == WIFI_E_TIMEOUT);
-    CHECK(M.eapol_bad == 1 && M.ap_wpa == 1 && M.keys == 0 && S.st == WIFI_STA_IDLE);
+    /* the station told the AP the handshake timed out (reason 15), so the AP dropped its state */
+    CHECK(M.eapol_bad == 1 && M.ap_wpa == 0 && M.keys == 0 && S.st == WIFI_STA_IDLE);
+    CHECK(M.deauth_rx == 1 && M.last_deauth_reason == WIFI_REASON_4WAY_TIMEOUT);
     /* AP-side attacks on message 3 and a silent AP */
     static const uint32_t faults[3] = {MODEL_F_M3_BAD_MIC, MODEL_F_M3_DOWNGRADE, MODEL_F_NO_M1};
     for (int i = 0; i < 3; i++) {
@@ -977,6 +1056,7 @@ static void test_station_wpa(void) {
         wifi_sta_set_psk(&S, pmk, &toy);
         CHECK(wifi_sta_connect(&S, (const uint8_t *)"aiensha", 7, 50000) == WIFI_E_TIMEOUT);
         CHECK(M.keys == 0 && S.st == WIFI_STA_IDLE && !S.ptk_set && S.eapol_refused == (i < 2 ? 1u : 0u));
+        CHECK(M.deauth_rx == 1 && M.last_deauth_reason == WIFI_REASON_4WAY_TIMEOUT);
         CHECK(wifi_sta_send_eth(&S, eth, (uint32_t)n) == WIFI_E_STATE);
     }
 }
@@ -1027,6 +1107,7 @@ int main(int argc, char **argv) {
     test_txd();
     test_tx_path();
     test_rx_parse();
+    test_rx_nested();
     test_join_builders();
     test_join_model();
     test_station();

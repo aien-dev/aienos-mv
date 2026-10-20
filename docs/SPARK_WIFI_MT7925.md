@@ -1,7 +1,10 @@
 # Spark Wi-Fi: Aienux driver for the MediaTek MT7925 (L206)
 
-Status: driver, 802.11 station, WPA handshake layer and chip model written
-and tested on the host. Never run on the chip. Every register sequence below
+Status: driver, 802.11 station, WPA handshake layer and chip model written.
+Host tests run them against our own chip model and a stand-in authenticator
+(receipts with commands and exit codes in section 6); that proves the code
+matches our reading of the reference and refuses hostile input, not that the
+chip behaves this way. Never run on the chip. Every register sequence below
 is from reading the open-source Linux mt76 driver (no public MediaTek
 programming manual exists: DOCS SILENT, recorded with `docs-read` on
 2026-10-20) and is UNKNOWN on hardware until an attended boot.
@@ -23,9 +26,10 @@ of hostile behaviour, not chip behaviour). [UNKNOWN] needs the real chip.
   between the radio and the AienOS network stack.
 - Open (no password) networks work end to end in the simulator: scan, join,
   then ARP and ping to the gateway through native/net/aienos_net.c.
-- Password networks (WPA2/WPA3): the whole handshake is written and tested
-  (the four-message key exchange, the group-key refresh, every attack check
-  the standard requires), and the keys go into the chip. It runs in the
+- Password networks (WPA2/WPA3): the whole handshake is written and host-tested
+  (the four-message key exchange, the group-key refresh, the attack checks
+  listed in section 5), and the keys go into the chip. A pairwise key refresh
+  is not done yet: the station leaves cleanly and must join again (R24). It runs in the
   simulator with stand-in crypto. With our real crypto library it refuses,
   because two pieces of standard crypto do not exist in native/ yet: the
   AES-128 message check (CMAC) and AES key wrap; plain WPA2 also needs SHA-1.
@@ -99,6 +103,14 @@ the attended-boot experiment that turns it from UNKNOWN into OBSERVED.
 | R20 | MSI and interrupts | SOURCE mt7925/pci.c | not used (polled) | UNKNOWN: MSI vector routing through the GIC ITS; experiment after polled path works |
 | R21 | IORT stream id for 0009:01:00.0 on smmu3 | OBSERVED IOMMU group | via ck_dma_confine | `smmu_dma_window` line prints the stream id |
 | R22 | ASPM: the reference offers disable_aspm | SOURCE mt7925/pci.c | not touched | UNKNOWN: whether L1 entry breaks MMIO on this card |
+| R23 | GTK from message 3 / group message 1: exactly 16 bytes (the group cipher is always CCMP-128 here), key id 1..3, checked before any reply | STANDARD 12.7.2 Figure 12-35 | TESTED (wpa_test NOGTK, PAD, group rekey) | Join a WPA2 AP whose group cipher is CCMP; a TKIP-group AP is refused by the RSN layer |
+| R24 | PTK rekey (a protected message 1 after the handshake) is not done: the station deauthenticates (reason 1) so the caller reconnects | STANDARD 12.7.6.2 | TESTED (mt7925_test station_wpa) | Set a short PTK rekey interval on a test AP; expect a clean leave and reconnect, then implement rekey in place |
+| R25 | Key removal on leave: no chip key-delete command is wired; keys stay in the chip until the next join rewrites the station record | SOURCE mt7925/mcu.c add_key (cmd remove) | not tested | UNKNOWN: whether a stale WCID key survives STA_REC removal; read back with a sniffer after leave, then wire the remove command |
+| R26 | Re-entrancy: data frames that arrive on RX0 while the driver waits for an MCU reply are held (4 deep) and delivered after the reply; every callback runs after its ring slot is consumed, on a per-level copy, so a callback that polls again (TX ring full, key install) cannot see the slot twice; nesting stops at 4 levels, deeper frames dropped and counted (rx_nest_dropped) | SOURCE mt7925 event path; our design | TESTED (deferred-frame block in station test, test_rx_nested) | Count rx_deferred / rx_defer_dropped / rx_nest_dropped during a busy join |
+| R27 | Key data padding: 0xdd then zeros to an 8-byte boundary, anything else refused | STANDARD 12.7.2 | TESTED (wpa_test PAD) | Interop: some APs may pad differently; record any refusal with the frame |
+| R28 | RSNXE (WPA3 extensions) in message 3 is not compared with the beacon's | STANDARD 12.7.6.4 | not tested | Needed with SAE-H2E; the SAE lane adds the check |
+| R29 | Leaving after a failed handshake: deauthentication with reason 15 (4-way timeout), or 1 for any other failure after association | STANDARD Table 9-49 | TESTED (wrong PSK, bad MIC, downgrade, silent AP) | Watch the AP log for the reason code |
+| R30 | EAPOL source must be the BSSID (the authenticator); once the pairwise key is in, cleartext EAPOL is dropped | STANDARD 12.7.6 | TESTED (forged-source and cleartext message 1) | none needed beyond R16 |
 
 ## 5. Security: what exists and what is missing
 
@@ -107,7 +119,7 @@ installed (R19). Host side, the 4-way handshake needs [STANDARD 12.7]:
 
 | Primitive | Needed for | In native/? |
 | --- | --- | --- |
-| Random (SNonce) | all | platform entropy (kernel core/entropy.c, arch/rndr.c); passed in by the caller |
+| Random (SNonce) | all | the kernel has it (ck_entropy_fill over the Arm RNDR instruction, refusing when absent; whether GB10 has RNDR is UNKNOWN until the boot prints `cpu_features ... rndr=`). The station takes it through `wifi_radio.random`; no entropy, no RSN join. The MT7925 kernel binding does not attach the station yet, so it is not wired there |
 | KDF-SHA256 | PTK for AKM 6 (PSK-SHA256) and AKM 8 (SAE) | yes: wpa_kdf_sha256 over the in-house HMAC-SHA256, checked against an OpenSSL-computed reference |
 | AES-128 block cipher | CMAC and key wrap | **missing** (native/crypto has AES-256 only) |
 | AES-128-CMAC | EAPOL-Key MIC for AKM 6 and 8 | **missing** |
@@ -124,13 +136,29 @@ absent. The supplicant checks, all tested: key-info shape per message,
 descriptor version per AKM, replay counter strictly increasing and only moved
 by MIC-verified messages, ANonce equality, constant-time MIC check before any
 key data is used, unwrap integrity, RSNE in message 3 equal to the beacon's
-(downgrade), GTK KDE bounds and key id, no reinstallation of an installed key,
+(downgrade), pairwise key length, GTK exactly 16 bytes with key id 1..3, no
+reinstallation of an installed key, EAPOL only from the BSSID and only
+protected once the pairwise key is in, deauthentication (reason 15) when the
+handshake fails, a PTK rekey answered by leaving (R24),
 message 4 sent before the pairwise key is installed, secrets wiped.
 
 ## 6. Receipts
 
-Filled from the runs of this lane (command, exit code).
-(see the handoff ~/handoffs/2026-10-20-spark-wifi-mt7925.md for the latest)
+Run 2026-10-20 (~18:45Z) on the Spark host, working tree on top of a089269
+(the commit that adds this section), through `quiet-build`
+(script /tmp/l206-run6.sh, run from native/):
+
+| Command | Exit | Result |
+| --- | --- | --- |
+| `make -C net test` | 0 | MT7925_FW_TESTS PASS (948 checks), MT7925_DRIVER_TESTS PASS (7232 checks, 0 failures), wifi_test 11046 checks 0 failures, AIENOS_WPA_TEST PASS (429 checks); the rest of native/net (net_test, ctl_test, secure, vnet) 0 failures |
+| `make -C net sanitize` (ASan + UBSan, halt on error) | 0 | the same four suites PASS with the same counts |
+| `make -C net mt7925-fw-real` (read-only parse of /lib/firmware/mediatek/mt7925) | 0 | MT7925_FW_REAL PASS; RAM code 5 regions (4 downloaded, region 4 host-only CLC); MT7925_MODEL_REAL_FW PASS: 6 downloads, 1275392 scatter bytes, 11 MCU commands, start addr 0x0090d000 option 0x1 |
+| `make -C kernel full CK_MT7925=1 OUT=../target/l206-mt7925 -j8` | 0 | BOOTAA64.EFI built; `nm` shows the ck_mt7925_* binding and mt7925_init linked. Not booted |
+
+The QEMU gate run for the default images (scripts/ck_gates.sh on the
+committed tree) is in the handoff ~/handoffs/2026-10-20-spark-wifi-mt7925.md.
+What these do not show: anything about the real chip (every row in
+section 4 stays UNKNOWN until the attended boot).
 
 ## 7. Attended boot plan (operator steps, in order)
 

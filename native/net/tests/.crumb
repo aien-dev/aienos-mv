@@ -14,20 +14,20 @@
       "children": [
         {
           "digest": "dee52184bb1879d3bbb1b3db0cb6b8aa9cce4fc524e3aa18e1ba93da79802f5f",
-          "last_commit": "d75a266",
+          "last_commit": "d75a2660",
           "name": "fixtures",
           "purpose": "Directory native/net/tests/fixtures. Purpose not yet described by a human."
         }
       ],
       "children_root": "sha256:eefad7996e552393c5e8e30abc9d90b9ec8f10e51bef5b788e6131b1c76c0907",
-      "compiled_at": "2026-10-04T13:47:18Z",
+      "compiled_at": "2026-10-20T18:50:58Z",
       "compiler": "crumb-compile/1",
-      "digest": "sha256:fd139e90ca41167b0025352fafdca0d2c9c869c6e13bab72c04d30b5776ddd93",
+      "digest": "sha256:1944781dd4eaa9b8836462195b5bac965a9ea1df9860a29040766814a58c0ef3",
       "evidence_files": 0,
       "evidence_root": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "files": 9,
-      "generated_at_commit": "a863d5c1f5bd89c88c5f6671eecfd27b599ee512",
-      "source_tree": "sha256:60565b9b1b0f84a1b034f20a7529336725a73f81a4b494da142265d8b2da8c19"
+      "files": 16,
+      "generated_at_commit": "a08926996564fc81a7f72a5516eca4e052be9d3f",
+      "source_tree": "sha256:c18cd3f55681a8256fb87b7702de8e8ef03fac39a115acebc3db0bc3cfd08857"
     },
     "owner_lane": "",
     "provenance": {

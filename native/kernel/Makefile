@@ -938,6 +938,10 @@ CORE_OBJS := $(patsubst $(NATIVE)/%.c,$(KOBJ)/%.o,$(CORE_C)) \
 
 # ---- boot stages (stage.mk: STAGE_SRCS, STAGE_CFLAGS, stage-* host targets) ----
 include $(KDIR)/stage.mk
+# L206: the MT7925 Wi-Fi binding and driver, CK_MT7925=1 (attended Spark image) only.
+ifeq ($(strip $(CK_MT7925)),1)
+STAGE_SRCS += $(KDIR)/dev/mt7925_bind.c $(NATIVE)/net/aienos_mt7925.c $(NATIVE)/net/aienos_mt7925_fw.c
+endif
 ifeq ($(strip $(CK_QEMU_UNSAFE_DMA)),1)
 FULL_NAME := full-qemu-unsafe-dma
 STAGE_DMA_FLAGS := -DCK_QEMU_UNSAFE_DMA=1
@@ -1003,9 +1007,6 @@ STAGE_SRCS += $(KDIR)/core/lifecycle.c $(KDIR)/core/lifecycle_fsm.c $(KDIR)/core
 STAGE_SRCS += $(KDIR)/core/context.c $(KDIR)/core/context_proposal.c
 # P06 cut 3: the canonical Omega Cortex store over the sealed Store (svc/cortex_journal.c).
 STAGE_SRCS += $(STAGE_CORTEX_SRCS)
-ifeq ($(strip $(CK_MT7925)),1)
-STAGE_SRCS += $(KDIR)/dev/mt7925_bind.c $(NATIVE)/net/aienos_mt7925.c $(NATIVE)/net/aienos_mt7925_fw.c
-endif
 # P05 cut 1: production continuity on the service lifecycle (svc/continuity_service.c):
 # the continuity layer without its TEST-ONLY mode selection (continuity_boot.c)
 # and without the Recovery Core (continuity_recovery.c, TEST operator key).

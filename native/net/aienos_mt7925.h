@@ -131,6 +131,11 @@
 #define MT7925_N_RX_DATA 32u
 #define MT7925_RING_MAX 32u
 #define MT7925_BUF_BYTES 2048u        /* RX buffers, TX data and MCU commands */
+/* Frames that arrive on the event ring while a command waits for its reply
+ * are held here and handed to on_rx by the next mt7925_poll_rings, so the
+ * receive callback never runs inside a command (it may send commands). */
+#define MT7925_RX_DEFER 4u
+#define MT7925_CB_DEPTH 4u        /* nested RX callbacks (a callback that polls again) */
 #define MT7925_FWDL_BUF_BYTES 4096u   /* one FW_SCATTER chunk */
 
 /* MCU command framing. */
@@ -251,6 +256,13 @@ typedef struct {
     void *cb_ctx;       /* passed to on_event */
     void *rx_ctx;       /* passed to on_rx */
     uint32_t events_seen, events_dropped;
+    uint8_t defer[MT7925_RX_DEFER][MT7925_BUF_BYTES];
+    uint16_t defer_len[MT7925_RX_DEFER];
+    uint32_t defer_n, rx_deferred, rx_defer_dropped;
+    /* One frame copy per callback nesting level (rx_one); deeper frames are
+     * dropped and counted. */
+    uint8_t cb_buf[MT7925_CB_DEPTH][MT7925_BUF_BYTES];
+    uint32_t cb_depth, rx_nest_dropped;
     uint32_t tok_busy;  /* data TX slots whose frame the chip has not yet released (TX_FREE) */
     uint32_t tx_freed;  /* tokens released by TX_FREE */
     uint8_t roc_token;  /* last remain-on-channel token (aienos_mt7925_sta.c) */

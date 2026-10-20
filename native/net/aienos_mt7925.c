@@ -645,6 +645,12 @@ static int rx_one(mt7925_dev *d, mt7925_ring *r, int events, uint8_t want_seq, u
         return -(int)MT7925_E_DEVICE;
     }
     int ret = 1;
+    /* Callbacks run after the slot is consumed and re-armed, on a copy in
+     * this nesting level's buffer: a callback may poll again (TX ring full,
+     * a key install waiting on the MCU), and the nested poll must see this
+     * slot as done and must not overwrite the frame being delivered. */
+    uint8_t *cb = 0;
+    int cb_eid = -1;
     const uint8_t *b = buf_ptr(d, r, i);
     int last = (ctrl & MT7925_DESC_LAST_SEC0) != 0;
     if (!last || len < 4) {
@@ -666,14 +672,35 @@ static int rx_one(mt7925_dev *d, mt7925_ring *r, int events, uint8_t want_seq, u
                 if (reply_len) *reply_len = len;
                 *matched = 1;
             } else if (d->on_event) {
-                d->on_event(d->cb_ctx, b[MT7925_EVT_EID_OFF], b, len);
+                if (d->cb_depth < MT7925_CB_DEPTH) {
+                    cb = d->cb_buf[d->cb_depth];
+                    copy(cb, b, len);
+                    cb_eid = b[MT7925_EVT_EID_OFF];
+                } else {
+                    d->rx_nest_dropped++;
+                }
             }
         } else if (type == MT7925_PKT_TYPE_TXRX_NOTIFY) {
             mt7925_err e = mt7925_tx_free(d, b, len);
             if (e != MT7925_OK)
                 ret = -(int)e;
         } else if ((type == MT7925_PKT_TYPE_NORMAL || type == MT7925_PKT_TYPE_NORMAL_MCU) && d->on_rx) {
-            d->on_rx(d->rx_ctx, b, len);
+            if (matched) { /* inside a command wait: hold it for the next poll */
+                if (d->defer_n < MT7925_RX_DEFER) {
+                    copy(d->defer[d->defer_n], b, len);
+                    d->defer_len[d->defer_n++] = (uint16_t)len;
+                    d->rx_deferred++;
+                } else {
+                    d->rx_defer_dropped++;
+                }
+            } else {
+                if (d->cb_depth < MT7925_CB_DEPTH) {
+                    cb = d->cb_buf[d->cb_depth];
+                    copy(cb, b, len);
+                } else {
+                    d->rx_nest_dropped++;
+                }
+            }
         } else {
             d->events_dropped++;
         }
@@ -687,6 +714,14 @@ static int rx_one(mt7925_dev *d, mt7925_ring *r, int events, uint8_t want_seq, u
     r->head = (uint16_t)((i + 1u) % r->n);
     d->ops.dma_barrier(d->ops.ctx);
     mt7925_wr(d, r->regs + MT7925_RING_CPU_IDX, i);
+    if (cb) {
+        d->cb_depth++;
+        if (cb_eid >= 0)
+            d->on_event(d->cb_ctx, (uint8_t)cb_eid, cb, len);
+        else
+            d->on_rx(d->rx_ctx, cb, len);
+        d->cb_depth--;
+    }
     return ret;
 }
 
@@ -698,6 +733,26 @@ int mt7925_poll_rings(mt7925_dev *d) {
     if (!d->dma_on)
         return -(int)MT7925_E_STATE;
     int total = 0;
+    /* Held frames first, in arrival order. Each is taken off the queue
+     * before delivery, so a nested poll from inside on_rx never sees it
+     * again; frames on_rx causes to be held (a key install waits on the
+     * MCU) wait for the next poll. */
+    uint32_t held = d->defer_n;
+    for (uint32_t k = 0; k < held && d->defer_n && d->on_rx; k++) {
+        if (d->cb_depth >= MT7925_CB_DEPTH) break;
+        uint8_t *f = d->cb_buf[d->cb_depth];
+        uint32_t fl = d->defer_len[0];
+        copy(f, d->defer[0], fl);
+        for (uint32_t j = 1; j < d->defer_n; j++) {
+            copy(d->defer[j - 1], d->defer[j], d->defer_len[j]);
+            d->defer_len[j - 1] = d->defer_len[j];
+        }
+        d->defer_n--;
+        d->cb_depth++;
+        d->on_rx(d->rx_ctx, f, fl);
+        d->cb_depth--;
+        total++;
+    }
     for (uint32_t k = 0; k < MT7925_RING_MAX; k++) {
         int a = rx_one(d, &d->rx_evt, 1, 0, 0, 0, 0, 0);
         if (a < 0) return a;

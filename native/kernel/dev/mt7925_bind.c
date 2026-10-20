@@ -9,7 +9,7 @@ static struct {
     const pci_func *pf;
     volatile uint8_t *bar;
     mt7925_dev dev;
-    int bm_on, confined, inited;
+    int bm_on, confined, init_tried; /* init_tried: mt7925_init ran (it may have programmed rings before failing) */
     uint32_t stream_id;
 } g_mt;
 
@@ -33,8 +33,8 @@ void ck_mt7925_release(void)
 {
     if (!g_mt.pf) return;
     if (g_mt.bm_on) {
-        /* Only a chip mt7925_init brought up (rings programmed) is stopped. */
-        if (g_mt.bar && g_mt.inited)
+        /* Any chip mt7925_init touched is stopped, even when init failed half way. */
+        if (g_mt.bar && g_mt.init_tried)
             ck_printf("mt7925: chip stop %s\n", mt7925_strerror(mt7925_stop(&g_mt.dev)));
         if (pci_bus_master_off(g_mt.pf) == 0) {
             g_mt.bm_on = 0;
@@ -48,7 +48,7 @@ void ck_mt7925_release(void)
         ck_printf("smmu: mt7925 stream 0x%x %s (rc=%d)\n", g_mt.stream_id, urc == 0 ? "returned to abort" : "abort FAILED",
                   urc);
     }
-    g_mt.inited = 0;
+    g_mt.init_tried = 0;
 }
 
 int ck_mt7925_find(const pci_found *found, uint32_t n, pci_func *out)
@@ -85,13 +85,14 @@ int ck_mt7925_probe(const pci_func *f)
         return CK_MT_E_ARG;
     }
     size_t need = mt7925_dma_bytes();
-    if (!g_mem) g_mem = ck_dma_alloc(need, 4096, &g_phys);
+    uint64_t win = ((uint64_t)need + 4095u) & ~(uint64_t)4095u;
+    /* The SMMU window is whole pages: allocate all of it, so the chip can reach nothing else. */
+    if (!g_mem) g_mem = ck_dma_alloc((size_t)win, 4096, &g_phys);
     if (!g_mem) {
-        ck_printf("mt7925: unavailable (DMA allocation of %u bytes failed)\n", (unsigned)need);
+        ck_printf("mt7925: unavailable (DMA allocation of %u bytes failed)\n", (unsigned)win);
         return CK_MT_E_DMA;
     }
     uint32_t rid = ((uint32_t)pf->bus << 8) | ((uint32_t)pf->dev << 3) | (uint32_t)pf->fn;
-    uint64_t win = ((uint64_t)need + 4095u) & ~(uint64_t)4095u;
     struct ck_dma_confinement cf;
     int src = ck_dma_confine(pf->segment, rid, g_phys, win, &cf);
     if (src != 0) {
@@ -113,13 +114,13 @@ int ck_mt7925_probe(const pci_func *f)
     g_mt.bm_on = 1;
     ck_printf("dma_gate: mt7925 granted (Confined), bus master on\n");
     mt7925_ops ops = {(void *)g_mt.bar, o_rd, o_wr, o_delay, o_barrier};
+    g_mt.init_tried = 1;
     mt7925_err e = mt7925_init(&g_mt.dev, &ops, g_mem, cf.iova, need);
     ck_printf("mt7925: init %s chip_rev=0x%08x\n", mt7925_strerror(e), g_mt.dev.chip_rev);
     if (e != MT7925_OK) {
         ck_mt7925_release();
         return CK_MT_E_INIT;
     }
-    g_mt.inited = 1;
     ck_printf("mt7925: firmware not packaged in this image (no download; UNKNOWN boot-package path)\n");
     ck_mt7925_release();
     return CK_MT_OK;

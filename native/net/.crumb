@@ -18,26 +18,26 @@
       "children": [
         {
           "digest": "bcfb85b12af64194fd5008d1083ea51394f327d16d46fd3849c4f3a022fcd2b6",
-          "last_commit": "d75a266",
+          "last_commit": "d75a2660",
           "name": "receipts",
           "purpose": "Directory native/net/receipts. Purpose not yet described by a human."
         },
         {
-          "digest": "fd139e90ca41167b0025352fafdca0d2c9c869c6e13bab72c04d30b5776ddd93",
-          "last_commit": "4a116e5",
+          "digest": "1944781dd4eaa9b8836462195b5bac965a9ea1df9860a29040766814a58c0ef3",
+          "last_commit": "a0892699",
           "name": "tests",
           "purpose": "Directory native/net/tests. Purpose not yet described by a human."
         }
       ],
-      "children_root": "sha256:72c6a05fd3be86ab3a6985c3b1d9ed75262d875773aff4440ec13869435108cc",
-      "compiled_at": "2026-10-14T14:58:51Z",
+      "children_root": "sha256:13321affe018b1912ba1d503f8e4a1724dc9faafcb27f028d53b8df6ba7888a1",
+      "compiled_at": "2026-10-20T18:51:51Z",
       "compiler": "crumb-compile/1",
-      "digest": "sha256:ff5c88f5e9bf86e7ff836d24c048dd2d4efc94f6f19a21a0caf72ae9c402deaf",
+      "digest": "sha256:c5c7fe51fae98ba4fa2173367424aebb51f96c19e389d6ea08ee70a0f554ac70",
       "evidence_files": 4,
       "evidence_root": "sha256:e410b845507e00568e15b51a5797af32a97e0e4b8ab4e8487bb7c98e7e0cf335",
-      "files": 29,
-      "generated_at_commit": "596870d6ef47c5238cc2c7fa1c08f5e5486e5d84",
-      "source_tree": "sha256:f44c1b908aa86c0360aa8d0f01723a1deae07cdecc40354390204e2ee456834d"
+      "files": 48,
+      "generated_at_commit": "a08926996564fc81a7f72a5516eca4e052be9d3f",
+      "source_tree": "sha256:d4ab2fd6ee379c43087c3d1c33b6ec4bbefc08f4f500c439799a83b1f12d34ab"
     },
     "owner_lane": "",
     "provenance": {

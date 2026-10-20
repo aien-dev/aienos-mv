@@ -267,3 +267,27 @@ and bus mastering, map the BARs named by the caps, supply `vnet_ops` (volatile
 MMIO at BAR + cap offset + off; notify = 16-bit write at the notify window +
 off), give a DMA-visible region of `vnet_mem_size(qsize)` bytes with its bus
 address, and call `vnet_init`; then poll `vnet_rx` / `vnet_tx_reclaim`.
+
+## L206: Spark Wi-Fi (MediaTek MT7925), hosted
+
+`aienos_mt7925.{h,c}` drives the Spark's MT7925 Wi-Fi card: register remap,
+power handshake, reset, DMA rings, MCU commands, firmware download
+(`aienos_mt7925_fw.c` parses the linux-firmware blobs), scan, join, key
+install and the data path. `aienos_wifi.{h,c}` (802.11 frames, beacons, RSN)
+and `aienos_wifi_sta.{h,c}` (station: scan table, auth, association, the
+Ethernet bridge into `aienos_net.c`) have no MediaTek code, so other radios
+can reuse them. `aienos_wpa.{h,c}` is the WPA2/WPA3 supplicant (4-way and
+group handshakes, KDF-SHA256) over a crypto table.
+
+What a reader can do now: `make test` runs the driver and station against a
+chip model (`tests/mt7925_model.c`): open networks join and pass ARP and ping
+end to end; password networks join only with the stand-in crypto in
+`tests/wpa_toy.h`. With native/ crypto a password network is refused before
+any frame, because AES-128, CMAC, key wrap and SHA-1 do not exist in
+native/crypto yet (ledger L290). `make mt7925-fw-real` parses the real
+firmware files read-only.
+
+Shown in the emulator/host only: everything. Shown on real hardware: nothing
+yet; every register sequence is UNKNOWN until an attended boot. Rows,
+receipts and the boot plan: `docs/SPARK_WIFI_MT7925.md`; firmware versions,
+digests and licence: `docs/MT7925_FIRMWARE_INVENTORY.md`.

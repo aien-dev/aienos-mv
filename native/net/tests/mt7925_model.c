@@ -89,6 +89,13 @@ static void flush_queues(mt7925_model *m) {
     }
 }
 
+void model_queue_evt_raw(mt7925_model *m, const uint8_t *buf, uint32_t len) {
+    if (m->evq_n < 16 && len <= MODEL_FRAME_MAX) {
+        memcpy(m->evq[m->evq_n], buf, len);
+        m->evq_len[m->evq_n++] = len;
+    }
+}
+
 void model_queue_rx(mt7925_model *m, uint32_t type, const uint8_t *buf, uint32_t len) {
     (void)type;
     if (m->rxq_n < 8 && len <= MODEL_FRAME_MAX) {
@@ -572,7 +579,9 @@ static void ap_data(mt7925_model *m, const model_ap *a, uint16_t ethertype, cons
     f[1] = 0x02; /* FromDS */
     memcpy(f + 4, m->sta_mac, 6);
     memcpy(f + 10, a->bssid, 6);
-    memcpy(f + 16, a->mac, 6); /* SA: the gateway behind the AP */
+    /* SA: the gateway behind the AP; key messages come from the AP itself
+     * (the authenticator address is the BSSID) unless a test forges them. */
+    memcpy(f + 16, ethertype == 0x888e && !m->eapol_from_gw ? a->bssid : a->mac, 6);
     static const uint8_t snap[6] = {0xaa, 0xaa, 0x03, 0, 0, 0};
     memcpy(f + 24, snap, 6);
     f[30] = (uint8_t)(ethertype >> 8);
@@ -602,7 +611,7 @@ static void ap_key(mt7925_model *m, const model_ap *a, uint16_t info, const uint
     if (wpa_key_build(&k, out, sizeof out, &n) != WPA_OK) return;
     if (mic) toy_mic(0, m->ap_ptk, out, n, out + WPA_MIC_OFF);
     if (mic && (m->faults & MODEL_F_M3_BAD_MIC)) out[WPA_MIC_OFF] ^= 1;
-    ap_data(m, a, 0x888e, out, n, 0);
+    ap_data(m, a, 0x888e, out, n, m->eapol_protect);
 }
 
 static void ap_wpa_start(mt7925_model *m, const model_ap *a) {
@@ -737,6 +746,8 @@ static void ap_handle(mt7925_model *m, const uint8_t *f, uint32_t len, int prote
                 ap_data(m, a, 0x0800, rep, tot, protect);
             }
         } else if (type == 0 && (st == 12 || st == 10)) {
+            m->deauth_rx++;
+            if (len >= 26) m->last_deauth_reason = (uint16_t)(f[24] | f[25] << 8);
             if (m->assoc_ap == (int)i) {
                 m->assoc_ap = -1;
                 m->ap_wpa = 0;
@@ -811,4 +822,9 @@ void model_release_tokens(mt7925_model *m) {
     m->faults &= ~(uint32_t)MODEL_F_TXFREE_HOLD;
     tx_free_flush(m);
     m->faults = f;
+}
+
+void model_ap_send_m1(mt7925_model *m) {
+    if (m->assoc_ap < 0) return;
+    ap_key(m, &m->ap[m->assoc_ap], WPA_KI_PAIRWISE | WPA_KI_ACK, 0, 0, 0);
 }

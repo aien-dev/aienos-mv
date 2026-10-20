@@ -136,6 +136,9 @@ typedef struct {
     uint8_t ap_pmk[32], ap_anonce[32], ap_ptk[48], ap_gtk[16];
     uint64_t ap_replay;
     uint32_t eapol_rx, eapol_bad, unprot_dropped;
+    uint8_t eapol_protect, eapol_from_gw; /* test knobs: send key messages under CCMP / from the gateway */
+    uint32_t deauth_rx;                   /* deauthentications and disassociations from the station */
+    uint16_t last_deauth_reason;
 } mt7925_model;
 
 void model_init(mt7925_model *m, uint32_t faults);
@@ -148,10 +151,16 @@ uint32_t model_chipreg(const mt7925_model *m, uint32_t addr);
 /* Queue a frame for the RX data ring (type = RXD packet type) and deliver
  * what fits. */
 void model_queue_rx(mt7925_model *m, uint32_t type, const uint8_t *buf, uint32_t len);
+/* Put a raw buffer on the event ring queue (delivered with the next event):
+ * a frame there arrives while the driver waits for a command reply. */
+void model_queue_evt_raw(mt7925_model *m, const uint8_t *buf, uint32_t len);
 void model_add_ap(mt7925_model *m, const model_ap *ap);
 /* Send TX_FREE for every token held (MODEL_F_TXFREE_HOLD tests). */
 void model_release_tokens(mt7925_model *m);
 /* PMK the access points use for their 4-way handshakes. */
 void model_set_pmk(mt7925_model *m, const uint8_t pmk[32]);
+/* The associated AP sends 4-way message 1 again (a PTK rekey, or a forgery
+ * with the eapol_* knobs). */
+void model_ap_send_m1(mt7925_model *m);
 
 #endif

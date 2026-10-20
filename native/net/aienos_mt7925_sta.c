@@ -482,7 +482,8 @@ void mt7925_link_attach(mt7925_link *l, mt7925_dev *d, wifi_sta *s, const uint8_
     l->d = d;
     l->sta = s;
     for (int i = 0; i < 6; i++) l->cfg.own_mac[i] = mac[i];
-    wifi_radio r = {l, link_join_prepare, link_assoc_done, link_tx, link_poll, link_udelay, link_set_key};
+    wifi_radio r = {l, link_join_prepare, link_assoc_done, link_tx, link_poll, link_udelay, link_set_key,
+                    0, 0 /* entropy is the platform's: the binding sets s->r.random after attach */};
     wifi_sta_init(s, &r, mac);
     d->on_rx = link_rx;
     d->rx_ctx = l;

@@ -1,4 +1,4 @@
-(s->st == WIFI_STA_RUN || s->st == WIFI_STA_KEYS || s->st == WIFI_STA_ASSOC) && eq6/* Wi-Fi station. See aienos_wifi_sta.h. */
+/* Wi-Fi station. See aienos_wifi_sta.h. */
 #include "aienos_wifi_sta.h"
 
 #include "../crypto/aienos_crypto.h"
@@ -54,6 +54,21 @@ const char *wifi_sta_missing_crypto(wifi_sec sec) {
     }
 }
 
+/* Drop the association: forget the keys, then tell the AP (deauth with
+ * `reason`) so it does not keep a half-built security association. The
+ * chip-side key entries are not removed (no key-delete command is wired;
+ * docs/SPARK_WIFI_MT7925.md row R25); the next join_prepare rewrites them. */
+static wifi_err leave(wifi_sta *s, uint16_t reason) {
+    uint8_t f[32];
+    uint32_t n = 0;
+    s->st = WIFI_STA_IDLE;
+    wpa_supp_wipe(&s->wpa);
+    s->ptk_set = 0;
+    wifi_err e = wifi_build_deauth(f, sizeof f, s->cur.bssid, s->mac, s->cur.bssid, reason, &n);
+    if (e != WIFI_OK) return e;
+    return s->r.tx(s->r.ctx, f, n, 0) == 0 ? WIFI_OK : WIFI_E_RADIO;
+}
+
 /* One EAPOL PDU from the AP: run the supplicant, send its reply (under the
  * keys the chip has now), then install what it derived (12.7.6.4: message
  * 4 goes out before the new pairwise key is used). */
@@ -61,8 +76,13 @@ static void eapol_rx(wifi_sta *s, const uint8_t *p, uint32_t len) {
     uint8_t reply[WPA_FRAME_MAX], eth[14 + WPA_FRAME_MAX], f[WIFI_HDR_MGMT + 8u + 14u + WPA_FRAME_MAX];
     uint32_t n = 0;
     wpa_action a;
-    if (wpa_supp_rx(&s->wpa, p, len, reply, sizeof reply, &a) != WPA_OK) {
+    wpa_err we = wpa_supp_rx(&s->wpa, p, len, reply, sizeof reply, &a);
+    if (we != WPA_OK) {
         s->eapol_refused++;
+        /* A protected message 1 after the handshake is a PTK rekey, which the
+         * supplicant does not do (row R24): leave cleanly so the caller
+         * reconnects, rather than keep a key the AP is about to retire. */
+        if (s->st == WIFI_STA_RUN && we == WPA_E_STATE) (void)leave(s, WIFI_REASON_UNSPECIFIED);
         return;
     }
     if (a.reply_len) {
@@ -80,19 +100,16 @@ static void eapol_rx(wifi_sta *s, const uint8_t *p, uint32_t len) {
         aienos_wipe(eth, sizeof eth);
         aienos_wipe(f, sizeof f);
     }
-    if (a.install_ptk) {
-        if (s->r.set_key(s->r.ctx, 1, 0, wpa_supp_tk(&s->wpa), WPA_TK_LEN) != 0) {
-            s->key_install_failed++;
-            s->keys_done = 2;
-            return;
-        }
-        s->ptk_set = 1;
-    }
-    if (a.install_gtk && s->r.set_key(s->r.ctx, 0, s->wpa.gtk_idx, s->wpa.gtk, s->wpa.gtk_len) != 0) {
+    if ((a.install_ptk && s->r.set_key(s->r.ctx, 1, 0, wpa_supp_tk(&s->wpa), WPA_TK_LEN) != 0) ||
+        (a.install_gtk && s->r.set_key(s->r.ctx, 0, s->wpa.gtk_idx, s->wpa.gtk, s->wpa.gtk_len) != 0)) {
         s->key_install_failed++;
         s->keys_done = 2;
+        /* In RUN nobody is waiting on keys_done (a group rekey): the chip
+         * holds a stale group key, so leave. In KEYS connect fails and leaves. */
+        if (s->st == WIFI_STA_RUN) (void)leave(s, WIFI_REASON_UNSPECIFIED);
         return;
     }
+    if (a.install_ptk) s->ptk_set = 1;
     if (a.done && !s->keys_done) s->keys_done = 1;
 }
 
@@ -108,10 +125,22 @@ static void queue_eth(wifi_sta *s, const uint8_t *f, uint32_t len, int decrypted
         s->rx_dropped++;
         return;
     }
+    uint16_t et = (uint16_t)((slot[12] << 8) | slot[13]);
     /* On a protected association only EAPOL may arrive in the clear. */
-    if (s->sec != WIFI_SEC_OPEN && !decrypted && ((slot[12] << 8)     /* Key messages go to the supplicant, never up the stack; until the
+    if (s->sec != WIFI_SEC_OPEN && !decrypted && et != WIFI_ETHERTYPE_EAPOL) {
+        s->rx_unprotected_dropped++;
+        return;
+    }
+    /* Key messages go to the supplicant, never up the stack; until the
      * handshake is done nothing else is accepted. */
-    if (s->sec != WIFI_SEC_OPEN && ((slot[12] << 8) | slot[13]) == WIFI_ETHERTYPE_EAPOL) {
+    if (s->sec != WIFI_SEC_OPEN && et == WIFI_ETHERTYPE_EAPOL) {
+        /* The authenticator is the AP itself (source = BSSID), and once the
+         * pairwise key is in, its key messages come protected. */
+        if (!eq6(slot + 6, s->cur.bssid) || (s->ptk_set && !decrypted)) {
+            s->rx_unprotected_dropped += s->ptk_set && !decrypted;
+            s->eapol_refused++;
+            return;
+        }
         if (s->st == WIFI_STA_ASSOC) {
             if (n - 14u <= sizeof s->early_eapol) {
                 cpy(s->early_eapol, slot + 14, n - 14u);
@@ -121,16 +150,9 @@ static void queue_eth(wifi_sta *s, const uint8_t *f, uint32_t len, int decrypted
             eapol_rx(s, slot + 14, n - 14u);
         }
         return;
-    }| slot[13]) == WIFI_ETHERTYPE_EAPOL) {
-        eapol_rx(s, slot + 14, n - 14u);
-        return;
     }
     if (s->st != WIFI_STA_RUN) {
         s->rx_dropped++;
-        return;
-    }
-| slot[13]) != WIFI_ETHERTYPE_EAPOL) {
-        s->rx_unprotected_dropped++;
         return;
     }
     s->rxq_len[(s->rxq_head + s->rxq_n) % WIFI_STA_RXQ] = (uint16_t)n;
@@ -169,6 +191,8 @@ void wifi_sta_rx(wifi_sta *s, const uint8_t *f, uint32_t len, int decrypted, int
             s->deauths++;
             s->last_status = (uint16_t)(h.body[0] | (h.body[1] << 8));
             s->st = WIFI_STA_IDLE;
+            wpa_supp_wipe(&s->wpa);
+            s->ptk_set = 0;
         }
         return;
     }
@@ -183,6 +207,7 @@ void wifi_sta_rx(wifi_sta *s, const uint8_t *f, uint32_t len, int decrypted, int
 static wifi_err wait_flag(wifi_sta *s, const uint8_t *flag, uint32_t budget_us) {
     for (uint32_t spent = 0; !*flag; spent += STEP_US) {
         if (s->r.poll(s->r.ctx) < 0) return WIFI_E_RADIO;
+        if (s->st == WIFI_STA_IDLE) return WIFI_E_REFUSED; /* deauthenticated meanwhile */
         if (*flag) break;
         if (spent >= budget_us) return WIFI_E_TIMEOUT;
         s->r.udelay(s->r.ctx, STEP_US);
@@ -215,8 +240,8 @@ wifi_err wifi_sta_connect(wifi_sta *s, const uint8_t *ssid, uint8_t ssid_len, ui
     if (s->sec != WIFI_SEC_OPEN) {
         /* SAE needs its own exchange before the 4-way; nothing provides it. */
         if (s->sec == WIFI_SEC_WPA3_SAE || !s->has_pmk || !s->cur.rsne_len) return WIFI_E_CRYPTO;
-        wpa_crypto native = wpa_crypto_native(s->sec, 0, 0);
-        if (wpa_crypto_missing(s->sec, s->crypto ? s->crypto : &native)) return WIFI_E_CRYPTO;
+        s->tbl = s->crypto ? *s->crypto : wpa_crypto_native(s->sec, s->r.random, s->r.rng_ctx);
+        if (wpa_crypto_missing(s->sec, &s->tbl)) return WIFI_E_CRYPTO;
     }
     if (s->r.join_prepare(s->r.ctx, &s->cur) != 0) return WIFI_E_RADIO;
 
@@ -240,7 +265,7 @@ wifi_err wifi_sta_connect(wifi_sta *s, const uint8_t *ssid, uint8_t ssid_len, ui
         uint32_t ol = 0;
         s->keys_done = s->ptk_set = 0;
         if (wifi_build_rsn(s->sec, own, sizeof own, &ol) != WIFI_OK ||
-            wpa_supp_start(&s->wpa, s->crypto, s->sec, s->pmk, s->cur.bssid, s->mac, own, (uint8_t)ol, s->cur.rsne,
+            wpa_supp_start(&s->wpa, &s->tbl, s->sec, s->pmk, s->cur.bssid, s->mac, own, (uint8_t)ol, s->cur.rsne,
                            s->cur.rsne_len) != WPA_OK) {
             e = WIFI_E_CRYPTO;
             goto fail;
@@ -257,6 +282,12 @@ wifi_err wifi_sta_connect(wifi_sta *s, const uint8_t *ssid, uint8_t ssid_len, ui
     s->st = WIFI_STA_RUN;
     return WIFI_OK;
 fail:
+    /* After a successful association the AP holds state for us: tell it.
+     * A handshake that ran out of time is reason 15 (12.7.6.1). */
+    if (s->st == WIFI_STA_KEYS || (s->st == WIFI_STA_ASSOC && s->assoc_done && s->last_status == WIFI_STATUS_SUCCESS)) {
+        (void)leave(s, s->st == WIFI_STA_KEYS && e == WIFI_E_TIMEOUT ? WIFI_REASON_4WAY_TIMEOUT : WIFI_REASON_UNSPECIFIED);
+        return e;
+    }
     s->st = WIFI_STA_IDLE;
     wpa_supp_wipe(&s->wpa);
     s->ptk_set = 0;
@@ -293,14 +324,8 @@ int wifi_sta_recv_eth(wifi_sta *s, uint8_t *out, uint32_t cap, uint32_t *len) {
 }
 
 wifi_err wifi_sta_disconnect(wifi_sta *s) {
-    uint8_t f[32];
-    uint32_t n = 0;
     if (!s) return WIFI_E_ARG;
     if (s->st == WIFI_STA_IDLE) return WIFI_OK;
-    s->st = WIFI_STA_IDLE;
-    wpa_supp_wipe(&s->wpa);
-    s->ptk_set = s->keys_done = 0;
-    wifi_err e = wifi_build_deauth(f, sizeof f, s->cur.bssid, s->mac, s->cur.bssid, WIFI_REASON_LEAVING, &n);
-    if (e != WIFI_OK) return e;
-    return s->r.tx(s->r.ctx, f, n, 0) == 0 ? WIFI_OK : WIFI_E_RADIO;
+    s->keys_done = 0;
+    return leave(s, WIFI_REASON_LEAVING);
 }
