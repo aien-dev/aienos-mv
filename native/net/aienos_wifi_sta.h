@@ -68,6 +68,14 @@ typedef struct {
     uint8_t keys_done;      /* 1 = handshake complete and keys installed, 2 = key install failed */
     uint8_t ptk_set;        /* pairwise key is in the chip: EAPOL replies go out protected */
     uint32_t eapol_refused, key_install_failed;
+    /* CCMP replay check (12.5.3.4.4): last packet number accepted per TID
+     * (index 16 = non-QoS), pairwise and group, reset when that key is
+     * installed. The chip decrypts but does not check it. */
+    uint64_t pn_ptk[17], pn_gtk[17];
+    uint32_t rx_replay_dropped;
+    /* Bumped whenever the association ends (leave, deauth from the AP): a
+     * callback that ran nested inside a TX can tell its state is gone. */
+    uint32_t epoch;
     /* EAPOL that arrived between the association response and the start of
      * the supplicant (the AP may send message 1 at once), held for it. */
     uint8_t early_eapol[WPA_FRAME_MAX];
@@ -77,6 +85,12 @@ typedef struct {
 void wifi_sta_init(wifi_sta *s, const wifi_radio *r, const uint8_t mac[6]);
 /* Every received 802.11 frame. `decrypted`: the chip opened it (CCMP). */
 void wifi_sta_rx(wifi_sta *s, const uint8_t *frame, uint32_t len, int decrypted, int8_t rssi);
+/* The same with the CCMP packet number the chip reported for a decrypted
+ * frame (has_pn = 0: none). On a protected association a decrypted data
+ * frame without a packet number, or with one not above the last, is dropped.
+ * wifi_sta_rx is this with has_pn = 0. */
+void wifi_sta_rx_pn(wifi_sta *s, const uint8_t *frame, uint32_t len, int decrypted, int has_pn, uint64_t pn,
+                    int8_t rssi);
 /* Strongest scanned BSS for `ssid`; open system auth + association, bounded
  * by budget_us of radio time per step. */
 wifi_err wifi_sta_connect(wifi_sta *s, const uint8_t *ssid, uint8_t ssid_len, uint32_t budget_us);

@@ -422,7 +422,7 @@ static void link_rx(void *ctx, const uint8_t *buf, uint32_t len) {
         l->rx_refused[e < MT7925_LINK_RX_ERRS ? e : 0]++;
         return;
     }
-    wifi_sta_rx(l->sta, ri.frame, ri.frame_len, ri.decrypted, ri.has_rssi ? ri.rssi : 0);
+    wifi_sta_rx_pn(l->sta, ri.frame, ri.frame_len, ri.decrypted, ri.has_pn, ri.pn, ri.has_rssi ? ri.rssi : 0);
 }
 
 static int link_join_prepare(void *ctx, const wifi_bss *b) {

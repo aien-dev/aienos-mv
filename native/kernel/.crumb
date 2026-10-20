@@ -64,7 +64,7 @@
         },
         {
           "digest": "08b0f4480b7dad96dc939dc601c9a8b4b5ee18589471e693026da3706228ef08",
-          "last_commit": "a0892699",
+          "last_commit": "595ed72c",
           "name": "dev",
           "purpose": "Directory native/kernel/dev. Purpose not yet described by a human."
         },
@@ -100,14 +100,14 @@
         }
       ],
       "children_root": "sha256:34b947b4521ffa17deaa4cf8dbdcf0f8d54edbbac707628990b20853aa2dc5bf",
-      "compiled_at": "2026-10-20T18:51:51Z",
+      "compiled_at": "2026-10-20T20:56:21Z",
       "compiler": "crumb-compile/1",
-      "digest": "sha256:1a9314e8077c0d3666606083e987db353c4270da69caffd985001f19c586dc76",
+      "digest": "sha256:f1c8b05941f43b7ef9b0ff34b4673847937ec6240f19693c9eb4d7d8dad6ac08",
       "evidence_files": 0,
       "evidence_root": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "files": 423,
-      "generated_at_commit": "a08926996564fc81a7f72a5516eca4e052be9d3f",
-      "source_tree": "sha256:e9b53b0474c0ffc9376f7ee32a357ac48703baceac7d12a5b1cddfbbcf7d1e7f"
+      "generated_at_commit": "595ed72cd7f80f51e78fdc7ba90adb3cb14860ff",
+      "source_tree": "sha256:22b96ce205cd34feb742e24b5fdc49d8b7bb03f79c2ddbcbf6e033f4bab7a8d1"
     },
     "owner_lane": "",
     "provenance": {

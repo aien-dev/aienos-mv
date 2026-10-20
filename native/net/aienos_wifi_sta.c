@@ -64,6 +64,7 @@ static wifi_err leave(wifi_sta *s, uint16_t reason) {
     s->st = WIFI_STA_IDLE;
     wpa_supp_wipe(&s->wpa);
     s->ptk_set = 0;
+    s->epoch++;
     wifi_err e = wifi_build_deauth(f, sizeof f, s->cur.bssid, s->mac, s->cur.bssid, reason, &n);
     if (e != WIFI_OK) return e;
     return s->r.tx(s->r.ctx, f, n, 0) == 0 ? WIFI_OK : WIFI_E_RADIO;
@@ -85,6 +86,10 @@ static void eapol_rx(wifi_sta *s, const uint8_t *p, uint32_t len) {
         if (s->st == WIFI_STA_RUN && we == WPA_E_STATE) (void)leave(s, WIFI_REASON_UNSPECIFIED);
         return;
     }
+    /* The TX below may poll the chip (ring full) and deliver frames here,
+     * among them a deauthentication that wipes the supplicant: then nothing
+     * it derived may be installed. */
+    uint32_t epoch = s->epoch;
     if (a.reply_len) {
         cpy(eth, s->cur.bssid, 6);
         cpy(eth + 6, s->mac, 6);
@@ -100,6 +105,10 @@ static void eapol_rx(wifi_sta *s, const uint8_t *p, uint32_t len) {
         aienos_wipe(eth, sizeof eth);
         aienos_wipe(f, sizeof f);
     }
+    if (s->epoch != epoch) {
+        s->eapol_refused++;
+        return;
+    }
     if ((a.install_ptk && s->r.set_key(s->r.ctx, 1, 0, wpa_supp_tk(&s->wpa), WPA_TK_LEN) != 0) ||
         (a.install_gtk && s->r.set_key(s->r.ctx, 0, s->wpa.gtk_idx, s->wpa.gtk, s->wpa.gtk_len) != 0)) {
         s->key_install_failed++;
@@ -109,7 +118,13 @@ static void eapol_rx(wifi_sta *s, const uint8_t *p, uint32_t len) {
         if (s->st == WIFI_STA_RUN) (void)leave(s, WIFI_REASON_UNSPECIFIED);
         return;
     }
-    if (a.install_ptk) s->ptk_set = 1;
+    /* A new key starts its packet numbers again (12.5.3.4.4). */
+    if (a.install_ptk) {
+        s->ptk_set = 1;
+        for (int t = 0; t < 17; t++) s->pn_ptk[t] = 0;
+    }
+    if (a.install_gtk)
+        for (int t = 0; t < 17; t++) s->pn_gtk[t] = 0;
     if (a.done && !s->keys_done) s->keys_done = 1;
 }
 
@@ -145,6 +160,8 @@ static void queue_eth(wifi_sta *s, const uint8_t *f, uint32_t len, int decrypted
             if (n - 14u <= sizeof s->early_eapol) {
                 cpy(s->early_eapol, slot + 14, n - 14u);
                 s->early_len = (uint16_t)(n - 14u);
+            } else {
+                s->eapol_refused++; /* larger than any key message 1 */
             }
         } else {
             eapol_rx(s, slot + 14, n - 14u);
@@ -160,6 +177,25 @@ static void queue_eth(wifi_sta *s, const uint8_t *f, uint32_t len, int decrypted
 }
 
 void wifi_sta_rx(wifi_sta *s, const uint8_t *f, uint32_t len, int decrypted, int8_t rssi) {
+    wifi_sta_rx_pn(s, f, len, decrypted, 0, 0, rssi);
+}
+
+/* CCMP replay check for a decrypted data frame from the AP: 1 = fresh. */
+static int pn_fresh(wifi_sta *s, const uint8_t *f, uint32_t len, const uint8_t *a1, int has_pn, uint64_t pn) {
+    /* QoS data (subtype bit 3) carries the TID in QoS Control right after
+     * the 3-address header; non-QoS frames share counter 16. */
+    uint32_t tid = (f[0] & 0x80u) && len >= 26u ? (f[24] & 0x0fu) : 16u;
+    uint64_t *last = (a1[0] & 1u) ? &s->pn_gtk[tid] : &s->pn_ptk[tid];
+    if (!has_pn || pn <= *last) {
+        s->rx_replay_dropped++;
+        return 0;
+    }
+    *last = pn;
+    return 1;
+}
+
+void wifi_sta_rx_pn(wifi_sta *s, const uint8_t *f, uint32_t len, int decrypted, int has_pn, uint64_t pn,
+                    int8_t rssi) {
     wifi_hdr h;
     if (!s || wifi_parse_hdr(f, len, &h) != WIFI_OK) {
         if (s) s->rx_dropped++;
@@ -176,7 +212,12 @@ void wifi_sta_rx(wifi_sta *s, const uint8_t *f, uint32_t len, int decrypted, int
     }
     int from_ap = s->st != WIFI_STA_IDLE && eq6(h.a2, s->cur.bssid) && eq6(h.a1, s->mac);
     if (h.type == WIFI_TYPE_MGMT) {
-        if (!from_ap) return;
+        /* An AP that restarts deauthenticates everyone at once (Address 1
+         * broadcast); like a unicast one it is accepted from our BSSID only. */
+        int bcast = h.a1[0] == 0xff && h.a1[1] == 0xff && h.a1[2] == 0xff && h.a1[3] == 0xff && h.a1[4] == 0xff &&
+                    h.a1[5] == 0xff;
+        int leave_frame = h.subtype == WIFI_ST_DEAUTH || h.subtype == WIFI_ST_DISASSOC;
+        if (!from_ap && !(leave_frame && bcast && s->st != WIFI_STA_IDLE && eq6(h.a2, s->cur.bssid))) return;
         uint16_t alg = 0, seq = 0, st = 0, cap = 0, aid = 0;
         if (h.subtype == WIFI_ST_AUTH && s->st == WIFI_STA_AUTH &&
             wifi_parse_auth(f, len, &alg, &seq, &st, 0, 0) == WIFI_OK && alg == WIFI_AUTH_OPEN && seq == 2) {
@@ -193,10 +234,12 @@ void wifi_sta_rx(wifi_sta *s, const uint8_t *f, uint32_t len, int decrypted, int
             s->st = WIFI_STA_IDLE;
             wpa_supp_wipe(&s->wpa);
             s->ptk_set = 0;
+            s->epoch++;
         }
         return;
     }
     if (h.type == WIFI_TYPE_DATA && (s->st == WIFI_STA_RUN || s->st == WIFI_STA_KEYS || s->st == WIFI_STA_ASSOC) && eq6(h.a2, s->cur.bssid)) {
+        if (decrypted && s->sec != WIFI_SEC_OPEN && !pn_fresh(s, f, len, h.a1, has_pn, pn)) return;
         queue_eth(s, f, len, decrypted);
         return;
     }

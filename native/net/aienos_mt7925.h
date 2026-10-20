@@ -453,6 +453,8 @@ typedef struct {
     uint8_t decrypted;    /* chip decrypted, IV and MIC stripped */
     uint8_t has_rssi;
     int8_t rssi;          /* chain 0, from P-RXV RCPI */
+    uint8_t has_pn;       /* decrypted and RXD group 1 present */
+    uint64_t pn;          /* CCMP packet number, group 1 bytes 0..5 = PN0..PN5 (reference mac.c) */
 } mt7925_rx_info;
 
 typedef enum {

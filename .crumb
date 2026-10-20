@@ -27,14 +27,14 @@
           "purpose": "Directory crates. Purpose not yet described by a human."
         },
         {
-          "digest": "68b9226bb49aecca375af81a9753870144e1bfa8559f3b0627d52da54afe3fa1",
-          "last_commit": "a0892699",
+          "digest": "78267f42ea9193c2f5c310530dc2b02188ddc230d85f1666ec51718238fd5c0f",
+          "last_commit": "595ed72c",
           "name": "docs",
           "purpose": "Directory docs. Purpose not yet described by a human."
         },
         {
-          "digest": "288456a80070442052e40209937da9487f915c9608591bc3895fa560bd7a72c1",
-          "last_commit": "a0892699",
+          "digest": "6705722655b5c0a69e92a2304fd6fe42cf9bc0505f79138911d21e64df0284c1",
+          "last_commit": "595ed72c",
           "name": "native",
           "purpose": "Directory native. Purpose not yet described by a human."
         },
@@ -45,15 +45,15 @@
           "purpose": "Directory scripts. Purpose not yet described by a human."
         }
       ],
-      "children_root": "sha256:baf339bacd1ac831972a5ec712251764559145bfd6c60936ee6d30324ce81dd1",
-      "compiled_at": "2026-10-20T18:51:51Z",
+      "children_root": "sha256:05f0b64943d7d4aa3727f9001f05c78f776f85337b7896a32a7eaaff5e5266e0",
+      "compiled_at": "2026-10-20T20:56:21Z",
       "compiler": "crumb-compile/1",
-      "digest": "sha256:bd076503127c80022d7788ae7c80d09087059002dd66979d2a602a4116d27a64",
+      "digest": "sha256:65f5c81ace0fcd2da445db430711a8eac53135a51b7ca1675474dd9d708cf15a",
       "evidence_files": 211,
       "evidence_root": "sha256:3a8f56415109a697e4beb6048c85805c50c9c6c4089629057f4e8b3e76863981",
       "files": 3514,
-      "generated_at_commit": "a08926996564fc81a7f72a5516eca4e052be9d3f",
-      "source_tree": "sha256:66ce570c10e663b12f33770d5ac7957d1e738fc8961819cfff92b8381377a502"
+      "generated_at_commit": "595ed72cd7f80f51e78fdc7ba90adb3cb14860ff",
+      "source_tree": "sha256:339296e8b2b98d1b9c9f356dc85b274123d10c43c7aa0228c94f3dd4eb7f50b4"
     },
     "owner_lane": "",
     "provenance": {

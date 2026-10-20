@@ -255,7 +255,7 @@ static void test_handshake(void) {
     CHECK(memcmp(&w, zero, sizeof w) == 0);
 }
 
-typedef enum { M3_ANONCE, M3_MIC, M3_RSNE, M3_NOENC, M3_VERSION, M3_NOGTK, M3_PAD, M3_WRAP, M3_REQUEST, M3_SHAPE, M3_GTKID, M3_KEYLEN } m3_bad;
+typedef enum { M3_ANONCE, M3_MIC, M3_RSNE, M3_NOENC, M3_VERSION, M3_NOGTK, M3_PAD, M3_WRAP, M3_REQUEST, M3_SHAPE, M3_GTKID, M3_GTKLEN, M3_KEYLEN } m3_bad;
 
 static void test_m3_attacks(void) {
     for (int bad = M3_ANONCE; bad <= M3_KEYLEN; bad++) {
@@ -281,6 +281,17 @@ static void test_m3_attacks(void) {
         if (bad == M3_GTKID) want = WPA_E_KEYDATA; /* key id 0 is pairwise-only */
         uint32_t kl = kd_build(kd, rsne, sizeof rsne, gtk, bad == M3_GTKID ? 0 : 1);
         if (bad == M3_PAD) { kd[kl - 1] = 1; want = WPA_E_KEYDATA; }
+        if (bad == M3_GTKLEN) { /* a 32-byte GTK: the group cipher is CCMP-128, so 16 only */
+            static const uint8_t big[32] = {1};
+            uint8_t kde[] = {0xdd, 6 + 32, 0x00, 0x0f, 0xac, 0x01, 1, 0x00};
+            memcpy(kd, rsne, sizeof rsne);
+            kl = sizeof rsne;
+            memcpy(kd + kl, kde, sizeof kde);
+            memcpy(kd + kl + sizeof kde, big, sizeof big);
+            kl += sizeof kde + sizeof big;
+            if (kl % 8u) { kd[kl++] = 0xdd; while (kl % 8u) kd[kl++] = 0; }
+            want = WPA_E_KEYDATA;
+        }
         if (bad == M3_ANONCE) { a.anonce[5] ^= 1; want = WPA_E_NONCE; }
         a.replay++;
         if (bad == M3_WRAP || bad == M3_KEYLEN) {

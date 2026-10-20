@@ -106,11 +106,13 @@ the attended-boot experiment that turns it from UNKNOWN into OBSERVED.
 | R23 | GTK from message 3 / group message 1: exactly 16 bytes (the group cipher is always CCMP-128 here), key id 1..3, checked before any reply | STANDARD 12.7.2 Figure 12-35 | TESTED (wpa_test NOGTK, PAD, group rekey) | Join a WPA2 AP whose group cipher is CCMP; a TKIP-group AP is refused by the RSN layer |
 | R24 | PTK rekey (a protected message 1 after the handshake) is not done: the station deauthenticates (reason 1) so the caller reconnects | STANDARD 12.7.6.2 | TESTED (mt7925_test station_wpa) | Set a short PTK rekey interval on a test AP; expect a clean leave and reconnect, then implement rekey in place |
 | R25 | Key removal on leave: no chip key-delete command is wired; keys stay in the chip until the next join rewrites the station record | SOURCE mt7925/mcu.c add_key (cmd remove) | not tested | UNKNOWN: whether a stale WCID key survives STA_REC removal; read back with a sniffer after leave, then wire the remove command |
-| R26 | Re-entrancy: data frames that arrive on RX0 while the driver waits for an MCU reply are held (4 deep) and delivered after the reply; every callback runs after its ring slot is consumed, on a per-level copy, so a callback that polls again (TX ring full, key install) cannot see the slot twice; nesting stops at 4 levels, deeper frames dropped and counted (rx_nest_dropped) | SOURCE mt7925 event path; our design | TESTED (deferred-frame block in station test, test_rx_nested) | Count rx_deferred / rx_defer_dropped / rx_nest_dropped during a busy join |
+| R26 | Re-entrancy: data frames that arrive on RX0 while the driver waits for an MCU reply are held (4 deep) and delivered after the reply, before any newer ring frame; every callback runs after its ring slot is consumed, on a per-level copy, so a callback that polls again (TX ring full, key install) cannot see the slot twice; nesting stops at 4 levels, deeper frames dropped and counted (rx_nest_dropped) | SOURCE mt7925 event path; our design | TESTED (deferred-frame block in station test, test_rx_nested) | Count rx_deferred / rx_defer_dropped / rx_nest_dropped during a busy join |
 | R27 | Key data padding: 0xdd then zeros to an 8-byte boundary, anything else refused | STANDARD 12.7.2 | TESTED (wpa_test PAD) | Interop: some APs may pad differently; record any refusal with the frame |
 | R28 | RSNXE (WPA3 extensions) in message 3 is not compared with the beacon's | STANDARD 12.7.6.4 | not tested | Needed with SAE-H2E; the SAE lane adds the check |
-| R29 | Leaving after a failed handshake: deauthentication with reason 15 (4-way timeout), or 1 for any other failure after association | STANDARD Table 9-49 | TESTED (wrong PSK, bad MIC, downgrade, silent AP) | Watch the AP log for the reason code |
+| R29 | Leaving after a failed handshake: deauthentication with reason 15 (4-way timeout), or 1 for any other failure after association | STANDARD Table 9-49 | TESTED (wrong PSK, bad MIC, downgrade, silent AP); the key-install failure in RUN (group rekey) is not tested, the model has no group rekey | Watch the AP log for the reason code |
 | R30 | EAPOL source must be the BSSID (the authenticator); once the pairwise key is in, cleartext EAPOL is dropped | STANDARD 12.7.6 | TESTED (forged-source and cleartext message 1) | none needed beyond R16 |
+| R31 | CCMP replay check: the packet number comes from RXD group 1 bytes 0..5 (PN0..PN5); the station keeps the last one per TID (16 = non-QoS), pairwise and group, resets on key install, and drops a decrypted data frame whose number is missing or not above the last | SOURCE mt7925/mac.c (group 1 to status->iv); STANDARD 12.5.3.4.4 | TESTED (replayed ARP reply dropped; chip without group 1: protected data dropped) | UNKNOWN: whether the chip always sets group 1 on decrypted frames, and the byte order; log the first 20 PNs after a join. A group rekey can drop old-key frames briefly (one group counter set across key ids) |
+| R32 | Broadcast deauthentication / disassociation from our BSSID (an AP restart) is honoured like a unicast one | STANDARD 11.3.4.5 | TESTED (accepted from the BSSID, ignored from another) | none |
 
 ## 5. Security: what exists and what is missing
 
@@ -139,21 +141,21 @@ key data is used, unwrap integrity, RSNE in message 3 equal to the beacon's
 (downgrade), pairwise key length, GTK exactly 16 bytes with key id 1..3, no
 reinstallation of an installed key, EAPOL only from the BSSID and only
 protected once the pairwise key is in, deauthentication (reason 15) when the
-handshake fails, a PTK rekey answered by leaving (R24),
+handshake fails, a PTK rekey answered by leaving (R24), the CCMP replay check (R31),
 message 4 sent before the pairwise key is installed, secrets wiped.
 
 ## 6. Receipts
 
-Run 2026-10-20 (~18:45Z) on the Spark host, working tree on top of a089269
-(the commit that adds this section), through `quiet-build`
-(script /tmp/l206-run6.sh, run from native/):
+Run 2026-10-20 (~21:00Z) on the Spark host, on top of 595ed72 with the advisor-2 fixes
+(replay check R31, broadcast deauth R32, epoch guard, ordered drain), through `quiet-build`
+(script /tmp/l206-run7.sh, run from native/):
 
 | Command | Exit | Result |
 | --- | --- | --- |
-| `make -C net test` | 0 | MT7925_FW_TESTS PASS (948 checks), MT7925_DRIVER_TESTS PASS (7232 checks, 0 failures), wifi_test 11046 checks 0 failures, AIENOS_WPA_TEST PASS (429 checks); the rest of native/net (net_test, ctl_test, secure, vnet) 0 failures |
+| `make -C net test` | 0 | MT7925_FW_TESTS PASS (948 checks), MT7925_DRIVER_TESTS PASS (7245 checks), wifi_test PASS (11046 checks), AIENOS_WPA_TEST PASS (433 checks, 0 failures); the rest of native/net 0 failures (log /tmp/l206b-test.log) |
 | `make -C net sanitize` (ASan + UBSan, halt on error) | 0 | the same four suites PASS with the same counts |
 | `make -C net mt7925-fw-real` (read-only parse of /lib/firmware/mediatek/mt7925) | 0 | MT7925_FW_REAL PASS; RAM code 5 regions (4 downloaded, region 4 host-only CLC); MT7925_MODEL_REAL_FW PASS: 6 downloads, 1275392 scatter bytes, 11 MCU commands, start addr 0x0090d000 option 0x1 |
-| `make -C kernel full CK_MT7925=1 OUT=../target/l206-mt7925 -j8` | 0 | BOOTAA64.EFI built; `nm` shows the ck_mt7925_* binding and mt7925_init linked. Not booted |
+| `make -C kernel full CK_MT7925=1 OUT=../target/l206b-mt7925 -j8` | 0 | BOOTAA64.EFI built; `nm` shows the ck_mt7925_* binding and mt7925_init linked. Not booted |
 
 The QEMU gate run for the default images (scripts/ck_gates.sh on the
 committed tree) is in the handoff ~/handoffs/2026-10-20-spark-wifi-mt7925.md.
@@ -162,7 +164,7 @@ section 4 stays UNKNOWN until the attended boot).
 
 ## 7. Attended boot plan (operator steps, in order)
 
-1. `make -C native/kernel full CK_MT7925=1`; boot it the attended way the
+1. `make -C native/kernel full CK_MT7925=1` (image: target/native-kernel/full-mt7925/BOOTAA64.EFI); boot it the attended way the
    Spark boot package lane (L197) documents. Expected console lines:
    `mt7925: found seg 0009 01:00.0`, `smmu_dma_window: mt7925 only ...`,
    `mt7925: init ok chip_rev=0x7925....`, `mt7925: chip stop ok`,

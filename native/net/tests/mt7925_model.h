@@ -62,6 +62,7 @@ typedef enum {
     MODEL_F_M3_BAD_MIC = 1u << 20,   /* AP: message 3 with a broken MIC */
     MODEL_F_M3_DOWNGRADE = 1u << 21, /* AP: message 3 RSNE differs from the beacon */
     MODEL_F_NO_M1 = 1u << 22,        /* AP: never starts the 4-way handshake */
+    MODEL_F_NO_PN = 1u << 23,        /* chip: protected frames come without RXD group 1 (no packet number) */
 } model_fault;
 
 typedef struct {
@@ -139,6 +140,9 @@ typedef struct {
     uint8_t eapol_protect, eapol_from_gw; /* test knobs: send key messages under CCMP / from the gateway */
     uint32_t deauth_rx;                   /* deauthentications and disassociations from the station */
     uint16_t last_deauth_reason;
+    uint64_t ap_pn;                       /* CCMP packet number of the last protected frame sent */
+    uint8_t last_prot[MODEL_FRAME_MAX];   /* that frame with its RXD, for model_replay_last */
+    uint32_t last_prot_len;
 } mt7925_model;
 
 void model_init(mt7925_model *m, uint32_t faults);
@@ -162,5 +166,7 @@ void model_set_pmk(mt7925_model *m, const uint8_t pmk[32]);
 /* The associated AP sends 4-way message 1 again (a PTK rekey, or a forgery
  * with the eapol_* knobs). */
 void model_ap_send_m1(mt7925_model *m);
+/* Deliver the last protected frame again, packet number and all (a replay). */
+void model_replay_last(mt7925_model *m);
 
 #endif

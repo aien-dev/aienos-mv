@@ -970,6 +970,25 @@ static void test_station(void) {
  * the data ring, keys into the chip through STA_REC KEY, then ARP and ping
  * over the protected link. The MIC and key wrap are the wpa_toy.h test
  * doubles (native/ has neither); the PTK derivation is the real KDF. */
+/* Radio TX wrapper: after the station sends 4-way message 4 (EAPOL-Key with
+ * Secure and without Ack), hand it a deauthentication from the AP at once,
+ * as a nested poll inside a full-ring TX would. */
+static int (*ORIG_TX)(void *ctx, const uint8_t *frame, uint32_t len, int protect);
+static int M4_SEEN;
+static int tx_deauth_on_m4(void *ctx, const uint8_t *f, uint32_t len, int protect) {
+    int r = ORIG_TX(ctx, f, len, protect);
+    if (len > 40 && (f[0] & 0x0c) == 0x08 && f[30] == 0x88 && f[31] == 0x8e && (f[37] & 0x02) && !(f[38] & 0x80)) {
+        uint8_t d[26] = {0xc0, 0x00};
+        memcpy(d + 4, S.mac, 6);
+        memcpy(d + 10, AP_SHA.bssid, 6);
+        memcpy(d + 16, AP_SHA.bssid, 6);
+        d[24] = 1;
+        M4_SEEN++;
+        wifi_sta_rx(&S, d, sizeof d, 0, -30);
+    }
+    return r;
+}
+
 static void test_station_wpa(void) {
     mt7925_dev d;
     uint8_t pmk[32], bad_pmk[32], eth[1600], pl[200], rx[1600];
@@ -1013,6 +1032,9 @@ static void test_station_wpa(void) {
     CHECK(net_arp_parse(ef.payload, ef.payload_len, &ar) == NET_OK && ar.operation == NET_ARP_REPLY &&
           memcmp(ar.sender_mac.b, AP_SHA.mac, 6) == 0);
     CHECK(M.unprot_dropped == 0 && S.rx_unprotected_dropped == 0 && M.dma_faults == 0 && M.uni_bad == 0);
+    /* the same protected frame again, packet number and all: a replay, dropped */
+    model_replay_last(&M);
+    CHECK(!recv_eth(&ef, rx, sizeof rx) && S.rx_replay_dropped == 1 && S.st == WIFI_STA_RUN);
     /* an unprotected data frame from the AP on this link is dropped by the station */
     uint8_t f[64] = {0x08, 0x02};
     memcpy(f + 4, S.mac, 6); memcpy(f + 10, AP_SHA.bssid, 6); memcpy(f + 16, AP_SHA.mac, 6);
@@ -1059,6 +1081,43 @@ static void test_station_wpa(void) {
         CHECK(M.deauth_rx == 1 && M.last_deauth_reason == WIFI_REASON_4WAY_TIMEOUT);
         CHECK(wifi_sta_send_eth(&S, eth, (uint32_t)n) == WIFI_E_STATE);
     }
+
+    /* a chip that reports no packet number: protected data is dropped, never trusted */
+    CHECK(station_up(&d, MODEL_F_NO_PN) == MT7925_OK);
+    model_set_pmk(&M, pmk);
+    wifi_sta_set_psk(&S, pmk, &toy);
+    CHECK(wifi_sta_connect(&S, (const uint8_t *)"aiensha", 7, 200000) == WIFI_OK && S.st == WIFI_STA_RUN);
+    memcpy(out.source.b, S.mac, 6);
+    CHECK(net_eth_build(&out, eth, sizeof eth, &n) == NET_OK);
+    CHECK(wifi_sta_send_eth(&S, eth, (uint32_t)n) == WIFI_OK && M.arp_replies == 1);
+    CHECK(!recv_eth(&ef, rx, sizeof rx) && S.rx_replay_dropped == 1);
+    /* an AP that restarts deauthenticates everyone (Address 1 broadcast): honoured */
+    uint8_t bd[26] = {0xc0, 0x00};
+    memset(bd + 4, 0xff, 6);
+    memcpy(bd + 10, AP_SHA.bssid, 6);
+    memcpy(bd + 16, AP_SHA.bssid, 6);
+    bd[24] = 7;
+    wifi_sta_rx(&S, bd, sizeof bd, 0, -30);
+    CHECK(S.st == WIFI_STA_IDLE && S.deauths == 1 && !S.ptk_set && S.wpa.st == WPA_ST_IDLE);
+    /* ... but not from another BSSID */
+    CHECK(station_up(&d, 0) == MT7925_OK);
+    model_set_pmk(&M, pmk);
+    wifi_sta_set_psk(&S, pmk, &toy);
+    CHECK(wifi_sta_connect(&S, (const uint8_t *)"aiensha", 7, 200000) == WIFI_OK);
+    bd[10] ^= 1;
+    wifi_sta_rx(&S, bd, sizeof bd, 0, -30);
+    CHECK(S.st == WIFI_STA_RUN && S.deauths == 0);
+
+    /* a deauthentication delivered while message 4 is being sent (the TX
+     * polled the chip): nothing the wiped supplicant derived is installed */
+    CHECK(station_up(&d, 0) == MT7925_OK);
+    model_set_pmk(&M, pmk);
+    wifi_sta_set_psk(&S, pmk, &toy);
+    ORIG_TX = S.r.tx;
+    S.r.tx = tx_deauth_on_m4;
+    CHECK(wifi_sta_connect(&S, (const uint8_t *)"aiensha", 7, 200000) == WIFI_E_REFUSED);
+    CHECK(M4_SEEN == 1 && M.keys == 0 && !S.ptk_set && S.st == WIFI_STA_IDLE && S.eapol_refused == 1);
+    S.r.tx = ORIG_TX;
 }
 
 static uint8_t *slurp(const char *path, size_t *len) {

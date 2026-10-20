@@ -353,7 +353,7 @@ OUT ?= $(REPO)/target/native-kernel-pi5
 CK_EXTRA_CFLAGS += -DCK_PI5=1 -DCK_KLOG=1
 endif
 
-# Spark attended boot (L206): `make full CK_MT7925=1` ($(OUT)/full/BOOTAA64.EFI)
+# Spark attended boot (L206): `make full CK_MT7925=1` ($(OUT)/full-mt7925/BOOTAA64.EFI)
 # probes the MediaTek MT7925 Wi-Fi (dev/mt7925_bind.c) in the devices stage:
 # identity, SMMU-confined DMA window, own handshake, WFSYS reset, rings, chip
 # revision, then stop and release. No firmware is sent. Empty (default) in
@@ -1055,6 +1055,11 @@ ifneq ($(strip $(CK_PI5_LIFECYCLE)),)
 # The NVMe image-slot service is not part of the Pi image: its four hooks are answered by svc/slot_service_pi5.c.
 STAGE_SRCS += $(filter-out $(KDIR)/svc/slot_service.c $(BOOT)/slot_select.c $(BOOT)/slot_control.c $(BOOT)/slot_update.c,$(SVC_STAGE_ADDED)) $(KDIR)/svc/slot_service_pi5.c
 endif
+endif
+# L206: the attended Wi-Fi image gets its own output and object directories,
+# so its devices stage never mixes with a default image built in the same OUT.
+ifeq ($(strip $(CK_MT7925)),1)
+FULL_NAME := $(FULL_NAME)-mt7925
 endif
 FULL_OUT := $(OUT)/$(FULL_NAME)
 STAGE_KOBJ := $(OUT)/obj/stage-$(FULL_NAME)

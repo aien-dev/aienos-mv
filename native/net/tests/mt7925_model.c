@@ -542,15 +542,25 @@ static int eq6(const uint8_t *a, const uint8_t *b) { return memcmp(a, b, 6) == 0
  * header and MIC already stripped. */
 static void ap_send(mt7925_model *m, const model_ap *a, const uint8_t *frame, uint32_t len, int protect) {
     uint8_t b[MODEL_FRAME_MAX];
-    if (len + 32u > sizeof(b)) return;
-    memset(b, 0, 32);
-    put32(b, ((len + 32u) & MT7925_RXD0_LEN_MASK) | (MT7925_PKT_TYPE_NORMAL << MT7925_RXD0_PKT_TYPE_SHIFT));
-    put32(b + 4, MT7925_WCID_AP);
+    /* RXD group 1 carries the CCMP packet number (MODEL_F_NO_PN: the chip leaves it out) */
+    uint32_t g = protect && !(m->faults & MODEL_F_NO_PN) ? 16u : 0u;
+    if (len + 32u + g > sizeof(b)) return;
+    memset(b, 0, 32u + g);
+    put32(b, ((len + 32u + g) & MT7925_RXD0_LEN_MASK) | (MT7925_PKT_TYPE_NORMAL << MT7925_RXD0_PKT_TYPE_SHIFT));
+    put32(b + 4, MT7925_WCID_AP | (g ? MT7925_RXD1_GROUP_1 : 0u));
     if (protect) put32(b + 8, MT7925_CIPHER_CCMP << MT7925_RXD2_SEC_MODE_SHIFT);
     put32(b + 12, (uint32_t)a->channel << 8);
-    memcpy(b + 32, frame, len);
-    if (protect) b[33] |= 0x40;
-    model_queue_rx(m, MT7925_PKT_TYPE_NORMAL, b, len + 32u);
+    if (g) {
+        uint64_t pn = ++m->ap_pn;
+        for (int k = 0; k < 6; k++) b[32 + k] = (uint8_t)(pn >> (8 * k));
+    }
+    memcpy(b + 32 + g, frame, len);
+    if (protect) b[33 + g] |= 0x40;
+    if (protect && len + 32u + g <= sizeof m->last_prot) { /* kept for the replay test */
+        memcpy(m->last_prot, b, len + 32u + g);
+        m->last_prot_len = len + 32u + g;
+    }
+    model_queue_rx(m, MT7925_PKT_TYPE_NORMAL, b, len + 32u + g);
 }
 
 static uint32_t mgmt(uint8_t *f, uint8_t subtype, const uint8_t *da, const uint8_t *bssid) {
@@ -827,4 +837,8 @@ void model_release_tokens(mt7925_model *m) {
 void model_ap_send_m1(mt7925_model *m) {
     if (m->assoc_ap < 0) return;
     ap_key(m, &m->ap[m->assoc_ap], WPA_KI_PAIRWISE | WPA_KI_ACK, 0, 0, 0);
+}
+
+void model_replay_last(mt7925_model *m) {
+    if (m->last_prot_len) model_queue_rx(m, MT7925_PKT_TYPE_NORMAL, m->last_prot, m->last_prot_len);
 }

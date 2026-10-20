@@ -588,7 +588,12 @@ mt7925_rx_err mt7925_rx_parse(const uint8_t *buf, uint32_t len, mt7925_rx_info *
     const uint8_t *rxv = 0;
     /* Optional groups in the reference's order: 4, 1, 2, 3 (+5 inside 3). */
     if (rxd1 & MT7925_RXD1_GROUP_4) off += 16u;
-    if (rxd1 & MT7925_RXD1_GROUP_1) off += 16u;
+    const uint8_t *g1 = 0;
+    if (rxd1 & MT7925_RXD1_GROUP_1) {
+        if (off + 16u > len) return MT7925_RX_SHORT;
+        g1 = buf + off;
+        off += 16u;
+    }
     if (rxd1 & MT7925_RXD1_GROUP_2) off += 16u;
     if (rxd1 & MT7925_RXD1_GROUP_3) {
         if (off + 16u > len) return MT7925_RX_SHORT;
@@ -613,6 +618,12 @@ mt7925_rx_err mt7925_rx_parse(const uint8_t *buf, uint32_t len, mt7925_rx_info *
         if (rxd2 & MT7925_RXD2_FRAG)
             return MT7925_RX_UNSUPPORTED; /* fragments keep the CCMP header: not handled */
         ri->decrypted = 1;
+        /* The chip strips the CCMP header and does not check the packet
+         * number; the replay check is the host's (wifi_sta). */
+        if (g1) {
+            ri->has_pn = 1;
+            for (int k = 5; k >= 0; k--) ri->pn = (ri->pn << 8) | g1[k];
+        }
     }
     if (protected_bit && !ri->decrypted)
         return MT7925_RX_CIPHER; /* ciphertext the chip did not open: never pass it on */
@@ -725,18 +736,12 @@ static int rx_one(mt7925_dev *d, mt7925_ring *r, int events, uint8_t want_seq, u
     return ret;
 }
 
-int mt7925_poll_rings(mt7925_dev *d) {
-    if (!d)
-        return -(int)MT7925_E_ARG;
-    if (d->broken)
-        return -(int)MT7925_E_BROKEN;
-    if (!d->dma_on)
-        return -(int)MT7925_E_STATE;
+/* Deliver the frames held during MCU waits, in arrival order. Each is taken
+ * off the queue before delivery, so a nested poll from inside on_rx never
+ * sees it again; frames held while these are delivered (a key install
+ * waits on the MCU) wait for the next drain. */
+static int drain_held(mt7925_dev *d) {
     int total = 0;
-    /* Held frames first, in arrival order. Each is taken off the queue
-     * before delivery, so a nested poll from inside on_rx never sees it
-     * again; frames on_rx causes to be held (a key install waits on the
-     * MCU) wait for the next poll. */
     uint32_t held = d->defer_n;
     for (uint32_t k = 0; k < held && d->defer_n && d->on_rx; k++) {
         if (d->cb_depth >= MT7925_CB_DEPTH) break;
@@ -753,6 +758,17 @@ int mt7925_poll_rings(mt7925_dev *d) {
         d->cb_depth--;
         total++;
     }
+    return total;
+}
+
+int mt7925_poll_rings(mt7925_dev *d) {
+    if (!d)
+        return -(int)MT7925_E_ARG;
+    if (d->broken)
+        return -(int)MT7925_E_BROKEN;
+    if (!d->dma_on)
+        return -(int)MT7925_E_STATE;
+    int total = drain_held(d);
     for (uint32_t k = 0; k < MT7925_RING_MAX; k++) {
         int a = rx_one(d, &d->rx_evt, 1, 0, 0, 0, 0, 0);
         if (a < 0) return a;
@@ -760,6 +776,9 @@ int mt7925_poll_rings(mt7925_dev *d) {
         if (b < 0) return b;
         if (!a && !b) break;
         total += a + b;
+        /* Frames held by an MCU wait inside these callbacks are older than
+         * what is still on the rings: deliver them first. */
+        total += drain_held(d);
     }
     mt7925_ring *tx[3] = {&d->tx_data, &d->tx_mcu, &d->tx_fwdl};
     for (int i = 0; i < 3; i++) {
