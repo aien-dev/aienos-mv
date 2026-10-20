@@ -6,12 +6,15 @@
 # machine. With --apply (run it as yourself, not under sudo: it calls sudo
 # itself) it STOPs before any write unless scripts/native_boot_preflight.sh
 # says READY for this exact image (Linux first in BootOrder, no BootNext
-# pending, the AIENOSRECOV stick listed, clean tree, no quiet flag), then saves
-# the pre-boot capture (scripts/verify_native_rollback.sh --capture-pre) in the
-# evidence folder, copies the image to the EFI system partition, writes
-# \EFI\AIENOS\STAGED.TXT (commit, image digest, prior boot state), creates a
-# boot entry WITHOUT adding it to BootOrder, checks the stick is still listed,
-# and sets BootNext.
+# pending, the AIENOSRECOV stick listed by the firmware and plugged in, clean
+# tree, no quiet flag), then saves the pre-boot capture
+# (scripts/verify_native_rollback.sh --capture-pre) in the evidence folder,
+# copies the image to the EFI system partition, removes the previous boot's
+# BOOTREPORT.TXT and AienosBootReportV1 variable (copies kept in the evidence
+# folder), creates boot entry Boot0A1E (a number the firmware does not hand
+# out) WITHOUT adding it to BootOrder, checks the stick is still listed, writes
+# \EFI\AIENOS\STAGED.TXT (commit, image digest, prior boot state) and sets
+# BootNext.
 # The firmware consumes BootNext on that boot, so the following boot returns to
 # the normal BootOrder (Linux) whether AIENOS succeeds, hangs, or is powered off.
 # Run it under `aien-proof hold --resource machine-1` so the attempt is recorded.
@@ -34,6 +37,9 @@ image="target/aarch64-unknown-uefi/release/aienos-handoff.efi"
 esp="/boot/efi"
 loader='\EFI\AIENOS\aienos-handoff.efi'
 label="AIENOS handoff (one-time)"
+entry="0A1E"
+report_file="${esp}/EFI/AIENOS/BOOTREPORT.TXT"
+report_var="/sys/firmware/efi/efivars/AienosBootReportV1-a1e05b0e-7c3d-4f51-9b6a-2d8e4c1f0a37"
 secure_boot_var="/sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c"
 
 if [[ -n "$(git status --porcelain)" ]]; then
@@ -86,7 +92,8 @@ echo "image:       ${image} (sha256 ${digest})"
 echo "recovery:    ${recov_entry:+Boot${recov_entry} AIENOSRECOV stick listed}${recov_entry:-AIENOSRECOV stick NOT listed}"
 echo "capture:     ${evidence_dir}/pre_boot_capture.json (sudo scripts/verify_native_rollback.sh --capture-pre)"
 echo "copy to:     ${esp}/EFI/AIENOS/aienos-handoff.efi and STAGED.TXT"
-echo "boot entry:  '${label}' on ${disk} partition ${part}, loader ${loader}"
+echo "clear:       previous ${report_file} and the AienosBootReportV1 variable (copies kept in the evidence folder)"
+echo "boot entry:  Boot${entry} '${label}' on ${disk} partition ${part}, loader ${loader}"
 echo "BootOrder:   ${order_before} (left unchanged)"
 echo "BootNext:    set to the AIENOS entry for one boot only"
 
@@ -104,13 +111,39 @@ mkdir -p "${evidence_dir}"
 sudo scripts/verify_native_rollback.sh --capture-pre "${evidence_dir}/pre_boot_capture.json"
 sudo chown "$(id -u):$(id -g)" "${evidence_dir}/pre_boot_capture.json"
 sudo install -D -m 0644 "${image}" "${esp}/EFI/AIENOS/aienos-handoff.efi"
-entry="$(efibootmgr | sed -n "s/^Boot\([0-9A-F]\{4\}\)\*\{0,1\} ${label}.*/\1/p" | head -1)"
-if [[ -z "${entry}" ]]; then
-    sudo efibootmgr --quiet --create-only --disk "${disk}" --part "${part}" \
-        --label "${label}" --loader "${loader}"
-    entry="$(efibootmgr | sed -n "s/^Boot\([0-9A-F]\{4\}\)\*\{0,1\} ${label}.*/\1/p" | head -1)"
+
+# Clear the previous boot's reports so any report found afterwards was written
+# by this boot. The variable is non-volatile: on 2026-10-20 it still held the
+# 2026-09-24 report after a boot in which the staged image never ran. Copies go
+# to the evidence folder first. efivarfs marks vendor variables immutable.
+cleared=""
+if sudo test -e "${report_file}"; then
+    sudo cat "${report_file}" >"${evidence_dir}/previous_BOOTREPORT.TXT"
+    sudo rm -f "${report_file}"
+    ! sudo test -e "${report_file}" || { echo "STOP: could not remove ${report_file}; BootNext NOT set"; exit 1; }
+    cleared="BOOTREPORT.TXT ($(wc -c <"${evidence_dir}/previous_BOOTREPORT.TXT") bytes, commit $(sed -n 's/^aienos_commit: //p' "${evidence_dir}/previous_BOOTREPORT.TXT" | head -1))"
 fi
-[[ -n "${entry}" ]] || { echo "boot entry was not created"; exit 1; }
+if sudo test -e "${report_var}"; then
+    sudo cat "${report_var}" | tail -c +5 >"${evidence_dir}/previous_AienosBootReportV1.txt"
+    sudo chattr -i "${report_var}"
+    sudo rm -f "${report_var}"
+    ! sudo test -e "${report_var}" || { echo "STOP: could not delete the old AienosBootReportV1 variable; BootNext NOT set"; exit 1; }
+    cleared="${cleared:+${cleared}; }AienosBootReportV1 (commit $(sed -n 's/^aienos_commit: //p' "${evidence_dir}/previous_AienosBootReportV1.txt" | head -1))"
+fi
+echo "cleared_before_boot: ${cleared:-nothing}" >>"${record}"
+
+# The entry gets a fixed number far above the ones the firmware hands out (it
+# numbered its own entries 0000-0004 on this machine), so a device the
+# firmware finds at power-on cannot take it; on 2026-10-20 the stick took
+# Boot0004 from the AIENOS entry. efibootmgr refuses a number already in use.
+entry_line="$(efibootmgr | grep -E "^Boot${entry}\*? " | head -1)"
+if [[ -z "${entry_line}" ]]; then
+    sudo efibootmgr --quiet --create-only --bootnum "${entry}" --disk "${disk}" --part "${part}" \
+        --label "${label}" --loader "${loader}"
+    entry_line="$(efibootmgr | grep -E "^Boot${entry}\*? " | head -1)"
+fi
+grep -qiF "File(${loader})" <<<"${entry_line}" \
+    || { echo "STOP: Boot${entry} is '${entry_line:-missing}', not the AIENOS loader; BootNext NOT set"; exit 1; }
 
 order_after="$(efibootmgr | sed -n 's/^BootOrder: //p')"
 if [[ "${order_after}" != "${order_before}" ]]; then

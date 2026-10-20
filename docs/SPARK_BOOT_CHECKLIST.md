@@ -49,15 +49,24 @@ the staging command replaces the older handoff image and leaves Allen alone.
 
 ### 1. Plug in the stick and the keyboard
 
-With Ubuntu running, plug the AIENOSRECOV stick and a wired USB keyboard
-into the Spark. Then, in a terminal on the Spark, type:
+Plug the AIENOSRECOV stick and a wired USB keyboard into the Spark. The
+firmware (the start-up program that runs before Ubuntu) only notices a stick
+while the machine is powering on, not when it is plugged into a running
+Ubuntu. So if the stick was not already in when the Spark last started,
+restart Ubuntu once now with `sudo reboot` (an ordinary restart; nothing is
+staged yet) and log back in. Then, in a terminal on the Spark, type:
 
     efibootmgr | grep f227357c
 
-*You should see* one line ending in `HD(1,GPT,f227357c-...)`: that is the
-stick, under whatever number the firmware gave it. If you see nothing, the
-firmware has not noticed the stick yet; unplug it, plug it in again, and
-retry. (This changes nothing; it only reads.)
+*You should see* a line starting `Boot000N* UEFI: USB USB Hard Drive,
+Partition 1` that contains `USB(` and ends in `HD(1,GPT,f227357c-...)`: that
+is the stick, under the number the firmware gave it. A line named
+`AIENOSRECOV` without `USB(` does not count: it is a hand-made entry, and
+the staging command now refuses it. Never create one by hand: on 2026-10-20
+that let the firmware give the stick the number of the AienOS entry at
+power-on, so the one-time boot started the stick instead of AienOS. If you
+see no `USB(` line, restart Ubuntu once with the stick in and look again.
+(The `efibootmgr` line changes nothing; it only reads.)
 
 ### 2. Stage the boot: the one command
 
@@ -78,14 +87,14 @@ once. It does **not** restart the machine.
    fine. Lines starting `ASK` are questions for you (are you at the machine,
    is this the right boot); they are not errors. The check ends with
    `NATIVE_PREFLIGHT: READY (read-only checks only; the ASK lines are Drake's)`.
-3. Eight summary lines (`commit:`, `image:`, `recovery:    Boot000N
-   AIENOSRECOV stick listed`, `capture:`, `copy to:`, `boot entry:`,
+3. Nine summary lines (`commit:`, `image:`, `recovery:    Boot000N
+   AIENOSRECOV stick listed`, `capture:`, `copy to:`, `clear:`, `boot entry:`,
    `BootOrder:`, `BootNext:`).
 4. **The password prompt** (this is where it asks), then
    `Captured state to ...pre_boot_capture.json`.
 5. The record of what was staged (`aienos_commit:`, `image_sha256:`, ...,
-   `aienos_boot_entry:`), four lines from the firmware that include
-   `BootNext: 000N`, then `Staged: the next boot runs Boot000N once.` and the
+   `cleared_before_boot:`, `aienos_boot_entry: 0A1E`), four lines from the firmware that include
+   `BootNext: 0A1E`, then `Staged: the next boot runs Boot0A1E once.` and the
    three commands for after the boot. Take a photo of this part.
 
 If any line starts with `STOP`, nothing was written. Send the screen text to
@@ -145,7 +154,9 @@ run the three commands step 2 printed at its end. They are, in order:
 
 *You should see*: the first ends with `M2_GATE: PASS` and shows the GB10
 lines from the report the firmware kept; the third ends with
-`VERDICT: PASS`. Both only read, except the second, which writes one file in
+`VERDICT: PASS`. If the first says a report is `left from an earlier boot`,
+AienOS did not run on this boot (the firmware started something else); its
+`aienos_entry_kept` line says what. Both only read, except the second, which writes one file in
 the evidence folder.
 
 Keep the stick plugged in until these three are done: if the stick is

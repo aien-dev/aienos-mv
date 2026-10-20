@@ -63,6 +63,13 @@ cargo test --workspace -- --format=pretty
 echo "PASS  host tests: cargo test --workspace -- --format=pretty"
 echo "PASS  ABI conformance: frozen wire format golden bytes and roundtrips verified"
 
+# Machine 1 boot scripts: canned inputs only, no machine state read or written.
+echo ""
+echo "--- [Native boot scripts: preflight self-test, M2 gate replay] ---"
+bash scripts/native_boot_preflight.sh --self-test
+bash scripts/collect_boot_report_test.sh
+echo "PASS  native boot scripts: preflight self-test and M2 gate replay of the 2026-09-24 and 2026-10-20 boots"
+
 # Step 3: Linting & Zero-Warning Enforcement
 echo ""
 echo "--- [Clippy Verification: -D warnings] ---"

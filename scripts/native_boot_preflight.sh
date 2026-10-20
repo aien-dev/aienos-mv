@@ -45,8 +45,10 @@ preflight() {
         current="$(sed -n 's/^BootCurrent: //p' <<<"${boot}")"
         recov="$(recovery_entry "${boot}")"
         echo "INFO  BootCurrent=${current:-?} BootOrder=${order:-?}"
-        [[ -n "${recov}" ]] && ok "recovery stick: Boot${recov} ${recov_label} listed (GPT partition ${AIENOS_RECOV_PARTUUID})" \
-            || stop "recovery stick: ${recov_label} not listed (no entry on GPT partition ${AIENOS_RECOV_PARTUUID}); plug it in, see docs/RECOVERY_MEDIA_MACHINE1.md"
+        [[ -n "${recov}" ]] && ok "recovery stick: Boot${recov} ${recov_label} listed by the firmware (GPT partition ${AIENOS_RECOV_PARTUUID})" \
+            || stop "recovery stick: ${recov_label} not listed by the firmware (no USB entry on GPT partition ${AIENOS_RECOV_PARTUUID}); the firmware lists it only at power-on: with the stick plugged in, restart Ubuntu once, then rerun (docs/RECOVERY_MEDIA_MACHINE1.md)"
+        recovery_stick_present && ok "recovery stick: plugged in now (${AIENOS_RECOV_PARTUUID} visible to Linux)" \
+            || stop "recovery stick: not plugged in now (partition ${AIENOS_RECOV_PARTUUID} not visible to Linux)"
         [[ "${order%%,*}" == "${default_entry}" ]] && ok "BootOrder starts with ${default_entry} (Linux, the permanent default)" \
             || stop "BootOrder does not start with ${default_entry} (got '${order:-none}')"
         [[ -z "${next}" ]] && ok "BootNext is not set (no other one-time boot pending)" \
@@ -94,9 +96,13 @@ if [[ "${1:-}" == --self-test ]]; then
     good=$'BootCurrent: 0001\nTimeout: 5 seconds\nBootOrder: 0001,0003\nBoot0001* ubuntu\nBoot0003* UEFI PXE\n'"${stick}"
     printf '\0\0\0\0\0' >"${t}/sb_off"; printf '\0\0\0\0\1' >"${t}/sb_on"
     esp="/"   # any mounted path stands in for the ESP in the self-test
+    mkdir -p "${t}/dev"; touch "${t}/dev/${AIENOS_RECOV_PARTUUID}"; export AIENOS_RECOV_DEV_DIR="${t}/dev"
+    # The hand-made entry of 2026-10-20 (efibootmgr -C on the stick, short path, no USB node):
+    # evidence/spark_native_boot1_2026-10-20/fixer_readonly_capture_L318.txt.
+    handmade=$'Boot0002* AIENOSRECOV\tHD(1,GPT,f227357c-1e80-4fd0-a55e-2efbef1dd25c,0x800,0x1df000)/File(\\EFI\\BOOT\\BOOTAA64.EFI)'
     printf 'img' >"${t}/img"; dig="$(sha256sum "${t}/img" | cut -c1-64)"
-    case_() { # label want(0|1) boot sb quiet tree image expect
-        local rc=0; preflight "$3" "$4" "${esp}" "$5" "$6" "$7" "$8" >"${t}/out" 2>&1 || rc=1
+    case_() { # label want(0|1) boot sb quiet tree image expect [stick dev dir]
+        local rc=0; AIENOS_RECOV_DEV_DIR="${9:-${t}/dev}" preflight "$3" "$4" "${esp}" "$5" "$6" "$7" "$8" >"${t}/out" 2>&1 || rc=1
         if [[ "${rc}" == "$2" ]]; then echo "PASS  $1"; else echo "FAIL  $1 (wanted $2, got ${rc})"; cat "${t}/out"; st=1; fi
     }
     case_ "good state is READY" 0 "${good}" "${t}/sb_off" "${t}/noflag" "" "${t}/img" "${dig}"
@@ -104,6 +110,9 @@ if [[ "${1:-}" == --self-test ]]; then
     case_ "recovery stick absent -> NOT_READY" 1 "${good/${stick}/}" "${t}/sb_off" "${t}/noflag" "" "" ""
     case_ "stick under another entry number -> READY" 0 "${good/Boot0004/Boot0002}" "${t}/sb_off" "${t}/noflag" "" "" ""
     case_ "entry named AIENOSRECOV on another partition -> NOT_READY" 1 "${good/${stick}/Boot0004* AIENOSRECOV}" "${t}/sb_off" "${t}/noflag" "" "" ""
+    case_ "only a hand-made entry on the stick (2026-10-20) -> NOT_READY" 1 "${good/${stick}/${handmade}}" "${t}/sb_off" "${t}/noflag" "" "" ""
+    case_ "hand-made entry beside the firmware's -> READY" 0 "${good}"$'\n'"${handmade}" "${t}/sb_off" "${t}/noflag" "" "" ""
+    case_ "stick listed but unplugged since power-on -> NOT_READY" 1 "${good}" "${t}/sb_off" "${t}/noflag" "" "" "" "${t}/nodev"
     case_ "BootOrder not Linux first -> NOT_READY" 1 "${good/BootOrder: 0001,0003/BootOrder: 0000,0001}" "${t}/sb_off" "${t}/noflag" "" "" ""
     case_ "booted from another entry -> NOT_READY" 1 "${good/BootCurrent: 0001/BootCurrent: 0004}" "${t}/sb_off" "${t}/noflag" "" "" ""
     case_ "Secure Boot on -> NOT_READY" 1 "${good}" "${t}/sb_on" "${t}/noflag" "" "" ""
