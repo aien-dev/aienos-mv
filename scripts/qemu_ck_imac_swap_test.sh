@@ -18,6 +18,7 @@
 #   3   the swap verifies with ck_slot_verify ("swap: verified ok") and jumps
 #   4   B boots (commit -B) and reaches DONE, after the jump
 #   4b  B starts every core again (the cores A stopped with INIT)
+#   4c  one swap only: B, entered by the swap, leaves the staged object on the test disk alone
 #   5   no reset: the QEMU process that started A is still running with B up (-no-reboot
 #       would have ended it on a guest reset)
 #   6   Allen's memory is intact: B loads the generation A saved, with the name A taught
@@ -192,6 +193,12 @@ if [[ -n "${b_cores}" && "${b_cores%/*}" == "${b_cores#*/}" && "${b_cores%/*}" -
     pass "4b B starts every core again after the swap (cores=${b_cores})"
 else
     fail "4b B starts every core again after the swap: cores=${b_cores:-none}, $(grep -a '^smp:' "${after}" | head -1 || echo 'no smp line')"
+fi
+n_jumps="$(grep -ac "swap: jumping to new kernel" "${logA}" || true)"
+if [[ "${n_jumps}" -eq 1 ]] && grep -aq "swap: entered by a swap, the test disk inbox is left alone" "${after}"; then
+    pass "4c one swap: B leaves the staged object alone"
+else
+    fail "4c one swap: ${n_jumps} jumps, B's inbox line: $(grep -a '^swap: ' "${after}" | head -1 || echo none)"
 fi
 if kill -0 "${qpid}" 2>/dev/null; then
     pass "5  no reset: the QEMU process that booted A is still running with B up"

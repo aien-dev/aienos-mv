@@ -240,6 +240,8 @@ void ck_x86_udp_send(const uint8_t dst_mac[6], const uint8_t *pkt, size_t len,
  * It is not a canonical address, so no firmware handle can equal it; efi_main then skips the
  * firmware and enters the kernel (efi_x86.c). */
 #define CK_X86_SWAP_ENTRY_MAGIC 0x5357415041454E49ull /* "INEAPAWS" */
+/* Set by efi_main when this kernel was entered by a live swap, not by the firmware. */
+extern int ck_x86_swapped_in;
 /* Swap helpers (swap_x86.c, exposed to kmain_x86.c). */
 void ck_x86_swap_stop_aps(void);
 uint64_t ck_x86_tsc_hz(void);
