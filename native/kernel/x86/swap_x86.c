@@ -1,10 +1,3 @@
-    /* The test disk is read only and staged for the first kernel: a kernel that came in by the
-     * swap would find the same object and swap into itself again, and again. */
-    if (ck_x86_swapped_in) {
-        disk_stage_triggered = 1;
-        ck_puts("swap: entered by a swap, the test disk inbox is left alone\n");
-        return;
-    }
 /* swap_x86.c -- AIENOS-KERNEL-0 live kernel swap (LAB BUILD ONLY: CK_X86_REPORT=1
  * compiles the receiver in; a default image gets the stubs at the bottom).
  *
@@ -331,6 +324,12 @@ static void try_disk_stage(void)
     if (disk_stage_triggered || !swap_ready || !swap_buf_pa)
         return;
     disk_stage_triggered = 1;
+    /* The test disk is read only and staged for the first kernel: a kernel that came in by the
+     * swap would find the same object and swap into itself again, and again. */
+    if (ck_x86_swapped_in) {
+        ck_puts("swap: entered by a swap, the test disk inbox is left alone\n");
+        return;
+    }
     size_t len = 0;
     if (swap_read_test_disk((uint8_t *)(uintptr_t)swap_buf_pa, SWAP_BUF_BYTES, &len))
         return;
