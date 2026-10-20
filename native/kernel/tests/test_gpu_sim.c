@@ -189,12 +189,12 @@ static void test_invalidate(void)
     CHECK(gread(va, &v) == 0 && v == 0x5E5E5E5Eu);
     sim.nlog = 0;
     CHECK(ck_gmmu_invalidate(&as, &regs, 10) == CK_GMMU_OK);
-    /* Register order: PDB, UPPER_PDB, INVALIDATE(ALL_VA|SYS_MEMBAR|TRIGGER), then polls. */
+    /* Register order: PDB, UPPER_PDB, INVALIDATE(ALL_VA|TRIGGER), then polls. */
     CHECK(sim.nlog >= 4);
     uint64_t pdb = as.root_pa >> 12;
     CHECK(sim.log[0].write && sim.log[0].off == 0x00B830A0u && sim.log[0].val == ((uint32_t)((pdb & 0xFFFFFFF) << 4) | 2u));
     CHECK(sim.log[1].write && sim.log[1].off == 0x00B830A4u && sim.log[1].val == (uint32_t)(pdb >> 28));
-    CHECK(sim.log[2].write && sim.log[2].off == 0x00B830B0u && sim.log[2].val == 0x80000041u);
+    CHECK(sim.log[2].write && sim.log[2].off == 0x00B830B0u && sim.log[2].val == 0x80000001u);
     CHECK(!sim.log[3].write && sim.log[3].off == 0x00B830B0u);
     CHECK(sim.inval_done == 1);
     CHECK(gread(va, &v) == CK_GSIM_F_UNMAPPED); /* translation gone */
@@ -300,6 +300,10 @@ static void test_channel(void)
     CHECK(ch.d.rl_entry[0] == ((uint32_t)ch.userd->pa & 0xFFFFFF00u) && ch.d.rl_entry[1] == (uint32_t)(ch.userd->pa >> 32));
     CHECK(ch.d.pdb == as.root_pa && ch.d.gpfifo_va == ch.gpfifo->gpu_va);
     CHECK(ch.gpfifo->cache == CK_GMEM_UNCACHED && ch.userd->cache == CK_GMEM_UNCACHED);
+    /* Instance block word 128/129 as the driver writes it: TARGET SYS_COH, BIG_PAGE 64K, NEW_PT_FORMAT 0. */
+    const uint32_t *ramin = (const uint32_t *)ch.inst->cpu;
+    CHECK(ramin[128] == (((uint32_t)as.root_pa & 0xFFFFF000u) | (1u << 11) | 2u));
+    CHECK(ramin[129] == (uint32_t)(as.root_pa >> 32));
     struct ck_gpu_chan dup;
     CHECK(ck_gpu_chan_create(&dup, &gm, &regs, &ops, &sim, 5, 2, 8) == CK_GCHAN_EBIND); /* same chid live */
     CHECK(ck_gmem_count(&gm, CK_GMEM_LIVE) == 3);                                      /* dup's memory returned */

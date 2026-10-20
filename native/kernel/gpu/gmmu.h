@@ -21,8 +21,8 @@
  * PD4); tests assert bit ranges, not names.
  *
  * A 2 MiB PTE sits in the low 8 bytes of the 16-byte PD0 slot, high 8 bytes
- * zero. dev_mmu.h does not say which half (DOCS SILENT); encoder and
- * simulator agree on the low half, the chip must confirm.
+ * zero: the driver's VER3 PTE descriptor (kgmmuFmtInitPte_GH10X) places its
+ * fields at bits 0..63 of the entry. Driver-sourced; the chip must confirm.
  *
  * Whether the GB10 silicon walks exactly this format is UNKNOWN until a chip
  * run; it is what the pinned driver programs for it.
@@ -97,7 +97,9 @@ struct ck_gpu_regs {
 #define CK_GPU_INVAL_PDB_AP_SYS   (1u << 1) /* MMU_INVALIDATE_PDB_APERTURE 1:1 SYS_MEM */
 /* Fields left 0 on purpose, matching the driver's plain invalidate:
  * HUBTLB_ONLY, REPLAY (NONE), ACK (NONE_REQUIRED), CACHE_LEVEL (ALL),
- * ALL_PDB (one PDB). The PDB aperture for GB10 unified memory is taken as
+ * ALL_PDB (one PDB), INVAL_SCOPE 16:15 (ALL_TLBS; GB10B sets it through
+ * kgmmuSetTlbInvalidationScope_GA100), SYS_MEMBAR (set only by the Turing
+ * membar workaround; a stub on GB10B: g_kern_gmmu_nvoc.c). The PDB aperture for GB10 unified memory is taken as
  * SYS_MEM: UNKNOWN on the chip. */
 
 enum ck_gmmu_status {
@@ -137,7 +139,7 @@ int ck_gmmu_map(struct ck_gmmu_as *as, uint64_t va, uint64_t pa, uint64_t size, 
  * in it is mapped with that page size. Caller must invalidate after. */
 int ck_gmmu_unmap(struct ck_gmmu_as *as, uint64_t va, uint64_t size, uint64_t page);
 
-/* Invalidate this address space's TLB entries (ALL_VA, one PDB, SYS_MEMBAR),
+/* Invalidate this address space's TLB entries (ALL_VA, one PDB),
  * then poll TRIGGER until clear for at most `poll_budget` reads. On timeout
  * the address space latches dead (UNKNOWN whether the GPU still uses stale
  * translations, so nothing mapped through it may be reused). */

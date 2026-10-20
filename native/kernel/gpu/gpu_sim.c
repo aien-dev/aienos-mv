@@ -308,8 +308,8 @@ static int sim_bind(void *ctx, const struct ck_gpu_chan_desc *d)
         return -1;
     uint64_t w = rd64(s, ipa);
     uint32_t lo32 = (uint32_t)w, target = lo32 & 3u;
-    if ((target != CK_GPU_RAMIN_TARGET_SYS_COH && target != 3u) || !(lo32 & CK_GPU_RAMIN_NEW_PT_FORMAT))
-        return -1; /* GB10 has only system memory; the old format is not GB10X */
+    if ((target != CK_GPU_RAMIN_TARGET_SYS_COH && target != 3u) || (lo32 & CK_GPU_RAMIN_NEW_PT_FORMAT))
+        return -1; /* GB10 has only system memory; SIM-CHOICE: bit 10 set means VERSION_2 tables, not GB10X */
     uint64_t pdb = ((w >> 32) << 32) | (lo32 & 0xFFFFF000u);
     for (uint32_t i = 0; i < CK_GSIM_CHANS; i++) {
         if (!s->chan[i].bound) {
@@ -342,8 +342,8 @@ static int sim_is_idle(void *ctx, uint32_t chid)
     struct ck_gsim_chan *c = chan_by_id(s, chid);
     if (!c)
         return 1;
-    if (s->hang)
-        return 0;
+    if (s->hang || !c->disabled)
+        return 0; /* never idle before a disable */
     c->bound = 0; /* idle and disabled: the id may be reused */
     return 1;
 }

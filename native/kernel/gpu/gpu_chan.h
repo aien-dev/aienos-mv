@@ -21,7 +21,8 @@
  * - Instance block page directory: for GB10B the driver uses
  *   kgmmuInstBlkPageDirBaseGet_GV100 -> _GP100 (kern_gmmu_gp100.c): word 128 =
  *   TARGET 1:0 | VOL 2 | FAULT_REPLAY_TEX 4 | FAULT_REPLAY_GCC 5 |
- *   USE_NEW_PT_FORMAT 10 | BIG_PAGE_SIZE 11 (1 = 64 KiB) | LO 31:12 = pa >> 12;
+ *   USE_NEW_PT_FORMAT 10 (TRUE only for format VERSION_2, so FALSE on GB10B) |
+ *   BIG_PAGE_SIZE 11 (1 = 64 KiB) | LO 31:12 = pa >> 12;
  *   word 129 = HI = pa >> 32 (pascal/gp100 and volta/gv100 dev_ram.h). Driver
  *   behaviour, DOCUMENTED; that the GB10 silicon reads it there is UNVERIFIED.
  *
@@ -43,7 +44,7 @@
 #include "gmmu.h"
 #include "gpu_mem.h"
 
-/* nvrm_mthd: incrementing method header (SEC_OP 2). */
+/* nvrm_mthd: incrementing method header (bits 31:29 = 1, INC_METHOD). */
 static inline uint32_t ck_gpu_mthd(uint32_t subc, uint32_t mthd, uint32_t count)
 {
     return (2u << 28) | (count << 16) | (subc << 13) | (mthd >> 2);

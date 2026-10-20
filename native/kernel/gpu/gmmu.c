@@ -288,7 +288,7 @@ int ck_gmmu_invalidate(struct ck_gmmu_as *as, const struct ck_gpu_regs *r, uint3
     uint64_t pdb = as->root_pa >> 12; /* MMU_INVALIDATE_PDB_ADDR_ALIGNMENT 12 */
     r->wr(r->ctx, CK_GPU_REG_INVAL_PDB, (uint32_t)((pdb & 0x0FFFFFFFull) << 4) | CK_GPU_INVAL_PDB_AP_SYS);
     r->wr(r->ctx, CK_GPU_REG_INVAL_UPPER, (uint32_t)((pdb >> 28) & 0xFFFFFull));
-    r->wr(r->ctx, CK_GPU_REG_INVAL, CK_GPU_INVAL_ALL_VA | CK_GPU_INVAL_SYS_MEMBAR | CK_GPU_INVAL_TRIGGER);
+    r->wr(r->ctx, CK_GPU_REG_INVAL, CK_GPU_INVAL_ALL_VA | CK_GPU_INVAL_TRIGGER);
 #ifdef CK_GPU_MUTANT_NO_INVAL_POLL
     return CK_GMMU_OK;
 #endif

@@ -67,8 +67,9 @@ int ck_gpu_chan_create(struct ck_gpu_chan *c, struct ck_gmem *mem, const struct 
      * FAULT_REPLAY_* and VOL stay 0 (replay disabled, non-volatile). */
     volatile uint32_t *ramin = (volatile uint32_t *)c->inst->cpu;
     uint64_t pdb = mem->as->root_pa;
-    ramin[CK_GPU_RAMIN_PDB_WORD] = ((uint32_t)pdb & 0xFFFFF000u) | CK_GPU_RAMIN_BIG_PAGE_64K | CK_GPU_RAMIN_NEW_PT_FORMAT |
-                                   CK_GPU_RAMIN_TARGET_SYS_COH;
+    ramin[CK_GPU_RAMIN_PDB_WORD] = ((uint32_t)pdb & 0xFFFFF000u) | CK_GPU_RAMIN_BIG_PAGE_64K | CK_GPU_RAMIN_TARGET_SYS_COH;
+                                   /* USE_NEW_PT_FORMAT (bit 10) stays FALSE: GP100 sets it only for GMMU_FMT_VERSION_2
+                                    * and GB10B uses VERSION_3 (kern_gmmu_gp100.c:165, kern_gmmu_fmt_gh10x.c). */
     ramin[CK_GPU_RAMIN_PDB_WORD + 1u] = (uint32_t)(pdb >> 32);
 #endif
 
@@ -153,7 +154,9 @@ int ck_gpu_chan_teardown(struct ck_gpu_chan *c, uint32_t idle_budget, struct ck_
     if (!c || !c->open)
         return CK_GCHAN_ESTATE;
     c->open = 0;
+#ifndef CK_GPU_MUTANT_NO_DISABLE
     (void)c->ops.disable(c->ops_ctx, c->d.chid);
+#endif
     int idle = 0;
     for (uint32_t i = 0; i < idle_budget && !idle; i++)
         idle = c->ops.is_idle(c->ops_ctx, c->d.chid) != 0;
@@ -166,7 +169,7 @@ int ck_gpu_chan_teardown(struct ck_gpu_chan *c, uint32_t idle_budget, struct ck_
         if (!idle)
             (void)ck_gmem_quarantine(c->mem, own[i]);
         else if (ck_gmem_free(c->mem, own[i]) != CK_GMEM_OK)
-            rc = CK_GCHAN_ETIMEDOUT; /* invalidate timed out: ck_gmem quarantined it */
+            rc = CK_GCHAN_ETIMEDOUT; /* free failed (invalidate timeout or dead address space): ck_gmem quarantined it */
     }
     if (!idle) {
         for (uint32_t i = 0; extra && i < nextra; i++)

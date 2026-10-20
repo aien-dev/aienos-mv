@@ -7,7 +7,10 @@
  * completed invalidate empties, so a missing invalidate shows up as a stale
  * translation. A fault is recorded and the access does not touch memory.
  *
- * Simulator choices where the docs are silent are marked SIM-CHOICE. */
+ * Simulator choices where the docs are silent are marked SIM-CHOICE.
+ * Limitation: a completed invalidate matches TLB entries by PDB address
+ * only; the PDB aperture bit is not checked here (the register-log test
+ * in test_gpu_sim.c is the guard for its encoding). */
 #ifndef CK_GPU_SIM_H
 #define CK_GPU_SIM_H
 

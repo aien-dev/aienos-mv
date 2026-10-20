@@ -2461,7 +2461,7 @@ gpu-freestanding:
 	echo "gpu-freestanding: PASS (gmmu gpu_mem gpu_chan built with KCC/KCFLAGS, linked -r, no undefined symbol except the PIE GOT)"
 # Each mutant removes one check; test_gpu_sim must FAIL for every one.
 GPU_SIM_MUTANTS := NO_OVERLAP NO_PA_RANGE NO_VA_BITS NO_POOL_COUNT NO_INVAL_POLL NO_TIMEOUT_LATCH NO_QUARANTINE \
-	NO_POLLED_UNCACHED NO_GP_VA40 NO_RING_FULL NO_IDLE_QUARANTINE NO_MIXED_PAGES NO_INST_PDB NO_CHID_WIDTH NO_USERD_WIDTH
+	NO_POLLED_UNCACHED NO_GP_VA40 NO_RING_FULL NO_IDLE_QUARANTINE NO_MIXED_PAGES NO_INST_PDB NO_CHID_WIDTH NO_USERD_WIDTH NO_DISABLE
 gpu-sim-mutants:
 	@mkdir -p $(OUT)/host
 	@fail=0; for m in $(GPU_SIM_MUTANTS); do \
