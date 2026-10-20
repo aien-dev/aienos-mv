@@ -43,12 +43,20 @@ mod tests {
         let fresh = std::fs::read(&p).unwrap();
         assert_eq!(fresh.len(), 16 << 20);
         assert_eq!(&fresh[512..520], b"EFI PART", "GPT header at LBA 1");
-        assert_eq!(&fresh[1024..1040], &crate::esp::AIENOS_TYPE, "first entry is AIENOS");
+        assert_eq!(
+            &fresh[1024..1040],
+            &crate::esp::AIENOS_TYPE,
+            "first entry is AIENOS"
+        );
         std::fs::write(&p, b"data").unwrap();
         assert!(!ensure(&p, 16 << 20).unwrap(), "an existing disk is kept");
         assert_eq!(std::fs::read(&p).unwrap(), b"data");
         reset(&p, 16 << 20).unwrap();
-        assert_eq!(std::fs::read(&p).unwrap(), fresh, "reset gives the same empty disk");
+        assert_eq!(
+            std::fs::read(&p).unwrap(),
+            fresh,
+            "reset gives the same empty disk"
+        );
         std::fs::remove_dir_all(&d).unwrap();
     }
 }

@@ -86,8 +86,14 @@ impl Backend for VzBackend {
                 spec.image_kind.as_str()
             )));
         }
-        if let Some(f) = spec.forwards.iter().find(|f| f.proto != crate::net::Proto::Udp) {
-            return Err(BackendError::Unavailable(format!("vz forwards UDP only (yet), not {f}")));
+        if let Some(f) = spec
+            .forwards
+            .iter()
+            .find(|f| f.proto != crate::net::Proto::Udp)
+        {
+            return Err(BackendError::Unavailable(format!(
+                "vz forwards UDP only (yet), not {f}"
+            )));
         }
         let _p = objc::Pool::new();
         // SAFETY: class method, no arguments.
@@ -116,12 +122,19 @@ impl Backend for VzBackend {
         }
         let (mut out_r, out_w) = os_pipe()?; // guest -> host
         let (in_r, mut in_w) = os_pipe()?; // host -> guest
-        // The runner's own user-mode network on a datagram socket pair, so the
-        // guest sees the 10.0.2.x addresses its kernel expects (vmnet NAT would
-        // hand it a DHCP subnet instead).
-        let (net, vm_end) = UserNet::start(&spec.forwards).map_err(|e| vmm(format!("network: {e}")))?;
+                                           // The runner's own user-mode network on a datagram socket pair, so the
+                                           // guest sees the 10.0.2.x addresses its kernel expects (vmnet NAT would
+                                           // hand it a DHCP subnet instead).
+        let (net, vm_end) =
+            UserNet::start(&spec.forwards).map_err(|e| vmm(format!("network: {e}")))?;
         let q = Queue::new("com.aienos.run.vz");
-        let dev = Devices { boot: &boot, vars: &vars, out_w: out_w.as_raw_fd(), in_r: in_r.as_raw_fd(), net: vm_end.as_raw_fd() };
+        let dev = Devices {
+            boot: &boot,
+            vars: &vars,
+            out_w: out_w.as_raw_fd(),
+            in_r: in_r.as_raw_fd(),
+            net: vm_end.as_raw_fd(),
+        };
         let vm = q
             .sync(|| -> Result<Id, String> {
                 // SAFETY: plain Objective-C calls with the documented signatures;
@@ -137,7 +150,11 @@ impl Backend for VzBackend {
         let mut buf = [0u8; 4096];
         let exit = loop {
             // Guest output: drain what is there (poll keeps this loop cheap).
-            let mut pfd = libc::pollfd { fd: out_r.as_raw_fd(), events: libc::POLLIN, revents: 0 };
+            let mut pfd = libc::pollfd {
+                fd: out_r.as_raw_fd(),
+                events: libc::POLLIN,
+                revents: 0,
+            };
             // SAFETY: one valid pollfd, 2 ms timeout.
             unsafe { libc::poll(&mut pfd, 1, 2) };
             while let Ok(n) = out_r.read(&mut buf) {
@@ -158,13 +175,21 @@ impl Backend for VzBackend {
             }
             match vm.state() {
                 ST_STOPPED if objc::START_DONE.poll().is_some() => {
-                    break if stop_at.is_some() { VmExit::Stopped } else { VmExit::PowerOff };
+                    break if stop_at.is_some() {
+                        VmExit::Stopped
+                    } else {
+                        VmExit::PowerOff
+                    };
                 }
-                ST_ERROR => break VmExit::Failed("the virtual machine entered the error state".into()),
+                ST_ERROR => {
+                    break VmExit::Failed("the virtual machine entered the error state".into())
+                }
                 _ => {}
             }
             if objc::START_DONE.poll().is_none() && t_start.elapsed() > Duration::from_secs(30) {
-                break VmExit::Failed("the virtual machine did not confirm its start within 30 s".into());
+                break VmExit::Failed(
+                    "the virtual machine did not confirm its start within 30 s".into(),
+                );
             }
             if console.stop_requested() {
                 match stop_at {
@@ -265,7 +290,9 @@ unsafe fn build_and_start(spec: &VmSpec, q: &Queue, dev: &Devices) -> Result<Id,
     let att = msg!(alloc("VZDiskImageStorageDeviceAttachment"), "initWithURL:readOnly:error:",
                    file_url(&dev.boot.to_string_lossy()) => Id, true => bool, &mut err => *mut Id; Id);
     let att = check_err("boot disk", att, err)?;
-    disks.push(msg!(alloc("VZVirtioBlockDeviceConfiguration"), "initWithAttachment:", att => Id; Id));
+    disks.push(
+        msg!(alloc("VZVirtioBlockDeviceConfiguration"), "initWithAttachment:", att => Id; Id),
+    );
     if let Some(store_disk) = &spec.store_disk {
         let att = msg!(alloc("VZDiskImageStorageDeviceAttachment"), "initWithURL:readOnly:error:",
                        file_url(&store_disk.to_string_lossy()) => Id, false => bool, &mut err => *mut Id; Id);
@@ -343,7 +370,9 @@ impl VzVm {
         let vm = self.vm as usize;
         objc::STOP_DONE.reset();
         // SAFETY: stopWithCompletionHandler: (macOS 12+) on the VM queue.
-        self.q.sync(|| unsafe { msg!(vm as Id, "stopWithCompletionHandler:", objc::stop_block().ptr() => Id; ()) });
+        self.q.sync(|| unsafe {
+            msg!(vm as Id, "stopWithCompletionHandler:", objc::stop_block().ptr() => Id; ())
+        });
         for _ in 0..100 {
             if objc::STOP_DONE.poll().is_some() {
                 break;

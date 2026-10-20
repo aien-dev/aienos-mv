@@ -36,7 +36,10 @@ pub fn class(name: &str) -> Id {
     let c = CString::new(name).expect("class name");
     // SAFETY: objc_getClass takes a NUL-terminated name and returns nil if absent.
     let k = unsafe { objc_getClass(c.as_ptr()) };
-    assert!(!k.is_null(), "Objective-C class {name} not found (macOS too old?)");
+    assert!(
+        !k.is_null(),
+        "Objective-C class {name} not found (macOS too old?)"
+    );
     k
 }
 
@@ -99,7 +102,11 @@ pub fn describe(obj: Id) -> String {
     // SAFETY: every NSObject answers description; NSError answers localizedDescription.
     unsafe {
         let is_err: bool = msg!(obj, "isKindOfClass:", class("NSError") => Id; bool);
-        let s: Id = if is_err { msg!(obj, "localizedDescription"; Id) } else { msg!(obj, "description"; Id) };
+        let s: Id = if is_err {
+            msg!(obj, "localizedDescription"; Id)
+        } else {
+            msg!(obj, "description"; Id)
+        };
         if s.is_null() {
             return "nil".into();
         }
@@ -155,7 +162,10 @@ impl Queue {
             let _pool = Pool::new();
             c.r = Some((c.f.take().expect("once"))());
         }
-        let mut c = Ctx { f: Some(f), r: None };
+        let mut c = Ctx {
+            f: Some(f),
+            r: None,
+        };
         // SAFETY: dispatch_sync_f returns only after tramp ran.
         unsafe { dispatch_sync_f(self.0, &mut c as *mut _ as *mut c_void, tramp::<F, R>) };
         c.r.expect("queue work ran")
@@ -178,7 +188,10 @@ pub struct ErrBlock {
 }
 unsafe impl Sync for ErrBlock {}
 const BLOCK_IS_GLOBAL: i32 = 1 << 28;
-static ERR_DESC: BlockDesc = BlockDesc { reserved: 0, size: std::mem::size_of::<ErrBlock>() };
+static ERR_DESC: BlockDesc = BlockDesc {
+    reserved: 0,
+    size: std::mem::size_of::<ErrBlock>(),
+};
 
 /// One completion slot per handler kind: 0 pending, 1 ok, 2 error (message kept).
 pub struct Completion {
@@ -192,7 +205,10 @@ impl Default for Completion {
 }
 impl Completion {
     pub const fn new() -> Self {
-        Completion { state: std::sync::atomic::AtomicU8::new(0), msg: std::sync::Mutex::new(String::new()) }
+        Completion {
+            state: std::sync::atomic::AtomicU8::new(0),
+            msg: std::sync::Mutex::new(String::new()),
+        }
     }
     pub fn reset(&self) {
         self.state.store(0, std::sync::atomic::Ordering::SeqCst);

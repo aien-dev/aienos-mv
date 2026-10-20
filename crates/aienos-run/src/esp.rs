@@ -7,15 +7,33 @@ use std::path::Path;
 
 const SECTOR: usize = 512;
 const PART_START: u64 = 2048; // 1 MiB aligned
-const ESP_TYPE: [u8; 16] = guid(0xC12A7328, 0xF81F, 0x11D2, [0xBA, 0x4B, 0x00, 0xA0, 0xC9, 0x3E, 0xC9, 0x3B]);
-const DISK_GUID: [u8; 16] = guid(0xA1E0_0505, 0x2026, 0x1020, [0x41, 0x49, 0x45, 0x4E, 0x4F, 0x53, 0x44, 0x4B]);
-const PART_GUID: [u8; 16] = guid(0xA1E0_0505, 0x2026, 0x1020, [0x41, 0x49, 0x45, 0x4E, 0x45, 0x53, 0x50, 0x31]);
+const ESP_TYPE: [u8; 16] = guid(
+    0xC12A7328,
+    0xF81F,
+    0x11D2,
+    [0xBA, 0x4B, 0x00, 0xA0, 0xC9, 0x3E, 0xC9, 0x3B],
+);
+const DISK_GUID: [u8; 16] = guid(
+    0xA1E0_0505,
+    0x2026,
+    0x1020,
+    [0x41, 0x49, 0x45, 0x4E, 0x4F, 0x53, 0x44, 0x4B],
+);
+const PART_GUID: [u8; 16] = guid(
+    0xA1E0_0505,
+    0x2026,
+    0x1020,
+    [0x41, 0x49, 0x45, 0x4E, 0x45, 0x53, 0x50, 0x31],
+);
 
 const fn guid(a: u32, b: u16, c: u16, d: [u8; 8]) -> [u8; 16] {
     let a = a.to_le_bytes();
     let b = b.to_le_bytes();
     let c = c.to_le_bytes();
-    [a[0], a[1], a[2], a[3], b[0], b[1], c[0], c[1], d[0], d[1], d[2], d[3], d[4], d[5], d[6], d[7]]
+    [
+        a[0], a[1], a[2], a[3], b[0], b[1], c[0], c[1], d[0], d[1], d[2], d[3], d[4], d[5], d[6],
+        d[7],
+    ]
 }
 
 pub fn crc32(data: &[u8]) -> u32 {
@@ -23,7 +41,11 @@ pub fn crc32(data: &[u8]) -> u32 {
     for &b in data {
         c ^= b as u32;
         for _ in 0..8 {
-            c = if c & 1 != 0 { (c >> 1) ^ 0xEDB8_8320 } else { c >> 1 };
+            c = if c & 1 != 0 {
+                (c >> 1) ^ 0xEDB8_8320
+            } else {
+                c >> 1
+            };
         }
     }
     !c
@@ -41,7 +63,10 @@ fn short_name(n: &str) -> Result<[u8; 11], String> {
         Some((b, e)) => (b.to_string(), e.to_string()),
         None => (up.clone(), String::new()),
     };
-    let ok = |s: &str| s.bytes().all(|c| c.is_ascii_alphanumeric() || b"_-~$".contains(&c));
+    let ok = |s: &str| {
+        s.bytes()
+            .all(|c| c.is_ascii_alphanumeric() || b"_-~$".contains(&c))
+    };
     if base.is_empty() || base.len() > 8 || ext.len() > 3 || !ok(&base) || !ok(&ext) {
         return Err(format!("{n:?} is not an 8.3 name"));
     }
@@ -92,11 +117,18 @@ pub fn fat16_image(sectors: u32, hidden: u32, files: &[EspFile]) -> Result<Vec<u
     let data_start = RESERVED + 2 * fat_secs + root_secs;
     let clusters = (sectors - data_start) / SPC;
     if !(4085..65525).contains(&clusters) {
-        return Err(format!("{sectors} sectors gives {clusters} clusters: not a FAT16 size"));
+        return Err(format!(
+            "{sectors} sectors gives {clusters} clusters: not a FAT16 size"
+        ));
     }
 
     // Build the tree.
-    let mut root = Node { name: [b' '; 11], data: None, children: Vec::new(), cluster: 0 };
+    let mut root = Node {
+        name: [b' '; 11],
+        data: None,
+        children: Vec::new(),
+        cluster: 0,
+    };
     for f in files {
         let parts: Vec<&str> = f.path.split('/').filter(|s| !s.is_empty()).collect();
         let mut cur = &mut root;
@@ -166,13 +198,20 @@ pub fn fat16_image(sectors: u32, hidden: u32, files: &[EspFile]) -> Result<Vec<u
             d.extend_from_slice(&dirent(b"..         ", 0x10, parent, 0));
             for c in &n.children {
                 let size = c.data.as_ref().map(|v| v.len() as u32).unwrap_or(0);
-                d.extend_from_slice(&dirent(&c.name, if c.data.is_some() { 0x20 } else { 0x10 }, c.cluster, size));
+                d.extend_from_slice(&dirent(
+                    &c.name,
+                    if c.data.is_some() { 0x20 } else { 0x10 },
+                    c.cluster,
+                    size,
+                ));
             }
             data[off(n.cluster)..off(n.cluster) + d.len()].copy_from_slice(&d);
         }
         for c in &n.children {
             match &c.data {
-                Some(v) if c.cluster != 0 => data[off(c.cluster)..off(c.cluster) + v.len()].copy_from_slice(v),
+                Some(v) if c.cluster != 0 => {
+                    data[off(c.cluster)..off(c.cluster) + v.len()].copy_from_slice(v)
+                }
                 Some(_) => {}
                 None => write(c, n.cluster, data, csize),
             }
@@ -222,7 +261,12 @@ pub fn fat16_image(sectors: u32, hidden: u32, files: &[EspFile]) -> Result<Vec<u
     r.extend_from_slice(&dirent(b"AIENOS     ", 0x08, 0, 0)); // volume label
     for c in &root.children {
         let size = c.data.as_ref().map(|v| v.len() as u32).unwrap_or(0);
-        r.extend_from_slice(&dirent(&c.name, if c.data.is_some() { 0x20 } else { 0x10 }, c.cluster, size));
+        r.extend_from_slice(&dirent(
+            &c.name,
+            if c.data.is_some() { 0x20 } else { 0x10 },
+            c.cluster,
+            size,
+        ));
     }
     if r.len() > (ROOT_ENTRIES as usize) * 32 {
         return Err("too many root entries".into());
@@ -237,7 +281,13 @@ pub fn fat16_image(sectors: u32, hidden: u32, files: &[EspFile]) -> Result<Vec<u
 /// [PART_START, last usable]: protective MBR, primary and backup headers and
 /// entry arrays, as (byte offset, bytes) pieces. Returns the pieces and the
 /// partition's last LBA.
-fn gpt_single(total: u64, ptype: &[u8; 16], disk_guid: &[u8; 16], part_guid: &[u8; 16], name: &str) -> (Vec<(u64, Vec<u8>)>, u64) {
+fn gpt_single(
+    total: u64,
+    ptype: &[u8; 16],
+    disk_guid: &[u8; 16],
+    part_guid: &[u8; 16],
+    name: &str,
+) -> (Vec<(u64, Vec<u8>)>, u64) {
     let last_usable = total - 34;
     let part_end = last_usable; // inclusive
     let mut m = vec![0u8; SECTOR];
@@ -290,7 +340,13 @@ fn gpt_single(total: u64, ptype: &[u8; 16], disk_guid: &[u8; 16], part_guid: &[u
 /// Raw GPT disk of `mib` MiB with one ESP (FAT16) holding `files`.
 pub fn gpt_disk(mib: u64, files: &[EspFile]) -> Result<Vec<u8>, String> {
     let total = mib * 1024 * 1024 / SECTOR as u64;
-    let (pieces, part_end) = gpt_single(total, &ESP_TYPE, &DISK_GUID, &PART_GUID, "EFI System Partition");
+    let (pieces, part_end) = gpt_single(
+        total,
+        &ESP_TYPE,
+        &DISK_GUID,
+        &PART_GUID,
+        "EFI System Partition",
+    );
     let part_secs = (part_end - PART_START + 1) as u32;
     let fat = fat16_image(part_secs, PART_START as u32, files)?;
     let mut d = vec![0u8; (total as usize) * SECTOR];
@@ -304,9 +360,24 @@ pub fn gpt_disk(mib: u64, files: &[EspFile]) -> Result<Vec<u8>, String> {
 
 /// AIENOS partition type GUID (native/kernel/dev/disk_part.h): the one
 /// partition the kernel's Store stages write.
-pub const AIENOS_TYPE: [u8; 16] = guid(0x38DA_AC89, 0x5EAD, 0x4B40, [0x8B, 0x1E, 0x36, 0x87, 0xA7, 0x41, 0x80, 0x61]);
-const STORE_DISK_GUID: [u8; 16] = guid(0xA1E0_0505, 0x2026, 0x1020, [0x41, 0x49, 0x45, 0x4E, 0x53, 0x54, 0x52, 0x44]);
-const STORE_PART_GUID: [u8; 16] = guid(0xA1E0_0505, 0x2026, 0x1020, [0x41, 0x49, 0x45, 0x4E, 0x53, 0x54, 0x52, 0x31]);
+pub const AIENOS_TYPE: [u8; 16] = guid(
+    0x38DA_AC89,
+    0x5EAD,
+    0x4B40,
+    [0x8B, 0x1E, 0x36, 0x87, 0xA7, 0x41, 0x80, 0x61],
+);
+const STORE_DISK_GUID: [u8; 16] = guid(
+    0xA1E0_0505,
+    0x2026,
+    0x1020,
+    [0x41, 0x49, 0x45, 0x4E, 0x53, 0x54, 0x52, 0x44],
+);
+const STORE_PART_GUID: [u8; 16] = guid(
+    0xA1E0_0505,
+    0x2026,
+    0x1020,
+    [0x41, 0x49, 0x45, 0x4E, 0x53, 0x54, 0x52, 0x31],
+);
 
 /// The per-user Store disk: a sparse raw disk of `mib` MiB, GPT with one
 /// all-zero AIENOS partition (the kernel formats the Store inside it on
@@ -317,14 +388,22 @@ pub fn ensure_store_disk(p: &Path, mib: u64) -> Result<(), String> {
         return Ok(());
     }
     if mib < 16 {
-        return Err(format!("store disk of {mib} MiB is too small (16 MiB minimum)"));
+        return Err(format!(
+            "store disk of {mib} MiB is too small (16 MiB minimum)"
+        ));
     }
     if let Some(d) = p.parent() {
         std::fs::create_dir_all(d).map_err(|e| format!("{}: {e}", d.display()))?;
     }
     let tmp = p.with_extension("tmp");
     let total = mib * 1024 * 1024 / SECTOR as u64;
-    let (pieces, _) = gpt_single(total, &AIENOS_TYPE, &STORE_DISK_GUID, &STORE_PART_GUID, "AIENOS Store");
+    let (pieces, _) = gpt_single(
+        total,
+        &AIENOS_TYPE,
+        &STORE_DISK_GUID,
+        &STORE_PART_GUID,
+        "AIENOS Store",
+    );
     let io = |e: std::io::Error| format!("{}: {e}", tmp.display());
     let mut f = std::fs::File::create(&tmp).map_err(io)?;
     f.set_len(mib << 20).map_err(io)?;
@@ -342,7 +421,13 @@ pub fn write_boot_disk(disk: &Path, efi: &Path, mib: u64) -> Result<(), String> 
     if img.len() < 2 || &img[..2] != b"MZ" {
         return Err(format!("{} is not a PE/UEFI image", efi.display()));
     }
-    let d = gpt_disk(mib, &[EspFile { path: "EFI/BOOT/BOOTAA64.EFI", data: &img }])?;
+    let d = gpt_disk(
+        mib,
+        &[EspFile {
+            path: "EFI/BOOT/BOOTAA64.EFI",
+            data: &img,
+        }],
+    )?;
     let tmp = disk.with_extension("tmp");
     std::fs::write(&tmp, &d).map_err(|e| format!("{}: {e}", tmp.display()))?;
     std::fs::rename(&tmp, disk).map_err(|e| format!("{}: {e}", disk.display()))
@@ -368,7 +453,14 @@ mod tests {
     #[test]
     fn gpt_disk_layout_and_file_bytes() {
         let payload: Vec<u8> = (0..5000u32).map(|i| (i * 7) as u8).collect();
-        let d = gpt_disk(64, &[EspFile { path: "EFI/BOOT/BOOTAA64.EFI", data: &payload }]).unwrap();
+        let d = gpt_disk(
+            64,
+            &[EspFile {
+                path: "EFI/BOOT/BOOTAA64.EFI",
+                data: &payload,
+            }],
+        )
+        .unwrap();
         assert_eq!(d.len(), 64 << 20);
         assert_eq!(&d[512..520], b"EFI PART");
         // Header CRC verifies.
@@ -390,8 +482,22 @@ mod tests {
 
     #[test]
     fn deterministic() {
-        let a = gpt_disk(32, &[EspFile { path: "EFI/BOOT/BOOTAA64.EFI", data: b"MZxx" }]).unwrap();
-        let b = gpt_disk(32, &[EspFile { path: "EFI/BOOT/BOOTAA64.EFI", data: b"MZxx" }]).unwrap();
+        let a = gpt_disk(
+            32,
+            &[EspFile {
+                path: "EFI/BOOT/BOOTAA64.EFI",
+                data: b"MZxx",
+            }],
+        )
+        .unwrap();
+        let b = gpt_disk(
+            32,
+            &[EspFile {
+                path: "EFI/BOOT/BOOTAA64.EFI",
+                data: b"MZxx",
+            }],
+        )
+        .unwrap();
         assert!(a == b);
     }
 

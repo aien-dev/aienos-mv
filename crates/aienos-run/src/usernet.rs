@@ -44,7 +44,11 @@ pub enum Action {
     /// Send this frame back to the guest.
     ToGuest(Vec<u8>),
     /// Send `payload` from the guest's UDP port `sport` to `dst` on the host.
-    Udp { sport: u16, dst: SocketAddrV4, payload: Vec<u8> },
+    Udp {
+        sport: u16,
+        dst: SocketAddrV4,
+        payload: Vec<u8>,
+    },
     Drop(&'static str),
 }
 
@@ -91,7 +95,11 @@ impl Nat {
         let o = ip.octets();
         if ip == GATEWAY_IP {
             Some(Ipv4Addr::LOCALHOST)
-        } else if (o[0], o[1], o[2]) == (10, 0, 2) || ip.is_broadcast() || ip.is_multicast() || ip.is_unspecified() {
+        } else if (o[0], o[1], o[2]) == (10, 0, 2)
+            || ip.is_broadcast()
+            || ip.is_multicast()
+            || ip.is_unspecified()
+        {
             None // the virtual subnet has nothing else on it
         } else {
             Some(ip)
@@ -175,8 +183,11 @@ impl Nat {
         if u.len() < 8 || usize::from(u16::from_be_bytes([u[4], u[5]])) != u.len() {
             return Action::Drop("udp: length");
         }
-        if u16::from_be_bytes([u[6], u[7]]) != 0 && csum_fold(csum_add(
-            csum_add(csum_add(0, &src.octets()), &dst.octets()) + 17 + u.len() as u32, u)) != 0
+        if u16::from_be_bytes([u[6], u[7]]) != 0
+            && csum_fold(csum_add(
+                csum_add(csum_add(0, &src.octets()), &dst.octets()) + 17 + u.len() as u32,
+                u,
+            )) != 0
         {
             return Action::Drop("udp: checksum");
         }
@@ -243,6 +254,8 @@ pub struct Stats {
 
 struct Fwd {
     guest: u16,
+    /// Host address the forward listens on (127.0.0.1 unless the user chose another).
+    bind: Ipv4Addr,
     sock: Arc<UdpSocket>,
     peers: Mutex<HashSet<SocketAddrV4>>,
 }
@@ -274,14 +287,21 @@ pub struct UserNet {
 fn set_buffers(s: &UnixDatagram) -> io::Result<()> {
     use std::os::fd::AsRawFd;
     extern "C" {
-        fn setsockopt(fd: i32, level: i32, name: i32, val: *const core::ffi::c_void, len: u32) -> i32;
+        fn setsockopt(
+            fd: i32,
+            level: i32,
+            name: i32,
+            val: *const core::ffi::c_void,
+            len: u32,
+        ) -> i32;
     }
     const SOL_SOCKET: i32 = 0xffff;
     const SO_SNDBUF: i32 = 0x1001;
     const SO_RCVBUF: i32 = 0x1002;
     for (opt, v) in [(SO_SNDBUF, 128 * 1024i32), (SO_RCVBUF, 512 * 1024i32)] {
         // SAFETY: setsockopt reads sizeof(int) bytes from &v.
-        if unsafe { setsockopt(s.as_raw_fd(), SOL_SOCKET, opt, (&v as *const i32).cast(), 4) } != 0 {
+        if unsafe { setsockopt(s.as_raw_fd(), SOL_SOCKET, opt, (&v as *const i32).cast(), 4) } != 0
+        {
             return Err(io::Error::last_os_error());
         }
     }
@@ -304,16 +324,26 @@ impl UserNet {
         let mut fw = Vec::new();
         for f in forwards {
             if f.proto != Proto::Udp {
-                return Err(io::Error::new(io::ErrorKind::Unsupported,
-                    format!("{f}: the macOS user network forwards UDP only (yet)")));
+                return Err(io::Error::new(
+                    io::ErrorKind::Unsupported,
+                    format!("{f}: the macOS user network forwards UDP only (yet)"),
+                ));
             }
             let addr: Ipv4Addr = f.host_addr.parse().map_err(|_| {
-                io::Error::new(io::ErrorKind::InvalidInput, format!("{f}: host address must be IPv4"))
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("{f}: host address must be IPv4"),
+                )
             })?;
             let s = UdpSocket::bind(SocketAddrV4::new(addr, f.host_port))
                 .map_err(|e| io::Error::new(e.kind(), format!("forward {f}: {e}")))?;
             s.set_read_timeout(Some(POLL))?;
-            fw.push(Fwd { guest: f.guest_port, sock: Arc::new(s), peers: Mutex::new(HashSet::new()) });
+            fw.push(Fwd {
+                guest: f.guest_port,
+                bind: addr,
+                sock: Arc::new(s),
+                peers: Mutex::new(HashSet::new()),
+            });
         }
         let sh = Arc::new(Shared {
             nat: Mutex::new(Nat::default()),
@@ -343,7 +373,11 @@ impl UserNet {
 
     /// Host ports actually bound, in forward order.
     pub fn forward_ports(&self) -> Vec<u16> {
-        self.sh.forwards.iter().filter_map(|f| f.sock.local_addr().ok().map(|a| a.port())).collect()
+        self.sh
+            .forwards
+            .iter()
+            .filter_map(|f| f.sock.local_addr().ok().map(|a| a.port()))
+            .collect()
     }
 }
 
@@ -352,9 +386,14 @@ impl Drop for UserNet {
         self.sh.stop.store(true, Ordering::SeqCst);
         if std::env::var_os("AIENOS_RUN_NET_DEBUG").is_some() {
             let s = &self.sh.stats;
-            eprintln!("usernet: from_guest={} to_guest={} dropped={} last_drop={:?} send_err={:?}",
-                s.frames_from_guest.load(Ordering::Relaxed), s.frames_to_guest.load(Ordering::Relaxed),
-                s.dropped.load(Ordering::Relaxed), self.sh.last_drop.lock().unwrap(), self.sh.send_err.lock().unwrap());
+            eprintln!(
+                "usernet: from_guest={} to_guest={} dropped={} last_drop={:?} send_err={:?}",
+                s.frames_from_guest.load(Ordering::Relaxed),
+                s.frames_to_guest.load(Ordering::Relaxed),
+                s.dropped.load(Ordering::Relaxed),
+                self.sh.last_drop.lock().unwrap(),
+                self.sh.send_err.lock().unwrap()
+            );
         }
         let t: Vec<_> = self.sh.threads.lock().unwrap().drain(..).collect();
         for h in t {
@@ -377,7 +416,11 @@ fn deliver(sh: &Shared, from: SocketAddr, dport: u16, payload: &[u8]) {
         sh.stats.dropped.fetch_add(1, Ordering::Relaxed);
         return;
     };
-    let f = sh.nat.lock().unwrap().to_guest(Nat::guest_view(from), dport, payload);
+    let f = sh
+        .nat
+        .lock()
+        .unwrap()
+        .to_guest(Nat::guest_view(from), dport, payload);
     match f {
         Some(f) => send_guest(sh, &f),
         None => {
@@ -391,14 +434,25 @@ fn guest_loop(sh: &Arc<Shared>) {
     while !sh.stop.load(Ordering::SeqCst) {
         let n = match sh.guest.recv(&mut buf) {
             Ok(n) => n,
-            Err(e) if matches!(e.kind(), io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut) => continue,
+            Err(e)
+                if matches!(
+                    e.kind(),
+                    io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
+                ) =>
+            {
+                continue
+            }
             Err(_) => return,
         };
         sh.stats.frames_from_guest.fetch_add(1, Ordering::Relaxed);
         let a = sh.nat.lock().unwrap().from_guest(&buf[..n]);
         match a {
             Action::ToGuest(f) => send_guest(sh, &f),
-            Action::Udp { sport, dst, payload } => udp_out(sh, sport, dst, &payload),
+            Action::Udp {
+                sport,
+                dst,
+                payload,
+            } => udp_out(sh, sport, dst, &payload),
             Action::Drop(why) => {
                 sh.stats.dropped.fetch_add(1, Ordering::Relaxed);
                 *sh.last_drop.lock().unwrap() = Some(why);
@@ -408,9 +462,14 @@ fn guest_loop(sh: &Arc<Shared>) {
 }
 
 fn udp_out(sh: &Arc<Shared>, sport: u16, dst: SocketAddrV4, payload: &[u8]) {
-    // A reply from a forwarded guest port to a peer that wrote to it.
+    // A forwarded guest port keeps one host endpoint: what it sends (replies,
+    // and also first contact such as a gateway registration) leaves from the
+    // forward's own host socket, so peers see the same address they dial. A
+    // loopback-only forward can only reach loopback; other traffic from that
+    // port falls through to a flow socket (a fresh host port).
     for f in &sh.forwards {
-        if f.guest == sport && f.peers.lock().unwrap().contains(&dst) {
+        if f.guest == sport && (!f.bind.is_loopback() || dst.ip().is_loopback()) {
+            f.peers.lock().unwrap().insert(dst);
             let _ = f.sock.send_to(payload, dst);
             return;
         }
@@ -424,9 +483,14 @@ fn udp_out(sh: &Arc<Shared>, sport: u16, dst: SocketAddrV4, payload: &[u8]) {
                 return;
             };
             let _ = s.set_read_timeout(Some(POLL));
-            let flow = Flow { sock: Arc::new(s), sent_to: Arc::new(Mutex::new(HashSet::new())) };
+            let flow = Flow {
+                sock: Arc::new(s),
+                sent_to: Arc::new(Mutex::new(HashSet::new())),
+            };
             let (s2, sent, shc) = (flow.sock.clone(), flow.sent_to.clone(), sh.clone());
-            sh.threads.lock().unwrap().push(std::thread::spawn(move || flow_loop(&shc, &s2, &sent, sport)));
+            sh.threads.lock().unwrap().push(std::thread::spawn(move || {
+                flow_loop(&shc, &s2, &sent, sport)
+            }));
             e.insert(flow)
         }
     };
@@ -444,7 +508,11 @@ fn flow_loop(sh: &Shared, s: &UdpSocket, sent_to: &Mutex<HashSet<SocketAddrV4>>,
             Ok(_) => {
                 sh.stats.dropped.fetch_add(1, Ordering::Relaxed); // unsolicited
             }
-            Err(e) if matches!(e.kind(), io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut) => {}
+            Err(e)
+                if matches!(
+                    e.kind(),
+                    io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
+                ) => {}
             Err(_) => return,
         }
     }
@@ -462,7 +530,11 @@ fn forward_loop(sh: &Shared, i: usize) {
             Ok(_) => {
                 sh.stats.dropped.fetch_add(1, Ordering::Relaxed);
             }
-            Err(e) if matches!(e.kind(), io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut) => {}
+            Err(e)
+                if matches!(
+                    e.kind(),
+                    io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
+                ) => {}
             Err(_) => return,
         }
     }
@@ -487,7 +559,10 @@ mod tests {
 
     /// A UDP frame the way the kernel builds it (net_udp.c): guest -> dst.
     fn guest_udp(sport: u16, dst: SocketAddrV4, payload: &[u8]) -> Vec<u8> {
-        let mut n = Nat { guest_mac: Some(GMAC), ip_id: 0 };
+        let mut n = Nat {
+            guest_mac: Some(GMAC),
+            ip_id: 0,
+        };
         // Build as if from `dst` to the guest, then swap direction fields.
         let mut f = n.to_guest(dst, sport, payload).unwrap();
         f[0..6].copy_from_slice(&GATEWAY_MAC);
@@ -508,20 +583,29 @@ mod tests {
     #[test]
     fn answers_arp_for_the_gateway_only() {
         let mut n = Nat::default();
-        let Action::ToGuest(r) = n.from_guest(&arp_request(GATEWAY_IP)) else { panic!() };
+        let Action::ToGuest(r) = n.from_guest(&arp_request(GATEWAY_IP)) else {
+            panic!()
+        };
         assert_eq!(&r[0..6], &GMAC);
         assert_eq!(&r[20..22], &[0, 2]); // reply
         assert_eq!(&r[22..28], &GATEWAY_MAC);
         assert_eq!(&r[28..32], &GATEWAY_IP.octets());
         assert_eq!(&r[38..42], &GUEST_IP.octets());
         assert_eq!(n.guest_mac, Some(GMAC));
-        assert!(matches!(Nat::default().from_guest(&arp_request(Ipv4Addr::new(10, 0, 2, 3))), Action::Drop(_)));
+        assert!(matches!(
+            Nat::default().from_guest(&arp_request(Ipv4Addr::new(10, 0, 2, 3))),
+            Action::Drop(_)
+        ));
     }
 
     #[test]
     fn udp_to_gateway_goes_to_loopback() {
         let mut n = Nat::default();
-        let f = guest_udp(47030, SocketAddrV4::new(GATEWAY_IP, 47029), b"AIENOS-CK-NET ping nonce=1");
+        let f = guest_udp(
+            47030,
+            SocketAddrV4::new(GATEWAY_IP, 47029),
+            b"AIENOS-CK-NET ping nonce=1",
+        );
         assert_eq!(
             n.from_guest(&f),
             Action::Udp {
@@ -551,22 +635,35 @@ mod tests {
         f[24..26].copy_from_slice(&c.to_be_bytes());
         assert_eq!(n.from_guest(&f), Action::Drop("ipv4: fragment"));
         let f = guest_udp(1, SocketAddrV4::new(Ipv4Addr::new(10, 0, 2, 9), 2), b"x");
-        assert_eq!(n.from_guest(&f), Action::Drop("udp: destination not routable"));
+        assert_eq!(
+            n.from_guest(&f),
+            Action::Drop("udp: destination not routable")
+        );
         assert!(matches!(n.from_guest(&ok[..20]), Action::Drop(_)));
     }
 
     #[test]
     fn frame_to_guest_has_valid_checksums() {
         let mut n = Nat::default();
-        assert!(n.to_guest(SocketAddrV4::new(GATEWAY_IP, 5), 47030, b"hi").is_none()); // MAC unknown
+        assert!(n
+            .to_guest(SocketAddrV4::new(GATEWAY_IP, 5), 47030, b"hi")
+            .is_none()); // MAC unknown
         n.guest_mac = Some(GMAC);
-        let f = n.to_guest(SocketAddrV4::new(GATEWAY_IP, 5), 47030, b"hi").unwrap();
+        let f = n
+            .to_guest(SocketAddrV4::new(GATEWAY_IP, 5), 47030, b"hi")
+            .unwrap();
         assert_eq!(f.len(), FRAME_MIN); // 44 bytes of frame, padded
         assert_eq!(u16::from_be_bytes([f[16], f[17]]), 20 + 8 + 2);
         assert_eq!(csum_fold(csum_add(0, &f[14..34])), 0);
         let s = csum_add(csum_add(0, &GATEWAY_IP.octets()), &GUEST_IP.octets()) + 17 + 10;
         assert_eq!(csum_fold(csum_add(s, &f[34..44])), 0);
-        assert!(n.to_guest(SocketAddrV4::new(GATEWAY_IP, 5), 1, &[0; UDP_PAYLOAD_MAX + 1]).is_none());
+        assert!(n
+            .to_guest(
+                SocketAddrV4::new(GATEWAY_IP, 5),
+                1,
+                &[0; UDP_PAYLOAD_MAX + 1]
+            )
+            .is_none());
     }
 
     fn recv_frame(vm: &UnixDatagram) -> Vec<u8> {
@@ -583,8 +680,18 @@ mod tests {
     /// to the host sender. Uses an ephemeral host port so it runs anywhere.
     #[test]
     fn forwarded_udp_port_reaches_the_guest_and_back() {
-        let free = UdpSocket::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
-        let fw = [Forward { proto: Proto::Udp, host_addr: "127.0.0.1".into(), host_port: free, guest_port: 47030, label: "test".into() }];
+        let free = UdpSocket::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
+        let fw = [Forward {
+            proto: Proto::Udp,
+            host_addr: "127.0.0.1".into(),
+            host_port: free,
+            guest_port: 47030,
+            label: "test".into(),
+        }];
         let (net, vm) = UserNet::start(&fw).unwrap();
         // The guest speaks first (its ARP), so its MAC is known.
         vm.send(&arp_request(GATEWAY_IP)).unwrap();
@@ -592,7 +699,8 @@ mod tests {
 
         let host = UdpSocket::bind("127.0.0.1:0").unwrap();
         host.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
-        host.send_to(b"interplane hello", ("127.0.0.1", free)).unwrap();
+        host.send_to(b"interplane hello", ("127.0.0.1", free))
+            .unwrap();
         let f = recv_frame(&vm);
         assert_eq!(&f[30..34], &GUEST_IP.octets());
         assert_eq!(u16::from_be_bytes([f[36], f[37]]), 47030);
@@ -600,11 +708,54 @@ mod tests {
         assert_eq!(&f[42..58], b"interplane hello");
 
         let hp = host.local_addr().unwrap().port();
-        vm.send(&guest_udp(47030, SocketAddrV4::new(GATEWAY_IP, hp), b"ack")).unwrap();
+        vm.send(&guest_udp(47030, SocketAddrV4::new(GATEWAY_IP, hp), b"ack"))
+            .unwrap();
         let mut b = [0u8; 64];
         let (n, from) = host.recv_from(&mut b).unwrap();
         assert_eq!(&b[..n], b"ack");
         assert_eq!(from.port(), free);
+        drop(net);
+    }
+
+    /// Interplane (L263 docs/INTERPLANE_JOIN.md section 7): first contact from
+    /// the forwarded guest port leaves from the forwarded host port, and the
+    /// peer's answer to that port reaches the guest.
+    #[test]
+    fn forwarded_guest_port_sends_from_the_forwarded_host_port() {
+        let free = UdpSocket::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
+        let fw = [Forward {
+            proto: Proto::Udp,
+            host_addr: "127.0.0.1".into(),
+            host_port: free,
+            guest_port: 47040,
+            label: "test".into(),
+        }];
+        let (net, vm) = UserNet::start(&fw).unwrap();
+        vm.send(&arp_request(GATEWAY_IP)).unwrap();
+        assert_eq!(&recv_frame(&vm)[20..22], &[0, 2]);
+
+        let gw = UdpSocket::bind("127.0.0.1:0").unwrap();
+        gw.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+        let gp = gw.local_addr().unwrap().port();
+        vm.send(&guest_udp(
+            47040,
+            SocketAddrV4::new(GATEWAY_IP, gp),
+            b"register",
+        ))
+        .unwrap();
+        let mut b = [0u8; 64];
+        let (n, from) = gw.recv_from(&mut b).unwrap();
+        assert_eq!(&b[..n], b"register");
+        assert_eq!(from.port(), free, "sent from the forwarded host port");
+        gw.send_to(b"welcome", from).unwrap();
+        let f = recv_frame(&vm);
+        assert_eq!(u16::from_be_bytes([f[34], f[35]]), gp);
+        assert_eq!(u16::from_be_bytes([f[36], f[37]]), 47040);
+        assert_eq!(&f[42..49], b"welcome");
         drop(net);
     }
 
@@ -616,7 +767,12 @@ mod tests {
         let ep = echo.local_addr().unwrap().port();
         echo.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
         let (net, vm) = UserNet::start(&[]).unwrap();
-        vm.send(&guest_udp(47030, SocketAddrV4::new(GATEWAY_IP, ep), b"ping")).unwrap();
+        vm.send(&guest_udp(
+            47030,
+            SocketAddrV4::new(GATEWAY_IP, ep),
+            b"ping",
+        ))
+        .unwrap();
         let mut b = [0u8; 64];
         let (n, from) = echo.recv_from(&mut b).unwrap();
         assert_eq!(&b[..n], b"ping");
@@ -629,14 +785,20 @@ mod tests {
         assert_eq!(u16::from_be_bytes([f[34], f[35]]), ep);
         assert_eq!(u16::from_be_bytes([f[36], f[37]]), 47030);
         assert_eq!(&f[42..46], b"pong");
-        vm.set_read_timeout(Some(Duration::from_millis(400))).unwrap();
-        assert!(vm.recv(&mut [0u8; 64]).is_err(), "unsolicited datagram reached the guest");
+        vm.set_read_timeout(Some(Duration::from_millis(400)))
+            .unwrap();
+        assert!(
+            vm.recv(&mut [0u8; 64]).is_err(),
+            "unsolicited datagram reached the guest"
+        );
         drop(net);
     }
 
     #[test]
     fn tcp_forward_is_refused_not_ignored() {
-        let e = UserNet::start(&[Forward::parse("tcp:1:1").unwrap()]).err().unwrap();
+        let e = UserNet::start(&[Forward::parse("tcp:1:1").unwrap()])
+            .err()
+            .unwrap();
         assert_eq!(e.kind(), io::ErrorKind::Unsupported);
     }
 }
