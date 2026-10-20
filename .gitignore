@@ -11,3 +11,4 @@ native/store/out/
 .crumb.local
 native/crypto/out/
 native/disk/qemu/build.log
+dist/

@@ -5,6 +5,7 @@
  *   ck_manifest_sig verify MANIFEST SIG PUBKEYHEX   exit 0 only if SIG (64 raw bytes) is a valid Ed25519
  *                                                   signature over the statement rebuilt from MANIFEST
  *   ck_manifest_sig sign-test MANIFEST SIGOUT       signs that statement with the PUBLIC RFC 8032 TEST 1 secret key
+ *   (each takes an optional last argument PURPOSE, default pi5-8-receipts-manifest, for the "purpose" line)
  *
  * WHAT IS SIGNED (design, docs/native/PI5-8-OWNER-CEREMONY.md): the owner key lives in a YubiKey PIV slot. The PIV
  * Ed25519 operation signs the message it is handed (pure Ed25519) but the tool and the card take only a small
@@ -78,6 +79,22 @@ static uint8_t *readf(const char *path, size_t *n)
 }
 
 /* Rebuild the signed statement for a manifest. Returns its length (fixed size for a given manifest length class). */
+static const char *purpose = "pi5-8-receipts-manifest";
+
+/* An optional last argument names another purpose (the PC edition release manifest signs
+ * "aienos-pc-release-manifest"): 1..64 characters of a-z 0-9 . - only, so the statement keeps its shape. */
+static int set_purpose(const char *p)
+{
+    size_t n = strlen(p);
+    if (!n || n > 64)
+        return -1;
+    for (size_t i = 0; i < n; i++)
+        if (!((p[i] >= 'a' && p[i] <= 'z') || (p[i] >= '0' && p[i] <= '9') || p[i] == '.' || p[i] == '-'))
+            return -1;
+    purpose = p;
+    return 0;
+}
+
 static size_t statement_of(const uint8_t *m, size_t mn, char *out, size_t cap)
 {
     uint8_t d[SHA256_DIGEST_SIZE];
@@ -86,8 +103,8 @@ static size_t statement_of(const uint8_t *m, size_t mn, char *out, size_t cap)
     for (size_t i = 0; i < SHA256_DIGEST_SIZE; i++)
         snprintf(hex + 2 * i, 3, "%02x", d[i]);
     int n = snprintf(out, cap,
-                     "AIENOS-OWNER-STATEMENT-V1\npurpose pi5-8-receipts-manifest\nmanifest_bytes %zu\nmanifest_sha256 %s\n", mn,
-                     hex);
+                     "AIENOS-OWNER-STATEMENT-V1\npurpose %s\nmanifest_bytes %zu\nmanifest_sha256 %s\n", purpose,
+                     mn, hex);
     if (n <= 0 || (size_t)n >= cap) {
         fprintf(stderr, "error: statement does not fit\n");
         exit(2);
@@ -110,6 +127,13 @@ int main(int argc, char **argv)
     uint8_t sig[64], pk[32], sk[32];
     size_t mn, sn;
     char st[256];
+    if (argc >= 5 && ((!strcmp(argv[1], "statement") && argc == 5) || (!strcmp(argv[1], "sign-test") && argc == 5) ||
+                      (!strcmp(argv[1], "verify") && argc == 6))) {
+        if (set_purpose(argv[--argc])) {
+            fprintf(stderr, "error: PURPOSE must be 1..64 characters of a-z 0-9 . -\n");
+            return 2;
+        }
+    }
     if (argc == 4 && !strcmp(argv[1], "statement")) {
         uint8_t *m = readf(argv[2], &mn);
         size_t n = statement_of(m, mn, st, sizeof st);

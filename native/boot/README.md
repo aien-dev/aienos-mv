@@ -64,6 +64,13 @@ through `ResetSystem(EfiResetShutdown)`. x86_64 pieces: `efi_entry_x86_64.S`
 `EFI/BOOT/BOOTX64.EFI`); QEMU test: `scripts/qemu_ck_imac_diag_test.sh`
 (`AIENOS_IMAC_DIAG`, q35 + OVMF; an emulator, nothing about the iMac is qualified by it).
 
+**PC edition Secure Boot record, `efi_secureboot.c` (linked into `PCKERN.EFI`
+only):** before ExitBootServices the x86_64 stub reads the UEFI variables
+`SecureBoot` and `SetupMode` with GetVariable and prints `secure_boot:
+SecureBoot=<0|1|absent> SetupMode=<0|1|absent>`. It is the only runtime-service
+call in the PC edition; the build refuses SetVariable or any other write there.
+Shown in QEMU (OVMF) only. Guide: `docs/PC_EDITION.md`.
+
 **Parked, not here:** signature checks, BootNext staging, rollback and the
 boot-report file. The Rust `aienos-boot` crate has BootNext staging and a QEMU
 rollback test but no A/B slot selection (ADR 0024 Q3); it is frozen and

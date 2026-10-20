@@ -14,7 +14,7 @@ QEMU qualifies nothing physical: a PASS here says nothing about real hardware.
 | `core/` | Console, printf, ACPI, reports/panic/PSCI reset, M3 (threads, scheduler, EL0, capabilities, IPC), `kmain.c`. |
 | `tests/` | Host unit tests. |
 | `third_party/omega/` | The canonical Omega Cortex store, byte for byte from the omega commit in `omega.lock` (checked by `scripts/omega_lock_check.sh`); built freestanding by `svc/cortex_store.c` over the sealed Store through `svc/cortex_journal.c` (native v1 plan P06). |
-| `x86/` | x86_64 port, first cut (AIENOS-IMAC-KERNEL-0, 2017 iMac): UEFI stub, descriptor tables and interrupt stubs, page tables, local APIC timer, ACPI power off, console, secondary-core start, PCI walk, read-only AHCI and NVMe disks, transmit-only BCM57766 Ethernet report. |
+| `x86/` | x86_64 port, first cut (AIENOS-IMAC-KERNEL-0, 2017 iMac): UEFI stub, descriptor tables and interrupt stubs, page tables, local APIC timer, ACPI power off, console, secondary-core start, PCI walk, read-only AHCI and NVMe disks, transmit-only BCM57766 Ethernet report. Also the PC edition (AIENUX-PC-0, platform id pc): virtio, x2APIC, a console that stays up. |
 | `../boot/` | Minimal UEFI entry stub (one image with the kernel). |
 
 ## Build and test
@@ -192,6 +192,27 @@ afterwards. Not yet: work scheduled on the other cores, x2APIC, NX, disk writes,
 VT-d, receiving on the network, a store. QEMU (no BCM57766 there)
 qualifies nothing physical; copy the image to a FAT stick as
 `EFI/BOOT/BOOTX64.EFI` and start it from the Option-key boot picker.
+
+## PC edition image (AIENUX-PC-0, x86_64, any UEFI PC or VM)
+
+    make -C native/kernel pc-kernel          # target/native-kernel/PCKERN.EFI
+    make -C native/kernel pc-edition         # dist/: live ISO, VM disks, signed manifest
+    scripts/qemu_ck_pc_edition_test.sh       # QEMU q35 + OVMF, -cpu EPYC-Genoa, 4 boots
+    scripts/pc_edition_repro.sh              # builds twice, compares bytes
+
+The same x86 kernel built for platform id pc (`x86/x86.h` `CK_X86_PLATFORM_PC`;
+the iMac build is platform imac and unchanged). Not linked: the iMac's BCM57766
+driver and network report (`tg3_x86.c`, `report_x86.c`; the link step refuses
+them). Vendor-neutral additions: x2APIC kept or turned on when the CPU has it,
+MADT x2APIC entries, up to 64 cores, the ACPI PM timer when there is no HPET.
+PC-only: virtio 1.x block (read-only), network and keyboard (`x86/virtio_x86.c`
+with `../net/aienos_virtio_net.c`), the Secure Boot state read before
+ExitBootServices (`../boot/efi_secureboot.c`, GetVariable only), and a console
+that stays up on COM1 and the screen (`x86/pc_console_x86.c`: `aienos: console
+ready`, prompt `aienos> `, help/status/poweroff/reboot, the ACPI power button
+powers off). Images come from our own writer `tools/ck_pc_image.c` (hybrid
+ISO/USB, GPT, qcow2, VHDX, deterministic). Shown in QEMU only (AMD Zen 4
+model); no real PC has run it yet. User guide: `docs/PC_EDITION.md`.
 
 ## Raspberry Pi 5 image (AIENOS-PI5 step 1)
 

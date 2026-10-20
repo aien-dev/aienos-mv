@@ -1937,6 +1937,19 @@ $(GPT_IMG_TOOL): $(GPT_IMG_SRCS) $(KDIR)/dev/disk_part.h $(KDIR)/tools/gpt_write
 	$(HOSTCC) -std=gnu11 -O2 -Wall -Wextra -Werror -I$(KDIR)/dev -I$(KDIR)/tools -I$(NATIVE)/disk -o $@ $(GPT_IMG_SRCS)
 gpt-image: $(GPT_IMG_TOOL)
 
+# PC edition image writer (scripts/pc_edition_build.sh; hosted, never part of an image): GPT disk,
+# hybrid ISO/USB live image, VHDX, qcow2, all deterministic. Its GPT check is the kernel's own parser.
+PC_IMG_TOOL := $(OUT)/host/ck_pc_image
+PC_IMG_SRCS := $(KDIR)/dev/disk_part.c $(NATIVE)/disk/disk.c $(NATIVE)/disk/disk_file.c $(NATIVE)/argus/sha256.c \
+	$(NATIVE)/store/store_v1.c $(KDIR)/tools/ck_pc_image.c
+$(PC_IMG_TOOL): $(PC_IMG_SRCS) $(KDIR)/dev/disk_part.h $(NATIVE)/disk/disk.h $(NATIVE)/argus/sha256.h
+	@mkdir -p $(dir $@)
+	$(HOSTCC) -std=gnu11 -O2 -Wall -Wextra -Werror -I$(KDIR)/dev -I$(NATIVE)/disk -I$(NATIVE)/argus -I$(NATIVE)/store -o $@ $(PC_IMG_SRCS)
+pc-image-tool: $(PC_IMG_TOOL)
+# The whole PC edition release (images, manifest, signature) into dist/: scripts/pc_edition_build.sh.
+pc-edition:
+	bash $(REPO)/scripts/pc_edition_build.sh --out $(REPO)/dist
+
 # MODEL.MAP tool (model ingest gate + the attended-boot staging; hosted, never
 # part of an image). SHA-256 is the kernel's own (argus).
 MODEL_MAP_TOOL := $(OUT)/host/ck_model_map
@@ -2473,7 +2486,7 @@ $(OUT)/host-san/test_pi5_rng: $(KDIR)/tests/test_pi5_rng.c $(PI5_RNG_SRCS) $(KDI
 	$(HOSTCC) $(HCFLAGS) $(SANFLAGS) -DCK_RNG200_SPINS=1000 -I$(KDIR)/dev -o $@ $< $(PI5_RNG_SRCS)
 
 FORCE:
-.PHONY: uefi-vars slot-loader slot-loader-check pi5-diag imac-diag imac-kernel pc-kernel
+.PHONY: uefi-vars slot-loader slot-loader-check pi5-diag imac-diag imac-kernel pc-kernel pc-image-tool pc-edition
 .PHONY: artifact-tier-pi5 artifact-tier-mutant
 .PHONY: osc-receipt-mutants osc-receipt-release all full pi5 pi5-store pi5-infer pi5-unlock pi5-unlock-card pi5-fact pi5-agent pi5-lifecycle pi5-artifact artifact-card-mutant test sanitize context-mutant agent-cmd-mutant cortex-image handoff-mutant acpi-dev-mutant iort-mutants smmu-l2-mutants acpi-scan clean print-kcflags udp-echo tool store-image gpt-image cont-tool owner-gen fb-check continuity-mutants continuity-resolve-mutants FORCE
 
