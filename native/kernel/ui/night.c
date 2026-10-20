@@ -128,17 +128,18 @@ int ck_night_init(ck_night *n, uint32_t w, uint32_t h, uint32_t k, int32_t cx, i
     n->aw = (int32_t)(w / 4 + 1);
     p += (size_t)(w / 4 + 1) * (h / 4 + 1);
     int32_t qw = (int32_t)(w / 4 + 2), qh = (int32_t)(h / 4 + 2);
-    ck_sky_milkyway_q(scratch, qw, qh, n->w, cx, cy);
+    n->view = ck_sky_the_view; /* default view: GW150914 region */
+    ck_sky_milkyway_q(scratch, qw, qh, n->w, cx, cy, &n->view);
     scale_up(n, scratch, qw);
     ck_canvas cv = {n->sky, n->w, n->h};
-    ck_sky_draw_stars(&cv, k, cx, cy, n->tw, CK_NIGHT_TWINKLES, &n->ntw);
+    ck_sky_draw_stars(&cv, k, cx, cy, &n->view, n->tw, CK_NIGHT_TWINKLES, &n->ntw);
     for (unsigned i = 0; i < CK_NIGHT_GALAXIES; i++) {
         ck_night_galaxy *g = &n->gal[i];
-        g->box = ck_sky_galaxy_box(w, h, cx, cy, i);
+        g->box = ck_sky_galaxy_box(w, h, cx, cy, &n->view, i);
         g->light = p;
         g->phase = p + (size_t)g->box.w * (size_t)g->box.h;
         p += (size_t)g->box.w * (size_t)g->box.h * 2;
-        ck_sky_galaxy_maps(g, i, w, cx, cy);
+        ck_sky_galaxy_maps(g, i, w, cx, cy, &n->view);
     }
     appear_map(n);
     ck_night_at(n, 0);
@@ -446,5 +447,31 @@ void ck_night_lights(const ck_night *n, ck_canvas *out, const ck_rect *r, uint32
                     row[x] = ck_add(row[x], g->tint, a);
             }
         }
+    }
+}
+/* ---- rebuilding the sky for a new view ---- */
+
+/* Resets the sky background and redraws it with the new view v. The sky's
+ * glow (dark sky background) is written first, then the Milky Way and the
+ * catalogue stars on top of it. Galaxy bounds and maps are updated too.
+ * scratch: at least n->w * n->h * 4 bytes of temporary workspace. */
+void ck_night_view(ck_night *n, const ck_sky_view *v, void *scratch)
+{
+    n->view = *v;
+    int32_t qw = (int32_t)(n->w / 4 + 2), qh = (int32_t)(n->h / 4 + 2);
+    /* clear the sky to the dark-sky glow (the same glow set in the original
+     * sky grid; bilinear_u8 of the empty dark grid gives the glow level) */
+    ck_canvas cv = {n->sky, n->w, n->h};
+    ck_sky_milkyway_q(scratch, qw, qh, n->w, n->cx, n->cy, &n->view);
+    scale_up(n, scratch, qw);
+    /* redraw stars over the new Milky Way */
+    ck_sky_draw_stars(&cv, n->k, n->cx, n->cy, &n->view, n->tw, CK_NIGHT_TWINKLES, &n->ntw);
+    /* recompute galaxy boxes (some may enter or leave the view) */
+    uint8_t *p = (uint8_t *)n->sky + (size_t)n->w * n->h * 4;
+    p += (size_t)(n->w / 4 + 1) * (n->h / 4 + 1);
+    for (unsigned i = 0; i < CK_NIGHT_GALAXIES; i++) {
+        ck_night_galaxy *g = &n->gal[i];
+        g->box = ck_sky_galaxy_box((uint32_t)n->w, (uint32_t)n->h, n->cx, n->cy, &n->view, i);
+        ck_sky_galaxy_maps(g, i, (uint32_t)n->w, n->cx, n->cy, &n->view);
     }
 }

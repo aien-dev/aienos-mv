@@ -76,4 +76,7 @@ void ck_allen_ui_stats(uint32_t *frames, uint32_t *slowest_us, uint32_t *average
 void ck_allen_ui_map(unsigned n, const uint8_t *ea, const uint8_t *eb, unsigned ne, int lit, const char *label,
                      unsigned total, unsigned links);
 
+/* ---- sky view and real-time sky ---- */
+void ck_allen_ui_set_unix_time(int64_t unix_s, uint64_t tsc_at_read);
+void ck_allen_ui_sky_mode(uint8_t mode, uint8_t region, int32_t lat_udeg, int32_t lon_udeg);
 #endif

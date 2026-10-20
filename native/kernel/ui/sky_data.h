@@ -3,7 +3,14 @@
  * their addresses and sha256 are listed there and in NOTICE).
  *
  * Directions are unit vectors in the J2000 equatorial frame (x towards
- * RA 0 Dec 0, z towards the north celestial pole), Q15. Integer only. */
+ * RA 0 Dec 0, z towards the north celestial pole), Q15. Integer only.
+ *
+ * The Milky Way is stored as a full-sphere equirectangular grid (cols x rows):
+ *   col 0..cols-1 covers RA 0..360 degrees (wraps);
+ *   row 0 = Dec +90, row rows-1 = Dec -90;
+ *   luma at full resolution, chroma at half (cols/2 x rows/2).
+ * The generator queries Gaia DR3 (ESA/Gaia/DPAC, CC BY-NC 3.0 IGO) and
+ * reddening from gaiadr3.astrophysical_parameters to fill the grid. */
 #ifndef AIENOS_SKY_DATA_H
 #define AIENOS_SKY_DATA_H
 #include <stdint.h>
@@ -21,8 +28,9 @@ typedef struct {
 } ck_sky_star;
 
 typedef struct {
-    uint16_t cols, rows, per_width; /* samples; per_width samples to one screen width */
-    int32_t row0_q16;               /* the first row, in screen widths from the view centre (negative: above) */
+    uint16_t cols, rows; /* equirectangular grid: cols RA cols, rows Dec rows */
+    uint16_t per_width;  /* = cols (kept for renderer: samples per 360 deg RA) */
+    int32_t row0_q16;    /* unused (0); kept so the struct is unchanged */
 } ck_sky_map;
 
 typedef struct {

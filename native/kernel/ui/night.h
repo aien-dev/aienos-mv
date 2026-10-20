@@ -37,6 +37,7 @@
 #include <stdint.h>
 
 #include "paint.h"
+#include "sky_data.h"
 
 #define CK_NIGHT_FADE_END_MS 6800u
 #define CK_NIGHT_HOLES_MS 2600u
@@ -82,6 +83,7 @@ typedef struct {
     int32_t ripple_disp[1024];  /* 16ths of a pixel, by distance from the crest */
     uint8_t ripple_light[1024];
     int32_t ripple_c2, ripple_s2; /* the stretch direction, Q14 */
+    ck_sky_view view;     /* the current sky view (set by ck_night_init, updated by ck_night_view) */
 } ck_night;
 
 /* Memory for a w x h night at scale k. */
@@ -90,6 +92,9 @@ size_t ck_night_mem_bytes(uint32_t w, uint32_t h, uint32_t k);
  * memory, overwritten. (cx, cy): where the holes merge. 0, or -1. */
 int ck_night_init(ck_night *n, uint32_t w, uint32_t h, uint32_t k, int32_t cx, int32_t cy, void *mem, size_t len,
                   void *scratch);
+/* Rebuilds the sky for a new view (changing sky mode or location).
+ * scratch: at least w * h * 4 bytes (same buffer as ck_night_init). */
+void ck_night_view(ck_night *n, const ck_sky_view *v, void *scratch);
 /* Moves the night to t ms: the holes, the lens region, the ripple. */
 void ck_night_at(ck_night *n, uint32_t t);
 /* The sky as seen at the current time (faded in, bent, rippled) into the

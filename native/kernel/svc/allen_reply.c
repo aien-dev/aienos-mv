@@ -737,6 +737,9 @@ const char *ck_allen_welcome(ck_allen_mind *m)
             put(&s, "Hello. I'm ");
             put(&s, m->mem.self);
             put(&s, ".");
+            if (!m->mem.sky_mode) {
+                put(&s, " The sky behind me can be the real sky above you right now, or a different part of the universe each time. Tell me which you'd like.");
+            }
             return m->out;
         }
         m->naming = 1;
@@ -815,6 +818,115 @@ const char *ck_allen_answer(ck_allen_mind *m, const char *line, uint64_t awake_s
         list_memory(m, &s);
         return m->out;
     }
+    /* Sky mode: "sky above me", "somewhere new", "where am I looking",
+     * location setting, and the first-boot offer when no mode is set. */
+    static const char *const sky_above_words[] = {"sky above me", "sky above", "real sky", "show me the sky",
+                                                   "above me", "live sky", "sky above you", 0};
+    static const char *const sky_new_words[] = {"somewhere new", "take me somewhere new", "new place",
+                                                 "new view", "different sky", "explore", "somewhere else", 0};
+    static const char *const sky_where_words[] = {"where am i looking", "what am i looking at",
+                                                   "what sky", "where are we looking", "which way", 0};
+    static const char *const loc_words[] = {"my location is", "i am in", "i m in", "im in", "i live in",
+                                            "i m at", "im at", "location is", "i am at", 0};
+
+    /* city table: name, lat udeg, lon udeg (east) */
+    static const struct { const char *name; int32_t lat, lon; } cities[] = {
+        {"memphis",        35145000, -90048000},
+        {"nashville",      36175000, -86781000},
+        {"chicago",        41851000, -87651000},
+        {"new york",       40713000, -74006000},
+        {"los angeles",    34052000, -118244000},
+        {"san francisco",  37775000, -122419000},
+        {"seattle",        47606000, -122332000},
+        {"houston",        29763000, -95363000},
+        {"miami",          25774000, -80194000},
+        {"denver",         39739000, -104984000},
+        {"dallas",         32776000, -96797000},
+        {"boston",         42360000, -71058000},
+        {"london",         51508000, -127000},
+        {"paris",          48853000,   2350000},
+        {"berlin",         52520000,  13405000},
+        {"sydney",        -33869000, 151209000},
+        {"tokyo",          35690000, 139692000},
+        {"new delhi",      28614000,  77209000},
+        {"toronto",        43653000, -79383000},
+        {"austin",         30267000, -97743000},
+        {0, 0, 0}
+    };
+
+    if (any(f, sky_above_words)) {
+        m->mem.sky_mode = 1;
+        m->sky_changed = 1;
+        m->changed = 1;
+        if (!m->mem.sky_have_loc) {
+            put(&s, "The sky will show what's above you. Where are you? A town is enough.");
+            return m->out;
+        }
+        return "The sky is now the real sky above you, turning at Earth's own rate.";
+    }
+    if (any(f, sky_new_words)) {
+        m->mem.sky_mode = 2;
+        m->mem.sky_region = (uint8_t)((m->mem.sky_region + 1) % 12);
+        m->sky_changed = 1;
+        m->changed = 1;
+        return "Each start I'll open on a different part of the sky and drift through it slowly.";
+    }
+    if (any(f, sky_where_words)) {
+        if (!m->mem.sky_mode) {
+            return "I haven't been told where to look. Say: sky above me, or: somewhere new.";
+        } else if (m->mem.sky_mode == 1) {
+            if (m->mem.sky_have_loc) {
+                put(&s, "Straight up from your location: the sky turning above you.");
+            } else {
+                put(&s, "The sky above you, but I don't know where you are yet.");
+            }
+        } else {
+            static const char *const region_names[] = {
+                "the galactic centre", "Orion and the great nebula", "the Carina Nebula",
+                "the Pleiades", "Andromeda", "the Large Magellanic Cloud",
+                "the merger at GW150914", "Cygnus and the Northern Cross",
+                "Sagittarius and the star clouds", "Scorpius and Antares",
+                "the Small Magellanic Cloud", "the north celestial pole",
+            };
+            put(&s, "We're looking at ");
+            put(&s, region_names[m->mem.sky_region % 12]);
+            put(&s, ".");
+        }
+        return m->out;
+    }
+    /* location: "I'm in Memphis" / "my location is Chicago" */
+    for (const char *lead = 0, **ll = (const char **)loc_words; *ll && !lead; ll++)
+        if ((lead = after(f, *ll)) || (find(f, *ll) && (lead = f))) {
+            /* try to match a city name */
+            for (int ci = 0; cities[ci].name; ci++) {
+                if (find(lead, cities[ci].name)) {
+                    m->mem.sky_lat_udeg = cities[ci].lat;
+                    m->mem.sky_lon_udeg = cities[ci].lon;
+                    m->mem.sky_have_loc = 1;
+                    m->sky_changed = 1;
+                    m->changed = 1;
+                    put(&s, "Got it. The sky will be the one above ");
+                    /* capitalise first letter */
+                    const char *cn = cities[ci].name;
+                    char buf[2] = {(char)(cn[0] >= 'a' && cn[0] <= 'z' ? cn[0] - 32 : cn[0]), 0};
+                    put(&s, buf);
+                    put(&s, cn + 1);
+                    put(&s, ".");
+                    return m->out;
+                }
+            }
+            /* not found */
+            put(&s, "I don't know that place. You can give me coordinates: 35 north 90 west.");
+            return m->out;
+        }
+
+    /* first boot with no sky choice: offer it */
+    if (!m->mem.sky_mode && !any(f, (const char *const[]){"help", 0}) &&
+        m->turns == 0 && !m->mem.starts) {
+        /* (not on repeated starts; only fresh first conversation) */
+        (void)0;
+    }
+
     if (arithmetic(&s, f))
         return m->out;
 

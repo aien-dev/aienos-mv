@@ -7,13 +7,14 @@
  *
  * One copy is one unit:
  *   0   "AIENALM1"                        8 bytes
- *   8   version (2)                       u32 little endian
+ *   8   version (2..4)                    u32 little endian
  *   12  payload length                    u32
  *   16  generation                        u64, +1 on every save
  *   24  zero                              8 bytes
  *   32  SHA-256 of bytes 0..31 and the payload
  *   64  payload: starts u32, lines u32, name[24], fact count u32, note
- *       count u32, then per fact key[48] val[64] are(u8); the rest zero
+ *       count u32, then per fact key[48] val[64] are(u8); v3+: self[24];
+ *       v4+: sky_mode(u8) sky_region(u8) sky_have_loc(u8) pad(u8) lat_udeg(s32) lon_udeg(s32);
  * A save writes generation g+1 over the OLDER copy, flushes the disk's write
  * cache, then reads it back and checks it; the newer copy is never touched
  * until the older one holds the newer state. Loading reads both and keeps
