@@ -2311,6 +2311,81 @@ $(IMACKERN_EFI): $(IMACKERN_ELF)
 	@echo "built $@ (commit $(AIENOS_COMMIT))"
 imac-kernel: $(IMACKERN_EFI)
 
+# ---- PCKERN.EFI: the AienOS PC edition kernel (Aienux on any x86_64 UEFI PC or VM) ----
+# The same x86 kernel built for platform id pc (x86/x86.h CK_X86_PLATFORM_PC): no iMac chip code
+# (tg3_x86.c, report_x86.c are not linked; the build checks), x2APIC kept or turned on, the ACPI PM
+# timer when there is no HPET, virtio disk/network/keyboard (x86/virtio_x86.c with
+# ../../net/aienos_virtio_net.c), a PS/2 keyboard when one answers, the Secure Boot state read before
+# ExitBootServices (../../boot/efi_secureboot.c: GetVariable only, never SetVariable), and a console
+# that stays up (x86/pc_console_x86.c with core/line_rx.c). Images: scripts/pc_edition_build.sh.
+#   make pc-kernel    -> $(OUT)/PCKERN.EFI       QEMU test: scripts/qemu_ck_pc_edition_test.sh
+PCKERN_DIR := $(OUT)/pckern
+PCKERN_ELF := $(PCKERN_DIR)/pckern.elf
+PCKERN_EFI := $(OUT)/PCKERN.EFI
+PCKERN_CFLAGS := $(IMACKERN_CFLAGS) -DCK_X86_PLATFORM=2
+PCKERN_OBJS := $(addprefix $(PCKERN_DIR)/,efi_entry_x86_64.o efi_x86.o efi_gop.o kmain_x86.o console_x86.o trap.o \
+	fbcon.o fmt.o acpi.o handoff_check.o frames.o heap.o libc_min.o ahci_x86.o disk_part.o disk.o pci_x86.o \
+	smp_x86.o disk_nvme.o aienos_net.o virtio_x86.o pc_console_x86.o aienos_virtio_net.o aienos_virtio_pci.o \
+	line_rx.o lifecycle_fsm.o efi_secureboot.o)
+$(PCKERN_DIR)/efi_entry_x86_64.o: $(BOOT)/efi_entry_x86_64.S
+$(PCKERN_DIR)/efi_x86.o: $(X86K)/efi_x86.c $(IMACKERN_HDRS)
+$(PCKERN_DIR)/efi_gop.o: $(BOOT)/efi_gop.c $(IMACKERN_HDRS)
+$(PCKERN_DIR)/kmain_x86.o: $(X86K)/kmain_x86.c $(IMACKERN_HDRS) $(KDIR)/core/handoff_check.h $(KDIR)/mm/frames.h $(KDIR)/mm/heap.h $(OUT)/commit.stamp
+$(PCKERN_DIR)/console_x86.o: $(X86K)/console_x86.c $(IMACKERN_HDRS) $(KDIR)/core/fbcon.h
+$(PCKERN_DIR)/trap.o: $(X86K)/trap.S
+$(PCKERN_DIR)/fbcon.o: $(KDIR)/core/fbcon.c $(KDIR)/core/fbcon.h $(KDIR)/core/font8x8.h
+$(PCKERN_DIR)/fmt.o: $(KDIR)/core/fmt.c $(KDIR)/core/fmt.h
+$(PCKERN_DIR)/acpi.o: $(KDIR)/core/acpi.c $(KDIR)/core/acpi.h
+$(PCKERN_DIR)/handoff_check.o: $(KDIR)/core/handoff_check.c $(KDIR)/core/handoff_check.h $(BOOT)/handoff.h
+$(PCKERN_DIR)/frames.o: $(KDIR)/mm/frames.c $(KDIR)/mm/frames.h
+$(PCKERN_DIR)/heap.o: $(KDIR)/mm/heap.c $(KDIR)/mm/heap.h
+$(PCKERN_DIR)/libc_min.o: $(KDIR)/core/libc_min.c
+$(PCKERN_DIR)/ahci_x86.o: $(X86K)/ahci_x86.c $(IMACKERN_HDRS) $(KDIR)/mm/frames.h $(KDIR)/dev/disk_part.h $(NATIVE)/disk/disk.h
+$(PCKERN_DIR)/disk_part.o: $(KDIR)/dev/disk_part.c $(KDIR)/dev/disk_part.h $(NATIVE)/disk/disk.h
+$(PCKERN_DIR)/disk.o: $(NATIVE)/disk/disk.c $(NATIVE)/disk/disk.h
+$(PCKERN_DIR)/pci_x86.o: $(X86K)/pci_x86.c $(IMACKERN_HDRS) $(KDIR)/mm/frames.h $(KDIR)/dev/disk_part.h $(NATIVE)/disk/disk.h $(NATIVE)/disk/disk_nvme.h
+$(PCKERN_DIR)/smp_x86.o: $(X86K)/smp_x86.S
+$(PCKERN_DIR)/disk_nvme.o: $(NATIVE)/disk/disk_nvme.c $(NATIVE)/disk/disk_nvme.h $(NATIVE)/disk/disk.h
+$(PCKERN_DIR)/aienos_net.o: $(NATIVE)/net/aienos_net.c $(NATIVE)/net/aienos_net.h
+$(PCKERN_DIR)/virtio_x86.o: $(X86K)/virtio_x86.c $(IMACKERN_HDRS) $(KDIR)/mm/frames.h $(NATIVE)/net/aienos_virtio_net.h $(NATIVE)/disk/disk.h
+$(PCKERN_DIR)/pc_console_x86.o: $(X86K)/pc_console_x86.c $(IMACKERN_HDRS) $(KDIR)/core/line_rx.h
+$(PCKERN_DIR)/aienos_virtio_net.o: $(NATIVE)/net/aienos_virtio_net.c $(NATIVE)/net/aienos_virtio_net.h $(NATIVE)/net/aienos_virtio_pci.h
+$(PCKERN_DIR)/aienos_virtio_pci.o: $(NATIVE)/net/aienos_virtio_pci.c $(NATIVE)/net/aienos_virtio_pci.h
+$(PCKERN_DIR)/line_rx.o: $(KDIR)/core/line_rx.c $(KDIR)/core/line_rx.h $(KDIR)/core/lifecycle_fsm.h
+$(PCKERN_DIR)/lifecycle_fsm.o: $(KDIR)/core/lifecycle_fsm.c $(KDIR)/core/lifecycle_fsm.h
+$(PCKERN_DIR)/efi_secureboot.o: $(BOOT)/efi_secureboot.c $(BOOT)/efi.h
+$(PCKERN_OBJS):
+	@mkdir -p $(dir $@)
+	$(X86CC) $(PCKERN_CFLAGS) -DAIENOS_COMMIT='"$(AIENOS_COMMIT)"' -c -o $@ $<
+$(PCKERN_ELF): $(PCKERN_OBJS) $(BOOT)/image_x86_64.ld
+	@if grep -nE -- 'rt->|RuntimeServices' $(X86K)/*.c; then \
+	  echo "the x86 kernel calls a UEFI runtime service; it must never call one"; exit 1; fi
+	@if grep -nE -- '->(SetVariable|ResetSystem|SetTime|SetWakeupTime|SetVirtualAddressMap|UpdateCapsule)' $(BOOT)/efi_secureboot.c; then \
+	  echo "efi_secureboot.c may read the Secure Boot variables only (GetVariable)"; exit 1; fi
+	@if grep -nE "define ATA_" $(X86K)/ahci_x86.c | grep -vE "ATA_(IDENTIFY 0xec|READ_DMA_EXT 0x25)$$"; then \
+	  echo "ahci_x86.c defines an ATA command other than IDENTIFY and READ DMA EXT; the driver is read-only"; exit 1; fi
+	@if grep -nE "nvme_(write|flush)\(|VIRTIO_BLK_T_OUT|VIRTIO_BLK_T_FLUSH" $(X86K)/*.c; then \
+	  echo "the x86 kernel writes or flushes a disk; its disks are read-only"; exit 1; fi
+	@mkdir -p $(dir $@)
+	$(X86LD) $(X86LDFLAGS) -o $@ $(PCKERN_OBJS)
+	@u=$$($(X86NM) -u $@ | grep -v ' w ' || true); \
+	if [ -n "$$u" ]; then echo "image has undefined symbols: $$u"; rm -f $@; exit 1; fi
+	@i=$$($(X86NM) $@ | grep -E ' ck_x86_(tg3|report)_' || true); \
+	if [ -n "$$i" ]; then echo "the PC image links iMac chip code: $$i"; rm -f $@; exit 1; fi
+	@bad=$$($(X86READELF) -rW $@ | grep -E '^[0-9a-f]+ ' | grep -v R_X86_64_RELATIVE || true); \
+	if [ -n "$$bad" ]; then echo "image has non-RELATIVE relocations:"; echo "$$bad"; rm -f $@; exit 1; fi
+	@n=$$($(X86NM) $@ | grep -c ' t isr_common$$' || true); s=$$($(X86NM) $@ | grep ' T ck_x86_isr_stubs$$' | cut -c1-16); \
+	e=$$($(X86NM) $@ | grep ' t isr_common$$' | cut -c1-16); \
+	if [ "$$n" != 1 ] || [ $$((0x$$e - 0x$$s)) != 4096 ]; then echo "interrupt stubs are not 256 x 16 bytes"; rm -f $@; exit 1; fi
+$(PCKERN_EFI): $(PCKERN_ELF)
+	$(X86OBJCOPY) -O binary $< $@
+	@sz=$$(stat -c %s $@); pad=$$(( (4096 - sz % 4096) % 4096 )); \
+	if [ $$pad -gt 0 ]; then head -c $$pad /dev/zero >> $@; fi
+	@[ "$$(head -c 2 $@)" = "MZ" ] || { echo "not a PE image"; rm -f $@; exit 1; }
+	@[ "$$(od -An -tx1 -j68 -N2 $@ | tr -d ' ')" = "6486" ] || { echo "PE Machine is not x86_64 (0x8664)"; rm -f $@; exit 1; }
+	@echo "built $@ (commit $(AIENOS_COMMIT))"
+pc-kernel: $(PCKERN_EFI)
+
 # Raspberry Pi 5 board image (see CK_PI5 above): target/native-kernel-pi5/BOOTAA64.EFI
 pi5-store:
 	$(MAKE) CK_PI5_STORE=1 full
@@ -2398,7 +2473,7 @@ $(OUT)/host-san/test_pi5_rng: $(KDIR)/tests/test_pi5_rng.c $(PI5_RNG_SRCS) $(KDI
 	$(HOSTCC) $(HCFLAGS) $(SANFLAGS) -DCK_RNG200_SPINS=1000 -I$(KDIR)/dev -o $@ $< $(PI5_RNG_SRCS)
 
 FORCE:
-.PHONY: uefi-vars slot-loader slot-loader-check pi5-diag imac-diag imac-kernel
+.PHONY: uefi-vars slot-loader slot-loader-check pi5-diag imac-diag imac-kernel pc-kernel
 .PHONY: artifact-tier-pi5 artifact-tier-mutant
 .PHONY: osc-receipt-mutants osc-receipt-release all full pi5 pi5-store pi5-infer pi5-unlock pi5-unlock-card pi5-fact pi5-agent pi5-lifecycle pi5-artifact artifact-card-mutant test sanitize context-mutant agent-cmd-mutant cortex-image handoff-mutant acpi-dev-mutant iort-mutants smmu-l2-mutants acpi-scan clean print-kcflags udp-echo tool store-image gpt-image cont-tool owner-gen fb-check continuity-mutants continuity-resolve-mutants FORCE
 

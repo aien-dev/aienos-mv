@@ -18,6 +18,7 @@
 extern char __image_base[], __image_end[];
 __attribute__((noreturn)) void ck_x86_kernel_entry(struct ck_handoff *h);
 void ck_boot_gop_find(EFI_SYSTEM_TABLE *st, struct ck_handoff *h);
+void ck_boot_secureboot_report(EFI_SYSTEM_TABLE *st);
 
 static uint64_t map_buf[MAP_BYTES / 8];
 static struct ck_handoff handoff;
@@ -50,7 +51,7 @@ EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE *st)
         if (guid_eq(&st->ConfigurationTable[i].VendorGuid, &acpi20))
             h->rsdp = (uint64_t)(uintptr_t)st->ConfigurationTable[i].VendorTable;
 
-    ck_puts("AIENOS-IMAC-KERNEL-0\n");
+    ck_puts(CK_X86_TITLE "\n");
     ck_printf("report_kind: pre_exit\naienos_commit: %s\n", ck_commit());
     ck_puts("kernel_impl: c (native/kernel/x86, x86_64)\n");
     char v[80];
@@ -61,6 +62,9 @@ EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE *st)
     ck_printf("firmware_vendor: %s\nfirmware_revision: 0x%x\n", v, st->FirmwareRevision);
     ck_printf("firmware_cpl: %u\n", h->firmware_el);
     ck_boot_gop_find(st, h);
+#if CK_X86_PLATFORM == CK_X86_PLATFORM_PC
+    ck_boot_secureboot_report(st); /* boot/efi_secureboot.c: read-only, before ExitBootServices */
+#endif
     ck_printf("acpi_rsdp: 0x%llx\n", (unsigned long long)h->rsdp);
     ck_printf("image: 0x%llx-0x%llx\n", (unsigned long long)h->image_base, (unsigned long long)h->image_end);
     ck_puts("exiting firmware boot services\n");

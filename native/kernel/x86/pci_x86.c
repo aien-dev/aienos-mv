@@ -148,6 +148,7 @@ static void nvme_start(const struct pfn *f, struct ck_frames *fr)
 /* ---- Broadcom Ethernet: a look, nothing driven ----
  * Config reads only, plus, when the chip is awake (D0) with memory decode on,
  * MII reads of the PHY's status and ID through the MAC's MI_COM register. */
+#if CK_X86_PLATFORM != CK_X86_PLATFORM_PC
 #define TG3_MI_COM 0x44c
 #define TG3_MI_MODE 0x454
 #define MI_START_BUSY 0x20000000u
@@ -165,6 +166,7 @@ static int mii_read(volatile uint8_t *bar, unsigned reg, uint16_t *out)
     *out = (uint16_t)v;
     return 0;
 }
+#endif
 
 static void net_look(const struct pfn *f)
 {
@@ -182,8 +184,14 @@ static void net_look(const struct pfn *f)
             }
             p = (h >> 8) & 0xfc;
         }
-    ck_printf("net: %02x:%02x.%u id=%04x:%04x bar0=0x%llx mem_decode=%u bus_master=%u power=D%u\n", f->bus, f->dev,
-              f->fn, f->vendor, f->device, (unsigned long long)bar, cmd & 2 ? 1u : 0u, cmd & 4 ? 1u : 0u, dstate);
+    ck_printf("net: %02x:%02x.%u id=%04x:%04x bar0=0x%llx mem_decode=%u bus_master=%u power=%s\n", f->bus, f->dev,
+              f->fn, f->vendor, f->device, (unsigned long long)bar, cmd & 2 ? 1u : 0u, cmd & 4 ? 1u : 0u,
+              dstate < 4 ? (const char *[]){"D0", "D1", "D2", "D3"}[dstate] : "unlisted");
+#if CK_X86_PLATFORM == CK_X86_PLATFORM_PC
+    if (f->vendor != 0x1af4) /* virtio-net is driven by virtio_x86.c; no driver for a physical chip yet */
+        ck_printf("net: %02x:%02x.%u no driver for %04x:%04x yet (nothing sent or changed)\n", f->bus, f->dev, f->fn,
+                  f->vendor, f->device);
+#else
     if (f->vendor != 0x14e4 || dstate != 0 || !(cmd & 2) || !bar || ck_x86_map_mmio(bar, 0x10000)) {
         ck_puts("net: PHY not read (not a Broadcom chip, chip asleep, or BAR off)\n");
         return;
@@ -202,12 +210,16 @@ static void net_look(const struct pfn *f)
     res.net_link = (bmsr & 4) ? 1 : 2;
     ck_printf("net: phy_id=%04x:%04x bmsr=0x%04x link=%s autoneg_done=%u\n", id1, id2, bmsr, bmsr & 4 ? "up" : "down",
               bmsr & 0x20 ? 1u : 0u);
+#endif
 }
 
 /* Drives the BCM57766 (tg3_x86.c) and waits up to 8 s for the link, so the
  * summary and the report can say whether the network is up. */
 static void net_drive(const struct pfn *f, struct ck_frames *fr)
 {
+#if CK_X86_PLATFORM == CK_X86_PLATFORM_PC
+    (void)f, (void)fr; /* the BCM57766 driver is iMac-only and not linked into the PC edition */
+#else
     uint32_t lo = cr32(f->cfg, 0x10), hi = (lo & 6) == 4 ? cr32(f->cfg, 0x14) : 0;
     uint64_t bar = ((uint64_t)hi << 32 | lo) & ~0xfull;
     if (f->vendor != 0x14e4 || f->device != 0x1686 || !bar || ck_x86_map_mmio(bar, 0x10000))
@@ -226,6 +238,7 @@ static void net_drive(const struct pfn *f, struct ck_frames *fr)
     res.net_link = ck_x86_tg3_link() ? 1 : 2;
     if (res.net_link != 1)
         ck_puts("net_tg3: no link after 8 s (cable unplugged?); the report is sent if it comes up during the hold\n");
+#endif
 }
 
 const struct ck_x86_storage_result *ck_x86_storage(uint64_t rsdp, struct ck_frames *fr, uint64_t tsc_hz,
@@ -298,6 +311,11 @@ const struct ck_x86_storage_result *ck_x86_storage(uint64_t rsdp, struct ck_fram
     for (unsigned i = 0; i < nfound; i++)
         if ((found[i].cls >> 8) == 0x0200 && (found[i].ht & 0x7f) == 0 && !res.net_driver)
             net_drive(&found[i], fr);
+#if CK_X86_PLATFORM == CK_X86_PLATFORM_PC
+    for (unsigned i = 0; i < nfound; i++)
+        if (found[i].vendor == 0x1af4 && (found[i].ht & 0x7f) == 0)
+            ck_x86_virtio_probe(found[i].cfg, found[i].bus, found[i].dev, found[i].fn, fr, tsc_hz);
+#endif
     if (!res.net_found)
         ck_puts("net: no Ethernet controller\n");
     ck_printf("storage: pci_functions=%u ahci_controllers=%u disks=%u nvme_controllers=%u nvme_disks=%u "

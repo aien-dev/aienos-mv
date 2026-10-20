@@ -30,7 +30,25 @@ int ck_x86_com1_probe(void)
         return com1_on = 0;
     ck_outb(COM1 + 7, 0xa5);
     com1_on = ck_inb(COM1 + 7) == 0xa5;
+#if CK_X86_PLATFORM == CK_X86_PLATFORM_PC
+    if (com1_on) { /* 115200 8N1, FIFOs on, no interrupts: the serial contract of the PC edition */
+        ck_outb(COM1 + 1, 0x00);
+        ck_outb(COM1 + 3, 0x80); /* DLAB */
+        ck_outb(COM1 + 0, 0x01); /* divisor 1 = 115200 */
+        ck_outb(COM1 + 1, 0x00);
+        ck_outb(COM1 + 3, 0x03); /* 8N1 */
+        ck_outb(COM1 + 2, 0x07); /* FIFO on, both cleared */
+        ck_outb(COM1 + 4, 0x03); /* DTR, RTS */
+    }
+#endif
     return com1_on;
+}
+
+int ck_x86_com1_getc(void)
+{
+    if (!com1_on || !(ck_inb(COM1 + 5) & 0x01)) /* LSR bit 0: data ready */
+        return -1;
+    return ck_inb(COM1);
 }
 
 static void com1_putc(char c)

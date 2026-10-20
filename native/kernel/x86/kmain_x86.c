@@ -17,7 +17,14 @@
  * powers off through ACPI S5 (FADT PM1 control + the DSDT's \_S5 package).
  * Scheduling on the secondary cores, disk writes, the network driver and VT-d
  * are later cuts. No runtime service
- * is called. QEMU runs of this path qualify nothing physical. */
+ * is called. QEMU runs of this path qualify nothing physical.
+ *
+ * The same file builds the PC edition kernel (CK_X86_PLATFORM_PC, x86.h):
+ * the local APIC stays in or is put in x2APIC mode when the CPU has it (AMD
+ * Ryzen and EPYC firmware may leave it on), the MADT's x2APIC entries count
+ * and start cores too, the TSC falls back to the ACPI PM timer when there is
+ * no HPET (AMD has no CPUID leaf 0x16), and after the report the console
+ * stays up (pc_console_x86.c) instead of holding and powering off. */
 #include "../core/ck_internal.h"
 #include "../core/handoff_check.h"
 #include "../mm/frames.h"
@@ -211,10 +218,17 @@ static __attribute__((noreturn)) void finish(void)
         for (;;)
             __asm__ volatile("hlt");
     }
+#if CK_X86_PLATFORM == CK_X86_PLATFORM_PC
+    /* PC edition: only a panic gets here; keep the message on the screen. */
+    ck_puts("power: halted with the message on the screen; turn the machine or the VM off\n");
+    for (;;)
+        __asm__ volatile("hlt");
+#else
     if (CK_X86_HOLD_S) {
         ck_printf("power: holding the screen %u s, then ACPI S5\n", (unsigned)CK_X86_HOLD_S);
         ck_x86_report_hold(tsc_hz, CK_X86_HOLD_S); /* sends the report if the network is up */
     }
+#endif
     acpi_poweroff();
     ck_puts("power: halted; hold the power button to turn the machine off\n");
     for (;;)
@@ -246,16 +260,41 @@ static const char *const exc_name[32] = {
     "#DE", "#DB", "NMI", "#BP", "#OF", "#BR", "#UD", "#NM", "#DF", "?", "#TS", "#NP", "#SS", "#GP", "#PF", "?",
     "#MF", "#AC", "#MC", "#XM", "#VE", "#CP", "?", "?", "?", "?", "?", "?", "#HV", "#VC", "#SX", "?"};
 
-/* The local APIC in xAPIC mode (MMIO, 4 KiB at IA32_APIC_BASE): the mode
- * the iMac's firmware leaves it in and the one QEMU TCG emulates. x2APIC
- * (MSR access) waits for a test that can run it. */
+/* The local APIC. xAPIC mode: MMIO, 4 KiB at IA32_APIC_BASE, the mode the
+ * iMac's firmware leaves it in (the imac platform always uses it). x2APIC
+ * mode (pc platform, when the CPU has it): the same registers as MSRs
+ * 0x800 + offset / 16, a 32-bit APIC ID, and the ICR as one 64-bit MSR
+ * (Intel SDM vol. 3A 11.12, AMD APM vol. 2 16.11). */
+static int x2apic;
 static void apic_wr(unsigned reg, uint32_t v)
 {
-    xapic[reg / 4] = v;
+    if (x2apic)
+        ck_wrmsr(0x800u + reg / 16, v);
+    else
+        xapic[reg / 4] = v;
 }
 static uint32_t apic_rd(unsigned reg)
 {
-    return xapic[reg / 4];
+    return x2apic ? (uint32_t)ck_rdmsr(0x800u + reg / 16) : xapic[reg / 4];
+}
+static uint32_t apic_id_now(void)
+{
+    return x2apic ? apic_rd(0x20) : apic_rd(0x20) >> 24;
+}
+/* IA32_APIC_BASE: bit 11 enable, bit 10 x2APIC. Leaving x2APIC needs a pass
+ * through disabled; entering it needs EN set first. */
+static void apic_mode_set(void)
+{
+    uint64_t base = ck_rdmsr(0x1b);
+    if (x2apic) {
+        if (!(base & 1u << 11))
+            ck_wrmsr(0x1b, base | 1u << 11);
+        ck_wrmsr(0x1b, base | 1u << 11 | 1u << 10);
+        return;
+    }
+    if (base & 1u << 10)
+        ck_wrmsr(0x1b, base & ~(3ull << 10));
+    ck_wrmsr(0x1b, (base & ~(1ull << 10)) | 1u << 11);
 }
 #define APIC_ID 0x20
 #define APIC_VER 0x30
@@ -289,7 +328,7 @@ void ck_x86_trap(struct ck_x86_frame *f)
         return;
     if (f->vector >= 32) {
         stray_irqs++;
-        if (xapic)
+        if (xapic || x2apic)
             apic_wr(APIC_EOI, 0);
         return;
     }
@@ -468,6 +507,7 @@ int ck_x86_map_mmio(uint64_t pa, uint64_t len)
 /* ---- time ---- */
 static const char *timebase = "none";
 static uint64_t hpet_period_fs;
+static uint32_t pm_timer_port;
 
 static void tsc_measure(void)
 {
@@ -496,6 +536,28 @@ static void tsc_measure(void)
         }
     }
 no_hpet:;
+    /* The ACPI PM timer (ACPI 6.5 4.8.3.3): 3.579545 MHz, 24 or 32 bits
+     * (FADT flag TMR_VAL_EXT), at the FADT's PM_TMR_BLK I/O port. Every PC
+     * has one whatever the CPU vendor; the HPET may be hidden by the firmware. */
+    const uint8_t *fadt = ck_acpi_lookup(hand->rsdp, "FACP");
+    uint32_t pmt = fadt && rd32(fadt, 4) >= 116 ? rd32(fadt, 76) : 0;
+    if (pmt && pmt <= 0xfffc && fadt[91] == 4) {
+        uint32_t mask = (rd32(fadt, 112) & 1u << 8) ? 0xffffffffu : 0xffffffu;
+        uint32_t want = 178977; /* 50 ms at 3.579545 MHz */
+        uint32_t c0 = ck_inl((uint16_t)pmt) & mask, c1 = c0, el = 0;
+        uint64_t s0 = ck_rdtsc();
+        while (el < want && ck_rdtsc() - s0 < (1ull << 34)) {
+            c1 = ck_inl((uint16_t)pmt) & mask;
+            el = (c1 - c0) & mask;
+        }
+        uint64_t s1 = ck_rdtsc();
+        if (el >= want) {
+            tsc_hz = (s1 - s0) * 3579545ull / el;
+            pm_timer_port = pmt;
+            timebase = "acpi_pm";
+            return;
+        }
+    }
     uint32_t r[4];
     ck_cpuid(0, 0, r);
     if (r[0] >= 0x16) {
@@ -509,7 +571,7 @@ no_hpet:;
 
 /* ---- interrupts ---- */
 struct apic_report {
-    uint32_t id, version, lapic_hz, cpus, ioapics, ioapic_lines;
+    uint32_t id, version, lapic_hz, cpus, ioapics, ioapic_lines, firmware_x2apic;
     uint64_t ticks, ms, min_us, max_us, avg_us;
 };
 
@@ -547,17 +609,83 @@ static void madt_walk(struct apic_report *ar)
     }
 }
 
+static uint32_t lapic_hz_g;
+
+/* The console's 100 Hz tick (pc): periodic LAPIC timer, interrupts on, so the
+ * idle loop can halt between polls instead of spinning a host core. */
+static void __attribute__((unused)) tick_arm(void)
+{
+    apic_wr(APIC_LVT_TIMER, 1u << 17 | VEC_TIMER);
+    apic_wr(APIC_TIMER_INIT, lapic_hz_g / 100u);
+    ck_sti();
+}
+
+/* The fixed-feature power button (ACPI 6.5 4.8.3.1: PM1 status and enable,
+ * PWRBTN_STS/PWRBTN_EN bit 8), polled by the pc console, no SCI: the status
+ * bit latches whether or not the interrupt is routed. A VM's "shut down" (QEMU
+ * system_powerdown, Hyper-V Stop) presses it. Not armed when the FADT says the
+ * button is a control-method device (flag PWR_BUTTON, bit 4). */
+static uint16_t pm1_sts_port;
+
+static void __attribute__((unused)) power_button_arm(void)
+{
+    const uint8_t *fadt = hand && hand->rsdp ? ck_acpi_lookup(hand->rsdp, "FACP") : 0;
+    if (!fadt || rd32(fadt, 4) < 116) {
+        ck_puts("power_button: no FADT, not armed\n");
+        return;
+    }
+    uint32_t evt = rd32(fadt, 56), cnt = rd32(fadt, 64), smi = rd32(fadt, 48);
+    unsigned evt_len = fadt[88];
+    if (rd32(fadt, 112) & 1u << 4) {
+        ck_puts("power_button: control-method button (FADT PWR_BUTTON), not armed\n");
+        return;
+    }
+    if (!evt || evt > 0xfffc || evt_len < 4 || !cnt || cnt > 0xffff) {
+        ck_printf("power_button: PM1 event block 0x%x len %u is not an I/O port, not armed\n", evt, evt_len);
+        return;
+    }
+    if (!(ck_inw((uint16_t)cnt) & 1) && smi && fadt[52]) { /* SCI_EN clear: ask the firmware for ACPI mode */
+        ck_outb((uint16_t)smi, fadt[52]);
+        for (unsigned i = 0; i < 300 && !(ck_inw((uint16_t)cnt) & 1); i++)
+            delay_ms(10);
+    }
+    uint16_t en = (uint16_t)(evt + evt_len / 2);
+    ck_outw((uint16_t)evt, 1u << 8); /* clear a stale press (write 1 to clear) */
+    ck_outw(en, (uint16_t)(ck_inw(en) | 1u << 8));
+    pm1_sts_port = (uint16_t)evt;
+    ck_printf("power_button: armed pm1_evt=0x%x sci_en=%u\n", evt, ck_inw((uint16_t)cnt) & 1u);
+}
+
+int ck_x86_power_button_pressed(void)
+{
+    if (!pm1_sts_port || !(ck_inw(pm1_sts_port) & 1u << 8))
+        return 0;
+    ck_outw(pm1_sts_port, 1u << 8);
+    return 1;
+}
+
+static void __attribute__((unused)) console_arm(void)
+{
+    power_button_arm();
+    tick_arm();
+}
+
 static void apic_start(struct apic_report *ar)
 {
     /* Legacy 8259 PICs: every line masked. */
     ck_outb(0x21, 0xff);
     ck_outb(0xa1, 0xff);
     uint64_t base = ck_rdmsr(0x1b);
-    if (base & 1u << 10) /* x2APIC on: leaving it needs a pass through disabled */
-        ck_wrmsr(0x1b, base & ~(3ull << 10));
-    ck_wrmsr(0x1b, (base & ~(1ull << 10)) | 1u << 11);
-    xapic = (volatile uint32_t *)(uintptr_t)(base & 0xffffff000ull);
-    ar->id = apic_rd(APIC_ID) >> 24;
+#if CK_X86_PLATFORM == CK_X86_PLATFORM_PC
+    uint32_t r[4];
+    ck_cpuid(1, 0, r);
+    ar->firmware_x2apic = (base & 1u << 10) != 0;
+    x2apic = ar->firmware_x2apic || (r[2] & 1u << 21); /* CPUID.1:ECX.x2APIC */
+#endif
+    apic_mode_set();
+    if (!x2apic)
+        xapic = (volatile uint32_t *)(uintptr_t)(base & 0xffffff000ull);
+    ar->id = apic_id_now();
     ar->version = apic_rd(APIC_VER);
     apic_wr(APIC_TPR, 0);
     apic_wr(APIC_SVR, 0x100 | VEC_SPURIOUS);
@@ -570,6 +698,7 @@ static void apic_start(struct apic_report *ar)
     uint32_t left = apic_rd(APIC_TIMER_CUR);
     apic_wr(APIC_TIMER_INIT, 0);
     ar->lapic_hz = (0xffffffffu - left) * 100u;
+    lapic_hz_g = ar->lapic_hz;
     if (!ar->lapic_hz)
         ck_panic("apic: timer did not count");
 
@@ -609,7 +738,7 @@ static void apic_start(struct apic_report *ar)
  * kernel's GDT (no task register) and IDT, sets the same PAT, enables its
  * local APIC, records its APIC ID, checks in, and halts with interrupts off.
  * Nothing is scheduled on it yet. */
-#define SMP_MAX 16u
+#define SMP_MAX 64u
 #define AP_STACK_PAGES 4u
 #define APIC_ICR_LO 0x300
 #define APIC_ICR_HI 0x310
@@ -637,13 +766,10 @@ static void ap_entry(void *arg)
     struct dtr i = {sizeof idt - 1, (uint64_t)(uintptr_t)idt};
     __asm__ volatile("lidt %0" ::"m"(i) : "memory");
     ck_wrmsr(0x277, PAT_VALUE);
-    uint64_t base = ck_rdmsr(0x1b);
-    if (base & 1u << 10)
-        ck_wrmsr(0x1b, base & ~(3ull << 10));
-    ck_wrmsr(0x1b, (base & ~(1ull << 10)) | 1u << 11);
+    apic_mode_set(); /* the same mode as the first core */
     apic_wr(APIC_TPR, 0);
     apic_wr(APIC_SVR, 0x100 | VEC_SPURIOUS);
-    ap_ids[idx] = apic_rd(APIC_ID) >> 24;
+    ap_ids[idx] = apic_id_now();
     __atomic_fetch_add(&ap_up, 1, __ATOMIC_SEQ_CST);
     for (;;)
         __asm__ volatile("cli; hlt");
@@ -651,6 +777,10 @@ static void ap_entry(void *arg)
 
 static int icr_send(uint32_t id, uint32_t lo)
 {
+    if (x2apic) { /* one 64-bit write; there is no delivery-status bit to wait on */
+        ck_wrmsr(0x830, (uint64_t)id << 32 | lo);
+        return 0;
+    }
     apic_wr(APIC_ICR_HI, id << 24);
     apic_wr(APIC_ICR_LO, lo);
     for (unsigned n = 0; n < 1000; n++) {
@@ -680,9 +810,22 @@ static void smp_start(const struct apic_report *ar, struct smp_report *sr)
 {
     const uint8_t *m = ck_acpi_lookup(hand->rsdp, "APIC");
     uint32_t len = rd32(m, 4);
-    for (uint32_t off = 44; off + 2 <= len; off += m[off + 1])
-        if (m[off] == 0 && m[off + 1] >= 8 && (rd32(m, off + 4) & 3) && sr->listed < SMP_MAX)
-            sr->ids[sr->listed++] = m[off + 3];
+    for (uint32_t off = 44; off + 2 <= len && m[off + 1] >= 2; off += m[off + 1]) {
+        uint32_t id;
+        if (m[off] == 0 && m[off + 1] >= 8 && (rd32(m, off + 4) & 3))
+            id = m[off + 3];
+        else if (m[off] == 9 && m[off + 1] >= 16 && (rd32(m, off + 8) & 3))
+            id = rd32(m, off + 4); /* processor local x2APIC */
+        else
+            continue;
+        if ((!x2apic && id > 254) || sr->listed >= SMP_MAX)
+            continue; /* xAPIC reaches IDs 0..254 only */
+        int dup = 0;
+        for (unsigned k = 0; k < sr->listed; k++)
+            dup |= sr->ids[k] == id;
+        if (!dup)
+            sr->ids[sr->listed++] = id;
+    }
     uint64_t size = (uint64_t)(uintptr_t)(ck_x86_tramp_end - ck_x86_tramp_start);
     if (!tramp_pa)
         sr->why = "no free page below 1 MiB";
@@ -823,8 +966,13 @@ static __attribute__((noreturn)) void kernel_main(void *arg)
     struct apic_report ar = {0};
     madt_walk(&ar);
     apic_start(&ar);
+#if CK_X86_PLATFORM == CK_X86_PLATFORM_PC
+    ck_printf("apic: mode=%s id=%u version=0x%x timer_hz=%u firmware_mode=%s\n", x2apic ? "x2apic" : "xapic",
+              ar.id, ar.version, ar.lapic_hz, ar.firmware_x2apic ? "x2apic" : "xapic");
+#else
     ck_printf("apic: mode=%s id=%u version=0x%x timer_hz=%u\n", "xapic", ar.id,
               ar.version, ar.lapic_hz);
+#endif
     ck_printf("madt: cpus=%u ioapics=%u ioapic_lines_masked=%u\n", ar.cpus, ar.ioapics, ar.ioapic_lines);
     ck_printf("timer_irq: %llu ticks in %llu ms\n", (unsigned long long)ar.ticks, (unsigned long long)ar.ms);
     ck_printf("timer_stats: vector=0x%x period_us=10000 min_us=%llu avg_us=%llu max_us=%llu stray_irqs=%llu\n",
@@ -838,7 +986,7 @@ static __attribute__((noreturn)) void kernel_main(void *arg)
     if (sr.why) {
         ck_printf("smp: cpus=%u started=0 (%s)\n", sr.listed, sr.why);
     } else {
-        char ids[SMP_MAX * 4 + 1];
+        char ids[SMP_MAX * 11 + 1];
         unsigned n = 0;
         for (unsigned k = 0; k < sr.started; k++)
             n += (unsigned)ck_snprintf(ids + n, sizeof ids - n, k ? ",%u" : "%u", sr.up_ids[k]);
@@ -850,6 +998,18 @@ static __attribute__((noreturn)) void kernel_main(void *arg)
 
     const struct ck_x86_storage_result *st = ck_x86_storage(h->rsdp, &frames, tsc_hz, mm.top);
     ck_puts("kernel: alive\n");
+#if CK_X86_PLATFORM == CK_X86_PLATFORM_PC
+    const struct ck_x86_virtio_result *vr = ck_x86_virtio_result();
+    ck_printf("summary: cores=%u/%u timer=ok sata_disks=%u nvme_disks=%u virtio_disks=%u gpt_valid=%u writes=none "
+              "net=%s keyboard=%s screen=%s\n",
+              sr.started + 1, sr.listed, st->ahci_disks, st->nvme_disks, vr->blk_disks, st->gpt_valid,
+              vr->net_up ? "virtio-up" : st->net_found ? "no-driver" : "none", vr->kbd_up ? "virtio" : "none-yet",
+              h->fb_status == CK_HANDOFF_FB_PRESENT && mm.fb_ok ? "gop" : "none");
+    ck_puts(CK_X86_TITLE " DONE\n");
+    struct ck_x86_pc_status ps = {sr.started + 1, sr.listed, x2apic ? "x2apic" : "xapic", timebase, tsc_hz,
+                                  ck_frames_free_bytes(&frames)};
+    ck_x86_pc_console(&ps, h->rsdp, console_arm, acpi_poweroff);
+#else
     ck_printf("summary: cores=%u/%u timer=ok sata_disks=%u nvme_disks=%u gpt_valid=%u writes=none net=%s\n",
               sr.started + 1, sr.listed, st->ahci_disks, st->nvme_disks, st->gpt_valid,
               !st->net_found          ? "none"
@@ -860,6 +1020,7 @@ static __attribute__((noreturn)) void kernel_main(void *arg)
     ck_puts("AIENOS-IMAC-KERNEL-0 DONE\n");
     ck_puts("note: QEMU qualifies nothing physical\n");
     finish();
+#endif
 }
 
 void ck_x86_kernel_entry(struct ck_handoff *h)

@@ -8,6 +8,25 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/* Platform id, fixed at build time (Makefile CK_X86_PLATFORM=...). imac: the
+ * 2017 iMac image IMACKERN.EFI, unchanged: its Broadcom BCM57766 transmit
+ * driver and network report hold (tg3_x86.c, report_x86.c), APIC forced to
+ * xAPIC, power off after the hold. pc: the AienOS PC edition PCKERN.EFI for any
+ * x86_64 UEFI PC or virtual machine, Intel or AMD: no iMac chip code linked,
+ * x2APIC kept or turned on when the CPU has it, virtio disk/network/keyboard
+ * (virtio_x86.c), a PS/2 keyboard when one answers, and a console that stays
+ * up (pc_console_x86.c). Everything else is shared and vendor-neutral. */
+#define CK_X86_PLATFORM_IMAC 1
+#define CK_X86_PLATFORM_PC 2
+#ifndef CK_X86_PLATFORM
+#define CK_X86_PLATFORM CK_X86_PLATFORM_IMAC
+#endif
+#if CK_X86_PLATFORM == CK_X86_PLATFORM_PC
+#define CK_X86_TITLE "AIENUX-PC-0"
+#else
+#define CK_X86_TITLE "AIENOS-IMAC-KERNEL-0"
+#endif
+
 static inline void ck_outb(uint16_t p, uint8_t v) { __asm__ volatile("outb %0, %1" ::"a"(v), "Nd"(p)); }
 static inline void ck_outw(uint16_t p, uint16_t v) { __asm__ volatile("outw %0, %1" ::"a"(v), "Nd"(p)); }
 static inline uint8_t ck_inb(uint16_t p)
@@ -20,6 +39,13 @@ static inline uint16_t ck_inw(uint16_t p)
 {
     uint16_t v;
     __asm__ volatile("inw %1, %0" : "=a"(v) : "Nd"(p));
+    return v;
+}
+static inline void ck_outl(uint16_t p, uint32_t v) { __asm__ volatile("outl %0, %1" ::"a"(v), "Nd"(p)); }
+static inline uint32_t ck_inl(uint16_t p)
+{
+    uint32_t v;
+    __asm__ volatile("inl %1, %0" : "=a"(v) : "Nd"(p));
     return v;
 }
 static inline uint64_t ck_rdmsr(uint32_t m)
@@ -114,6 +140,34 @@ int ck_x86_tg3_drain(unsigned ms);
 /* report_x86.c: holds `seconds`, sending the console's RAM copy over the
  * network every 2 s while the link is up; returns the rounds sent. */
 unsigned ck_x86_report_hold(uint64_t tsc_hz, unsigned seconds);
+
+/* console_x86.c (pc): one byte from COM1, or -1 when none is waiting. */
+int ck_x86_com1_getc(void);
+/* kmain_x86.c (pc): 1 once per press of the ACPI fixed power button, else 0. */
+int ck_x86_power_button_pressed(void);
+
+/* virtio_x86.c (pc): virtio 1.x PCI devices, polled. probe is called by the
+ * PCI walk for every function with vendor 0x1af4; cfg is its ECAM page. */
+struct ck_x86_virtio_result {
+    unsigned blk_disks, blk_gpt_valid, net_up, net_tx_frames, kbd_up;
+};
+void ck_x86_virtio_probe(volatile uint8_t *cfg, uint8_t bus, uint8_t dev, uint8_t fn, struct ck_frames *fr,
+                         uint64_t tsc_hz);
+const struct ck_x86_virtio_result *ck_x86_virtio_result(void);
+/* One typed key as a byte (ASCII, '\n' for Enter, 8 for Backspace) from the
+ * virtio keyboard, or -1. Also drains received network frames. */
+int ck_x86_virtio_poll_key(void);
+unsigned ck_x86_virtio_net_rx_frames(void);
+
+/* pc_console_x86.c (pc): the console after boot: COM1, the virtio keyboard and
+ * a PS/2 keyboard when one answers, until poweroff or reboot. Never returns. */
+struct ck_x86_pc_status {
+    unsigned cores_up, cores_listed;
+    const char *apic_mode, *timebase;
+    uint64_t tsc_hz, free_bytes;
+};
+__attribute__((noreturn)) void ck_x86_pc_console(const struct ck_x86_pc_status *st, uint64_t rsdp,
+                                                 void (*arm_tick)(void), void (*poweroff)(void));
 
 /* smp_x86.S: the secondary-core trampoline, copied below 1 MiB and patched. */
 extern char ck_x86_tramp_start[], ck_x86_tramp_end[], ck_x86_tramp_gdt[], ck_x86_tramp_pm32[],
