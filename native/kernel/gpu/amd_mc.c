@@ -1,5 +1,5 @@
 /* native/kernel/gpu/amd_mc.c -- GMC 8.x memory controller read-only probe for
- * the 2017 iMac's AMD Radeon Pro 555/560 (Polaris 11).
+ * the 2017 iMac's AMD Radeon Pro 570/575/580 (Polaris 10, PCI 1002:67df).
  *
  * Reads MC_VM_FB_LOCATION (VRAM start / end in MC address space), the system
  * aperture, and the VM context 0 page-table base address -- everything needed

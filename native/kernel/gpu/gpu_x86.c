@@ -88,7 +88,7 @@ void ck_x86_gpu_start(volatile uint8_t *cfg, unsigned bus, unsigned dev, unsigne
          * buffer + GART scratch).  ck_x86_map_mmio skips if already mapped. */
         (void)ck_x86_map_mmio(bar0_pa, 256ull * 1024u * 1024u);
         g->vram_cpu  = (volatile uint8_t *)(uintptr_t)bar0_pa;
-        g->vram_sz   = 4ull * 1024u * 1024u * 1024u; /* Polaris 560 = 4 GiB; confirmed by MC step */
+        g->vram_sz   = 4ull * 1024u * 1024u * 1024u; /* UNMEASURED: assumes 4 GiB (Pro 570/575); a Pro 580 has 8 GiB. amd_mc.c does not override it. */
     }
 
     /* DMA pool for the ring buffers, all below AMD_DMA_LIMIT (amd_gpu.h). fr is

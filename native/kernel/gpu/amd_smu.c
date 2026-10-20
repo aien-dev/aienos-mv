@@ -1,5 +1,5 @@
 /* native/kernel/gpu/amd_smu.c -- SMU (System Management Unit) state check for
- * the 2017 iMac's AMD Radeon Pro 555/560 (Polaris 11).
+ * the 2017 iMac's AMD Radeon Pro 570/575/580 (Polaris 10, PCI 1002:67df).
  *
  * Apple's EFI leaves the SMC running with its full power-management firmware.
  * We check: is it alive (its firmware header is readable), what version, and what

@@ -1,5 +1,5 @@
 /* native/kernel/gpu/amd_compute.c -- one MEC HQD compute queue for the 2017
- * iMac's AMD Radeon Pro 555/560 (Polaris 11, GFX 8.0).
+ * iMac's AMD Radeon Pro 570/575/580 (Polaris 10, PCI 1002:67df, GFX 8.0).
  *
  * Sets up pipe 0 queue 0 of MEC1 as a user-mode dispatch queue backed by a
  * physical queue (HQD).  The shader stream (feat/imac-gpu-shader) targets this

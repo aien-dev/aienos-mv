@@ -1,5 +1,5 @@
 /* native/kernel/gpu/amd_sdma.c -- SDMA0 ring initialization and timed memory
- * operations for the 2017 iMac's AMD Radeon Pro 555/560 (Polaris 11).
+ * operations for the 2017 iMac's AMD Radeon Pro 570/575/580 (Polaris 10, PCI 1002:67df).
  *
  * SDMA0 is the first DMA engine (OSS 3.0); it can fill or copy data without
  * the CP.  It has its own microcode loaded by the CP ME firmware initialisation;

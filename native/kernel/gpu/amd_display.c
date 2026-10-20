@@ -1,6 +1,6 @@
 /* native/kernel/gpu/amd_display.c -- DCE 11.2 display engine: double-buffered
- * page flip with vsync wait for the 2017 iMac's AMD Radeon Pro 555/560
- * (Polaris 11, PCI 1002:67ef).
+ * page flip with vsync wait for the 2017 iMac's AMD Radeon Pro 570/575/580
+ * (Polaris 10, PCI 1002:67df).
  *
  * The GOP leaves CRTC 0 running and scanning out of the front buffer.  This
  * file:

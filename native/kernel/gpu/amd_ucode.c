@@ -1,5 +1,5 @@
 /* native/kernel/gpu/amd_ucode.c -- RLC and CP microcode load for the 2017 iMac's
- * AMD Radeon Pro 555/560 (Polaris 11, GFX 8.0).
+ * AMD Radeon Pro 570/575/580 (Polaris 10, PCI 1002:67df, GFX 8.0).
  *
  * Steps:
  *   1. Soft-reset CP and RLC via GRBM_SOFT_RESET (gfx_v8_0.c:gfx_v8_0_cp_reset).
@@ -17,6 +17,9 @@
  * computes and verifies sha256 against the pinned digests in
  * scripts/gpu_ucode_sha256.txt before embedding.  Blobs are never committed.
  * Source: linux-firmware amdgpu/polaris11_*.bin (AMD redistributable licence).
+ * KNOWN MISMATCH (L213): the iMac chip (1002:67df) is Polaris 10, and Linux v6.12 loads
+ * amdgpu/polaris10_*.bin for it (gfx_v8_0.c:967-968, MODULE_FIRMWARE at gfx_v8_0.c:134-144).
+ * These pinned polaris11 blobs have not been proven to run on it; see ~/handoffs/fixer-imac-gpu-id.md.
  *
  * If the include is absent (CK_X86_GPU_UCODE=0, default for now), the step
  * logs "not available" and skips to Step 5, leaving the CP unfueled.  In that

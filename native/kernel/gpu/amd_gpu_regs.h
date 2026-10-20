@@ -1,5 +1,5 @@
-/* native/kernel/gpu/amd_gpu_regs.h -- AMD GCN register indices for Polaris 11
- * (Radeon Pro 555/560, PCI 1002:67ef, DCE 11.2 / GMC 8.x / GFX 8.0 / OSS 3.0 / SMU 7.1.3).
+/* native/kernel/gpu/amd_gpu_regs.h -- AMD GCN register indices for Polaris 10
+ * (Radeon Pro 570/575/580, PCI 1002:67df rev c5 on the real iMac, DCE 11.2 / GMC 8.x / GFX 8.0 / OSS 3.0 / SMU 7.1.3).
  *
  * MMIO byte offset = index * 4.  All indices refer to BAR5 (256 KiB register aperture).
  * Indices sourced from MIT-licensed AMD Linux kernel headers; see THIRD_PARTY_NOTICES.
