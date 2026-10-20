@@ -441,8 +441,8 @@ int ck_x86_swap_step(const struct ck_handoff *hand, uint64_t tramp_pa)
     ck_x86_tg3_stop();
     ck_x86_hda_stop();
 
-    /* The trampoline page is read-only after boot (wx_retire_trampoline); it becomes
-     * writable and executable here, after the verify, for this one jump. */
+    /* The trampoline page (read-only after boot, wx_retire_trampoline) and the running image
+     * (W^X) become writable and executable here, after the verify, for this one jump. */
     ck_x86_swap_tramp_open();
 
     /* Build rebuilt handoff in the tramp page. */

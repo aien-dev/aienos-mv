@@ -1143,15 +1143,29 @@ static void wx_retire_trampoline(void)
 }
 
 /* Lab swap only, called once after a verified payload and before the jump: the
- * trampoline page becomes writable and executable again. The application processors
- * are halted by then (quiesce_aps), so this BSP-only invlpg is the only TLB to flush. */
+ * trampoline page becomes writable and executable again, and so does the running image,
+ * which the trampoline overwrites with the new kernel's sections (text is read-only and
+ * data no-execute under W^X; the new kernel runs on these tables until its own mm_build).
+ * The application processors are halted by then (quiesce_aps), so the BSP's CR3 reload
+ * is the only TLB flush needed. */
 void ck_x86_swap_tramp_open(void)
 {
     uint64_t *e = tramp_pa ? pte4k(tramp_pa) : 0;
-    if (!e)
-        return;
-    *e = (*e | PTE_W) & ~PTE_NX;
-    __asm__ volatile("invlpg (%0)" ::"r"(tramp_pa) : "memory");
+    if (e)
+        *e = (*e | PTE_W) & ~PTE_NX;
+    for (uint64_t a = (uint64_t)(uintptr_t)__image_base; a < (uint64_t)(uintptr_t)__image_end; a += CK_PAGE) {
+        uint64_t *pd = &pds[a >> 30][(a >> 21) & 511];
+        if (!(*pd & PTE_P))
+            continue;
+        if (*pd & PTE_PS) {
+            *pd = (*pd | PTE_W) & ~PTE_NX;
+            continue;
+        }
+        uint64_t *pte = pte4k(a);
+        if (pte && (*pte & PTE_P))
+            *pte = (*pte | PTE_W) & ~PTE_NX;
+    }
+    ck_wr_cr3(ck_rd_cr3());
 }
 
 /* Every present leaf of the identity map: writable+executable ones, and
