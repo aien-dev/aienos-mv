@@ -53,8 +53,11 @@
 #endif
 #define NSIDE (1 << HPX_LEVEL)
 #define NCELLS (12 * NSIDE * NSIDE)
-/* Gaia DR3 G-band zero point: G = 25.6874 - 2.5 log10(flux in e-/s) (Riello et al. 2021, A&A 649, A3, Table 5). */
+/* Gaia DR3 Vega zero points: a source of 1 e-/s has G 25.6874, BP 25.3385, RP 24.7479 (Gaia DR3 documentation,
+ * section 5.4.1, Table 5.4; Riello et al. 2021, A&A 649, A3). */
 #define GAIA_ZP_G 25.6874
+#define GAIA_ZP_BP 25.3385
+#define GAIA_ZP_RP 24.7479
 
 /* The screen shape the grid is made for: centre of the view at half the width
  * and 40% of the height (where allen_ui.c puts the merger); rows cover a 16:10
@@ -667,6 +670,7 @@ typedef struct {
     long nsrc;
     double g_flux, bp_flux, rp_flux;
     double mean_ag; /* mean G-band extinction from GSP-Phot */
+    double v_s10;   /* its light as V surface brightness, S10 (gaia_v_light) */
     double ra, dec; /* cell centre, degrees */
 } gaia_cell_t;
 
@@ -717,11 +721,13 @@ static gaia_cell_t *parse_gaia_csv(const char *flux_path, const char *dust_path)
 }
 
 /* Build 360 x 180 equirectangular grid (1 deg/cell) from Gaia cells.
- * Each cell is splatted within 1.5 deg of its centre (HEALPix cells are
- * ~0.9 deg). Returns a flattened (rows*cols)*3 double array: [luma, co, cg]
+ * Each grid point averages the cells within SPLAT_DEG of it: 1.5 deg for level 6 (cells ~0.9 deg apart),
+ * 0.75 deg for level 7 (~0.46 deg apart, about 8 cells per point, so no point is empty and the Small
+ * Magellanic Cloud, 5 x 3 deg, is not smeared over a 3 deg disk). Returns a flattened (rows*cols)*3 double array: [luma, co, cg]
  * in the same YCbCr-like space as the old photograph, in 16ths-of-level units.
  * flux_gain: linear display light per (g_flux / nsrc) unit. */
-static double *gaia_to_grid(const gaia_cell_t *cells, double flux_gain)
+#define SPLAT_DEG (HPX_LEVEL == 7 ? 0.75 : 1.5)
+static double *gaia_to_grid(const gaia_cell_t *cells)
 {
 #define GCOLS 360
 #define GROWS 180
@@ -736,12 +742,8 @@ static double *gaia_to_grid(const gaia_cell_t *cells, double flux_gain)
         double ra = c->ra, dec = c->dec;
         /* E(B-V) ~ A_G / 2.285 (Cardelli 1989); applied as reddening of the colour */
         double ebv = c->mean_ag / 2.285;
-        /* Flux calibration: g_flux is electrons/s summed over nsrc sources.
-         * The display light is proportional to the total G-band flux per cell,
-         * boosted by the display gain factor. */
-        /* Normalise to linear light: peak_norm=1.0 at the calibration flux.
-         * The emit() function scales by a->g_phys to get display linear light. */
-        double luma_lin = (flux_gain > 0) ? c->g_flux * flux_gain : 0;
+        /* the cell's light: V surface brightness in S10 (gaia_v_light), physical; emit() scales by a->g_phys */
+        double luma_lin = c->v_s10;
         /* Color from BP/RP ratio (log scale). Higher = redder (dust or cool stars).
          * Map to the chrominance offsets used by the photograph approach (linear, 0..1 range). */
         double bprp = (c->bp_flux > 1.0) ? log(c->rp_flux / c->bp_flux) : 0.5;
@@ -756,19 +758,19 @@ static double *gaia_to_grid(const gaia_cell_t *cells, double flux_gain)
         double Yw = 0.2126 * wR + 0.7152 * wG + 0.0722 * wB;
         double r_lin = luma_lin * wR / Yw, g_lin = luma_lin * wG / Yw, b_lin = luma_lin * wB / Yw;
 
-        /* Splat onto surrounding grid points (within 1.5 deg) */
-        int j0 = (int)((90.0 - dec - 1.5) + 0.5);
-        int j1 = (int)((90.0 - dec + 1.5) + 0.5);
+        /* Splat onto the grid points within SPLAT_DEG (row j is centred at Dec 89.5 - j) */
+        const double R = SPLAT_DEG;
+        int j0 = (int)floor(89.5 - dec - R), j1 = (int)ceil(89.5 - dec + R);
         j0 = j0 < 0 ? 0 : j0 >= GROWS ? GROWS - 1 : j0;
         j1 = j1 < 0 ? 0 : j1 >= GROWS ? GROWS - 1 : j1;
         for (int j = j0; j <= j1; j++) {
             double dec_j = 90.0 - j - 0.5;
             double ddec = dec_j - dec;
-            if (ddec * ddec > 2.25) continue;
+            if (ddec * ddec > R * R) continue;
             double cos_dec = cos(rad(dec_j));
-            double dra_max = cos_dec > 0.01 ? 1.5 / cos_dec : 360.0;
-            int i0 = (int)((ra - dra_max) / 1.0 + 0.5);
-            int i1 = (int)((ra + dra_max) / 1.0 + 0.5);
+            double dra_max = cos_dec > 0.01 ? R / cos_dec : 360.0;
+            int i0 = (int)floor(ra - dra_max - 0.5), i1 = (int)ceil(ra + dra_max - 0.5);
+            if (dra_max >= 180) i0 = 0, i1 = GCOLS - 1; /* near a pole: every column once */
             for (int ii = i0; ii <= i1; ii++) {
                 int i = ((ii % GCOLS) + GCOLS) % GCOLS;
                 double ra_i = i + 0.5;
@@ -776,7 +778,7 @@ static double *gaia_to_grid(const gaia_cell_t *cells, double flux_gain)
                 if (dra > 180) dra -= 360;
                 if (dra < -180) dra += 360;
                 double dra_deg = dra * cos_dec;
-                if (dra_deg * dra_deg + ddec * ddec > 2.25) continue;
+                if (dra_deg * dra_deg + ddec * ddec > R * R) continue;
                 size_t off = (size_t)j * (size_t)(GCOLS + 1) + (size_t)i;
                 grid[off * 3]     += r_lin;
                 grid[off * 3 + 1] += g_lin;
@@ -814,6 +816,115 @@ static double *gaia_to_grid(const gaia_cell_t *cells, double flux_gain)
 
     free(count);
     return grid;
+}
+
+/* Each cell's light as V surface brightness in S10. The cell's G flux F (e-/s) over its area A (arcsec^2) is
+ * G = ZP_G - 2.5 log10(F / A) per arcsec^2; 1 S10 is V 27.78 mag/arcsec^2. G is moved to Johnson V with the
+ * cell's own integrated colour c = BP - RP (from its summed BP and RP fluxes and the DR3 zero points):
+ * G - V = -0.02704 + 0.01424 c - 0.2156 c^2 + 0.01426 c^3, valid -0.5 < c < 5, scatter 0.03 mag (Gaia DR3
+ * documentation, chapter 5, "relationships with other photometric systems", Table 5.9). At c = 2 (the
+ * reddened bulge) G - V is -0.75: V is that much fainter than G. Returns the number of cells with no BP/RP flux (those keep G as V). */
+static long gaia_v_light(gaia_cell_t *cells, double cell_arcsec2)
+{
+    long nocol = 0;
+    double g_s10 = pow(10, 0.4 * (27.78 - GAIA_ZP_G)) / cell_arcsec2;
+    for (int k = 0; k < NCELLS; k++) {
+        gaia_cell_t *c = &cells[k];
+        double gv = 0;
+        if (c->bp_flux > 0 && c->rp_flux > 0) {
+            double x = clampd(-2.5 * log10(c->bp_flux / c->rp_flux) + GAIA_ZP_BP - GAIA_ZP_RP, -0.5, 5.0);
+            gv = -0.02704 + x * (0.01424 + x * (-0.2156 + x * 0.01426));
+        } else if (c->nsrc > 0) {
+            nocol++;
+        }
+        c->v_s10 = c->g_flux * g_s10 * pow(10, 0.4 * gv);
+    }
+    return nocol;
+}
+
+static int cmpd(const void *a, const void *b)
+{
+    double x = *(const double *)a, y = *(const double *)b;
+    return x < y ? -1 : x > y;
+}
+
+/* The Magellanic Clouds: Gaia resolves their brightest stars (the LMC is 50 kpc away, distance modulus 18.5,
+ * so Gaia's G 20.7 limit reaches absolute G +2) but not the faint, crowded rest of their light. For each
+ * catalogue galaxy at least CLOUD_MIN_ARCMIN long (the grid's 3 degree splat sees its shape), the Gaia light
+ * inside its catalogue ellipse (OpenNGC major and minor axes and position angle, the D25 isophote) above the
+ * local sky (the median cell between 1.2 and 1.6 ellipse radii: Milky Way foreground and background) is the
+ * resolved part. The catalogue's total V says how much light the galaxy has; the missing part is added in the
+ * pattern of the resolved stars themselves (each cell's excess times total / resolved), so the total inside the
+ * ellipse is the catalogue's and the shape is Gaia's. Only where Gaia resolves at least CLOUD_MIN_SHARE of the
+ * light: a farther galaxy (M31) shows Gaia only a few supergiants, too few to carry its shape. */
+#define CLOUD_MIN_ARCMIN 120.0
+#define CLOUD_MIN_SHARE 0.25
+static void gaia_clouds(gaia_cell_t *cells, const galaxy_t *gx, size_t ngx, double cell_deg2)
+{
+    double *rho2 = xmalloc(NCELLS * sizeof *rho2), *ann = xmalloc(NCELLS * sizeof *ann);
+    for (size_t gi = 0; gi < ngx; gi++) {
+        const galaxy_t *g = &gx[gi];
+        if (g->maj < CLOUD_MIN_ARCMIN || g->min <= 0 || g->vmag > 20)
+            continue;
+        vec3 gc = vec(g->ra, g->dec);
+        double a_ = rad(g->ra), d_ = rad(g->dec), cp = cos(rad(g->pa)), sp = sin(rad(g->pa));
+        vec3 east = {-sin(a_), cos(a_), 0.0};
+        vec3 north = {-sin(d_) * cos(a_), -sin(d_) * sin(a_), cos(d_)};
+        double ha = g->maj / 120.0, hb = g->min / 120.0; /* half axes, degrees */
+        size_t nann = 0, nin = 0, nctr = 0;
+        double ctr = 0;
+        for (int k = 0; k < NCELLS; k++) {
+            vec3 c = vec(cells[k].ra, cells[k].dec);
+            double cg = dot(c, gc);
+            rho2[k] = 1e9;
+            if (cg < 0.5)
+                continue;
+            double x = deg(dot(c, east) / cg), y = deg(dot(c, north) / cg); /* tangent plane, degrees */
+            double u = x * sp + y * cp, w = x * cp - y * sp;               /* along the long and short axes */
+            rho2[k] = (u / ha) * (u / ha) + (w / hb) * (w / hb);
+            if (rho2[k] >= 1.44 && rho2[k] <= 2.56)
+                ann[nann++] = cells[k].v_s10;
+        }
+        if (nann < 8)
+            continue;
+        qsort(ann, nann, sizeof *ann, cmpd);
+        double bg = ann[nann / 2], ex = 0;
+        for (int k = 0; k < NCELLS; k++)
+            if (rho2[k] <= 1.0) {
+                nin++;
+                ex += fmax(0, cells[k].v_s10 - bg);
+                if (rho2[k] <= 0.04)
+                    ctr += cells[k].v_s10, nctr++;
+            }
+        double f_gaia = ex * cell_deg2, f_cat = pow(10, 0.4 * (10 - g->vmag)); /* light in V 10 stars */
+        double share = f_cat > 0 ? f_gaia / f_cat : 0;
+        double v_gaia = f_gaia > 0 ? 10 - 2.5 * log10(f_gaia) : 99;
+        char common[160];
+        snprintf(common, sizeof common, "%s", g->common);
+        char *cm = strchr(common, ',');
+        if (cm)
+            *cm = 0;
+        if (share < CLOUD_MIN_SHARE) {
+            report("cloud light %s %s: Gaia resolves V %.2f of the catalogue's V %.2f (%.1f%%), under %.0f%%: not added",
+                   g->name, common, v_gaia, g->vmag, 100 * share, 100 * CLOUD_MIN_SHARE);
+            continue;
+        }
+        double k_ = share < 1 ? 1 / share : 1, ctr_after = 0;
+        for (int k = 0; k < NCELLS; k++)
+            if (rho2[k] <= 1.0) {
+                cells[k].v_s10 += (k_ - 1) * fmax(0, cells[k].v_s10 - bg);
+                if (rho2[k] <= 0.04)
+                    ctr_after += cells[k].v_s10;
+            }
+        ctr = nctr ? ctr / (double)nctr : 0, ctr_after = nctr ? ctr_after / (double)nctr : 0;
+        report("cloud light %s %s: %zu Gaia cells in the %.0fx%.0f arcmin ellipse, local sky %.1f S10 (median of %zu "
+               "cells at 1.2-1.6 radii); Gaia resolves V %.2f of the catalogue's V %.2f (%.0f%%); the rest added in the "
+               "Gaia stars' pattern (excess x %.2f); centre (inner fifth) V %.2f -> %.2f mag/arcsec2, %.0f -> %.0f S10",
+               g->name, common, nin, g->maj, g->min, bg, nann, v_gaia, g->vmag, 100 * share, k_,
+               27.78 - 2.5 * log10(ctr), 27.78 - 2.5 * log10(ctr_after), ctr, ctr_after);
+    }
+    free(rho2);
+    free(ann);
 }
 
 /* ---- the run ---- */
@@ -1010,18 +1121,21 @@ int main(int argc, char **argv)
     /* Compute direction (ra, dec) of each HEALPix nested cell (nside=64) */
     for (int k = 0; k < NCELLS; k++)
         healpix_nest_ang(NSIDE, k, &cells[k].ra, &cells[k].dec);
-    /* Calibrate flux on the physical scale, with no anchor. A cell's G-band flux F (electrons/s) over its
-     * area A (arcsec^2) is a surface brightness, G = ZP - 2.5 log10(F/A), ZP the Gaia DR3 zero point for
-     * 1 e-/s. In S10 (1 S10 = V 27.78 mag/arcsec^2) that is S10 = (F/A) 10^(0.4 (27.78 - ZP)). G is taken
-     * as V (the colour term is under 0.2 mag for these populations). The grid then holds S10 directly. */
+    /* The physical scale, with no anchor: each cell's light is its own Gaia flux, in V (gaia_v_light). */
     double cell_arcsec2 = (4 * PI / (12.0 * NSIDE * NSIDE)) * (180.0 * 3600.0 / PI) * (180.0 * 3600.0 / PI);
-    double flux_gain = pow(10, 0.4 * (27.78 - GAIA_ZP_G)) / cell_arcsec2;
+    long nocol = gaia_v_light(cells, cell_arcsec2);
     long nnonempty = 0;
     for (int k = 0; k < NCELLS; k++) if (cells[k].nsrc > 0) nnonempty++;
-    report("Gaia DR3 Milky Way: %d HEALPix level-%d cells (nside %d), %ld non-empty; "
+    report("Gaia DR3 Milky Way: %d HEALPix level-%d cells (nside %d), %ld non-empty, %ld with no BP/RP colour (G kept as V); "
            "sky glow %.5f linear/design-px (V %.1f, physical, no gain)",
-           NCELLS, HPX_LEVEL, NSIDE, nnonempty, a.glow_lin, a.skyglow);
-    double *grid = gaia_to_grid(cells, flux_gain);
+           NCELLS, HPX_LEVEL, NSIDE, nnonempty, nocol, a.glow_lin, a.skyglow);
+    /* the catalogue galaxies (OpenNGC): the Clouds' light here, the galaxies in the view below */
+    size_t gcap = 4096, ngx = 0;
+    galaxy_t *gx = xmalloc(gcap * sizeof *gx);
+    openngc_load(path_join(a.cache, "NGC.csv"), &gx, &ngx, &gcap);
+    openngc_load(path_join(a.cache, "addendum.csv"), &gx, &ngx, &gcap);
+    gaia_clouds(cells, gx, ngx, cell_arcsec2 / (3600.0 * 3600.0));
+    double *grid = gaia_to_grid(cells);
     free(cells);
     int gw_cols = GCOLS, gw_rows = GROWS;
     double gy0 = 0.0, step = 1.0 / GCOLS;
@@ -1037,15 +1151,11 @@ int main(int argc, char **argv)
     if (top <= 0)
         die("the Gaia Milky Way grid is empty");
     a.g_phys = s10;
-    report("Milky Way: brightest band %.1f S10 = V %.2f mag/arcsec2 (Gaia G flux, physical scale, no anchor); "
-           "%.2f times the dark sky; gain %.2f",
+    report("Milky Way: brightest band %.1f S10 = V %.2f mag/arcsec2 (Gaia flux in V, physical scale, no anchor; "
+           "the published Bochum value is V 20.7, Leinert et al. 1998); %.2f times the dark sky; gain %.2f",
            top, 27.78 - 2.5 * log10(top), top / (pow(10, 0.4 * (27.78 - a.skyglow))), a.gain);
 
     /* galaxies in the view, bright enough for the eye */
-    size_t gcap = 4096, ngx = 0;
-    galaxy_t *gx = xmalloc(gcap * sizeof *gx);
-    openngc_load(path_join(a.cache, "NGC.csv"), &gx, &ngx, &gcap);
-    openngc_load(path_join(a.cache, "addendum.csv"), &gx, &ngx, &gcap);
     gsel_t *gals = xmalloc((ngx + 1) * sizeof *gals);
     size_t ngal = 0;
     for (size_t i = 0; i < ngx; i++) {

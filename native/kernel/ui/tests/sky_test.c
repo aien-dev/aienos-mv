@@ -113,6 +113,12 @@ static double now_ms(void)
     return t.tv_sec * 1e3 + t.tv_nsec / 1e6;
 }
 
+static int cmp_double(const void *a, const void *b)
+{
+    double x = *(const double *)a, y = *(const double *)b;
+    return x < y ? -1 : x > y;
+}
+
 static const double D2R = M_PI / 180.0;
 
 /* Meeus 21.4: J2000 -> mean equator and equinox of the date */
@@ -246,6 +252,47 @@ int main(int argc, char **argv)
     }
     printf("note: mean level %.2f\n", sum / 3.0 / W / H);
     CHECK(black == 0, "no pixel of the sky is black (the night sky glows): %u black", black);
+    /* 6. the Magellanic Clouds glow where they are: the median light (linear luminance, so the stars do not
+     * count) at each catalogue galaxy's centre (inside 0.3 of its short half axis) over the median of a ring
+     * at 1.3 to 1.6 long half axes. The generator puts the Clouds' Gaia light, raised to the catalogue total,
+     * into the grid: about 2.5 times the surround at their centres (sky_data.txt, "cloud light"), about 2 on
+     * screen after the 1 degree grid. Measured: LMC 1.99, SMC 1.81; with the screen-to-sky step of the grid off by
+     * two (the bug fixed at 9ab1281) the glow lands elsewhere and both read 0.95 to 0.99. The bar is 1.5. */
+    {
+        static double lin[256];
+        for (int i = 0; i < 256; i++)
+            lin[i] = i <= 10 ? i / 255.0 / 12.92 : pow((i / 255.0 + 0.055) / 1.055, 2.4);
+        size_t cap = (size_t)W * H / 4;
+        double *in = malloc(cap * sizeof *in), *ring = malloc(cap * sizeof *ring);
+        for (unsigned i = 0; i < ck_sky_ngalaxies; i++) {
+            int32_t x16, y16;
+            if (!ck_sky_project(&n.view, ck_sky_galaxies[i].dir, (int32_t)W, (int32_t)W / 2, (int32_t)(H * 40 / 100), &x16, &y16))
+                continue;
+            int32_t gx = (x16 + 8) >> 4, gy = (y16 + 8) >> 4;
+            double a = (double)ck_sky_galaxies[i].a_q16 * W / 65536, b = (double)ck_sky_galaxies[i].b_q16 * W / 65536;
+            size_t nin = 0, nring = 0;
+            int32_t r = (int32_t)(1.6 * a) + 1;
+            for (int32_t y = gy - r; y <= gy + r; y++)
+                for (int32_t x = gx - r; x <= gx + r; x++) {
+                    if (x < 0 || y < 0 || x >= (int32_t)W || y >= (int32_t)H)
+                        continue;
+                    double d = sqrt((double)(x - gx) * (x - gx) + (double)(y - gy) * (y - gy));
+                    uint32_t c = fb[(size_t)y * W + (size_t)x];
+                    double l = 0.2126 * lin[c >> 16 & 255] + 0.7152 * lin[c >> 8 & 255] + 0.0722 * lin[c & 255];
+                    if (d <= 0.3 * b && nin < cap)
+                        in[nin++] = l;
+                    else if (d >= 1.3 * a && d <= 1.6 * a && nring < cap)
+                        ring[nring++] = l;
+                }
+            qsort(in, nin, sizeof *in, cmp_double);
+            qsort(ring, nring, sizeof *ring, cmp_double);
+            double ratio = nin && nring && ring[nring / 2] > 0 ? in[nin / 2] / ring[nring / 2] : 0;
+            CHECK(ratio >= 1.5, "galaxy %u glows at its place: centre %.5f over surround %.5f linear = %.2f (at least 1.5)", i,
+                  nin ? in[nin / 2] : 0, nring ? ring[nring / 2] : 0, ratio);
+        }
+        free(in);
+        free(ring);
+    }
     if (dir) {
         snprintf(path, sizeof path, "%s/sky-whole.png", dir);
         png(path, fb, W, 0, 0, W, H, 2);
