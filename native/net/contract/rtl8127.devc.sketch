@@ -1,0 +1,155 @@
+# rtl8127.devc.sketch -- SKETCH of the RTL8127 10GbE device contract (ADR 0021 part c).
+#
+# Not compiled: devc 1 knows one class/transport/ring kind (net-poll over
+# virtio-pci with virtq-split). This sketch is written in devc 1 grammar plus
+# the statements a devc 2 needs, each marked "# devc2:". Its job is to show
+# the contract model holds for a real chip with NO public datasheet, and to
+# list exactly what the format must add (ADR 0021 "RTL8127 sketch").
+#
+# Source: L198's register table (docs/SPARK_RTL8127.md on
+# origin/feat/spark-rtl8127-net @3552564), itself read from Realtek's
+# out-of-tree Linux driver r8127 v11.014.00 (github.com/openwrt/rtl8127
+# @ec2f285, the version the Spark runs). Read only; nothing here ran on the chip.
+# Every register below is DOCUMENTED-BY-VENDOR-CODE, not by a manual.
+
+devc 2
+device rtl8127
+prefix r8127
+class net-poll
+transport pci-bar                       # devc2: plain PCI function, registers in one BAR
+ring-kind own-bit                       # devc2: descriptors handed over by an OWN bit (Realtek, Intel, Broadcom shape)
+
+match pci 0x10ec 0x8127
+
+# ---- evidence ----
+# No manual exists: the evidence is the vendor driver and, later, a trace.
+manual "DOCS SILENT" "Realtek RTL8127" "There's no public datasheet for the chip so this is just porting over the original vendor code (Fabio Baltieri, netdev, 2025-11-17)"
+source "r8127 v11.014.00" "github.com/openwrt/rtl8127@ec2f285" "r8127.h:1438-1823, r8127_n.c:3287-17126"   # devc2: vendor-code evidence, line ranges
+trace-required bring-up                 # devc2: refuse PROVEN until a recorded trace of the vendor driver matches (ADR 0021 "Traces")
+proven spark-gx10 spark-0007:01:00.0 - none pending                     # no attended boot yet: UNPROVEN
+
+# ---- resources ----
+window regs 0 bar 2 min 0x100           # devc2: locator `bar N` (MMIO BAR 2, >= 256 bytes, r8127.h:700)
+window regs_hi 1 bar 2 min 0x2100       # devc2: the same BAR, the high registers (0x0D30, 0x19E0, 0x20E4)
+dma region align 256 mask 64            # devc2: 64-bit DMA mask
+irq none                                # interrupts stay masked (polled), as in L198
+
+# ---- registers (r8127.h line numbers in L198's table) ----
+reg regs MAC0 0x00 4 rw
+reg regs MAC4 0x04 2 rw
+reg regs TX_DESC_LO 0x20 4 rw role qdesc
+reg regs TX_DESC_HI 0x24 4 rw
+reg regs CHIPCMD 0x37 1 rw role status
+reg regs IMR0 0x38 4 rw reset 0
+reg regs ISR0 0x3c 4 rw1c               # devc2: access rw1c (write one to clear)
+reg regs TXCONFIG 0x40 4 rw role chip-id
+reg regs RXCONFIG 0x44 4 rw
+reg regs CFG9346 0x50 1 rw
+reg regs TIMER0 0x58 4 rw
+reg regs TIMER1 0x5c 4 rw
+reg regs PHYSTATUS 0x6c 2 ro
+reg regs TIMER2 0x8c 4 rw
+reg regs MACOCP 0xb0 4 rw role indirect # devc2: indirect window (below)
+reg regs LLFIFO 0xd2 2 ro
+reg regs MCUCMD 0xd3 1 ro
+reg regs RXDESC_CFG 0xd8 1 rw
+reg regs RXMAXSIZE 0xda 2 rw
+reg regs CPLUSCMD 0xe0 2 rw
+reg regs INTRMITIGATE 0xe2 2 rw
+reg regs RX_DESC_LO 0xe4 4 rw
+reg regs RX_DESC_HI 0xe8 4 rw
+reg regs RXDV_GATE 0xf2 1 rw
+reg regs TIMER3 0xf4 4 rw
+reg regs_hi SW_TAIL_PTR0 0x0d30 4 wo queue-notify   # TX "no close" doorbell: producer count
+reg regs_hi HW_CLO_PTR0 0x0d34 4 ro                  # TX close pointer, mask 0x7fffffff
+reg regs_hi BACKUP_ADDR0 0x19e0 4 ro
+reg regs_hi BACKUP_ADDR1 0x19e4 2 ro
+reg regs_hi NOCLOSE_EN 0x20e4 1 rw
+
+bits CHIPCMD C STOPREQ=7 RESET=4 RXENB=3 TXENB=2
+bits CFG9346 L UNLOCK_A=7 UNLOCK_B=6
+bits PHYSTATUS P FULLDUP=0 LINK=1 S10M=2 S100M=3 S1G=4 S2G5=10 S5G=12 S10G=14
+bits MCUCMD M RXFIFO_EMPTY=4 TXFIFO_EMPTY=5 NOW_IS_OOB=7
+bits RXDV_GATE G CLOSED=3
+bits RXDESC_CFG D RXDESC_V4=1
+
+# devc2: an indirect register file reached through one window register.
+# write: ((addr/2) << 16) | value | 0x80000000 ; read: write (addr/2) << 16, read low 16 bits
+indirect MACOCP ocp addr-shift 16 addr-div 2 write-flag 0x80000000 data 16
+
+# devc2: chip identification. The bring-up branches on a table, never on hand C.
+chip-id TXCONFIG mask 0x7c800000 is 0x6c800000 else NOT_RTL8127
+chip-version TXCONFIG mask 0x00700000 0x000000=CFG_METHOD_1 0x100000=CFG_METHOD_2 other=CFG_METHOD_2_UNKNOWN
+
+# ---- rings (devc2: own-bit layout instead of virtq-split) ----
+# descriptor layout: field name, byte offset, width; OWN and END bits in opts1
+desc TX 32 opts1 0 4 opts2 4 4 addr 8 8 own 31 end 30 first 29 last 28 len 0..15
+desc RX 16 opts1 0 4 opts2 4 4 addr 8 8 own 31 end 30 len 0..13 error 21
+ring RX 0 own-bit device-writes buf BUF_LEN stride BUF_STRIDE hdr 0 strip-tail 4   # devc2: length includes the 4-byte FCS
+ring TX 1 own-bit device-reads buf BUF_LEN stride BUF_STRIDE hdr 0 doorbell SW_TAIL_PTR0 producer-count close HW_CLO_PTR0 mask 0x7fffffff
+const FRAME_MAX 1514
+const BUF_LEN 2048
+const BUF_STRIDE 2048
+const WAIT_US 10000
+
+# ---- bring-up (L198's chosen order; the vendor's probe+open minus MCU/EPHY/PHY patch code) ----
+failmark CHIPCMD STOPREQ               # devc2: failure action = stop the chip, not a status bit
+init
+  expect TXCONFIG chip-id else NOT_RTL8127            # devc2: `chip-id` condition from the table
+  # exit_oob (without DASH, RealWoW, UPS-resume wait)
+  write RXCONFIG 0                                    # devc2 write of a 32-bit field set
+  write CHIPCMD STOPREQ
+  wait MCUCMD has TXFIFO_EMPTY|RXFIFO_EMPTY us WAIT_US count   # devc2: timed wait; `count` = timeout is counted, not fatal (vendor ignores it)
+  write RXDV_GATE CLOSED
+  # hw_reset
+  write CHIPCMD RESET
+  poll CHIPCMD lacks RESET tries 1000 else RESET_TIMEOUT       # devc2: poll on a bit, not a value
+  # station address: BACKUP_ADDR wins over MAC0 (r8127_n.c:12418-12441)
+  read-addr BACKUP_ADDR0 BACKUP_ADDR1 into mac                  # devc2: MAC from two registers
+  unlock CFG9346 UNLOCK_A|UNLOCK_B                              # devc2: unlock ... relock bracket
+    write MAC4 mac[4..5]
+    write MAC0 mac[0..3]
+  relock CFG9346 0
+  # rings
+  queues RX TX
+  write RXDESC_CFG 0                                            # RX descriptor type 1 (RSS off)
+  write TXCONFIG (7 << 8) | (3 << 24) | (1 << 6)                # devc2: constant expressions
+  write NOCLOSE_EN bit 2                                        # devc2: read-modify-write of one bit
+  write RXCONFIG (1 << 30) | (1 << 21) | (1 << 11) | (1 << 22) | (1 << 23) | (5 << 8) | 0x0e
+  write RXMAXSIZE BUF_LEN
+  write TIMER0 0
+  write TIMER1 0
+  write TIMER2 0
+  write TIMER3 0
+  write IMR0 0
+  clear RXDV_GATE CLOSED                                        # devc2: clear one bit
+  write CHIPCMD TXENB|RXENB
+  post RX
+  live
+  wait PHYSTATUS has LINK us 10000000 else LINK_DOWN nofail     # link wait, reported not fatal
+end
+
+qsetup
+  write64 ring-desc-lo ring-desc-hi desc                        # devc2: per-ring address registers (TX 0x20/0x24, RX 0xe4/0xe8)
+end
+
+# ---- what stays hand logic (escape hatch: may call generated accessors only) ----
+# none in this sketch. Left OUT on purpose (L198): MAC MCU patch, EPHY tuning,
+# PHY micro-code. When needed they come from a TRACE of the vendor driver as a
+# `sequence` block of recorded register writes (ADR 0021 "Traces"):
+#   sequence ephy_tuning from-trace r8127-open-spark-2026-xx.trace steps 412
+#   end
+
+rule TX_DESC_LO write requires-status lacks TXENB              # ring base only while TX is stopped
+rule RX_DESC_LO write requires-status lacks RXENB
+rule MAC0 write requires-unlock CFG9346                       # devc2: rule on another register's state
+
+error ARG 1 Arg
+error CAPS 2 Caps
+error MEM 3 Mem
+error RESET_TIMEOUT 4 ResetTimeout
+error NOT_RTL8127 5 NotRtl8127
+error LINK_DOWN 6 LinkDown
+error FULL 10 Full
+error DEVICE 11 HostileDevice
+error BROKEN 12 Broken

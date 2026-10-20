@@ -72,7 +72,7 @@ $(OUT)/ctl_test: tests/ctl_test.c $(LIB)
 $(OUT)/net_diff: tests/net_diff.c $(LIB)
 	$(CC) $(CFLAGS) -o $@ $< $(LIB)
 $(OUT)/vnet_test: tests/vnet_test.c $(LIB)
-	$(CC) $(CFLAGS) -o $@ $< $(LIB)
+	$(CC) $(CFLAGS) -I. -o $@ $< $(LIB)
 $(OUT)/net_diff_ref: tests/net_diff.c $(SRCS) $(DEP_SRCS) $(wildcard *.h) | $(OUT)
 	$(CC) $(CFLAGS) -DAIENOS_VIRTIO_PCI_REFERENCE_COMPAT -o $@ tests/net_diff.c $(SRCS) $(DEP_SRCS)
 $(OUT)/x25519_test: tests/x25519_test.c $(LIB)
@@ -192,7 +192,84 @@ secure:
 receipt:
 	sh ./receipt.sh
 
+# ---- ADR 0021 device contract: contract/virtio_net.devc -> contract/gen/ ----
+#   make contract-gen     regenerate contract/gen/ (needs cargo; host tool crates/aienos-devc)
+#   make contract-check   regenerate in memory, FAIL on any difference (drift)
+#   make contract-test    the generated driver through the same hosted test as the hand one
+#                         (tests/vnet_test.c), the fuzzer against both drivers, and the
+#                         differential register trace: both drivers byte-identical
+#   make contract-sanitize   the same under ASan+UBSan
+# The kernel image never runs cargo: it compiles the committed contract/gen/ C.
+DEVC ?= cargo run -q --manifest-path ../../Cargo.toml -p aienos-devc --
+CONTRACT = contract/virtio_net.devc
+GEN = contract/gen
+GEN_DRV = $(GEN)/driver/vnet_contract.c
+GEN_MODEL = $(GEN)/model/vnet_model.c
+GEN_FUZZ = $(GEN)/model/vnet_fuzz.c
+GEN_H = $(wildcard $(GEN)/*/*.h)
+INC_GEN = -I$(GEN)/driver -I. -I$(GEN)/model
+INC_HAND = -I. -I$(GEN)/model
+HAND_DRV = aienos_virtio_net.c
+PCI_NET = aienos_virtio_pci.c aienos_net.c ../argus/sha256.c
+FUZZ_SEED ?= 0x6a5e11
+FUZZ_WALKS ?= 20000
+# The recording of the hand driver that `aienos-devc covers` and the Rust tests read.
+# (its first lines: bring-up, queue setup and the first datapath calls; the full
+# trace is 2 MB and is compared hand vs generated in out/ instead)
+TRACE_FIXTURE = contract/traces/virtio_net_hand.trace
+TRACE_FIXTURE_LINES = 4000
+
+contract-gen:
+	$(DEVC) gen $(CONTRACT) $(GEN)
+contract-check:
+	$(DEVC) check $(CONTRACT) $(GEN)
+	$(DEVC) covers $(CONTRACT) $(TRACE_FIXTURE)
+contract-trace-update: $(OUT)/vnet_trace_hand
+	mkdir -p contract/traces
+	./$(OUT)/vnet_trace_hand | head -n $(TRACE_FIXTURE_LINES) > $(TRACE_FIXTURE)
+
+# $(1) = suffix, $(2) = extra flags
+define contract_bins
+$(OUT)/vnet_test_contract$(1): tests/vnet_test.c $(GEN_DRV) $(PCI_NET) $(GEN_H) $(wildcard *.h) | $(OUT)
+	$(CC) $(CFLAGS) $(2) $(INC_GEN) -o $$@ tests/vnet_test.c $(GEN_DRV) $(PCI_NET)
+$(OUT)/vnet_fuzz_contract$(1): $(GEN_FUZZ) $(GEN_DRV) $(GEN_MODEL) aienos_virtio_pci.c $(GEN_H) $(wildcard *.h) | $(OUT)
+	$(CC) $(CFLAGS) $(2) $(INC_GEN) -o $$@ $(GEN_FUZZ) $(GEN_DRV) $(GEN_MODEL) aienos_virtio_pci.c
+$(OUT)/vnet_fuzz_hand$(1): $(GEN_FUZZ) $(HAND_DRV) $(GEN_MODEL) aienos_virtio_pci.c $(GEN_H) $(wildcard *.h) | $(OUT)
+	$(CC) $(CFLAGS) $(2) $(INC_HAND) -o $$@ $(GEN_FUZZ) $(HAND_DRV) $(GEN_MODEL) aienos_virtio_pci.c
+$(OUT)/vnet_trace_contract$(1): tests/vnet_trace.c $(GEN_DRV) $(GEN_MODEL) aienos_virtio_pci.c $(GEN_H) $(wildcard *.h) | $(OUT)
+	$(CC) $(CFLAGS) $(2) $(INC_GEN) -o $$@ tests/vnet_trace.c $(GEN_DRV) $(GEN_MODEL) aienos_virtio_pci.c
+$(OUT)/vnet_trace_hand$(1): tests/vnet_trace.c $(HAND_DRV) $(GEN_MODEL) aienos_virtio_pci.c $(GEN_H) $(wildcard *.h) | $(OUT)
+	$(CC) $(CFLAGS) $(2) $(INC_HAND) -o $$@ tests/vnet_trace.c $(HAND_DRV) $(GEN_MODEL) aienos_virtio_pci.c
+endef
+$(eval $(call contract_bins,,))
+$(eval $(call contract_bins,_san,$(SANFLAGS)))
+
+# $(1) = suffix
+define contract_run
+	./$(OUT)/vnet_test_contract$(1)
+	./$(OUT)/vnet_fuzz_contract$(1) $(FUZZ_SEED) $(FUZZ_WALKS)
+	./$(OUT)/vnet_fuzz_hand$(1) $(FUZZ_SEED) $(FUZZ_WALKS)
+	./$(OUT)/vnet_trace_hand$(1) > $(OUT)/trace_hand$(1).txt
+	./$(OUT)/vnet_trace_contract$(1) > $(OUT)/trace_contract$(1).txt
+	cmp $(OUT)/trace_hand$(1).txt $(OUT)/trace_contract$(1).txt
+	@echo "VNET_TRACE_DIFF: PASS ($$(wc -l < $(OUT)/trace_hand$(1).txt) lines identical, hand vs generated)"
+	head -n $(TRACE_FIXTURE_LINES) $(OUT)/trace_hand$(1).txt | cmp - $(TRACE_FIXTURE)
+	@echo "VNET_TRACE_FIXTURE: PASS (first $(TRACE_FIXTURE_LINES) lines match $(TRACE_FIXTURE); aienos-devc covers checks it against the contract)"
+endef
+contract-test: $(OUT)/vnet_test_contract $(OUT)/vnet_fuzz_contract $(OUT)/vnet_fuzz_hand $(OUT)/vnet_trace_contract $(OUT)/vnet_trace_hand
+	$(call contract_run,)
+contract-sanitize: $(OUT)/vnet_test_contract_san $(OUT)/vnet_fuzz_contract_san $(OUT)/vnet_fuzz_hand_san $(OUT)/vnet_trace_contract_san $(OUT)/vnet_trace_hand_san
+	$(call contract_run,_san)
+
+# Timing twin: both drivers, same loop, same model, same flags (-O2). Run it under
+# quiet-measure; scripts/vnet_contract_timing.sh writes the receipt.
+$(OUT)/vnet_bench_hand: tests/vnet_bench.c $(HAND_DRV) $(GEN_MODEL) aienos_virtio_pci.c $(GEN_H) $(wildcard *.h) | $(OUT)
+	$(CC) $(CFLAGS) $(INC_HAND) -o $@ tests/vnet_bench.c $(HAND_DRV) $(GEN_MODEL) aienos_virtio_pci.c
+$(OUT)/vnet_bench_contract: tests/vnet_bench.c $(GEN_DRV) $(GEN_MODEL) aienos_virtio_pci.c $(GEN_H) $(wildcard *.h) | $(OUT)
+	$(CC) $(CFLAGS) $(INC_GEN) -o $@ tests/vnet_bench.c $(GEN_DRV) $(GEN_MODEL) aienos_virtio_pci.c
+contract-bench: $(OUT)/vnet_bench_hand $(OUT)/vnet_bench_contract
+
 clean:
 	rm -rf $(OUT)
 
-.PHONY: all test lib-checks diff-corpus diff-check sanitize mutants secure receipt clean
+.PHONY: all test lib-checks diff-corpus diff-check sanitize mutants secure receipt clean contract-gen contract-check contract-test contract-sanitize contract-bench contract-trace-update

@@ -337,6 +337,12 @@ static int recovery(ck_vnet *n, const vnet_ops *ops, const virtio_pci_caps *caps
     return ok ? 0 : -1;
 }
 
+#ifdef VNET_CONTRACT_PROVEN
+#define VNET_DRIVER_KIND "contract"
+#else
+#define VNET_DRIVER_KIND "hand"
+#endif
+
 int ck_net_bind_selftest(const pci_func *f, const virtio_pci_caps *caps)
 {
     ck_vnet *n = &g_net;
@@ -348,6 +354,19 @@ int ck_net_bind_selftest(const pci_func *f, const virtio_pci_caps *caps)
     }
     memset(n, 0, sizeof *n);
     if (!f || !caps) return CK_NET_E_ARG;
+#ifdef VNET_CONTRACT_PROVEN
+    /* ADR 0021: a driver generated from a device contract carries its proof
+     * status. With no hardware receipt it is UNPROVEN and binds on attended
+     * (QEMU and test) images only; a hardware staging image refuses it. */
+    ck_printf("virtio_net: driver from contract %s digest=%s hardware_receipts=%d\n", VNET_CONTRACT_DEVICE,
+              vnet_contract_digest, VNET_CONTRACT_PROVEN);
+#if defined(CK_HARDWARE_STAGING)
+    if (VNET_CONTRACT_PROVEN == 0) {
+        ck_printf("virtio_net: not bound (contract UNPROVEN: attended boots only)\n");
+        return CK_NET_E_ARG;
+    }
+#endif
+#endif
     n->pf = f;
     size_t need = vnet_mem_size(CK_NET_QSIZE);
     uint64_t win = ((uint64_t)need + 4095u) & ~(uint64_t)4095u;
@@ -386,8 +405,10 @@ int ck_net_bind_selftest(const pci_func *f, const virtio_pci_caps *caps)
     vnet_ops ops = {n, o_read, o_write, o_notify};
     /* Fail closed: without VIRTIO_F_ACCESS_PLATFORM QEMU (and a real device
      * behind a bypassing transport) would DMA around the SMMU window. */
+    uint64_t t_init = ck_time_us();
     vnet_err e =
         vnet_init_flags(&n->dev, &ops, caps, mem, phys, need, CK_NET_QSIZE, VNET_INIT_REQUIRE_ACCESS_PLATFORM);
+    t_init = ck_time_us() - t_init;
     if (e != VNET_OK) {
         ck_printf("virtio_net: init FAIL (%s)\n", vnet_err_name(e));
         ck_net_release();
@@ -401,7 +422,12 @@ int ck_net_bind_selftest(const pci_func *f, const virtio_pci_caps *caps)
               (n->dev.features >> VNET_F_ACCESS_PLATFORM & 1) ? "yes" : "no");
     ck_net_peer peer;
     memset(&peer, 0, sizeof peer);
+    uint64_t t_rt = ck_time_us();
     int rc = n->dev.has_mac ? roundtrip(n, &peer) : CK_NET_E_INIT;
+    t_rt = ck_time_us() - t_rt;
+    /* ADR 0021 timing twin: the same image built with either driver prints this. */
+    ck_printf("net: timing driver=%s init_us=%llu roundtrip_us=%llu\n", VNET_DRIVER_KIND, (unsigned long long)t_init,
+              (unsigned long long)t_rt);
     /* Prove the fence: device DMA outside the window is refused by the SMMU,
      * then the device recovers inside it (net_bind.h). */
     if (rc == CK_NET_OK &&

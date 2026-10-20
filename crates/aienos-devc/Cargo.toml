@@ -1,0 +1,15 @@
+[package]
+name = "aienos-devc"
+description = "Device contract compiler: a .devc chip description to driver, chip model, fuzzer and doc (ADR 0021)"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "aienos-devc"
+path = "src/main.rs"
+
+[dependencies]
+aienos-crypto = { workspace = true }

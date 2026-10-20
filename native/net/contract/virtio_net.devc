@@ -1,0 +1,171 @@
+# virtio_net.devc -- the virtio-net device contract (ADR 0021, format devc 1).
+#
+# This file is the driver. crates/aienos-devc compiles it into
+#   gen/aienos_virtio_net.h + gen/vnet_contract.c   the polled driver (same API as ../aienos_virtio_net.h)
+#   gen/vnet_model.h + gen/vnet_model.c             the chip model (register file + split-ring device)
+#   gen/vnet_fuzz.c                                  the state-machine fuzzer
+#   gen/virtio_net.md                                the documentation page
+#   gen/virtio_net.omegese                           the Omegese form (UNCHECKED until L184 K1/K2/K5)
+# `make -C native/net contract-check` regenerates and fails on any difference.
+# The hand-written ../aienos_virtio_net.c stays as the reference twin until the
+# generated one passes the same gates (ADR 0021 "Migration").
+#
+# Grammar: one statement per line, words separated by blanks, "#" to end of
+# line is a comment, strings in double quotes, numbers decimal or 0x hex.
+# Every name used must be declared above its first use.
+
+devc 1
+device virtio-net
+prefix vnet
+class net-poll
+transport virtio-pci
+ring-kind virtq-split
+
+# ---- identity: which functions this contract binds ----
+match pci 0x1af4 0x1041
+match pci 0x1af4 0x1000 subsys 1
+
+# ---- evidence: the manual lines this contract is written from ----
+manual "OASIS virtio v1.2 cs01" "3.1.1 Driver Requirements: Device Initialization" "Re-read device status to ensure the FEATURES_OK bit is still set: otherwise, the device does not support our subset of features and the device is unusable."
+manual "OASIS virtio v1.2 cs01" "2.1.2 Device Requirements: Device Status Field" "MUST reset when 0 is written to device_status, and present a 0 in device_status once that is done. The device MUST present a 0 in queue_enable on reset."
+manual "OASIS virtio v1.2 cs01" "4.1.4.3 Common configuration structure layout" "le32 device_feature_select; /* read-write */ le32 device_feature; /* read-only for driver */ le32 driver_feature_select; /* read-write */ le32 driver_feature; /* read-write */ le16 config_msix_vector; /* read-write */ le16 num_queues; /* read-only for driver */ u8 device_status; /* read-write */ u8 config_generation; /* read-only for driver */"
+manual "OASIS virtio v1.2 cs01" "6.1 Driver Requirements: Reserved Feature Bits" "driver SHOULD accept VIRTIO_F_ACCESS_PLATFORM if it is offered, and it MUST then either disable the IOMMU or configure the IOMMU to translate bus addresses passed to the device into physical addresses"
+manual "OASIS virtio v1.2 cs01" "2.7.8 The Virtqueue Used Ring" "The device MUST set len prior to updating the used idx."
+# Proof on machines. A contract with no `proven` line for the booting platform
+# loads UNPROVEN: attended boots only (ADR 0021 "Evidence").
+# proven <platform> <machine-id> <date> <gate>[,<gate>] <commit>
+proven qemu-virt-aarch64 spark-gx10-qemu822 2026-10-20 AIENOS_CK_NET pending
+
+# ---- constants (C: VNET_<NAME>) ----
+const QUEUE_MAX 256
+const QUEUE_MIN 2
+const HDR_LEN 12
+const FRAME_MAX 1514
+const BUF_LEN HDR_LEN + FRAME_MAX
+const BUF_STRIDE 1536
+const RESET_POLLS 100000
+const CFGGEN_TRIES 8
+
+# ---- register windows: name index locator min-length [tag] ----
+# A driver may touch only registers declared below, inside these windows.
+window common 0 virtio-cap 1 min 0x38 tag CC
+window notify 1 virtio-cap 2 min 2 multiplier
+window isr 2 virtio-cap 3 min 0
+window device 3 virtio-cap 4 min 0
+
+# ---- registers: window NAME offset width access [reset v] [bank SEL] [count n] [role R] ----
+# role: what the transport model does with the register (virtio-pci: status, cfggen,
+# numq, offer, accept, qsize, qenable, qnoff, qdesc, qavail, qused, config);
+# a register with no role is plain storage.
+reg common DFSELECT 0x00 4 rw reset 0
+reg common DF 0x04 4 ro bank DFSELECT role offer
+reg common GFSELECT 0x08 4 rw reset 0
+reg common GF 0x0c 4 rw bank GFSELECT role accept
+reg common MSIX 0x10 2 rw reset 0xffff
+reg common NUMQ 0x12 2 ro role numq
+reg common STATUS 0x14 1 rw reset 0 role status
+reg common CFGGEN 0x15 1 ro role cfggen
+reg common Q_SELECT 0x16 2 rw reset 0
+reg common Q_SIZE 0x18 2 rw bank Q_SELECT role qsize
+reg common Q_MSIX 0x1a 2 rw bank Q_SELECT reset 0xffff
+reg common Q_ENABLE 0x1c 2 rw bank Q_SELECT reset 0 role qenable
+reg common Q_NOFF 0x1e 2 ro bank Q_SELECT role qnoff
+reg common Q_DESCLO 0x20 4 rw bank Q_SELECT role qdesc
+reg common Q_DESCHI 0x24 4 rw bank Q_SELECT
+reg common Q_AVAILLO 0x28 4 rw bank Q_SELECT role qavail
+reg common Q_AVAILHI 0x2c 4 rw bank Q_SELECT
+reg common Q_USEDLO 0x30 4 rw bank Q_SELECT role qused
+reg common Q_USEDHI 0x34 4 rw bank Q_SELECT
+reg device MAC 0x00 1 ro count 6 role config
+reg notify DOORBELL 0x00 2 wo queue-notify
+
+# ---- named bits: REG group NAME=bit ... (C: VNET_<group>_<NAME>) ----
+bits STATUS S ACK=0 DRIVER=1 DRIVER_OK=2 FEATURES_OK=3 NEEDS_RESET=6 FAILED=7
+
+# ---- features: NAME bit policy [needs WINDOW LEN] [required-by FLAG] (C: VNET_F_<NAME>) ----
+# require: refuse a device that does not offer it. accept: take it when offered.
+# Every feature not listed is declined.
+feature MAC 5 accept needs device 6
+feature VERSION_1 32 require else NO_VERSION_1
+feature ACCESS_PLATFORM 33 accept required-by REQUIRE_ACCESS_PLATFORM else NO_ACCESS_PLATFORM
+features banks 2 offer DFSELECT DF accept GFSELECT GF
+
+# ---- init flags (C: VNET_INIT_<NAME>) ----
+flag REQUIRE_ACCESS_PLATFORM 1
+
+# ---- errors: NAME code Name (C: VNET_E_<NAME>; code 0 is Ok) ----
+error ARG 1 Arg
+error CAPS 2 Caps
+error MEM 3 Mem
+error RESET_TIMEOUT 4 ResetTimeout
+error NO_VERSION_1 5 NoVersion1
+error FEATURES 6 FeaturesRefused
+error QUEUES 7 Queues
+error NOTIFY 8 NotifyOffset
+error CONFIG 9 ConfigGeneration
+error FULL 10 Full
+error DEVICE 11 HostileDevice
+error BROKEN 12 Broken
+error NO_ACCESS_PLATFORM 13 NoAccessPlatform
+
+# ---- resources: what the kernel grants (and nothing else) ----
+# one DMA region, all rings and buffers inside it; no interrupt (polled).
+dma region align 16
+irq none
+queue-size min QUEUE_MIN max QUEUE_MAX pow2
+
+# ---- rings: NAME index kind direction buf LEN stride STRIDE hdr HDR ----
+ring RX 0 virtq-split device-writes buf BUF_LEN stride BUF_STRIDE hdr HDR_LEN
+ring TX 1 virtq-split device-reads buf BUF_LEN stride BUF_STRIDE hdr HDR_LEN
+
+# ---- bring-up state machine (virtio 1.x 3.1.1). Steps run in order. ----
+# On a step's error the driver writes STATUS |= FAILED (`failmark`) unless the
+# step says nofail; before `armfail` no step marks FAILED.
+failmark STATUS FAILED
+init
+  write STATUS 0
+  poll STATUS == 0 tries RESET_POLLS else RESET_TIMEOUT nofail
+  write STATUS ACK
+  write STATUS ACK|DRIVER
+  armfail
+  negotiate
+  write STATUS ACK|DRIVER|FEATURES_OK
+  expect STATUS has FEATURES_OK else FEATURES
+  commit-features
+  write MSIX 0xffff
+  expect NUMQ >= 2 else QUEUES
+  queues RX TX
+  stable-read MAC into mac guard CFGGEN tries CFGGEN_TRIES else CONFIG when MAC
+  post RX
+  write STATUS ACK|DRIVER|FEATURES_OK|DRIVER_OK
+  expect STATUS has DRIVER_OK lacks NEEDS_RESET|FAILED else DEVICE
+  live
+  kick RX
+end
+
+# per ring, in `queues` order (virtio 1.x 4.1.5.1.3)
+qsetup
+  write Q_SELECT ring
+  read Q_SIZE max
+  expect max != 0 else QUEUES
+  expect Q_ENABLE == 0 else QUEUES
+  fit max min QUEUE_MIN else QUEUES
+  write Q_SIZE size
+  write Q_MSIX 0xffff
+  notify-offset Q_NOFF else NOTIFY
+  write64 Q_DESCLO Q_DESCHI desc
+  write64 Q_AVAILLO Q_AVAILHI avail
+  write64 Q_USEDLO Q_USEDHI used
+  avail-flags NO_INTERRUPT
+  write Q_ENABLE 1
+end
+
+# ---- protocol rules the chip model enforces on every access ----
+# rule <REG> <write|read> requires-status <bits> [lacks <bits>]
+rule GF write requires-status DRIVER lacks FEATURES_OK
+rule Q_SIZE write requires-status FEATURES_OK lacks DRIVER_OK
+rule Q_ENABLE write requires-status FEATURES_OK lacks DRIVER_OK
+rule Q_DESCLO write requires-status FEATURES_OK lacks DRIVER_OK
+rule Q_AVAILLO write requires-status FEATURES_OK lacks DRIVER_OK
+rule Q_USEDLO write requires-status FEATURES_OK lacks DRIVER_OK
+rule DOORBELL write requires-status DRIVER_OK lacks FAILED

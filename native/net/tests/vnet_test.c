@@ -7,9 +7,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "../aienos_net.h"
-#include "../aienos_virtio_net.h"
-#include "../aienos_virtio_pci.h"
+#include "aienos_net.h"
+#include "aienos_virtio_net.h"
+#include "aienos_virtio_pci.h"
 
 static int failures, checks;
 #define CHECK(c) do { checks++; if (!(c)) { failures++; fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #c); } } while (0)

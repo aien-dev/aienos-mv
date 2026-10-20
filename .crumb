@@ -33,27 +33,27 @@
           "purpose": "Directory docs. Purpose not yet described by a human."
         },
         {
-          "digest": "64cc87f8507bb580e1788d335c5a76039f3e3a016552595526718448ab5aa098",
+          "digest": "52729494472d48b31b2b99737e0d812cdb1bd8717f86b0552fbef55edf353e16",
           "last_commit": "3037967",
           "name": "native",
           "purpose": "Directory native. Purpose not yet described by a human."
         },
         {
-          "digest": "28cf2363c4d527a9d7ecc2974f3dcda3e065959cbddaed7863d9c9354f166967",
-          "last_commit": "00d7759",
+          "digest": "275e01a7280bf7f2a6667c9cc25f8b3b9442d75a9006d07206c88480fcb53a73",
+          "last_commit": "18e2765",
           "name": "scripts",
           "purpose": "Directory scripts. Purpose not yet described by a human."
         }
       ],
-      "children_root": "sha256:9dce6ec60d33531c951ea265c84962b9a7e5ca0199cd76e63ba01585a7c01928",
-      "compiled_at": "2026-10-19T15:08:12Z",
+      "children_root": "sha256:5251d0e40d5d73d429137773933c1fe04ee5c4005b02a45861ce872f51a664ae",
+      "compiled_at": "2026-10-20T18:13:18Z",
       "compiler": "crumb-compile/1",
-      "digest": "sha256:ea1028946ad65a777ed93ea1a58dee8a194f58035dbf961f631a313b044ee868",
+      "digest": "sha256:9a4f75046e56a55684fe945a20ff5aa101acbb3ddb60ec73cfcf7ace27e25954",
       "evidence_files": 211,
       "evidence_root": "sha256:3a8f56415109a697e4beb6048c85805c50c9c6c4089629057f4e8b3e76863981",
       "files": 3491,
-      "generated_at_commit": "00d77597386501631f08ac78ea5c0c3a0795348f",
-      "source_tree": "sha256:68db139dcb9eaed72ca1bd7795960ebd933df55d7f3f5b9d3495639071aba901"
+      "generated_at_commit": "18e276590424593647cd7c39c6d16c2f9f8d6027",
+      "source_tree": "sha256:11954d78f0aa701e3bb232bdf8acf13fd717eda0ffa94a629f4f6fcd22f6f540"
     },
     "owner_lane": "",
     "provenance": {
