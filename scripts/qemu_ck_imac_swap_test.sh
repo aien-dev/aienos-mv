@@ -47,6 +47,11 @@ work="$(mktemp -d)"
 qpid=""
 cleanup() {
     [[ -z "${qpid}" ]] || kill "${qpid}" 2>/dev/null || true
+    # a red run keeps its serial logs for diagnosis
+    if [[ "${fails:-0}" -gt 0 ]]; then
+        keepdir="${HOME}/handoffs/gpu-bench-logs/${tag}-$(date -u +%Y%m%dT%H%M%SZ)"
+        mkdir -p "${keepdir}" && cp "${work}"/*.log "${keepdir}/" 2>/dev/null && echo "logs kept: ${keepdir}"
+    fi
     rm -rf "${work}"
     gh_lock_release
 }
@@ -102,7 +107,9 @@ esp="${work}/esp.img"; mkesp "${esp}"
 data="${work}/data.img"; truncate -s 64M "${data}"
 swp="${work}/swap.img"; mkswap "${swp}" "${work}/SLOT_B.bin"
 
-# boot ESP DATA SWAP SERIAL-LOG: starts QEMU in the background, sets qpid
+# boot ESP DATA SWAP SERIAL-LOG: starts QEMU in the background, sets qpid. A USB keyboard is
+# attached because Allen's window (and with it Allen's memory) starts only when a keyboard is ready;
+# -monitor none keeps QEMU from reading this job's stdin (EOF makes QEMU quit).
 boot() {
     local v="${work}/vars-$RANDOM$RANDOM.fd"
     cp "${vars_fd}" "${v}"
@@ -112,7 +119,8 @@ boot() {
         -drive if=none,id=esp,format=raw,file="$1" -device ide-hd,drive=esp,bus=ide.0 \
         -drive if=none,id=data,format=raw,file="$2" -device "ide-hd,drive=data,bus=ide.1,model=APPLE HDD ST1000DM003" \
         -drive if=none,id=swap,format=raw,file="$3" -device ide-hd,drive=swap,bus=ide.2 \
-        -nographic -serial file:"$4" -no-reboot 2>/dev/null &
+        -device qemu-xhci -device usb-kbd \
+        -nographic -monitor none -serial file:"$4" -no-reboot 2>/dev/null &
     qpid=$!
 }
 # wait_for REGEX FILE SECONDS: 0 when REGEX shows up in FILE; stops early if QEMU has exited

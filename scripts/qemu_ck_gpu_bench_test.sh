@@ -37,6 +37,11 @@ work="$(mktemp -d)"
 qpid=""
 cleanup() {
     [[ -z "${qpid}" ]] || kill "${qpid}" 2>/dev/null || true
+    # a red run keeps its logs for diagnosis
+    if [[ "${fails:-0}" -gt 0 ]]; then
+        keepdir="${HOME}/handoffs/gpu-bench-logs/${tag}-$(date -u +%Y%m%dT%H%M%SZ)"
+        mkdir -p "${keepdir}" && cp "${work}"/*.log "${work}"/*.txt "${keepdir}/" 2>/dev/null && echo "logs kept: ${keepdir}"
+    fi
     rm -rf "${work}"
     gh_lock_release
 }
@@ -85,6 +90,7 @@ qemu-system-x86_64 -M q35 -accel tcg -cpu max -smp 4 -m 1024 \
     -drive if=pflash,format=raw,readonly=on,file="${code_fd}" \
     -drive if=pflash,format=raw,file="${work}/vars.fd" \
     -drive if=none,id=esp,format=raw,file="${img}" -device ide-hd,drive=esp,bus=ide.0 \
+    -device qemu-xhci -device usb-kbd \
     -nographic -monitor none -serial unix:"${sock}",server=on,wait=on -no-reboot >"${serial_log}" 2>&1 &
 qpid=$!
 for _ in $(seq 1 100); do [[ -S "${sock}" ]] && break; sleep 0.2; done

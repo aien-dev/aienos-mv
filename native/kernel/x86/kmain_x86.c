@@ -862,6 +862,10 @@ void ck_x86_hold_step(uint64_t *end)
         ck_x86_kbd_hold_poll(end);
         courier_step(); /* before the window too: the wire's FIFO is 16 bytes, the far side's hello 14 */
     }
+    /* The lab receivers (swap, bench) run whether or not Allen's window is up: a lab
+     * iMac with no keyboard must still take a swap or a bench command. */
+    ck_x86_swap_step(hand, tramp_pa);
+    ck_x86_bench_step(tsc_hz);
     if (!allen_on)
         return;
     if (!__atomic_load_n(&draw_on, __ATOMIC_ACQUIRE) && !__atomic_test_and_set(&draw_lock, __ATOMIC_ACQUIRE)) {
@@ -887,8 +891,6 @@ void ck_x86_hold_step(uint64_t *end)
     if (poll && power_button_tapped())
         allen_sleep(!allen_asleep);
     panel_step();
-    ck_x86_swap_step(hand, tramp_pa);
-    ck_x86_bench_step(tsc_hz);
     meter_step(ck_rdtsc());
     *end = ~0ull;
     if (allen_asleep)
