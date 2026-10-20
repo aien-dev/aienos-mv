@@ -7,6 +7,9 @@
 #include "mmio_window.h"
 #include "virtio_net.h"
 #include "net_bind.h"
+#if CK_MT7925
+#include "mt7925_bind.h"
+#endif
 #include "xhci_fence.h"
 #include "usb_kbd.h"
 #include "../../boot/slot_format.h"
@@ -120,6 +123,16 @@ int ck_stage_devices(void)
     int netrc = (vrc == 0 && vf) ? ck_net_bind_selftest(vf, &caps) : 1;
     ck_printf("devices: pci=ok nvme=%s virtio_net=%s\n", g_nvme.bound ? "bound" : "unbound",
               vrc != 0 ? "caps-refused" : !vf ? "absent" : netrc == 0 ? "selftest-ok" : "selftest-failed");
+#if CK_MT7925
+    /* Spark attended boot (L206): the MT7925 Wi-Fi probe. Reported, never a
+     * devices-stage failure; the chip is released again before this returns. */
+    {
+        static pci_func mf;
+        int mrc = ck_mt7925_find(df, dn, &mf);
+        if (mrc == CK_MT_OK) mrc = ck_mt7925_probe(&mf);
+        ck_printf("devices: mt7925=%s (rc=%d)\n", mrc == CK_MT_OK ? "probed-released" : mrc == CK_MT_ABSENT ? "absent" : "failed", mrc);
+    }
+#endif
     /* xHCI: DMA fence (bus master off before the gate, SMMU-confined grant or
      * fail-closed deny, halt, revoke, stream back to abort) with the operator
      * keyboard phase inside the grant (usb_kbd.c). Reported, never a
@@ -149,6 +162,10 @@ void ck_stage_quiesce(void)
 {
     int net_live = ck_net_live();
     if (net_live) ck_net_release();
+#if CK_MT7925
+    int mt_live = ck_mt7925_live();
+    if (mt_live) ck_mt7925_release();
+#endif
     int xhci_live = ck_xhci_live();
     if (xhci_live) ck_xhci_release();
     int was_live = g_nvme.pf && (g_nvme.bm_on || g_nvme.confined);

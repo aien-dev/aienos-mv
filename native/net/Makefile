@@ -35,7 +35,8 @@ DIFF_DIGEST = 9ddf33a859ade2d92d0e86a213d29d682708b0ac308239a7b6f003dbf9a5cdfe
 # build (out/net_diff_ref). C-only pin, recorded 2026-10-01; no Rust run.
 DIFF_DIGEST_FIXED = 034151b28953e23cbcdc2b805885ea88887b3da52e46369e8c01bd5b276241cb
 
-SRCS = aienos_net.c aienos_virtio_pci.c aienos_virtio_net.c aienos_ctl.c x25519.c aienos_sec.c
+SRCS = aienos_net.c aienos_virtio_pci.c aienos_virtio_net.c aienos_ctl.c x25519.c aienos_sec.c \
+       aienos_mt7925_fw.c aienos_mt7925.c aienos_mt7925_sta.c aienos_wifi.c aienos_wifi_sta.c aienos_wpa.c
 # M6-B links (never edits) the in-house AES-GCM-SIV/HMAC and Ed25519 code.
 CRYPTO_SRCS = ../crypto/aes.c ../crypto/polyval.c ../crypto/gcm_siv.c ../crypto/hmac.c ../crypto/ct.c
 SIG_SRCS = ../sig/ed25519.c ../sig/sha512.c ../sig/ct.c
@@ -79,13 +80,25 @@ $(OUT)/x25519_test: tests/x25519_test.c $(LIB)
 	$(CC) $(CFLAGS) -o $@ $< $(LIB)
 $(OUT)/sec_test: tests/sec_test.c $(LIB)
 	$(CC) $(CFLAGS) -o $@ $< $(LIB)
+$(OUT)/mt7925_fw_test: tests/mt7925_fw_test.c $(LIB)
+	$(CC) $(CFLAGS) -o $@ $< $(LIB)
+$(OUT)/mt7925_test: tests/mt7925_test.c tests/mt7925_model.c tests/mt7925_model.h $(LIB)
+	$(CC) $(CFLAGS) -o $@ tests/mt7925_test.c tests/mt7925_model.c $(LIB)
+$(OUT)/wifi_test: tests/wifi_test.c $(LIB)
+	$(CC) $(CFLAGS) -o $@ $< $(LIB)
+$(OUT)/wpa_test: tests/wpa_test.c tests/wpa_toy.h $(LIB)
+	$(CC) $(CFLAGS) -o $@ $< $(LIB)
 
-test: lib-checks $(OUT)/net_test $(OUT)/ctl_test $(OUT)/vnet_test $(OUT)/x25519_test $(OUT)/sec_test diff-check
+test: lib-checks $(OUT)/net_test $(OUT)/ctl_test $(OUT)/vnet_test $(OUT)/x25519_test $(OUT)/sec_test $(OUT)/mt7925_fw_test $(OUT)/mt7925_test $(OUT)/wifi_test $(OUT)/wpa_test diff-check
 	./$(OUT)/net_test $(SEED) $(ITERS)
 	./$(OUT)/ctl_test
 	./$(OUT)/x25519_test
 	./$(OUT)/sec_test
 	./$(OUT)/vnet_test
+	./$(OUT)/mt7925_fw_test
+	./$(OUT)/mt7925_test
+	./$(OUT)/wifi_test
+	./$(OUT)/wpa_test
 
 # Protocol objects must not allocate, read a clock or do their own I/O.
 lib-checks: $(OBJS)
@@ -132,6 +145,14 @@ ifeq ($(shell uname -s),Linux)
 	ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 ./$(OUT)/sec_test_asan
 	$(CC) $(CFLAGS) $(SANFLAGS) -o $(OUT)/vnet_test_asan tests/vnet_test.c $(SRCS) $(DEP_SRCS)
 	ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 ./$(OUT)/vnet_test_asan
+	$(CC) $(CFLAGS) $(SANFLAGS) -o $(OUT)/mt7925_fw_test_asan tests/mt7925_fw_test.c $(SRCS) $(DEP_SRCS)
+	$(CC) $(CFLAGS) $(SANFLAGS) -o $(OUT)/mt7925_test_asan tests/mt7925_test.c tests/mt7925_model.c $(SRCS) $(DEP_SRCS)
+	ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 ./$(OUT)/mt7925_fw_test_asan
+	$(CC) $(CFLAGS) $(SANFLAGS) -o $(OUT)/wifi_test_asan tests/wifi_test.c $(SRCS) $(DEP_SRCS)
+	ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 ./$(OUT)/mt7925_test_asan
+	ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 ./$(OUT)/wifi_test_asan
+	$(CC) $(CFLAGS) $(SANFLAGS) -o $(OUT)/wpa_test_asan tests/wpa_test.c $(SRCS) $(DEP_SRCS)
+	ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 ./$(OUT)/wpa_test_asan
 	@echo "NET_SANITIZE: PASS"
 else
 	@echo "sanitize: Linux only"
@@ -189,10 +210,20 @@ secure:
 	$(MAKE) --no-print-directory mutants || ok=0; \
 	if [ $$ok = 1 ]; then echo "AIENOS_NET_SECURE: PASS"; else echo "AIENOS_NET_SECURE: FAIL"; exit 1; fi
 
+# MT7925 firmware on this box (read-only): decompress the two Wi-Fi files with
+# the zstd tool into out/, parse them, check the pinned digests. Nothing is
+# sent to any device. Not part of `test`: it depends on the installed package.
+MT7925_FW_DIR ?= /lib/firmware/mediatek/mt7925
+mt7925-fw-real: $(OUT)/mt7925_fw_test $(OUT)/mt7925_test
+	zstd -q -d -c $(MT7925_FW_DIR)/WIFI_MT7925_PATCH_MCU_1_1_hdr.bin.zst > $(OUT)/mt7925_patch.bin
+	zstd -q -d -c $(MT7925_FW_DIR)/WIFI_RAM_CODE_MT7925_1_1.bin.zst > $(OUT)/mt7925_ram.bin
+	./$(OUT)/mt7925_fw_test real $(OUT)/mt7925_patch.bin $(OUT)/mt7925_ram.bin
+	./$(OUT)/mt7925_test real $(OUT)/mt7925_patch.bin $(OUT)/mt7925_ram.bin
+
 receipt:
 	sh ./receipt.sh
 
 clean:
 	rm -rf $(OUT)
 
-.PHONY: all test lib-checks diff-corpus diff-check sanitize mutants secure receipt clean
+.PHONY: mt7925-fw-real all test lib-checks diff-corpus diff-check sanitize mutants secure receipt clean

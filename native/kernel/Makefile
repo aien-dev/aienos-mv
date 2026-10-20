@@ -353,6 +353,21 @@ OUT ?= $(REPO)/target/native-kernel-pi5
 CK_EXTRA_CFLAGS += -DCK_PI5=1 -DCK_KLOG=1
 endif
 
+# Spark attended boot (L206): `make full CK_MT7925=1` ($(OUT)/full/BOOTAA64.EFI)
+# probes the MediaTek MT7925 Wi-Fi (dev/mt7925_bind.c) in the devices stage:
+# identity, SMMU-confined DMA window, own handshake, WFSYS reset, rings, chip
+# revision, then stop and release. No firmware is sent. Empty (default) in
+# every QEMU gate: neither the binding nor the driver is compiled.
+ifneq ($(strip $(CK_MT7925)),)
+ifneq ($(strip $(CK_MT7925)),1)
+$(error CK_MT7925 must be empty or 1)
+endif
+ifneq ($(strip $(CK_PI5)),)
+$(error CK_MT7925 cannot be combined with CK_PI5)
+endif
+CK_EXTRA_CFLAGS += -DCK_MT7925=1
+endif
+
 # TEST-ONLY artifact source: CK_TEST_FWCFG_ARTIFACTS=1 compiles the QEMU fw_cfg
 # side channel (opt/aienos/artifacts) into the loader instead of the boot disk
 # Store. Every image built without it is checked to contain no fw_cfg artifact
@@ -988,6 +1003,9 @@ STAGE_SRCS += $(KDIR)/core/lifecycle.c $(KDIR)/core/lifecycle_fsm.c $(KDIR)/core
 STAGE_SRCS += $(KDIR)/core/context.c $(KDIR)/core/context_proposal.c
 # P06 cut 3: the canonical Omega Cortex store over the sealed Store (svc/cortex_journal.c).
 STAGE_SRCS += $(STAGE_CORTEX_SRCS)
+ifeq ($(strip $(CK_MT7925)),1)
+STAGE_SRCS += $(KDIR)/dev/mt7925_bind.c $(NATIVE)/net/aienos_mt7925.c $(NATIVE)/net/aienos_mt7925_fw.c
+endif
 # P05 cut 1: production continuity on the service lifecycle (svc/continuity_service.c):
 # the continuity layer without its TEST-ONLY mode selection (continuity_boot.c)
 # and without the Recovery Core (continuity_recovery.c, TEST operator key).
