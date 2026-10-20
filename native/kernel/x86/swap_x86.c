@@ -56,6 +56,8 @@ extern const unsigned ck_slot_loader_nkeys;
 #define SWAP_BUF_BYTES (SWAP_BUF_PAGES * CK_PAGE)
 
 static uint64_t swap_buf_pa;      /* physical address of the swap buffer */
+static uint64_t swap_stack_top;   /* top of the stack the new kernel starts on */
+#define SWAP_STACK_PAGES 16u      /* 64 KiB */
 static uint32_t swap_received;    /* bytes received so far */
 static uint32_t swap_total;       /* total bytes expected */
 static int      swap_ready;       /* 1: init succeeded */
@@ -63,6 +65,7 @@ static int      swap_ready;       /* 1: init succeeded */
 /* ---- Trampoline page layout (at tramp_pa, already allocated) ---- */
 #define TRAMP_SECT_OFF  0u    /* section table: 8 × 32 bytes = 256 bytes */
 #define TRAMP_ENTRY_OFF 256u  /* entry_point u64 */
+#define TRAMP_STACK_OFF 264u  /* stack top u64 (rsp for the new kernel; the old stack may be overwritten) */
 #define TRAMP_HAND_OFF  280u  /* handoff struct copy (232 bytes) */
 #define TRAMP_CODE_OFF  512u  /* position-independent trampoline code */
 
@@ -342,6 +345,12 @@ void ck_x86_swap_init(struct ck_frames *fr)
         ck_puts("swap: no memory for swap buffer (swap disabled)\n");
         return;
     }
+    uint64_t stk;
+    if (ck_frames_alloc(fr, SWAP_STACK_PAGES, CK_PAGE, &stk)) {
+        ck_puts("swap: no memory for the swap stack (swap disabled)\n");
+        return;
+    }
+    swap_stack_top = stk + (uint64_t)SWAP_STACK_PAGES * CK_PAGE - 16;
     swap_buf_pa = pa;
     swap_ready  = 1;
     ck_printf("swap: ready buf=0x%llx cap=%u KiB port=%u receiver=%s\n",
@@ -450,6 +459,8 @@ int ck_x86_swap_step(const struct ck_handoff *hand, uint64_t tramp_pa)
     new_hand->image_end  = base + extent;
     /* uefi_entry_ticks: preserve original (the clock since power-on). */
 
+    /* Stack for the new kernel: a page the image copy cannot reach. */
+    *(uint64_t *)(tp + TRAMP_STACK_OFF) = swap_stack_top;
     /* Copy trampoline code to tramp_pa + TRAMP_CODE_OFF. */
     size_t tramp_code_bytes = (size_t)(ck_x86_swap_tramp_end - ck_x86_swap_tramp);
     if (tramp_code_bytes > CK_PAGE - TRAMP_CODE_OFF) {

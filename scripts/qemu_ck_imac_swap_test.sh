@@ -106,7 +106,7 @@ mkswap() { # image slot-object
     dd if="$2" of="$1" bs=512 seek=2048 conv=notrunc 2>/dev/null
 }
 esp="${work}/esp.img"; mkesp "${esp}"
-data="${work}/data.img"; truncate -s 64M "${data}"; "${gpt}" create "${data}" 512 64 one-old >/dev/null
+data="${work}/data.img"; truncate -s 1280M "${data}"; "${gpt}" create "${data}" 512 1280 one-old >/dev/null
 swp="${work}/swap.img"; mkswap "${swp}" "${work}/SLOT_B.bin"
 
 # boot ESP DATA SWAP SERIAL-LOG: starts QEMU in the background, sets qpid. A USB keyboard is
@@ -184,7 +184,7 @@ fi
 # ---- run 2: the bad signature must be refused ----
 badesp="${work}/esp_bad.img"; mkesp "${badesp}"
 badswp="${work}/swap_bad.img"; mkswap "${badswp}" "${work}/SLOT_BAD.bin"
-badata="${work}/data_bad.img"; truncate -s 64M "${badata}"; "${gpt}" create "${badata}" 512 64 one-old >/dev/null
+badata="${work}/data_bad.img"; truncate -s 1280M "${badata}"; "${gpt}" create "${badata}" 512 1280 one-old >/dev/null
 logR="${work}/serialR.log"
 boot "${badesp}" "${badata}" "${badswp}" "${logR}"
 wait_for "swap: REJECTED" "${logR}" "${B_WAIT}" || true

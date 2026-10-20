@@ -22,6 +22,7 @@
 #define TRAMP_SECT_OFF   0    /* section table */
 #define TRAMP_ENTRY_OFF  256  /* entry_point u64 */
 #define TRAMP_HAND_OFF   280  /* handoff copy */
+#define TRAMP_STACK_OFF  264  /* u64: top of the stack the new kernel starts on (swap_x86.c) */
 #define SECT_SZ          32   /* bytes per section table entry */
 
     .text
@@ -32,6 +33,7 @@
 ck_x86_swap_tramp:
     /* rdi = tramp_pa */
     movq  %rdi, %r12          /* r12 = tramp_pa; our data base */
+    movq  TRAMP_STACK_OFF(%r12), %rsp   /* dedicated stack: the old kernel's stack may lie inside the new image */
     cld
     xorl  %r13d, %r13d         /* section index */
 
