@@ -374,6 +374,37 @@ the relay on it and the model server on this machine; NOT_RUN without one;
 screenshot `target/native-kernel-allen-courier/allen-far-side.png`). A machine
 without a second serial port gets Allen as before, answering alone.
 
+**The setup wizard.** The first time Allen wakes on a computer he asks one thing in
+his own window: what would you like this computer to do (play games smoothly, run
+an AI model here, or something else in your own words). He then lists what he found
+(PCI functions, USB, processors, disks, screens, `svc/setup_inv.c`) in plain words
+and asks one consent, "set it up". Games: the graphics driver state, the screen's
+mode and refresh, the processor profile, and what he will and cannot tune yet; a
+number is only shown when it was measured (QEMU shows none). AI model: the graphics
+memory he found, which models fit, then the model pick (`svc/setup_wizard.c`): on
+this computer first (Allen's own 27B + 30B pair if it answers, else an installed or
+running model), then peers, then "connect my own" (OpenAI-style or Anthropic
+service, key typed once). One found model is offered with "Use it / Choose another"
+and starts by itself after 10 s; two or more are never picked for the person. The
+key stays in kernel RAM, is tested with one request through the courier relay
+(`KEYTEST` in `crates/allen-courier`, http only: the relay has no TLS and we do not
+hand-roll it, so https services are refused out loud) and is wiped; only
+`llm.conf` (`kind`, `base_url`, `model`, `key_env`, never the key) and a consent
+record are kept, with the wizard's place, in fixed records inside Allen's memory
+section (`svc/setup_store.c`), so a power cut resumes where it stopped and a
+finished wizard is not shown again ("set up again" reopens it). Every screen can be
+skipped with Escape. Arrow keys and Tab come from `dev/usb_hid.c`. The window side
+is `ck_allen_ui_panel` in `ui/allen_ui.c` (lines easing in, a row of pill choices,
+hint, typed-secret dots). The host description (fw_cfg `opt/aienos/host`: inventory
+a launcher knows and the guest cannot) is read only by the launcher image
+`make imac-kernel CK_X86_HOSTDESC=1` (`IMACKERN-HOST.EFI`); the default image
+carries no fw_cfg code and the build checks that. Tests:
+`scripts/ck_setup_wizard_test.sh` (host, three machines: a games PC, an AI PC, the
+Spark), `scripts/ck_allen_ui_test.sh` (panel pictures `wizard-*.png`) and
+`scripts/qemu_ck_allen_wizard_test.sh` (QEMU end to end: power-cut resume, the
+three model sources, the key in no log, relay file or disk; screenshots in
+`target/native-kernel-allen-wizard/`).
+
 **Starting from its own disk.** When the network loader (`../boot/net_loader.c`)
 starts a kernel it hands it a `struct nb_pass` (`../boot/netboot_proto.h`) as
 LoadOptions: the processor clock when the loader began, and where the verified
