@@ -146,6 +146,8 @@ if grep -aq -- "${commit}-A" "${logA}" && grep -aq "AIENOS-KERNEL-0 DONE" "${log
 else
     fail "1  kernel A boots (commit -A): DONE not seen in ${A_WAIT} s"
 fi
+# Allen's memory is saved after DONE (Allen's window opens, the start count and the taught name go to disk)
+wait_for "allen: Nice to meet you, Ada" "${logA}" "${A_WAIT}" || true
 if grep -aq "allen_memory: saved generation" "${logA}"; then
     pass "1b A saves Allen's memory before the swap"
 else
@@ -158,7 +160,7 @@ if grep -aq "swap: verified ok" "${logA}"; then pass "3  swap verifies with ck_s
 if grep -aq "swap: jumping to new kernel" "${logA}"; then pass "3b swap jumps to B"; else fail "3b swap jumps to B"; fi
 
 jump_line="$(grep -an "swap: jumping to new kernel" "${logA}" | head -1 | cut -d: -f1 || true)"
-GA="$(grep -a "allen_memory: saved generation" "${logA}" | tail -1 | sed -n 's/.*saved generation \([0-9][0-9]*\).*/\1/p' || true)"
+GA="$(head -n "${jump_line:-0}" "${logA}" | grep -a "allen_memory: saved generation" | tail -1 | sed -n 's/.*saved generation \([0-9][0-9]*\).*/\1/p' || true)"
 after="${work}/after_jump.log"
 if [[ -n "${jump_line}" ]]; then tail -n +"$((jump_line + 1))" "${logA}" > "${after}"; else : > "${after}"; fi
 
@@ -176,7 +178,7 @@ else
 fi
 stop_qemu
 
-if [[ -n "${GA}" ]] && grep -aq "allen_memory: loaded generation ${GA} " "${after}" && grep -aq "name Ada" "${after}"; then
+if [[ -n "${GA}" ]] && grep -aq "allen_memory: loaded generation ${GA} " "${after}" && grep -aq "allen: Welcome back, Ada." "${after}"; then
     pass "6  Allen's memory intact: B loads generation ${GA} with the name A taught"
 else
     fail "6  Allen's memory intact: A saved generation '${GA:-none}', B's load line: $(grep -a 'loaded generation' "${after}" | head -1 || echo none)"

@@ -58,6 +58,10 @@ extern const unsigned ck_slot_loader_nkeys;
 static uint64_t swap_buf_pa;      /* physical address of the swap buffer */
 static uint64_t swap_stack_top;   /* top of the stack the new kernel starts on */
 #define SWAP_STACK_PAGES 16u      /* 64 KiB */
+/* The UEFI memory map the new kernel builds its frame pool from. The handoff's copy lives in the
+ * running image (efi_x86.c map_buf), which the trampoline overwrites: it is copied here first. */
+#define SWAP_MAP_PAGES 16u        /* 64 KiB, efi_x86.c MAP_BYTES */
+static uint64_t swap_map_pa;
 static uint32_t swap_received;    /* bytes received so far */
 static uint32_t swap_total;       /* total bytes expected */
 static int      swap_ready;       /* 1: init succeeded */
@@ -66,6 +70,7 @@ static int      swap_ready;       /* 1: init succeeded */
 #define TRAMP_SECT_OFF  0u    /* section table: 8 × 32 bytes = 256 bytes */
 #define TRAMP_ENTRY_OFF 256u  /* entry_point u64 */
 #define TRAMP_STACK_OFF 264u  /* stack top u64 (rsp for the new kernel; the old stack may be overwritten) */
+#define TRAMP_MAGIC_OFF 272u  /* CK_X86_SWAP_ENTRY_MAGIC u64: the RCX the new image's _start sees (x86.h) */
 #define TRAMP_HAND_OFF  280u  /* handoff struct copy (232 bytes) */
 #define TRAMP_CODE_OFF  512u  /* position-independent trampoline code */
 
@@ -350,6 +355,10 @@ void ck_x86_swap_init(struct ck_frames *fr)
         ck_puts("swap: no memory for the swap stack (swap disabled)\n");
         return;
     }
+    if (ck_frames_alloc(fr, SWAP_MAP_PAGES, CK_PAGE, &swap_map_pa)) {
+        ck_puts("swap: no memory for the memory map copy (swap disabled)\n");
+        return;
+    }
     swap_stack_top = stk + (uint64_t)SWAP_STACK_PAGES * CK_PAGE - 16;
     swap_buf_pa = pa;
     swap_ready  = 1;
@@ -413,6 +422,8 @@ int ck_x86_swap_step(const struct ck_handoff *hand, uint64_t tramp_pa)
         return swap_refuse("PE sections unreadable or too many");
     if (extent > hand->image_end - base)
         return swap_refuse("the new image is larger than the running one");
+    if (!hand->memory_map || hand->map_size > (uint64_t)SWAP_MAP_PAGES * CK_PAGE)
+        return swap_refuse("the memory map does not fit the swap's copy");
     uint64_t entry = base + pi.entry_rva;
     ck_printf("swap: PE ok base=0x%llx entry=0x%llx sections=%u extent=0x%llx\n",
               (unsigned long long)base, (unsigned long long)entry, nsect,
@@ -457,10 +468,14 @@ int ck_x86_swap_step(const struct ck_handoff *hand, uint64_t tramp_pa)
     new_hand->exit_attempts = 1;
     new_hand->image_base = base;
     new_hand->image_end  = base + extent;
+    /* The memory map, out of the image the trampoline overwrites (size checked before the quiesce). */
+    memcpy((void *)(uintptr_t)swap_map_pa, (const void *)(uintptr_t)hand->memory_map, hand->map_size);
+    new_hand->memory_map = swap_map_pa;
     /* uefi_entry_ticks: preserve original (the clock since power-on). */
 
     /* Stack for the new kernel: a page the image copy cannot reach. */
     *(uint64_t *)(tp + TRAMP_STACK_OFF) = swap_stack_top;
+    *(uint64_t *)(tp + TRAMP_MAGIC_OFF) = CK_X86_SWAP_ENTRY_MAGIC;
     /* Copy trampoline code to tramp_pa + TRAMP_CODE_OFF. */
     size_t tramp_code_bytes = (size_t)(ck_x86_swap_tramp_end - ck_x86_swap_tramp);
     if (tramp_code_bytes > CK_PAGE - TRAMP_CODE_OFF) {

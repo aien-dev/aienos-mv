@@ -235,6 +235,11 @@ int  ck_x86_tg3_recv_bench(uint8_t *pkt, size_t cap, size_t *len, uint8_t src_ma
 /* UDP broadcast send helper. */
 void ck_x86_udp_send(const uint8_t dst_mac[6], const uint8_t *pkt, size_t len,
                       uint16_t src_port, uint16_t dst_port);
+/* Live swap entry: the trampoline (swap_tramp.S) calls the new image's PE entry, _start, with this
+ * value where UEFI puts the ImageHandle (RCX) and the handoff where it puts the SystemTable (RDX).
+ * It is not a canonical address, so no firmware handle can equal it; efi_main then skips the
+ * firmware and enters the kernel (efi_x86.c). */
+#define CK_X86_SWAP_ENTRY_MAGIC 0x5357415041454E49ull /* "INEAPAWS" */
 /* Swap helpers (swap_x86.c, exposed to kmain_x86.c). */
 void ck_x86_swap_wake_aps(void);
 uint64_t ck_x86_tsc_hz(void);

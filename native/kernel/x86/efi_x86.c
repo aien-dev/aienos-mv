@@ -75,6 +75,15 @@ static void night_ground(const struct ck_handoff *h)
 
 EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE *st)
 {
+#if defined(CK_X86_SWAP) && CK_X86_SWAP
+    /* A live swap, not the firmware: the running kernel already left UEFI and hands over its
+     * CHANDOF3 record (swap_x86.c). The console is this image's own state, so probe it again;
+     * ck_x86_kernel_entry checks the record. */
+    if ((uint64_t)(uintptr_t)image == CK_X86_SWAP_ENTRY_MAGIC) {
+        ck_x86_com1_probe();
+        ck_x86_kernel_entry((struct ck_handoff *)(void *)st);
+    }
+#endif
     struct ck_handoff *h = &handoff;
     uint16_t cs;
     __asm__ volatile("mov %%cs, %0" : "=r"(cs));

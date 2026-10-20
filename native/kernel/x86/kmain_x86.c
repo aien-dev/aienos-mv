@@ -1180,6 +1180,44 @@ static void wx_audit(uint64_t *wx, uint64_t *exec4k)
         }
 }
 
+/* Memory this kernel is standing on when it starts, kept out of the frame pool. After the
+ * firmware it all sits outside conventional memory and the reserves change nothing. After a live
+ * swap (swap_x86.c) the old kernel's frames hold it: the handoff record (in the old kernel's
+ * trampoline page), the memory map copy, the stack this code runs on, and the page tables CR3
+ * still points at. A frame handed out from any of them would be overwritten while in use. */
+#define LIVE_STACK_BELOW (16u << 10) /* stack mm_build may still grow into below the current rsp */
+#define LIVE_STACK_ABOVE (64u << 10) /* the callers' frames above it (the swap stack is 64 KiB) */
+static void reserve_live(const struct ck_handoff *h)
+{
+    uint64_t hp = (uint64_t)(uintptr_t)h, rsp;
+    ck_frames_reserve(&frames, hp, hp + sizeof *h);
+    ck_frames_reserve(&frames, h->memory_map, h->memory_map + h->map_size);
+    __asm__ volatile("mov %%rsp, %0" : "=r"(rsp));
+    ck_frames_reserve(&frames, rsp > LIVE_STACK_BELOW ? rsp - LIVE_STACK_BELOW : 0, rsp + LIVE_STACK_ABOVE);
+    /* The firmware's tables are its own memory; any other CR3 is a previous kernel's, built from
+     * frames: keep every table it reaches (leaves of 1 GiB and 2 MiB are not tables). */
+    uint64_t cr3 = ck_rd_cr3() & PTE_ADDR;
+    if (cr3 == (h->firmware_ttbr0 & PTE_ADDR))
+        return;
+    ck_frames_reserve(&frames, cr3, cr3 + CK_PAGE);
+    const uint64_t *l4 = (const uint64_t *)(uintptr_t)cr3;
+    for (unsigned a = 0; a < 512; a++) {
+        if (!(l4[a] & PTE_P))
+            continue;
+        const uint64_t *l3 = (const uint64_t *)(uintptr_t)(l4[a] & PTE_ADDR);
+        ck_frames_reserve(&frames, (uint64_t)(uintptr_t)l3, (uint64_t)(uintptr_t)l3 + CK_PAGE);
+        for (unsigned b = 0; b < 512; b++) {
+            if (!(l3[b] & PTE_P) || (l3[b] & PTE_PS))
+                continue;
+            const uint64_t *l2 = (const uint64_t *)(uintptr_t)(l3[b] & PTE_ADDR);
+            ck_frames_reserve(&frames, (uint64_t)(uintptr_t)l2, (uint64_t)(uintptr_t)l2 + CK_PAGE);
+            for (unsigned c = 0; c < 512; c++)
+                if ((l2[c] & PTE_P) && !(l2[c] & PTE_PS))
+                    ck_frames_reserve(&frames, l2[c] & PTE_ADDR, (l2[c] & PTE_ADDR) + CK_PAGE);
+        }
+    }
+}
+
 static void mm_build(void)
 {
     const struct ck_handoff *h = hand;
@@ -1192,6 +1230,7 @@ static void mm_build(void)
      * map, and then a frame taken from them (the swap stack did) is inside the image that a live
      * swap copies over. Reserving it keeps every frame the kernel hands out outside its image. */
     ck_frames_reserve(&frames, (uint64_t)(uintptr_t)__image_base, (uint64_t)(uintptr_t)__image_end);
+    reserve_live(h);
     /* The secondary-core trampoline needs a page below 1 MiB; take the
      * lowest free page before anything else does. */
     if (ck_frames_alloc(&frames, 1, CK_PAGE, &tramp_pa) || tramp_pa >= 0x100000)
