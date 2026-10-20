@@ -2456,8 +2456,9 @@ gpu-freestanding:
 	@for f in gmmu gpu_mem gpu_chan; do \
 	  $(KCC) $(KCFLAGS) -I$(KDIR)/gpu -c -o $(OUT)/host/gpu-fs/$$f.o $(KDIR)/gpu/$$f.c || exit 1; \
 	done; \
-	if nm -u $(OUT)/host/gpu-fs/*.o | grep -q .; then nm -u $(OUT)/host/gpu-fs/*.o; echo "gpu-freestanding: FAIL (undefined symbols)"; exit 1; fi; \
-	echo "gpu-freestanding: PASS (gmmu gpu_mem gpu_chan, no undefined symbols)"
+	$(CROSS)ld -r -o $(OUT)/host/gpu-fs/gpu.o $(OUT)/host/gpu-fs/gmmu.o $(OUT)/host/gpu-fs/gpu_mem.o $(OUT)/host/gpu-fs/gpu_chan.o || exit 1; \
+	if nm -u $(OUT)/host/gpu-fs/gpu.o | grep -v " _GLOBAL_OFFSET_TABLE_$$" | grep -q .; then nm -u $(OUT)/host/gpu-fs/gpu.o; echo "gpu-freestanding: FAIL (undefined symbols)"; exit 1; fi; \
+	echo "gpu-freestanding: PASS (gmmu gpu_mem gpu_chan built with KCC/KCFLAGS, linked -r, no undefined symbol except the PIE GOT)"
 # Each mutant removes one check; test_gpu_sim must FAIL for every one.
 GPU_SIM_MUTANTS := NO_OVERLAP NO_PA_RANGE NO_VA_BITS NO_POOL_COUNT NO_INVAL_POLL NO_TIMEOUT_LATCH NO_QUARANTINE \
 	NO_POLLED_UNCACHED NO_GP_VA40 NO_RING_FULL NO_IDLE_QUARANTINE NO_MIXED_PAGES NO_INST_PDB NO_CHID_WIDTH NO_USERD_WIDTH

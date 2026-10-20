@@ -240,6 +240,8 @@ int ck_gmmu_map(struct ck_gmmu_as *as, uint64_t va, uint64_t pa, uint64_t size, 
 #ifndef CK_GPU_MUTANT_NO_POOL_COUNT
     if (need > pt_free_count(as))
         return CK_GMMU_ENOMEM;
+#else
+    (void)pt_free_count(as);
 #endif
 
     for (uint64_t off = 0; off < size; off += page) {

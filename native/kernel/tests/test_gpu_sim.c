@@ -294,6 +294,8 @@ static void test_channel(void)
     CHECK(ck_gpu_chan_create(&ch, &gm, &regs, &ops, &sim, 1, 0, 1) == CK_GCHAN_EINVAL);
     CHECK(ck_gmem_count(&gm, CK_GMEM_LIVE) == 0);
     CHECK(ck_gpu_chan_create(&ch, &gm, &regs, &ops, &sim, 5, 2, 8) == CK_GCHAN_OK);
+    if (!ch.open)
+        return; /* the rest needs a live channel */
     CHECK(ch.d.token == 0x00020005u);
     CHECK(ch.d.rl_entry[0] == ((uint32_t)ch.userd->pa & 0xFFFFFF00u) && ch.d.rl_entry[1] == (uint32_t)(ch.userd->pa >> 32));
     CHECK(ch.d.pdb == as.root_pa && ch.d.gpfifo_va == ch.gpfifo->gpu_va);

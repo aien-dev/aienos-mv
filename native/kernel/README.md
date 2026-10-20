@@ -12,6 +12,7 @@ QEMU qualifies nothing physical: a PASS here says nothing about real hardware.
 | `arch/` | Vectors, EL2 -> EL1h entry (ADR 0009), recoverable probe, exception and IRQ dispatch, GICv3 or GICv2 (picked from the MADT; GICv2 is the Raspberry Pi 5 GIC-400 shape, QEMU gate `AIENOS_QEMU_GIC=2 scripts/qemu_ck_boot_test.sh`), EL1 physical timer. |
 | `mm/` | Frame allocator (UEFI map), 4 KiB-granule page-table builder, heap, the kernel address space (`mmu.c`). |
 | `core/` | Console, printf, ACPI, reports/panic/PSCI reset, M3 (threads, scheduler, EL0, capabilities, IPC), `kmain.c`. |
+| `gpu/` | GB10 GPU memory side, cut D, host only: GPU page tables in the format the NVIDIA driver uses for GB10, a bounded GPU buffer allocator with per-buffer cache policy and quarantine, one compute channel (ring, USERD, instance block, doorbell), and a simulated GB10 to test them on. Not linked into any image; never run on the chip. See "GB10 GPU memory (simulated)" below. |
 | `tests/` | Host unit tests. |
 | `third_party/omega/` | The canonical Omega Cortex store, byte for byte from the omega commit in `omega.lock` (checked by `scripts/omega_lock_check.sh`); built freestanding by `svc/cortex_store.c` over the sealed Store through `svc/cortex_journal.c` (native v1 plan P06). |
 | `x86/` | x86_64 port, first cut (AIENOS-IMAC-KERNEL-0, 2017 iMac): UEFI stub, descriptor tables and interrupt stubs, page tables, local APIC timer, ACPI power off, console, secondary-core start, PCI walk, read-only AHCI and NVMe disks, transmit-only BCM57766 Ethernet report. |
@@ -621,3 +622,32 @@ low-water free bytes.
   (no FP/SIMD; EL0 FP/SIMD traps). Placement is computed from the MADT; no
   secondary core is started (same as Rust). See GATES.md rows 16-20.
 - MAIR adds a Normal Non-cacheable attribute (index 2) for the DMA pool.
+
+## GB10 GPU memory (simulated)
+
+`gpu/` holds the part of a native GB10 GPU driver that the Linux NVIDIA
+driver (RM and UVM) does for us today: GPU page tables, the GPU TLB
+invalidate, GPU-visible buffers, and the memory and doorbell of one compute
+channel. It is cut D of `docs/GB10_NATIVE_DEPENDENCY_MAP.md`, host side only.
+
+- `gmmu.c`: GB10 page tables (57-bit GPU addresses, 4 KiB, 64 KiB and
+  2 MiB pages) and the TLB invalidate register sequence, as
+  open-gpu-kernel-modules 580.173.02 programs them for GB10B.
+- `gpu_mem.c`: a bounded GPU buffer allocator. Each buffer has a CPU address
+  and a separate GPU address. A buffer the CPU polls must be GPU-uncached
+  (the allocator refuses otherwise). Freed memory is reused only after the
+  GPU confirms the invalidate; if it never does, the memory is quarantined.
+- `gpu_chan.c`: one compute channel: ring, USERD, instance block with the
+  page-directory pointer, runlist USERD pointer, work-submit token, doorbell.
+  A channel that does not go idle on teardown has its memory quarantined.
+- `gpu_sim.c`: a simulated GB10 for the tests (memory array, logged
+  registers, a page walker written separately from `gmmu.c`, a TLB that only
+  an invalidate empties, fault records). Test only.
+
+Run: `make -C native/kernel test-gpu-sim` (also part of `make test`),
+`gpu-sim-mutants` (each mutant removes one check; all must be caught) and
+`gpu-freestanding` (the three driver files build with the kernel compiler
+and flags). What this shows: the code follows the driver's layouts and
+refuses what it should, on a simulator. What it does not show: anything on
+the real chip. Which register sequences still need the chip is listed in the
+`gpu_chan.h` and `gmmu.h` header comments (UNKNOWN / UNVERIFIED).
