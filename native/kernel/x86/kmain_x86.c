@@ -1837,6 +1837,7 @@ static __attribute__((noreturn)) void kernel_main(void *arg)
     allen_facts.cores = sr.started + 1;
     allen_facts.sata_disks = st->ahci_disks;
     allen_facts.nvme_disks = st->nvme_disks;
+    ck_printf("AIENOS-KERNEL-0 commit=%s\n", ck_commit());
     ck_puts("kernel: alive\n");
     ck_printf("summary: cores=%u/%u timer=ok sata_disks=%u nvme_disks=%u gpt_valid=%u writes=none net=%s\n",
               sr.started + 1, sr.listed, st->ahci_disks, st->nvme_disks, st->gpt_valid,
