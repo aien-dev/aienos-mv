@@ -30,6 +30,7 @@
  * Exit: 0 all OK; 1 an error status or an ALLONES stop; 2 transport failure.
  *
  * Build: cc -O2 -std=c11 -o ck_gpu_bench ck_gpu_bench.c   (make -C native/kernel ck-gpu-bench) */
+#define _POSIX_C_SOURCE 200809L /* clock_gettime */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -186,11 +187,20 @@ static int hexnib(char c)
     return -1;
 }
 
-/* Finds "ABCHRESP " + 128 hex digits in the buffer and decodes it into resp. */
+static int64_t mono_ms(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
+
+/* Finds "ABCHRESP " + 128 hex digits in the buffer and decodes it into resp. The reply line
+ * arrives a few bytes per read, so the wait is bounded by time, not by the number of reads. */
+#define SERIAL_REPLY_MS 30000
 static int serial_recv_resp(uint8_t resp[BENCH_RESP_BYTES])
 {
     static const char tag[] = "ABCHRESP ";
-    for (int tries = 0; tries < 30; tries++) {
+    for (int64_t until = mono_ms() + SERIAL_REPLY_MS; mono_ms() < until;) {
         char *p = strstr(rx + rxpos, tag);
         if (p) {
             size_t need = strlen(tag) + 2 * BENCH_RESP_BYTES;
@@ -206,7 +216,7 @@ static int serial_recv_resp(uint8_t resp[BENCH_RESP_BYTES])
             }
         }
     next:
-        if (serial_fill(1000) < 0 && tries >= 10) break;
+        serial_fill(1000);
     }
     return -1;
 }
