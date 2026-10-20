@@ -1,5 +1,5 @@
 # tests/gates/aienos-native-agx.gate
-# Apple GPU (AGX) shader ISA suite: make -C native/gpu/agx test sanitize plus its pass marker, no NOT_RUN (L214)
+# Apple GPU (AGX) suite: shader ISA plus the simulated AGX running driver-built jobs; make -C native/gpu/agx test sanitize plus its pass markers, no NOT_RUN (L214)
 gate: AIENOS-NATIVE-AGX
 manifest_version: 2
 owner: aienos

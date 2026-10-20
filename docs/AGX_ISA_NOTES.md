@@ -112,7 +112,7 @@ by the driver's uniform upload; see `docs/AGX_FIRMWARE_INTERFACE.md`.
 
 | # | Instruction, bits | Observed values | Meaning | Status | Experiment that resolves it |
 |---|---|---|---|---|---|
-| A1 | `lload`/`lstore` bits 40:42 (AienOS modifier `tgu`, printed `tg1`..`tg7`) | 37 instances: 1 (30), 4 (6), 2 (1). Value 1 appears with an index offset of 0 or a negative byte offset (`-4` in `matmul_tiled`). Values 4 and 2 appear only with positive constant offsets (32, 16, 8, 4, 2, 1) in `reduce`. | Hypothesis: a one-hot scale (x1, x2, x4) applied to the constant index offset. | UNKNOWN (hypothesis INFERRED from the value pattern above) | Patch one `lload` in `reduce`'s archive from `tg4` to `tg1`, keeping the offset, run it on the GPU through Metal (applegpu `hwtestbed`/`metallib_replacer` style, user space, no reboot), and compare which threadgroup element is read. Repeat with `tg2`. |
+| A1 | `lload`/`lstore` bits 40:42 (AienOS modifier `tgu`, printed `tg1`..`tg7`) | 37 instances: 1 (30), 4 (6), 2 (1). Value 1 appears with an index offset of 0 or a negative offset (`-4` in `matmul_tiled`, which is -4 elements: see docs/AGX_SIMULATOR.md 5.2). Values 4 and 2 appear only with positive constant offsets (32, 16, 8, 4, 2, 1) in `reduce`. | Hypothesis: a one-hot scale (x1, x2, x4) applied to the constant index offset. | UNKNOWN (hypothesis INFERRED from the value pattern above) | Patch one `lload` in `reduce`'s archive from `tg4` to `tg1`, keeping the offset, run it on the GPU through Metal (applegpu `hwtestbed`/`metallib_replacer` style, user space, no reboot), and compare which threadgroup element is read. Repeat with `tg2`. |
 | A2 | `lload`/`lstore` bit 47 (AienOS modifier `tg47`) | Set in all 37 instances, in both the 6- and 8-byte forms (25 and 12). Mesa's encoder never sets it, and its vectors leave it clear. | Unknown. Apple sets it unconditionally. | UNKNOWN | Clear bit 47 in a patched `reduce` and run as in A1. If the result is unchanged, the bit is a hint (cache or ordering); otherwise compare against the outputs. |
 | A3 | `load`/`store` bit 26 (AienOS enum `b26`, printed `b26clr` when 0) | 0 in 1 of 59 device memory ops: `store r1, du2, r2, i32, x, a, b26clr` in `reduce` (the per-threadgroup result store, base in uniforms, index `threadgroup_in_grid_x`). 1 in the other 58. Mesa and applegpu both treat it as a constant 1. | Unknown. The candidate reading is that it relates to the index operand's interpretation, which is the only difference from the other stores. | UNKNOWN | Assemble `store` with bit 26 = 0 and = 1 and the same operands, then run both with index values above 2^31 and below 0. A difference in the written address settles it. Same user-space path as A1. |
 
@@ -120,9 +120,13 @@ Without A1 to A3, the strict decoder rejects those instructions. With them,
 each bit is carried through decode, print, assemble and encode unchanged, so
 they never silently lose information. The simulator (step 5) refuses to
 execute A1 or A2 values it has no semantics for, rather than guess. The one
-exception is A1 = 1 with A2 set, which it treats as a plain byte offset
-(INFERRED from `matmul_tiled`). Step 5 checks that inference by comparing the
-simulator's `matmul_tiled` output with the real GPU's output.
+exception is A1 = 1 with A2 set and an immediate index, which it reads in
+elements of the access size, not bytes as an earlier version of this note
+said: with elements, `matmul_tiled`'s two tiles fill exactly the 2048 bytes
+Metal allocates (OBSERVED, `make gpu-ref` prints `tg_mem 2048`); with bytes
+they would reach 2060. That reading is INFERRED from the exact fit; the
+real-GPU hash cannot separate the two readings, and docs/AGX_SIMULATOR.md 5.2
+gives the experiment that does.
 
 ## Known limits
 

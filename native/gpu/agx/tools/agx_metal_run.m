@@ -49,7 +49,7 @@ int main(int argc, char **argv)
 		}
 		if (argc - ai != 2 || repeat < 1 || sleep_ms < 0)
 			return usage();
-		const struct agx_case *c = NULL;
+		const struct agx_case_desc *c = NULL;
 		for (size_t i = 0; i < AGX_NCASES; i++)
 			if (!strcmp(agx_cases[i].name, argv[ai + 1]))
 				c = &agx_cases[i];
@@ -127,9 +127,9 @@ int main(int argc, char **argv)
 		}
 
 		const uint32_t *o = out.contents;
-		printf("case %s device \"%s\" words %u runs %ld gpu_hash %016llx ref_hash %016llx %s\n", c->name,
-		       dev.name.UTF8String, words, repeat, (unsigned long long)got, (unsigned long long)want,
-		       bad ? "MISMATCH" : "MATCH");
+		printf("case %s device \"%s\" words %u runs %ld gpu_hash %016llx ref_hash %016llx tg_mem %lu %s\n",
+		       c->name, dev.name.UTF8String, words, repeat, (unsigned long long)got, (unsigned long long)want,
+		       (unsigned long)ps.staticThreadgroupMemoryLength, bad ? "MISMATCH" : "MATCH");
 		printf("first words: %08x %08x %08x %08x\n", o[0], o[1], o[2], o[3]);
 		if (out_path) {
 			FILE *f = fopen(out_path, "wb");

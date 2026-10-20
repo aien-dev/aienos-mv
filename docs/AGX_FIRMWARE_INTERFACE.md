@@ -312,7 +312,7 @@ addresses from uniforms `u0_u1`, `u2_u3` and `u4_u5`. A host therefore
 needs one `Uniform` word, start 0 and size 12 halves, pointing at a table of
 the three 64-bit addresses. **INFERRED** (the shader's operand use is
 OBSERVED; that the hardware fills uniforms from `Uniform` words is MESA).
-The simulator in step 5 executes this exact arrangement.
+The simulator in step 5 executes this exact arrangement (docs/AGX_SIMULATOR.md).
 
 ## 9. Cross-check: drm/asahi layouts against m1n1's independent definitions
 

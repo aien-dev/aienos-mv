@@ -21,7 +21,7 @@ enum agx_case_kind {
 	AGX_CASE_MATMUL,     /* C = A * B, N x N float */
 };
 
-struct agx_case {
+struct agx_case_desc {
 	const char *name;      /* also the kernel function name in corpus/<name>.metal */
 	enum agx_case_kind kind;
 	uint32_t n;            /* element count, or N for matmul */
@@ -29,7 +29,7 @@ struct agx_case {
 	uint32_t tg[3];        /* threads per threadgroup */
 };
 
-static const struct agx_case agx_cases[] = {
+static const struct agx_case_desc agx_cases[] = {
 	{ "vadd", AGX_CASE_VADD_F32, 1024, { 1024, 1, 1 }, { 64, 1, 1 } },
 	{ "vadd_i32", AGX_CASE_VADD_I32, 1024, { 1024, 1, 1 }, { 64, 1, 1 } },
 	{ "vadd_bounds", AGX_CASE_VADD_BOUNDS, 1000, { 1024, 1, 1 }, { 64, 1, 1 } },
@@ -50,7 +50,7 @@ static inline float agx_case_ma(uint32_t i) { return (float)((int)((i * 7u) % 9u
 static inline float agx_case_mb(uint32_t i) { return (float)((int)((i * 5u) % 7u) - 3); }
 
 /* Buffer sizes in 32-bit words: inputs a, b and the output. */
-static inline uint32_t agx_case_words(const struct agx_case *c)
+static inline uint32_t agx_case_words(const struct agx_case_desc *c)
 {
 	if (c->kind == AGX_CASE_MATMUL)
 		return c->n * c->n;
@@ -58,7 +58,7 @@ static inline uint32_t agx_case_words(const struct agx_case *c)
 }
 
 /* Fill inputs a, b and output o (all agx_case_words long). */
-static inline void agx_case_fill(const struct agx_case *c, uint32_t *a, uint32_t *b, uint32_t *o)
+static inline void agx_case_fill(const struct agx_case_desc *c, uint32_t *a, uint32_t *b, uint32_t *o)
 {
 	uint32_t w = agx_case_words(c);
 	for (uint32_t i = 0; i < w; i++) {
@@ -90,7 +90,7 @@ static inline float agx_case_f(uint32_t u) { union { uint32_t u; float f; } x = 
 static inline uint32_t agx_case_u(float f) { union { float f; uint32_t u; } x = { f }; return x.u; }
 
 /* Plain C reference result, computed into o (already filled by agx_case_fill). */
-static inline void agx_case_reference(const struct agx_case *c, const uint32_t *a, const uint32_t *b, uint32_t *o)
+static inline void agx_case_reference(const struct agx_case_desc *c, const uint32_t *a, const uint32_t *b, uint32_t *o)
 {
 	switch (c->kind) {
 	case AGX_CASE_VADD_F32:
