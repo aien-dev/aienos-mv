@@ -62,3 +62,55 @@ Linux probe: exit_oob, powerup_pll, hw_init, hw_reset, get_mac_address (r8127_n.
 Aienux copies: exit_oob (without DASH, RealWoW and the UPS-resume PHY wait), hw_reset, MAC address read and rar_set, the hw_config steps that set rings, TxConfig, RxConfig, RxMaxSize, descriptor type, no-close mode and the RX DV gate, then hw_start (ChipCmd TE|RE). Interrupts stay masked (polled driver).
 
 Aienux leaves out, on purpose: MAC MCU patch code (hw_mac_mcu_config), PCIe EPHY tuning (hw_ephy_config_8127_1, dozens of magic values), PHY micro-code and PHY tuning (hw_phy_config), ASPM/CLKREQ, EEE, power-save, PTP, TCAM, RSS, and the long list of undocumented MAC OCP writes in hw_config (0xC0B6, 0xE614, 0xE63E, 0xC0B4, 0xEB6A, 0xEB50, 0xE056, 0xE040, 0xEA1C, 0xE0C0, 0xE052, 0xD430, 0xD40C, ...). The hope is that UEFI firmware (which has its own Realtek driver for PXE, Boot0003) already applied whatever the PHY needs. That hope is UNKNOWN until the attended boot.
+
+## What was built (L198)
+
+| Piece | File | Tested by |
+|---|---|---|
+| Driver core (polled, one DMA region, TX no-close, RX type 1, IRQs masked) | `native/net/aienos_rtl8127.{h,c}` | `native/net/tests/rtl8127_test.c` (chip model, `make -C native/net test`, also under ASan/UBSan in `make sanitize`) |
+| Boot report frames, tag `AIENUX-SPARK-REPORT`, UDP 47031 broadcast, iMac wire format | `native/net/aienos_report.{h,c}` | `rtl8127_test.c` (report sent through the driver and rebuilt from the model's wire), `scripts/ck_spark_report_test.sh` (loopback to the receiver) |
+| Receiver (now accepts the Spark tag, writes `spark-<run>.txt`) | `native/kernel/tools/ck_imac_report_listen.c` | `scripts/ck_spark_report_test.sh`, `scripts/ck_imac_report_test.sh` |
+| Kernel binding: find 10ec:8127 in the multi-segment discovery, SMMU window first, BAR 2, init, link wait (10 s), report every 2 s for 20 s, receive count, release | `native/kernel/dev/rtl8127_bind.{h,c}`, called from `dev/devices.c` only in a `CK_RTL8127=1` build | `stage_test` case `test_rtl8127_bind` (absent, no SMMU: denied with memory decode and bus master off, bad BAR) |
+
+The chip model is written from the same vendor source as the driver. It proves the driver does what the
+reference does, stays inside its DMA region, survives hostile completions, and moves frames intact
+around both rings; it cannot prove the reference is right for this chip. A mutation pass (7 deliberate
+driver bugs: TX ring-end bit, MAC write without unlock, RX oversize check, FCS strip, close-pointer bound,
+interrupt mask, RX repost) was killed by the test every time.
+
+## UNKNOWN until attended boot #2 (nothing here has touched the chip)
+
+1. Whether the link comes up and frames flow without the parts Aienux leaves out: MAC MCU patch code,
+   PCIe EPHY tuning (`hw_ephy_config_8127_1`), PHY micro-code and PHY tuning (`hw_phy_config`), and the
+   undocumented MAC OCP writes in `hw_config`. Aienux relies on the state the UEFI firmware's Realtek
+   driver leaves. Most likely failure point. If link stays down, the boot log line
+   `rtl8127: link DOWN` says so and the chip is released.
+2. Whether the UEFI firmware binds the NIC on a normal (non-PXE) boot at all, and in which state it
+   leaves the PHY after ExitBootServices.
+3. Chip revision mapping: the Spark reports PCI revision 0x05; which TxConfig IC version that gives
+   (CFG_METHOD_1 or 2) is printed (`rtl8127: init ... tcr= mcfg=`), not known in advance.
+4. TX no-close on this chip: tail pointer 0x0D30 and close pointer 0x0D34 (version 6 registers) are taken
+   from the vendor's per-version table; that the close pointer restarts at 0 after a soft reset is the
+   vendor's assumption (Aienux reads a base instead and prints `clo_base=`).
+5. RX descriptor type 1 with RSS off is what the vendor's default build runs (INFERRED from the module
+   version string, medium-high); not observed on the chip.
+6. The UPS-resume PHY wait in `exit_oob` is not done; Aienux only records `ups_resume=`.
+7. FIFO-empty, LL-share-FIFO and PHY-state waits: the vendor ignores timeouts; Aienux counts them
+   (`wait_timeouts=`). Their real durations are not measured.
+8. The MAC address source (BACKUP_ADDR at 0x19E0 vs MAC0) is printed; expected to match Linux's
+   enP7s7 address.
+9. SMMU: the RTL8127's stream on segment 7 must resolve through the IORT (`docs/GB10_IORT_DECODE.md`);
+   the confinement path has run on QEMU and host only. A denied grant prints
+   `dma_gate: rtl8127 denied` and the chip stays off.
+10. Whether ARM64 Normal Non-cacheable DMA memory (`ck_dma_alloc`) plus `ck_mb()` around every register
+   write is enough ordering for this chip's descriptor fetch (the vendor uses Linux coherent DMA and
+   `wmb()`).
+11. Autonegotiation time to 10G (the 10 s link wait is not measured).
+
+## How attended boot #2 uses it
+
+Build the image with `CK_RTL8127=1` (adds the binding call and the RAM console copy). On another machine
+on the same LAN, run `ck_imac_report_listen 47031 OUTDIR 120`
+(`make -C native/kernel imac-report-listen`); the Spark's log arrives as `OUTDIR/spark-<run>.txt`.
+The image never takes the chip out of the devices stage with DMA live: every path ends in
+`rtl8127: chip stop`, `dma_gate: rtl8127 bus master revoked`, `smmu: rtl8127 stream ... returned to abort`.
