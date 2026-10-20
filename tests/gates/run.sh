@@ -93,6 +93,7 @@ case "$step" in
   native-disk)       native_suite disk "test sanitize mutants" 'AIENOS_DISK_NATIVE: PASS|AIENOS_DISK_SANITIZE: PASS|AIENOS_DISK_MUTANTS: PASS' ;;
   native-argus)      native_suite argus "test sanitize" 'GATE CONTAIN_TEST PASS|GATE CONTAIN_DETERMINISM PASS' ;;
   native-capability) native_suite capability "mutants" 'AIENOS_CAP_MUTANTS: PASS' ;;
+  native-agx)        native_suite gpu/agx "test sanitize" 'AIENOS_AGX_NATIVE: PASS|AGX_COVERAGE: [0-9]+/[0-9]+' ;;
   disk-qemu)
     set -o pipefail
     bash scripts/qemu_native_nvme_test.sh 2>&1 | tee "$TMP/qemu.log"

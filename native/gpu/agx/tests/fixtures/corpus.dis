@@ -1,0 +1,640 @@
+== atomics.bin
+   0: f2023a00             mov      $r0h, active_thread_index_in_simdgroup
+   4: 72093b00             mov      r2, total_active_threads_in_simdgroup
+   8: e2000000             ldimm    $r0l, 0
+   c: 528841000000         if       r0h, 0, 1, seq
+  12: 1508008d00d00400     atomic   r1, r2, du0, 0, add, coherent1, a
+  1a: 3800                 wait     a
+  1c: d20e00000000         pop_exec 1, cache
+  22: 6f05c2060000         shuffle  r1, ^r1, 0
+  28: f2091004             mov      $r2, thread_in_grid_x
+  2c: f20c3a00             mov      $r3l, active_thread_index_in_simdgroup
+  30: 6f89c422c080         simd     r2, ^r2, smax
+  36: 5288c6000000         if       ^r3l, 0, 1, seq
+  3c: d501048d00500400     atomic   _, r2, du2, 0, imax, coherent1, a
+  44: d20e00000000         pop_exec 1, cache
+  4a: f2091004             mov      $r2, thread_in_grid_x
+  4e: fe09c4064000         not      $r2, ^r2
+  54: f2143a00             mov      $r5l, active_thread_index_in_simdgroup
+  58: 6f8dc4220000         simd     r3, ^r2, and
+  5e: 0e09c2120c000000     iadd     r2, ^r1, ^r0h
+  66: 5288ca000000         if       ^r5l, 0, 1, seq
+  6c: 1502108d00500600     atomic   _, r3, du0, 1, and, coherent1, a
+  74: 520e00000000         pop_exec 1
+  7a: f2191004             mov      $r6, thread_in_grid_x
+  7e: 0e1501c024000000     iadd     r5, 1, r6
+  86: d50820cd00d00a00     atomic   r1, r5_r6, du0, 2, cmpxchg, coherent1, b
+  8e: 951830cd00d00c00     atomic   r3, r6, du0, 3, xchg, coherent1, b
+  96: 3801                 wait     b
+  98: 8e05c2422c000000     iadd     $r1, ^r1, ^r2
+  a0: 0e05c2622c000000     iadd     r1, ^r1, ^r3
+  a8: 4509c80e00c01200     store    r1, du4, r6, i32, x, a
+  b0: 8800                 stop
+== bitops.bin
+   0: 72051004             mov      r1, thread_in_grid_x
+   4: 0509200e00c01200     load     r1, du0, r1, i32, x, a
+   c: 3800                 wait     a
+   e: e20920000000         ldimm    $r2, 32
+  14: e21520000000         ldimm    $r5, 32
+  1a: be0d820a0000         popcnt   $r3, $r1
+  20: e2000000             ldimm    $r0l, 0
+  24: d28982020000         if       $r1, 0, 1, cache, nseq
+  2a: be19820e0000         ffs      $r6, $r1
+  30: 8e151fc82c000000     isub     $r5, 31, ^r6
+  38: d20e00000000         pop_exec 1, cache
+  3e: 8e0dca622c000000     iadd     $r3, ^r5, ^r3
+  46: d28982020000         if       $r1, 0, 1, cache, nseq
+  4c: 8e09821a00000000     isub     $r2, $r1, 1
+  54: fe0982426800         andn1    $r2, $r1, $r2
+  5a: be09840a0000         popcnt   $r2, $r2
+  60: 520e00000000         pop_exec 1
+  66: aea1002068030400     bfeil    $r8, 0, $r1, 3, 5
+  6e: 9e17828218000000     imul     $dr5, $r1, u4
+  76: fe1d820a8000         mov      $r7, $r1
+  7c: 8e25c6422c000000     iadd     $r9, ^r3, ^r2
+  84: ae1582e628190000     extr     $r5, $r1, $r7, 25, 0
+  8c: be0982060000         bitrev   $r2, $r1
+  92: ae1d82e62c130000     extr     $r7, $r1, ^r7, 19, 0
+  9a: fe09d24a6c00         xor      $r2, ^r9, ^r2
+  a0: ae0d002028080400     bfi      $r3, 0, $r1, 8, 4
+  a8: 8e15cea22c000000     iadd     $r5, ^r7, ^r5
+  b0: 8e09c4022d000000     iadd     $r2, ^r2, ^r8
+  b8: 8e0dca622c000000     iadd     $r3, ^r5, ^r3
+  c0: fe09c4c29800         and      $r2, ^r2, u6
+  c6: 9e1f82a218000000     imul     $dr7, $r1, u5
+  ce: 8e25c6422c000000     iadd     $r9, ^r3, ^r2
+  d6: 9e0b922228000000     imul     $dr2, $r9, $r1
+  de: 8e0982ca28000000     isub     $r2, $r1, $r6
+  e6: ae9500402c010000     shr      $r5, ^r2, 1
+  ee: ae8900002d030000     shr      $r2, ^r8, 3
+  f6: 8e15cac22c000000     iadd     $r5, ^r5, ^r6
+  fe: 9e09c4b200000000     imul     $r2, ^r2, 11
+ 106: ae9500a02c020000     shr      $r5, ^r5, 2
+ 10e: 8e05c24a2c000000     isub     $r1, ^r1, ^r2
+ 116: 8e09d2622c000000     iadd     $r2, ^r9, ^r3
+ 11e: 8e05c2aa2c000000     isub     $r1, ^r1, ^r5
+ 126: 8e09c442ac000000     iadd     $r2, ^r2, ^r2, lsl 1
+ 12e: 0e05c2422c000000     iadd     r1, ^r1, ^r2
+ 136: 72091004             mov      r2, thread_in_grid_x
+ 13a: 4509440e00c01200     store    r1, du2, r2, i32, x, a
+ 142: 8800                 stop
+== convert.bin
+   0: 72051004             mov      r1, thread_in_grid_x
+   4: 0529200e00c01200     load     r5, du0, r1, i32, x, a
+   c: 3800                 wait     a
+   e: be8d09a02800         f_to_s32 $r3, $r5, rtz
+  14: fe0194a16800         andn1    $r0, u10, $r5
+  1a: be8908002c00         f_to_u32 $r2, ^r0, rtz
+  20: ae81463600000000     asr      $r0, r3, 3, 0, 0
+  28: fe1144728000         and      $r4, r2, 7
+  2e: be810b042c00         s32_to_f $r0, ^r0, rte
+  34: be910a842c00         u32_to_f $r4, ^r4, rte
+  3a: 2a94ca020002         fadd     r5l, ^r5, -0.0
+  40: 2a81c8022c00         fadd     r0, ^r4, ^r0
+  46: 4519240e00c01200     store    r3, du2, r1, i32, x, a
+  4e: c528280e00c01000     store    r5l, du4, r1, i16, x, a
+  56: 45112c0e00c01200     store    r2, du6, r1, i32, x, a
+  5e: 4501200e10c01200     store    r0, du8, r1, i32, x, a
+  66: 8800                 stop
+== half_math.bin
+   0: 72051004             mov      r1, thread_in_grid_x
+   4: 8520200e00c01000     load     r4l, du0, r1, i16, x, a
+   c: 3800                 wait     a
+   e: 8a0988d0             exp2     $r2, $r4l
+  12: aa8188040300         fadd     $r0, $r4l.abs, 1.0
+  18: 9a8d88800001         fmul     $r3, $r4l, 3.0
+  1e: 8a01c092             rsqrt    $r0, ^r0
+  22: 8a0dc602             floor    $r3, ^r3
+  26: aa89c6422c00         fadd     $r2, ^r3, ^r2
+  2c: 360cc8800c38         hfma     r3l, ^r4l, ^r4l, 1.5
+  32: 2a81c4022c00         fadd     r0, ^r2, ^r0
+  38: c518240e00c01000     store    r3l, du2, r1, i16, x, a
+  40: 4501280e00c01200     store    r0, du4, r1, i32, x, a
+  48: 8800                 stop
+== math.bin
+   0: 72011004             mov      r0, thread_in_grid_x
+   4: 0539000e00c01200     load     r7, du0, r0, i32, x, a
+   c: 3800                 wait     a
+   e: 9a898ea21900         fmul     $r2, $r7, u13
+  14: fe058ec29800         and      $r1, $r7, u6
+  1a: 0a09c4d2             exp2     r2, ^r2
+  1e: 8e0d821a00000000     isub     $r3, $r1, 1
+  26: 8e05c28a19000000     isub     $r1, ^r1, u12
+  2e: 9221c66219c66059     csel     $r8, ^r3, u11, ^r3, u11, ugt
+  36: ae95002028010000     shr      $r5, $r1, 1
+  3e: 921190a2189c4159     csel     $r4, $r8, u5, u14, u10, ugt
+  46: fe0d8ee29900         and      $r3, $r7, u15
+  4c: 8a198882             rcp      $r6, $r4
+  50: 8e0dc68218000000     iadd     $r3, ^r3, u4
+  58: fe15cac29800         and      $r5, ^r5, u6
+  5e: 923150a2188e604c     csel     $r12, r8, u5, $r7, ^r3, ugt
+  66: 8e05c2aa28000000     isub     $r1, ^r1, $r5
+  6e: ba0d8c82a830         ffma     $r3, $r6, $r4.neg, 1.0
+  74: 8e25ca8218000000     iadd     $r9, ^r5, u4
+  7c: ba8dc6c2288c0200     ffma     $r3, ^r3, $r6, $r6
+  84: 0a158e82             rcp      r5, $r7
+  88: 9aad98622800         fmul     $r11, $r12, $r3
+  8e: 1aa988c22800         fmul     r10, $r4, $r6
+  94: bab1c86a29d80200     ffma     $r12, ^r4.neg, $r11, ^r12
+  9c: 8a118e02             floor    $r4, $r7
+  a0: baadd8622cd60200     ffma     $r11, ^r12, ^r3, ^r11
+  a8: 9a8d8e021900         fmul     $r3, $r7, u8
+  ae: 9aa5d6222d00         fmul     $r9, ^r11, ^r9
+  b4: fe2d8cead800         or       $r11, $r6, u7
+  ba: 8e05c28218000000     iadd     $r1, ^r1, u4
+  c2: 8219d40200d6c00c     csel     $r6, ^r10, 0.0, ^r11, ^r6, feq
+  ca: 9a85d2222c00         fmul     $r1, ^r9, ^r1
+  d0: 9a99cce22800         fmul     $r6, ^r6, $r7
+  d6: 9221d0a218cc204c     csel     $r8, ^r8, u5, ^r6, ^r1, ugt
+  de: 8a258602             floor    $r9, $r3
+  e2: aa8586020100         fadd     $r1, $r3, 0.25
+  e8: 9a998e221900         fmul     $r6, $r7, u9
+  ee: aa8dc622ad00         fadd     $r3, ^r3, ^r9.neg
+  f4: 8a19ccd2             exp2     $r6, ^r6
+  f8: 9a8dc6020101         fmul     $r3, ^r3, 4.0
+  fe: aaa58e82ac00         fadd     $r9, $r7, ^r4.neg
+ 104: 8a118ec2             log2     $r4, $r7
+ 108: aa95d2a22c00         fadd     $r5, ^r9, ^r5
+ 10e: 8a258e12             rsqrts   $r9, $r7
+ 112: aaa1ca022d00         fadd     $r8, ^r5, ^r8
+ 118: 8a958e020300         rint     $r5, $r7
+ 11e: aaa1d0822c00         fadd     $r8, ^r8, ^r4
+ 124: 8a118ec6             log2     $r4, $r7.abs
+ 128: aaa1d0c22c00         fadd     $r8, ^r8, ^r6
+ 12e: 8a998e020100         ceil     $r6, $r7
+ 134: baa1d2e228d00200     ffma     $r8, ^r9, $r7, ^r8
+ 13c: 8a9dce020200         trunc    $r7, ^r7
+ 142: aaa1d0c22c00         fadd     $r8, ^r8, ^r6
+ 148: 8a198202             floor    $r6, $r1
+ 14c: aa9dd0e22c00         fadd     $r7, ^r8, ^r7
+ 152: 8a0dc6a2             sinr     $r3, ^r3
+ 156: aa85c2c2ac00         fadd     $r1, ^r1, ^r6.neg
+ 15c: 9a91c8420001         fmul     $r4, ^r4, 2.5
+ 162: 9a85c2020101         fmul     $r1, ^r1, 4.0
+ 168: 8a11c8d2             exp2     $r4, ^r4
+ 16c: aa9984020300         fadd     $r6, $r2, 1.0
+ 172: aa95cea22c00         fadd     $r5, ^r7, ^r5
+ 178: 8a19cc82             rcp      $r6, ^r6
+ 17c: aa95ca822c00         fadd     $r5, ^r5, ^r4
+ 182: 8a05c2a2             sinr     $r1, ^r1
+ 186: aa89c4020302         fadd     $r2, ^r2, -1.0
+ 18c: 8a1186e2             sinc     $r4, $r3
+ 190: ba95c4c22cca0200     ffma     $r5, ^r2, ^r6, ^r5
+ 198: 8a0982e2             sinc     $r2, $r1
+ 19c: ba8dc6822cca0200     ffma     $r3, ^r3, ^r4, ^r5
+ 1a4: 3a85c2422cc60200     ffma     r1, ^r1, ^r2, ^r3
+ 1ac: 4509040e00c01200     store    r1, du2, r0, i32, x, a
+ 1b4: 8800                 stop
+== matmul_fixed.bin
+   0: e20500000000         ldimm    $r1, 0
+   6: 620900000000         ldimm    r2, 0
+   c: 62000000             ldimm    r0l, 0
+  10: f2151004             mov      $r5, thread_in_grid_x
+  14: 8e0d002028001000     iadd     $r3, 0, $r1, lsl 2
+  1c: 0e3d8a6228002000     iadd     r15, $r5, $r3, lsl 4
+  24: 8e19012028000000     iadd     $r6, 1, $r1
+  2c: f20d1104             mov      $r3, thread_in_grid_y
+  30: 8e1900c02c001000     iadd     $r6, 0, ^r6, lsl 2
+  38: 8e0d006028001000     iadd     $r3, 0, $r3, lsl 2
+  40: 0e35cac22c002000     iadd     r13, ^r5, ^r6, lsl 4
+  48: 8e39042028000000     iadd     $r14, 4, $r1
+  50: 0e19426228002000     iadd     r6, r1, $r3, lsl 4
+  58: 0e155c6224002000     iadd     r5, r14, r3, lsl 4
+  60: 0549c00e00c0f200     load     r9_r10_r11_r12, du0, r6, i32, xyzw, a
+  68: 0529a00e00c0f200     load     r5_r6_r7_r8, du0, r5, i32, xyzw, a
+  70: 05a1e40e01c01200     load     r20, du2, r15, i32, x, a
+  78: 0599a40e01c01200     load     r19, du2, r13, i32, x, a
+  80: 8e3d022028000000     iadd     $r15, 2, $r1
+  88: 8e35032028000000     iadd     $r13, 3, $r1
+  90: 8e3d00e02d001000     iadd     $r15, 0, ^r15, lsl 2
+  98: 8e3500a02d001000     iadd     $r13, 0, ^r13, lsl 2
+  a0: f2551004             mov      $r21, thread_in_grid_x
+  a4: 0e49aae22d002000     iadd     r18, $r21, ^r15, lsl 4
+  ac: 0e45aaa22d002000     iadd     r17, $r21, ^r13, lsl 4
+  b4: 8e35052028000000     iadd     $r13, 5, $r1
+  bc: 8e3900c02d001000     iadd     $r14, 0, ^r14, lsl 2
+  c4: 8e3500a02d001000     iadd     $r13, 0, ^r13, lsl 2
+  cc: 0e41aac22d002000     iadd     r16, $r21, ^r14, lsl 4
+  d4: 0e3daaa22d002000     iadd     r15, $r21, ^r13, lsl 4
+  dc: 8e39062028000000     iadd     $r14, 6, $r1
+  e4: 8e35072024000000     iadd     $r13, 7, r1
+  ec: 8e3900c02d001000     iadd     $r14, 0, ^r14, lsl 2
+  f4: 8e3500a02d001000     iadd     $r13, 0, ^r13, lsl 2
+  fc: 0e39aac22d002000     iadd     r14, $r21, ^r14, lsl 4
+ 104: 0e35eaa22d002000     iadd     r13, ^r21, ^r13, lsl 4
+ 10c: 0591440e02c01200     load     r18, du2, r18, i32, x, a
+ 114: 0589240e02c01200     load     r17, du2, r17, i32, x, a
+ 11c: 0581040e02c01200     load     r16, du2, r16, i32, x, a
+ 124: 0579e40e01c01200     load     r15, du2, r15, i32, x, a
+ 12c: 0571c44e01c01200     load     r14, du2, r14, i32, x, b
+ 134: 0569a44e01c01200     load     r13, du2, r13, i32, x, b
+ 13c: 3800                 wait     a
+ 13e: 3801                 wait     b
+ 140: ba89d2822e840200     ffma     $r2, ^r9, ^r20, $r2
+ 148: ba89d4622e840200     ffma     $r2, ^r10, ^r19, $r2
+ 150: ba89d6422e840200     ffma     $r2, ^r11, ^r18, $r2
+ 158: ba89d8222e840200     ffma     $r2, ^r12, ^r17, $r2
+ 160: ba89ca022e840200     ffma     $r2, ^r5, ^r16, $r2
+ 168: ba89cce22d840200     ffma     $r2, ^r6, ^r15, $r2
+ 170: ba89cec22d840200     ffma     $r2, ^r7, ^r14, $r2
+ 178: 8e0508202c000000     iadd     $r1, 8, ^r1
+ 180: 3a89d0a22d440200     ffma     r2, ^r8, ^r13, r2
+ 188: 529542020001         while    r1, 64, 2, nseq
+ 18e: 00c082feffff         jmp_any  -382
+ 194: 521600000000         pop_exec 2
+ 19a: f2051004             mov      $r1, thread_in_grid_x
+ 19e: 0e05c2622c002000     iadd     r1, ^r1, ^r3, lsl 4
+ 1a6: 4511280e00c01200     store    r2, du4, r1, i32, x, a
+ 1ae: 8800                 stop
+== matmul_half.bin
+   0: 62020000             ldimm    r0h, 0
+   4: 620500000000         ldimm    r1, 0
+   a: e2000000             ldimm    $r0l, 0
+   e: 528990010000         if       u8, 0, 1, nseq
+  14: 20c072000000         jmp_none 114
+  1a: f2051104             mov      $r1, thread_in_grid_y
+  1e: e20900000000         ldimm    $r2, 0
+  24: 9e05820219000000     imul     $r1, $r1, u8
+  2c: 620d00000000         ldimm    r3, 0
+  32: 421000000000         if       0.0, 0.0, 2, feq
+  38: f2151004             mov      $r5, thread_in_grid_x
+  3c: 0e1d842224000000     iadd     r7, $r2, r1
+  44: 1e15440219ca0200     imadd    r5, r2, u8, ^r5
+  4c: 8504e00e00c01000     load     r0h, du0, r7, i16, x, a
+  54: 8520a40e00c01000     load     r4l, du2, r5, i16, x, a
+  5c: 3800                 wait     a
+  5e: 8e0901402c000000     iadd     $r2, 1, ^r2
+  66: 3a8d41800c460200     ffma     r3, r0h, ^r4l, r3
+  6e: 529544021900         while    r2, u8, 2, nseq
+  74: 00c0c4ffffff         jmp_any  -60
+  7a: d21600000000         pop_exec 2, cache
+  80: 2a82c6020002         fadd     r0h, ^r3, -0.0
+  86: 520e00000000         pop_exec 1
+  8c: f2091004             mov      $r2, thread_in_grid_x
+  90: 0e09c2422c000000     iadd     r2, ^r1, ^r2
+  98: c504480e00c01000     store    r0h, du4, r2, i16, x, a
+  a0: 8800                 stop
+== matmul_naive.bin
+   0: f2051104             mov      $r1, thread_in_grid_y
+   4: f2091004             mov      $r2, thread_in_grid_x
+   8: 9202420219010130     csel     $r0h, r1, u8, 1, 0, ult
+  10: 9202c40219c10030     csel     $r0h, ^r2, u8, ^r0h, 0, ult
+  18: e2000000             ldimm    $r0l, 0
+  1c: 5289c1000000         if       ^r0h, 0, 1, nseq
+  22: 20c07c000000         jmp_none 124
+  28: 9e0590212c000000     imul     $r1, u8, ^r1
+  30: e20d00000000         ldimm    $r3, 0
+  36: 620900000000         ldimm    r2, 0
+  3c: 421000000000         if       0.0, 0.0, 2, feq
+  42: f2151004             mov      $r5, thread_in_grid_x
+  46: 0e21862224000000     iadd     r8, $r3, r1
+  4e: 1e19460219ca0200     imadd    r6, r3, u8, ^r5
+  56: 0529000e01c01200     load     r5, du0, r8, i32, x, a
+  5e: 0539c40e00c01200     load     r7, du2, r6, i32, x, a
+  66: 3800                 wait     a
+  68: 8e0d01602c000000     iadd     $r3, 1, ^r3
+  70: 3a89cea22c440200     ffma     r2, ^r7, ^r5, r2
+  78: 529546021900         while    r3, u8, 2, nseq
+  7e: 00c0c4ffffff         jmp_any  -60
+  84: 521600000000         pop_exec 2
+  8a: f20d1004             mov      $r3, thread_in_grid_x
+  8e: 0e0dc2622c000000     iadd     r3, ^r1, ^r3
+  96: 4511680e00c01200     store    r2, du4, r3, i32, x, a
+  9e: 520e00000000         pop_exec 1
+  a4: 8800                 stop
+== matmul_tiled.bin
+   0: 620900000000         ldimm    r2, 0
+   6: 620500000000         ldimm    r1, 0
+   c: e2000000             ldimm    $r0l, 0
+  10: 528990010000         if       u8, 0, 1, nseq
+  16: 20c04e020000         jmp_none 590
+  1c: f2051104             mov      $r1, thread_in_grid_y
+  20: f2083000             mov      $r2l, thread_in_threadgroup_x
+  24: 9e05820219000000     imul     $r1, $r1, u8
+  2c: f2023100             mov      $r0h, thread_in_threadgroup_y
+  30: 8e0d424208000000     iadd     $r3, r1, $r2l
+  38: 9e15c10000000001     imul     $r5, ^r0h, 64
+  40: e21900000000         ldimm    $r6, 0
+  46: 620900000000         ldimm    r2, 0
+  4c: 421000000000         if       0.0, 0.0, 2, feq
+  52: f2211004             mov      $r8, thread_in_grid_x
+  56: f2023100             mov      $r0h, thread_in_threadgroup_y
+  5a: 8e1d8c120c000000     iadd     $r7, $r6, ^r0h
+  62: 1e1dce0219d00200     imadd    r7, ^r7, u8, ^r8
+  6a: f2023000             mov      $r0h, thread_in_threadgroup_x
+  6e: 8e108a1008001000     iadd     $r4l, $r5l, $r0h, lsl 2
+  76: 8e024a100c001000     iadd     $r0h, r5l, ^r0h, lsl 2
+  7e: 0e10c82080021000     iadd     r4l, ^r4l, 130, lsl 3
+  86: 0e0210100c000000     iadd     r0h, 16, ^r0h
+  8e: 0e2146c224000000     iadd     r8, r3, r6
+  96: 0541000e01c01200     load     r8, du0, r8, i32, x, a
+  9e: 0539e40e00c01200     load     r7, du2, r7, i32, x, a
+  a6: 3800                 wait     a
+  a8: 29a108c21781ff03     lstore   r8, r4l, -4, i32, x, tg1, tg47
+  b0: 299d01c21781ff03     lstore   r7, r0h, -4, i32, x, tg1, tg47
+  b8: 6800                 barrier
+  ba: e21d00000000         ldimm    $r7, 0
+  c0: 421000000000         if       0.0, 0.0, 2, feq
+  c6: f2023100             mov      $r0h, thread_in_threadgroup_y
+  ca: 9e02c100008e1001     imadd    $r0h, ^r0h, 64, $r7l, lsl 2
+  d2: f2163000             mov      $r5h, thread_in_threadgroup_x
+  d6: 0e10812080021000     iadd     r4l, $r0h, 130, lsl 3
+  de: 0e02c14080021000     iadd     r0h, ^r0h, 132, lsl 3
+  e6: 8e2001e008000000     iadd     $r8l, 1, $r7l
+  ee: 8e2202e008000000     iadd     $r8h, 2, $r7l
+  f6: 9e24d000008b1001     imadd    $r9l, ^r8l, 64, $r5h, lsl 2
+  fe: 8e2003e008000000     iadd     $r8l, 3, $r7l
+ 106: 9e22d100008b1001     imadd    $r8h, ^r8h, 64, $r5h, lsl 2
+ 10e: 0e2a10200d000000     iadd     r10h, 16, ^r9l
+ 116: 9e20d000008b1001     imadd    $r8l, ^r8l, 64, $r5h, lsl 2
+ 11e: 0e2810100d000000     iadd     r10l, 16, ^r8h
+ 126: 9e228e00008b1001     imadd    $r8h, $r7l, 64, $r5h, lsl 2
+ 12e: 0e2610000d000000     iadd     r9h, 16, ^r8l
+ 136: 8e2006e008000000     iadd     $r8l, 6, $r7l
+ 13e: 0e2c10100d000000     iadd     r11l, 16, ^r8h
+ 146: 9e20d000008b1001     imadd    $r8l, ^r8l, 64, $r5h, lsl 2
+ 14e: 8e2404e008000000     iadd     $r9l, 4, $r7l
+ 156: 8e2205e008000000     iadd     $r8h, 5, $r7l
+ 15e: 9e24d200008b1001     imadd    $r9l, ^r9l, 64, $r5h, lsl 2
+ 166: 8e2e07e004000000     iadd     $r11h, 7, r7l
+ 16e: 9e22d100008b1001     imadd    $r8h, ^r8h, 64, $r5h, lsl 2
+ 176: 0e2410200d000000     iadd     r9l, 16, ^r9l
+ 17e: 9e16d70000cb1001     imadd    $r5h, ^r11h, 64, ^r5h, lsl 2
+ 186: 0e2210100d000000     iadd     r8h, 16, ^r8h
+ 18e: 0e2010000d000000     iadd     r8l, 16, ^r8l
+ 196: 0e1610b00c000000     iadd     r5h, 16, ^r5h
+ 19e: 69dd16c21781ff03     lload    r23, r11l, -4, i32, x, tg1, tg47
+ 1a6: 69d915c21781ff03     lload    r22, r10h, -4, i32, x, tg1, tg47
+ 1ae: 69d514c21781ff03     lload    r21, r10l, -4, i32, x, tg1, tg47
+ 1b6: 69d113c21781ff03     lload    r20, r9h, -4, i32, x, tg1, tg47
+ 1be: 69cd12c21781ff03     lload    r19, r9l, -4, i32, x, tg1, tg47
+ 1c6: 69c911c21781ff03     lload    r18, r8h, -4, i32, x, tg1, tg47
+ 1ce: 69c510c21781ff03     lload    r17, r8l, -4, i32, x, tg1, tg47
+ 1d6: 69c10bc21781ff03     lload    r16, r5h, -4, i32, x, tg1, tg47
+ 1de: 69b108c2f781ff03     lload    r12_r13_r14_r15, r4l, -4, i32, xyzw, tg1, tg47
+ 1e6: 69a101c2f781ff03     lload    r8_r9_r10_r11, r0h, -4, i32, xyzw, tg1, tg47
+ 1ee: ba89d8e22e840200     ffma     $r2, ^r12, ^r23, $r2
+ 1f6: ba89dac22e840200     ffma     $r2, ^r13, ^r22, $r2
+ 1fe: ba89dca22e840200     ffma     $r2, ^r14, ^r21, $r2
+ 206: ba89de822e840200     ffma     $r2, ^r15, ^r20, $r2
+ 20e: ba89d0622e840200     ffma     $r2, ^r8, ^r19, $r2
+ 216: ba89d2422e840200     ffma     $r2, ^r9, ^r18, $r2
+ 21e: ba89d4222e840200     ffma     $r2, ^r10, ^r17, $r2
+ 226: 8e1d08e02c000000     iadd     $r7, 8, ^r7
+ 22e: 3a89d6022e440200     ffma     r2, ^r11, ^r16, r2
+ 236: 52954e020100         while    r7, 16, 2, nseq
+ 23c: 00c08afeffff         jmp_any  -374
+ 242: 521600000000         pop_exec 2
+ 248: 0e1910c02c000000     iadd     r6, 16, ^r6
+ 250: 6800                 barrier
+ 252: 52344c021900         while    r6, u8, 2, ult
+ 258: 00c0fafdffff         jmp_any  -518
+ 25e: d21600000000         pop_exec 2, cache
+ 264: 520e00000000         pop_exec 1
+ 26a: f20d1004             mov      $r3, thread_in_grid_x
+ 26e: 0e0dc2622c000000     iadd     r3, ^r1, ^r3
+ 276: 4511680e00c01200     store    r2, du4, r3, i32, x, a
+ 27e: 8800                 stop
+== misc_int.bin
+   0: 720d1004             mov      r3, thread_in_grid_x
+   4: 0509600e00c01200     load     r1, du0, r3, i32, x, a
+   c: 3800                 wait     a
+   e: ae95002028050000     shr      $r5, $r1, 5
+  16: f2190000             mov      $r6, threadgroup_in_grid_x
+  1a: 8e090020a8001000     iadd     $r2, 0, $r1, lsl 3
+  22: fe15caca6c00         xor      $r5, ^r5, ^r6
+  28: 9e05c28218000000     imul     $r1, ^r1, u4
+  30: fe15ca4a6c00         xor      $r5, ^r5, ^r2
+  36: 620a0000             ldimm    r2h, 0
+  3a: fe05ca2a6c00         xor      $r1, ^r5, ^r1
+  40: 7e0842088000         mov      r2l, r1l
+  46: 4511600e00c01200     store    r2, du0, r3, i32, x, a
+  4e: fe05c2128000         and      $r1, ^r1, 1
+  54: e2000000             ldimm    $r0l, 0
+  58: 5289c2020000         if       ^r1, 0, 1, nseq
+  5e: 20c01c000000         jmp_none 28
+  64: f2023a00             mov      $r0h, active_thread_index_in_simdgroup
+  68: 72053b00             mov      r1, total_active_threads_in_simdgroup
+  6c: 5288c1000000         if       ^r0h, 0, 1, seq
+  72: 1500048d00500200     atomic   _, r1, du2, 0, add, coherent1, a
+  7a: 521600000000         pop_exec 2
+  80: 3800                 wait     a
+  82: 8800                 stop
+== reduce.bin
+   0: f2023300             mov      $r0h, thread_index_in_threadgroup
+   4: 72091004             mov      r2, thread_in_grid_x
+   8: 0e04001004001000     iadd     r1l, 0, r0h, lsl 2
+  10: 0511400e00c01200     load     r2, du0, r2, i32, x, a
+  18: 3800                 wait     a
+  1a: 290902021481         lstore   r2, r1l, 0, i32, x, tg1, tg47
+  20: 6800                 barrier
+  22: e2000000             ldimm    $r0l, 0
+  26: 522841000002         if       r0h, 128, 1, ult
+  2c: 20c01e000000         jmp_none 30
+  32: 690902021684         lload    r2, r1l, 32, i32, x, tg4, tg47
+  38: 690d02021481         lload    r3, r1l, 0, i32, x, tg1, tg47
+  3e: 2a89c6422c00         fadd     r2, ^r3, ^r2
+  44: 290902021481         lstore   r2, r1l, 0, i32, x, tg1, tg47
+  4a: 520e00000000         pop_exec 1
+  50: 6800                 barrier
+  52: 5228c1000001         if       ^r0h, 64, 1, ult
+  58: f2023300             mov      $r0h, thread_index_in_threadgroup
+  5c: 0e0200100c001000     iadd     r0h, 0, ^r0h, lsl 2
+  64: 20c01e000000         jmp_none 30
+  6a: 690501021584         lload    r1, r0h, 16, i32, x, tg4, tg47
+  70: 690901021481         lload    r2, r0h, 0, i32, x, tg1, tg47
+  76: 2a85c4222c00         fadd     r1, ^r2, ^r1
+  7c: 290501021481         lstore   r1, r0h, 0, i32, x, tg1, tg47
+  82: 520e00000000         pop_exec 1
+  88: 72023300             mov      r0h, thread_index_in_threadgroup
+  8c: 6800                 barrier
+  8e: 522841000200         if       r0h, 32, 1, ult
+  94: f2043300             mov      $r1l, thread_index_in_threadgroup
+  98: 0e0c00200c001000     iadd     r3l, 0, ^r1l, lsl 2
+  a0: 20c01e000000         jmp_none 30
+  a6: 690506821484         lload    r1, r3l, 8, i32, x, tg4, tg47
+  ac: 690906021481         lload    r2, r3l, 0, i32, x, tg1, tg47
+  b2: 2a85c4222c00         fadd     r1, ^r2, ^r1
+  b8: 290506021481         lstore   r1, r3l, 0, i32, x, tg1, tg47
+  be: 520e00000000         pop_exec 1
+  c4: 6800                 barrier
+  c6: 5228c1000100         if       ^r0h, 16, 1, ult
+  cc: f2023300             mov      $r0h, thread_index_in_threadgroup
+  d0: 0e0200100c001000     iadd     r0h, 0, ^r0h, lsl 2
+  d8: 20c01e000000         jmp_none 30
+  de: 690501421484         lload    r1, r0h, 4, i32, x, tg4, tg47
+  e4: 690901021481         lload    r2, r0h, 0, i32, x, tg1, tg47
+  ea: 2a85c4222c00         fadd     r1, ^r2, ^r1
+  f0: 290501021481         lstore   r1, r0h, 0, i32, x, tg1, tg47
+  f6: 520e00000000         pop_exec 1
+  fc: 72023300             mov      r0h, thread_index_in_threadgroup
+ 100: 6800                 barrier
+ 102: 522841800000         if       r0h, 8, 1, ult
+ 108: f2043300             mov      $r1l, thread_index_in_threadgroup
+ 10c: 0e0c00200c001000     iadd     r3l, 0, ^r1l, lsl 2
+ 114: 20c01e000000         jmp_none 30
+ 11a: 690506221484         lload    r1, r3l, 2, i32, x, tg4, tg47
+ 120: 690906021481         lload    r2, r3l, 0, i32, x, tg1, tg47
+ 126: 2a85c4222c00         fadd     r1, ^r2, ^r1
+ 12c: 290506021481         lstore   r1, r3l, 0, i32, x, tg1, tg47
+ 132: 520e00000000         pop_exec 1
+ 138: 6800                 barrier
+ 13a: 5228c1400000         if       ^r0h, 4, 1, ult
+ 140: f2023300             mov      $r0h, thread_index_in_threadgroup
+ 144: 0e0200100c001000     iadd     r0h, 0, ^r0h, lsl 2
+ 14c: 20c01e000000         jmp_none 30
+ 152: 690501121484         lload    r1, r0h, 1, i32, x, tg4, tg47
+ 158: 690901021481         lload    r2, r0h, 0, i32, x, tg1, tg47
+ 15e: 2a85c4222c00         fadd     r1, ^r2, ^r1
+ 164: 290501021481         lstore   r1, r0h, 0, i32, x, tg1, tg47
+ 16a: 520e00000000         pop_exec 1
+ 170: 72023300             mov      r0h, thread_index_in_threadgroup
+ 174: 6800                 barrier
+ 176: 522841200000         if       r0h, 2, 1, ult
+ 17c: f2043300             mov      $r1l, thread_index_in_threadgroup
+ 180: 0e0c00200c001000     iadd     r3l, 0, ^r1l, lsl 2
+ 188: 20c01e000000         jmp_none 30
+ 18e: 690506121482         lload    r1, r3l, 1, i32, x, tg2, tg47
+ 194: 690906021481         lload    r2, r3l, 0, i32, x, tg1, tg47
+ 19a: 2a85c4222c00         fadd     r1, ^r2, ^r1
+ 1a0: 290506021481         lstore   r1, r3l, 0, i32, x, tg1, tg47
+ 1a6: 520e00000000         pop_exec 1
+ 1ac: 6800                 barrier
+ 1ae: 5288c1000000         if       ^r0h, 0, 1, seq
+ 1b4: f2023300             mov      $r0h, thread_index_in_threadgroup
+ 1b8: 0e0200100c001000     iadd     r0h, 0, ^r0h, lsl 2
+ 1c0: 20c018000000         jmp_none 24
+ 1c6: 690501023481         lload    r1_r2, r0h, 0, i32, xy, tg1, tg47
+ 1cc: 2a85c2422c00         fadd     r1, ^r1, ^r2
+ 1d2: 290501021481         lstore   r1, r0h, 0, i32, x, tg1, tg47
+ 1d8: 520e00000000         pop_exec 1
+ 1de: 72023300             mov      r0h, thread_index_in_threadgroup
+ 1e2: 6800                 barrier
+ 1e4: 5288c1000000         if       ^r0h, 0, 1, seq
+ 1ea: 72090000             mov      r2, threadgroup_in_grid_x
+ 1ee: 690580021481         lload    r1, 0, i32, x, tg1, tg47
+ 1f4: 4509440a00c01200     store    r1, du2, r2, i32, x, a, b26clr
+ 1fc: 520e00000000         pop_exec 1
+ 202: 8800                 stop
+== saxpy.bin
+   0: 72011004             mov      r0, thread_in_grid_x
+   4: 0509000e00c01200     load     r1, du0, r0, i32, x, a
+   c: 0511040e00c01200     load     r2, du2, r0, i32, x, a
+  14: 3800                 wait     a
+  16: 3a85c2c218c40200     ffma     r1, ^r1, u6, ^r2
+  1e: 4509040e00c01200     store    r1, du2, r0, i32, x, a
+  26: 8800                 stop
+== select.bin
+   0: 72051004             mov      r1, thread_in_grid_x
+   4: 0529200e00c01200     load     r5, du0, r1, i32, x, a
+   c: 0501240e00c01200     load     r0, du2, r1, i32, x, a
+  14: 3800                 wait     a
+  16: ea918a020002         fadd     $r4, $r5, -0.0, sat
+  1c: 82998a82008a60f90003 csel     $r6, $r5, -3.0, $r5, u11, fgtn
+  26: 82898a02008a20790001 csel     $r2, $r5, 2.0, $r5, u9, fltn
+  30: 8e0d000828000000     isub     $r3, 0, $r0
+  38: aa89c4822c00         fadd     $r2, ^r2, ^r4
+  3e: 92118032008060c8     csel     $r4, $r0, 3, $r0, $r3, sgt
+  46: aa89c4c22c00         fadd     $r2, ^r2, ^r6
+  4c: 9219800200c600a8     csel     $r6, $r0, 0, ^r3, $r0, slt
+  54: 921d8012018010b1     csel     $r7, $r0, 17, $r0, 17, slt
+  5c: fe0d94a96800         xor      $r3, u10, $r5
+  62: 9201c08219c080d9     csel     $r0, ^r0, u12, ^r0, u12, sgt
+  6a: 820d8a0202c6a028     csel     $r3, $r5, 0.5, ^r3, $r5, flt
+  72: 8e01c0e22c000000     iadd     $r0, ^r0, ^r7
+  7a: 8215ca4203ca0079     csel     $r5, ^r5, 1.25, ^r5, u8, fltn
+  82: 8e01c0c22c000000     iadd     $r0, ^r0, ^r6
+  8a: aa89c4a22c00         fadd     $r2, ^r2, ^r5
+  90: 0e01c0822c000000     iadd     r0, ^r0, ^r4
+  98: 2a89c4622c00         fadd     r2, ^r2, ^r3
+  9e: 4511280e00c01200     store    r2, du4, r1, i32, x, a
+  a6: 45012c0e00c01200     store    r0, du6, r1, i32, x, a
+  ae: 8800                 stop
+== simd.bin
+   0: 72051004             mov      r1, thread_in_grid_x
+   4: 0501200e00c01200     load     r0, du0, r1, i32, x, a
+   c: 3800                 wait     a
+   e: f2083400             mov      $r2l, thread_index_in_simdgroup
+  12: 8e0801400c000000     iadd     $r2l, 1, ^r2l
+  1a: fe14c4f08100         and      $r5l, ^r2l, 31
+  20: fe088ac08100         and      $r2l, $r5l, 28
+  26: 8e10014008000000     iadd     $r4l, 1, $r2l
+  2e: 8e18018008000000     iadd     $r6l, 1, $r4l
+  36: ef0980460c00         shuffle  $r2, $r0, ^r2l
+  3c: ef0d80860800         shuffle  $r3, $r0, $r4l
+  42: 8e16028008000000     iadd     $r5h, 2, $r4l
+  4a: 9211c8a008c6408c     csel     $r4, ^r4l, $r5l, ^r3, ^r2, seq
+  52: ef0d80c60800         shuffle  $r3, $r0, $r6l
+  58: ef0980b60800         shuffle  $r2, $r0, $r5h
+  5e: 920dcca008c6808c     csel     $r3, ^r6l, $r5l, ^r3, ^r4, seq
+  66: 9211cba00cc4608c     csel     $r4, ^r5h, ^r5l, ^r2, ^r3, seq
+  6e: ef8d80320000         simd     $r3, $r0, fadd
+  74: f2083a00             mov      $r2l, active_thread_index_in_simdgroup
+  78: ef998032c000         simd     $r6, $r0, fmax
+  7e: b215c40000000180     ballot   $r5, ^r2l, 0, seq
+  86: ef8980720000         simd     $r2, $r0, prefix, fadd
+  8c: aa8dcc622c00         fadd     $r3, ^r6, ^r3
+  92: be14ca0e0000         ffs      $r5l, ^r5
+  98: aa8dc6422c00         fadd     $r3, ^r3, ^r2
+  9e: ef098016c000         shuffle  $r2, $r0, 1, down
+  a4: aa91c6822c00         fadd     $r4, ^r3, ^r4
+  aa: ef0d80a60c00         shuffle  $r3, $r0, ^r5l
+  b0: aa89c8422c00         fadd     $r2, ^r4, ^r2
+  b6: 2a89c4622c00         fadd     r2, ^r2, ^r3
+  bc: 2201c00200000140     ballot   r0, ^r0, 0.0, ugt
+  c4: 4511240e00c01200     store    r2, du2, r1, i32, x, a
+  cc: 4501280e00c01200     store    r0, du4, r1, i32, x, a
+  d4: 8800                 stop
+== vadd.bin
+   0: 72051004             mov      r1, thread_in_grid_x
+   4: 0501200e00c01200     load     r0, du0, r1, i32, x, a
+   c: 0511240e00c01200     load     r2, du2, r1, i32, x, a
+  14: 3800                 wait     a
+  16: 2a81c4022c00         fadd     r0, ^r2, ^r0
+  1c: 4501280e00c01200     store    r0, du4, r1, i32, x, a
+  24: 8800                 stop
+== vadd_bounds.bin
+   0: f2051004             mov      $r1, thread_in_grid_x
+   4: e2000000             ldimm    $r0l, 0
+   8: 524890212400         if       u8, r1, 1, ugt
+   e: 20c026000000         jmp_none 38
+  14: 0511200e00c01200     load     r2, du0, r1, i32, x, a
+  1c: 0519240e00c01200     load     r3, du2, r1, i32, x, a
+  24: 3800                 wait     a
+  26: 2a89c6422c00         fadd     r2, ^r3, ^r2
+  2c: 4511280e00c01200     store    r2, du4, r1, i32, x, a
+  34: 520e00000000         pop_exec 1
+  3a: 8800                 stop
+== vadd_i32.bin
+   0: 72051004             mov      r1, thread_in_grid_x
+   4: 0501200e00c01200     load     r0, du0, r1, i32, x, a
+   c: 0511240e00c01200     load     r2, du2, r1, i32, x, a
+  14: 3800                 wait     a
+  16: 0e01c4022c000000     iadd     r0, ^r2, ^r0
+  1e: 4501280e00c01200     store    r0, du4, r1, i32, x, a
+  26: 8800                 stop
+== vec4.bin
+   0: 72111004             mov      r4, thread_in_grid_x
+   4: 0529800e00c8f200     load     r5_r6_r7_r8, du0, r4, lsl 2, i32, xyzw, a
+   c: 0501840e00c8f200     load     r0_r1_r2_r3, du2, r4, lsl 2, i32, xyzw, a
+  14: 3800                 wait     a
+  16: 9aa58aa22800         fmul     $r9, $r5, $r5
+  1c: baa58cc228d20200     ffma     $r9, $r6, $r6, ^r9
+  24: baa58ee228d20200     ffma     $r9, $r7, $r7, ^r9
+  2c: baa9900229d20200     ffma     $r10, $r8, $r8, ^r9
+  34: 8a2d9412             rsqrts   $r11, $r10
+  38: 9aa58a022800         fmul     $r9, $r5, $r0
+  3e: baa58c2224d20200     ffma     $r9, $r6, r1, ^r9
+  46: baa58e4224d20200     ffma     $r9, $r7, r2, ^r9
+  4e: 9aadd6422d00         fmul     $r11, ^r11, ^r10
+  54: baa5906228d20200     ffma     $r9, $r8, $r3, ^r9
+  5c: ba9d90e12c960200     ffma     $r7, u8, ^r7, $r11
+  64: baa190012d960200     ffma     $r8, u8, ^r8, $r11
+  6c: baa990a12c960200     ffma     $r10, u8, ^r5, $r11
+  74: ba9590c12cd60200     ffma     $r5, u8, ^r6, ^r11
+  7c: 3a8192022cd40200     ffma     r0, $r9, ^r0, ^r10
+  84: 3a8592222cca0200     ffma     r1, $r9, ^r1, ^r5
+  8c: 3a8992422cce0200     ffma     r2, $r9, ^r2, ^r7
+  94: 3a8dd2622cd00200     ffma     r3, ^r9, ^r3, ^r8
+  9c: 4501880e00c8f200     store    r0_r1_r2_r3, du4, r4, lsl 2, i32, xyzw, a
+  a4: 8800                 stop

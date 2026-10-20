@@ -1,0 +1,20 @@
+# tests/gates/aienos-native-agx.gate
+# Apple GPU (AGX) shader ISA suite: make -C native/gpu/agx test sanitize plus its pass marker, no NOT_RUN (L214)
+gate: AIENOS-NATIVE-AGX
+manifest_version: 2
+owner: aienos
+requires:
+  - host
+inputs:
+  - native/gpu/agx/
+  - tests/gates/
+run:
+  exec: tests/gates/run.sh
+  args: ["native-agx"]
+expects:
+  exit: 0
+  observe: ["not_run_in_log == false"]
+  verdict: PASS
+timeout: 10m
+exactness: EXACT
+cache_scope: machine

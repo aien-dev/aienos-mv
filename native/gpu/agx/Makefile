@@ -1,0 +1,65 @@
+# Apple GPU (AGX, M1/M2 family) shader ISA: table-driven decoder/encoder,
+# Mesa-syntax assembler/disassembler, and tools. Tables are generated from
+# Mesa's AGX2.xml (MIT) plus AienOS additions; see docs/AGX_ISA_NOTES.md.
+# Library objects (agx_isa.c, agx_isa_tables.c) import no heap, clock or I/O;
+# the text layer, tools and tests use hosted libc.
+#
+#   make            build out/libaienos_agx.a, out/agx_dis, out/agx_as
+#   make test       round-trip, Mesa-vector, negative and coverage tests (host)
+#   make sanitize   the same test under ASan+UBSan (Linux)
+#   make clean
+
+CC ?= cc
+AR ?= ar
+CFLAGS ?= -std=gnu11 -O2 -Wall -Wextra -Werror -fstack-protector-strong
+OUT ?= out
+
+LIB_SRCS = agx_isa.c agx_isa_tables.c
+TEXT_SRCS = agx_text.c
+HDRS = agx_isa.h agx_text.h
+LIB_OBJS = $(LIB_SRCS:%.c=$(OUT)/%.o)
+TEXT_OBJS = $(TEXT_SRCS:%.c=$(OUT)/%.o)
+LIB = $(OUT)/libaienos_agx.a
+TEST = $(OUT)/agx_isa_test
+TOOLS = $(OUT)/agx_dis $(OUT)/agx_as
+SANFLAGS = -fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all -g
+
+all: $(LIB) $(TOOLS)
+
+$(OUT):
+	mkdir -p $(OUT)
+
+$(OUT)/%.o: %.c $(HDRS) | $(OUT)
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+$(LIB): $(LIB_OBJS) $(TEXT_OBJS)
+	$(AR) rcs $@ $^
+
+$(OUT)/agx_%: tools/agx_%.c $(LIB) $(HDRS)
+	$(CC) $(CFLAGS) -o $@ $< $(LIB)
+
+$(TEST): tests/agx_isa_test.c $(LIB) $(HDRS)
+	$(CC) $(CFLAGS) -o $@ tests/agx_isa_test.c $(LIB)
+
+test: $(TEST) $(TOOLS) lib-checks
+	./$(TEST) tests/fixtures
+
+# The ISA core must not allocate, read a clock, or do its own I/O: the kernel
+# and the simulator use it as is.
+lib-checks: $(LIB_OBJS)
+	@bad=$$(nm -u $(LIB_OBJS) | awk 'NF {print $$NF}' | sed 's/^_//' | grep -xE 'malloc|calloc|realloc|free|aligned_alloc|posix_memalign|mmap|clock_gettime|time|gettimeofday|open|openat|read|write|pread|pwrite|fopen|fread|fwrite|printf|fprintf|snprintf|puts|getrandom'); \
+	if [ -n "$$bad" ]; then echo "lib-checks FAIL: ISA core imports $$bad"; exit 1; fi
+	@echo "lib-checks PASS (no heap, clock or I/O in the AGX ISA core)"
+
+sanitize: | $(OUT)
+ifeq ($(shell uname -s),Linux)
+	$(CC) $(CFLAGS) $(SANFLAGS) -o $(OUT)/agx_isa_test_asan tests/agx_isa_test.c $(LIB_SRCS) $(TEXT_SRCS)
+	UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 ./$(OUT)/agx_isa_test_asan tests/fixtures
+else
+	@echo "sanitize: Linux only"
+endif
+
+clean:
+	rm -rf $(OUT)
+
+.PHONY: all test lib-checks sanitize clean
