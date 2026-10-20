@@ -74,6 +74,9 @@ const void *ck_acpi_find(const char sig[4]);
 /* Monotonic time from the generic timer. */
 uint64_t ck_time_us(void);
 void ck_udelay(uint32_t us);
+/* Wait about us microseconds with the core halted (WFI), not spinning. Wakes on the
+ * EL1 timer even with IRQs masked; spins like ck_udelay unless the boot timer window saw real timer interrupts. */
+void ck_idle_wait_us(uint32_t us);
 
 /* Boot facts. */
 const char *ck_commit(void);  /* git commit the image was built from */

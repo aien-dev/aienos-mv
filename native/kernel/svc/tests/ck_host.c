@@ -200,6 +200,7 @@ uint64_t ck_time_us(void)
     return (uint64_t)ts.tv_sec * 1000000u + (uint64_t)ts.tv_nsec / 1000u;
 }
 void ck_udelay(uint32_t us) { (void)us; }
+void ck_idle_wait_us(uint32_t us) { (void)us; }
 const char *ck_commit(void) { return "host-test-commit"; }
 unsigned ck_exception_level(void) { return 1; }
 uint64_t ck_conventional_memory_kb(void) { return 42; }

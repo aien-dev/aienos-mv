@@ -34,6 +34,24 @@ void ck_udelay(uint32_t us)
         ;
 }
 
+void ck_idle_wait_us(uint32_t us)
+{
+    if (!ticks) { /* the boot timer window saw no interrupt: never halt on one that may not arrive */
+        ck_udelay(us);
+        return;
+    }
+    uint64_t f = ck_rd(cntfrq_el0);
+    uint64_t need = (uint64_t)us * (f / 1000000u) + ((uint64_t)us * (f % 1000000u)) / 1000000u;
+    uint64_t deadline = counter() + need;
+    ck_wr(cntp_cval_el0, deadline);
+    ck_wr(cntp_ctl_el0, 1); /* ENABLE, IMASK clear: the PPI wakes WFI even while PSTATE.I is set */
+    ck_isb();
+    while (counter() < deadline) /* any other wake-up just halts again until the deadline */
+        __asm__ volatile("wfi" ::: "memory");
+    ck_wr(cntp_ctl_el0, 0);
+    ck_isb();
+}
+
 void ck_timer_tick(void)
 {
     uint64_t hz = ck_rd(cntfrq_el0);

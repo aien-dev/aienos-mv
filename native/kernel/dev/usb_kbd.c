@@ -601,6 +601,9 @@ void ck_recovery_console_stub(void)
  * the existing ones. */
 /* Most bytes the start-of-session drain reads before it gives up. */
 #define CK_SESSION_DRAIN_MAX 4096u
+/* An empty poll pass halts the core this long (WFI until the timer): idle CPU stays near zero,
+ * key latency stays far under 50 ms. */
+#define CK_SESSION_IDLE_US 5000u
 static ck_line s_line;
 static ck_src_gate s_gate;
 static ck_hid_decoder s_dec;
@@ -712,7 +715,7 @@ static int sess_loop(int usb_ok)
             ck_printf("\nconsole_session: usb keyboard disconnected (port %u); the keyboard is revoked, serial goes on\n", g_k.port);
             return 1;
         }
-        if (idle) ck_udelay(100);
+        if (idle) ck_idle_wait_us(CK_SESSION_IDLE_US);
     }
 }
 
