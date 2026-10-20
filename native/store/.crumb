@@ -10,25 +10,6 @@
     }
   ],
   "extensions": {
-    "generated": {
-      "children": [
-        {
-          "digest": "2d3d3126d372770e8db78cfd308c5912d55104a6b8761ea21190679f9d37c9f1",
-          "last_commit": "22eb360",
-          "name": "tests",
-          "purpose": "Directory native/store/tests. Purpose not yet described by a human."
-        }
-      ],
-      "children_root": "sha256:63c601409e5cfba3ed2b46512984506078778d1d861501e8f4604e9277027df8",
-      "compiled_at": "2026-10-14T20:37:20Z",
-      "compiler": "crumb-compile/1",
-      "digest": "sha256:f75197d76b7daaeee8223cf25353251824cd4497400a439724a3a424e014a229",
-      "evidence_files": 0,
-      "evidence_root": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "files": 22,
-      "generated_at_commit": "7db773a8c3e041d4415c3c37240b26235c81b7a7",
-      "source_tree": "sha256:9cc41dbe9d2dc974564886203d0e1ff8f418eeea4dddde0f6cd1c57a698b65cb"
-    },
     "owner_lane": "",
     "provenance": {
       "entries": [

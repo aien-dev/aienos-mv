@@ -10,25 +10,6 @@
     }
   ],
   "extensions": {
-    "generated": {
-      "children": [
-        {
-          "digest": "33dc4e9fb2d9d884bb3ae8b384327e07d1c4d6871a536b42317da9882e666ffb",
-          "last_commit": "cea54be",
-          "name": "tests",
-          "purpose": "Directory native/sig/tests. Purpose not yet described by a human."
-        }
-      ],
-      "children_root": "sha256:2c318acd4ff46092a89eec7b6b1f764bdc91bb6428427fffa9b04f05753be9fd",
-      "compiled_at": "2026-10-14T14:58:51Z",
-      "compiler": "crumb-compile/1",
-      "digest": "sha256:135fd1edbe2388764de7dc755611b483b0c61adab858718c390b7745d141635c",
-      "evidence_files": 0,
-      "evidence_root": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "files": 10,
-      "generated_at_commit": "596870d6ef47c5238cc2c7fa1c08f5e5486e5d84",
-      "source_tree": "sha256:e0f0c7871cebb725ef0fbe9a56e1e0ca558690712174e9f2d8eab5fc2b848ce2"
-    },
     "owner_lane": "",
     "provenance": {
       "entries": [
