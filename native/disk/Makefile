@@ -104,6 +104,8 @@ GUARDS = disk-zero disk-lba disk-end queue-bound queue-failstop \
 	nvme-cfs-ready nvme-ready-bound nvme-cfs-cmd nvme-cmd-bound nvme-cid nvme-sqid \
 	nvme-sqes nvme-cqes nvme-nsid nvme-nsze nvme-flbas nvme-meta nvme-lbads \
 	nvme-failstop nvme-xfer nvme-range \
+	nvme-fail-reset nvme-sq-full nvme-direct-align nvme-io-cid nvme-io-sqid nvme-io-cfs nvme-io-bound \
+	nvme-async-xfer nvme-quiesce-sq root-live \
 	prp-len-wrap prp-addr-wrap prp-list-cap atomic-unit atomic-boundary \
 	sdhci-err-int sdhci-inhibit sdhci-r1 sdhci-ver sdhci-reset sdhci-volt sdhci-clock0 \
 	sdhci-nocard sdhci-cmd8 sdhci-acmd41-bound sdhci-csd-zero sdhci-ready sdhci-range \
