@@ -76,4 +76,25 @@ void ck_allen_ui_stats(uint32_t *frames, uint32_t *slowest_us, uint32_t *average
 void ck_allen_ui_map(unsigned n, const uint8_t *ea, const uint8_t *eb, unsigned ne, int lit, const char *label,
                      unsigned total, unsigned links);
 
+/* The setup wizard's panel (svc/setup_wizard.h): up to CK_ALLEN_UI_PANEL_LINES
+ * lines under Allen's words, each easing in a moment after the one before
+ * (a line already shown stays as it is when the panel is set again), and up
+ * to CK_ALLEN_UI_CHOICES choices in a row where the bar sits, the lit one
+ * bright, with hint under the row and aside small under that. A prompt
+ * (not NULL or "") puts the bar back for typing instead of the choices, with
+ * the prompt as its hint. While the panel is up Allen's words stay until he
+ * says something else. NULL: the panel fades and the window is as before.
+ * Strings are copied. */
+#define CK_ALLEN_UI_PANEL_LINES 8u
+#define CK_ALLEN_UI_CHOICES 5u
+typedef struct {
+    const char *line[CK_ALLEN_UI_PANEL_LINES];
+    unsigned nline;
+    const char *choice[CK_ALLEN_UI_CHOICES];
+    unsigned nchoice;
+    int lit;
+    const char *hint, *aside, *prompt;
+} ck_allen_ui_panel_view;
+void ck_allen_ui_panel(const ck_allen_ui_panel_view *p, uint64_t now);
+
 #endif

@@ -11,6 +11,8 @@
 #include <string.h>
 #include "setup_inv.h"
 #include "setup_wizard.h"
+#include "setup_store.h"
+#include "disk_file.h"
 
 static int fails;
 #define CHECK(c, ...)                                                                                                  \
@@ -538,6 +540,46 @@ static void test_resume(void)
     CHECK(sw_save(&again, rec, 20) == 0 && rec[0] == 0, "a short buffer gets nothing, not half a record");
 }
 
+/* the records on disk: two copies, a power cut in a save, a spoiled copy */
+static void test_store(const char *dir)
+{
+    char path[512], text[CK_SETUP_TEXT + 1];
+    unsigned n;
+    snprintf(path, sizeof path, "%s/setup-store.img", dir);
+    static disk_file f;
+    disk_dev d;
+    uint64_t blocks = (uint64_t)(CK_SETUP_FIRST + CK_SETUP_UNITS) * (CK_ALLEN_MEM_UNIT / 512);
+    CHECK(disk_file_open(&f, &d, path, 512, blocks, 1) == 0, "store image");
+    ck_setup_store st;
+    CHECK(ck_setup_load(&st, &d, text, sizeof text, &n) == 1 && n == 0, "a blank section is a first start");
+    CHECK(ck_setup_save(&st, "aienos-setup v1\nstep 5\n", 23) == 0 && st.gen == 1 && st.newest == 0, "first save in A");
+    CHECK(ck_setup_save(&st, "aienos-setup v1\nstep 9\n", 23) == 0 && st.newest == 1, "second save in B");
+    CHECK(ck_setup_load(&st, &d, text, sizeof text, &n) == 0 && !strcmp(text, "aienos-setup v1\nstep 9\n") && st.gen == 2,
+          "the newest comes back: %s", text);
+    disk_file_arm_cut(&f, 0); /* power lost before the next save (into copy A) reached the disk */
+    CHECK(ck_setup_save(&st, "aienos-setup v1\nstep 16\n", 24) != 0, "a cut save fails");
+    disk_file_disarm(&f);
+    CHECK(ck_setup_load(&st, &d, text, sizeof text, &n) == 0 && !strcmp(text, "aienos-setup v1\nstep 9\n"),
+          "after the cut the last whole save is there: %s", text);
+    uint8_t junk[512];
+    memset(junk, 0xa5, sizeof junk);
+    disk_write(&d, (uint64_t)(CK_SETUP_FIRST + 1) * 8, 1, junk); /* spoil copy B, the newest */
+    CHECK(ck_setup_load(&st, &d, text, sizeof text, &n) == 0 && !strcmp(text, "aienos-setup v1\nstep 5\n"),
+          "a spoiled newest copy: the older one is used: %s", text);
+    CHECK(ck_setup_save(&st, "x\x01y", 3) == 0, "a save of any bytes");
+    CHECK(ck_setup_load(&st, &d, text, sizeof text, &n) == 0 && !strcmp(text, "aienos-setup v1\nstep 5\n"),
+          "a copy with a control byte is not taken: %s", text);
+    disk_write(&d, (uint64_t)CK_SETUP_FIRST * 8, 1, junk);
+    CHECK(ck_setup_load(&st, &d, text, sizeof text, &n) == 1 && n == 0, "no valid copy: a first start, not junk");
+    char big[CK_SETUP_TEXT + 2];
+    memset(big, 'a', sizeof big);
+    CHECK(ck_setup_save(&st, big, CK_SETUP_TEXT + 1) != 0, "too long is refused");
+    disk_dev small = d;
+    small.block_count = blocks - 1;
+    CHECK(ck_setup_load(&st, &small, text, sizeof text, &n) < 0, "a section too small is refused");
+    disk_file_close(&f);
+}
+
 int main(int argc, char **argv)
 {
     setvbuf(stdout, 0, _IONBF, 0);
@@ -553,6 +595,7 @@ int main(int argc, char **argv)
     test_key_fails();
     test_alone();
     test_resume();
+    test_store(argc > 2 ? argv[2] : "/tmp");
     if (fails) {
         printf("%d checks failed\n", fails);
         return 1;

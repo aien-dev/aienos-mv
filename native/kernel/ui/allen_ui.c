@@ -36,6 +36,20 @@
 #define LETTER_MS 35u
 #define BAR_REST_MS 9000u /* the bar fades this long after the last thing happened */
 #define MAP_SHOW_MS 9000u
+#define PANEL_STEP_MS 600u /* the panel's lines ease in this far apart */
+#define PL_MAX 96
+#define PC_MAX 32
+
+/* the setup wizard's panel, as the keyboard side left it and as it is drawn */
+struct panel {
+    char line[CK_ALLEN_UI_PANEL_LINES][PL_MAX];
+    unsigned nline;
+    char choice[CK_ALLEN_UI_CHOICES][PC_MAX];
+    unsigned nchoice;
+    int lit;
+    char hint[PL_MAX], aside[64], prompt[48];
+    int on;
+};
 
 struct words {
     char text[TEXT_MAX];
@@ -52,6 +66,7 @@ static struct {
     volatile char lock;
     volatile int refresh;
     unsigned input_gen, said_gen, map_gen, wake_gen;
+    unsigned said_input_gen; /* input_gen when the last words came: keys after them stay in the bar */
     int sleep;
     unsigned sleep_gen;
     char input[TEXT_MAX];
@@ -64,6 +79,8 @@ static struct {
     int lit;
     uint8_t ea[CK_ALLEN_UI_MAP_LINKS], eb[CK_ALLEN_UI_MAP_LINKS];
     char label[TEXT_MAX];
+    struct panel panel;
+    unsigned panel_gen;
 } note;
 
 static struct {
@@ -114,6 +131,13 @@ static struct {
     int32_t mx, my, mr;
     uint32_t map_t, map_a, map_was; /* map_t: when it was last shown (0: never) */
     ck_rect map_box;
+    /* the setup wizard's panel */
+    struct panel pan;
+    unsigned seen_panel;
+    uint32_t pl_t[CK_ALLEN_UI_PANEL_LINES]; /* when each line starts to ease in */
+    uint32_t pan_a, pan_was, lit_t;
+    int lit_was;
+    ck_rect pan_box, row_box;
     /* the frame */
     uint8_t tiles[TILES_MAX];
     int32_t tx, ty;
@@ -146,6 +170,14 @@ static void lock(void)
 static void unlock(void) { __atomic_clear(&note.lock, __ATOMIC_RELEASE); }
 
 static uint32_t ms(uint64_t now) { return (uint32_t)((now - ui.t0) * 1000u / ui.hz); }
+
+static unsigned copy_len(const char *s)
+{
+    unsigned n = 0;
+    while (s && s[n])
+        n++;
+    return n;
+}
 
 static unsigned copy(char *d, const char *s, unsigned max)
 {
@@ -220,6 +252,8 @@ static uint32_t words_alpha(const struct words *w, uint32_t t)
 {
     if (!w->len)
         return 0;
+    if (ui.pan.on && !w->fade) /* a question is up: his words stay with it */
+        return 256;
     uint32_t out = w->fade ? w->fade : w->done + read_ms(w);
     return 256 - ck_smooth(ck_prog(t, out, out + 450));
 }
@@ -251,6 +285,8 @@ static void draw_words(const struct words *w, const ck_rect *r, uint32_t t)
 static void draw_bar(const ck_rect *r, uint32_t t)
 {
     uint32_t A = ui.bar_a;
+    const char *hint = ui.pan.on && ui.pan.prompt[0] ? ui.pan.prompt : ui.hint;
+    unsigned hint_len = hint == ui.hint ? ui.hint_len : (unsigned)copy_len(hint);
     if (!A || !ck_meets(ui.bar_box, r))
         return;
     ck_rect b = ui.bar, d = ck_grow(b, S(14));
@@ -280,7 +316,7 @@ static void draw_bar(const ck_rect *r, uint32_t t)
     int32_t x = b.x + pad;
     if (!ui.input_len) {
         if (tc.w)
-            text(&ui.cv, &tc, &ui.body, x, base, ui.hint, ui.hint_len, CK_RGB(150, 160, 196), 150 * A >> 8);
+            text(&ui.cv, &tc, &ui.body, x, base, hint, hint_len, CK_RGB(150, 160, 196), 150 * A >> 8);
     } else {
         int32_t avail = b.w - 2 * pad - S(12);
         unsigned from = 0;
@@ -304,12 +340,93 @@ static void draw_bar(const ck_rect *r, uint32_t t)
                 uint32_t *p = ui.back + (size_t)y * (size_t)ui.w + xx;
                 *p = ck_add(*p, CK_RGB(150, 170, 255), (40 + ca) * A >> 8);
             }
-    if (ui.footer && !ui.input_len) {
+    if (ui.footer && !ui.input_len && !ui.pan.on) {
         unsigned n = 0;
         while (ui.footer[n])
             n++;
         int32_t fw = (int32_t)ck_af_measure(&ui.small, ui.footer, n);
         text(&ui.cv, r, &ui.small, (ui.w - fw) / 2, b.y + b.h + S(34), ui.footer, n, CK_RGB(130, 140, 176),
+             110 * A >> 8);
+    }
+}
+
+/* ---- the setup wizard's panel ---- */
+
+static int32_t pan_line_y(unsigned i) { return words_top() + S(76) + (int32_t)i * S(31); }
+static int choices_up(void) { return ui.pan.on && ui.pan.nchoice && !ui.pan.prompt[0]; }
+
+/* one choice: a soft pill, lit (l 0..256) from a faint outline to a bright, blue-glowing one */
+static void draw_pill(const ck_rect *r, const ck_rect *p, const char *s, unsigned n, uint32_t l, uint32_t A)
+{
+    ck_rect d = ck_grow(*p, S(16));
+    if (!ck_clip(&d, r))
+        return;
+    int32_t rad = p->h / 2;
+    for (int32_t y = d.y; y < d.y + d.h; y++) {
+        uint32_t *row = ui.back + (size_t)y * (size_t)ui.w;
+        for (int32_t x = d.x; x < d.x + d.w; x++) {
+            int32_t sd = ck_sd_rrect(x, y, p, rad);
+            uint32_t in = ck_cover(sd);
+            if (in) {
+                row[x] = ck_mix(row[x], CK_RGB(6, 8, 18), (in * 140 >> 8) * A >> 8);
+                row[x] = ck_add(row[x], CK_RGB(70, 90, 210), (in * (40 * l >> 8) >> 8) * A >> 8);
+            }
+            int32_t edge = ck_abs(sd + 8);
+            if (edge < 16)
+                row[x] = ck_add(row[x], CK_RGB(255, 255, 255), (uint32_t)(16 - edge) * (2u + (4u * l >> 8)) * A >> 8);
+            if (l && sd > 0 && sd < S(16) * 16) {
+                uint32_t g = 256 - (uint32_t)(sd * 256 / (S(16) * 16));
+                row[x] = ck_add(row[x], CK_RGB(110, 130, 255), ((g * g >> 8) * 40 >> 8) * l >> 8);
+            }
+        }
+    }
+    int32_t tw = (int32_t)ck_af_measure(&ui.body, s, n);
+    uint32_t c = ck_mix(CK_RGB(160, 168, 204), CK_RGB(244, 246, 255), l);
+    text(&ui.cv, r, &ui.body, p->x + (p->w - tw) / 2, p->y + p->h / 2 + S(7), s, n, c, (150 + (106 * l >> 8)) * A >> 8);
+}
+
+static void draw_panel(const ck_rect *r, uint32_t t)
+{
+    uint32_t A = ui.pan_a;
+    if (!A)
+        return;
+    if (ck_meets(ui.pan_box, r))
+        for (unsigned i = 0; i < ui.pan.nline; i++) {
+            if (t <= ui.pl_t[i])
+                continue;
+            uint32_t age = t - ui.pl_t[i], a = ck_smooth(ck_prog(age, 0, 420));
+            int32_t rise = (int32_t)((int64_t)S(6) * (256 - ck_ease_out(ck_prog(age, 0, 520))) >> 8);
+            unsigned n = copy_len(ui.pan.line[i]);
+            int32_t lw = (int32_t)ck_af_measure(&ui.body, ui.pan.line[i], n);
+            text(&ui.cv, r, &ui.body, (ui.w - lw) / 2, pan_line_y(i) + rise, ui.pan.line[i], n, CK_RGB(206, 212, 238),
+                 (a * 230 >> 8) * A >> 8);
+        }
+    if (!choices_up() || !ck_meets(ui.row_box, r))
+        return;
+    /* the row: centred where the bar sits */
+    int32_t pad = S(28), gap = S(20), h = ui.bar.h - S(8), total = 0, wd[CK_ALLEN_UI_CHOICES];
+    for (unsigned i = 0; i < ui.pan.nchoice; i++) {
+        wd[i] = (int32_t)ck_af_measure(&ui.body, ui.pan.choice[i], copy_len(ui.pan.choice[i])) + 2 * pad;
+        total += wd[i] + (i ? gap : 0);
+    }
+    int32_t x = (ui.w - total) / 2, y = ui.bar.y + (ui.bar.h - h) / 2;
+    uint32_t ease = ck_smooth(ck_prog(t, ui.lit_t, ui.lit_t + 220));
+    for (unsigned i = 0; i < ui.pan.nchoice; i++) {
+        uint32_t l = (int)i == ui.pan.lit ? ease : (int)i == ui.lit_was ? 256 - ease : 0;
+        ck_rect p = {x, y, wd[i], h};
+        draw_pill(r, &p, ui.pan.choice[i], copy_len(ui.pan.choice[i]), l, A);
+        x += wd[i] + gap;
+    }
+    if (ui.pan.hint[0]) {
+        unsigned n = copy_len(ui.pan.hint);
+        int32_t hw = (int32_t)ck_af_measure(&ui.small, ui.pan.hint, n);
+        text(&ui.cv, r, &ui.small, (ui.w - hw) / 2, ui.bar.y + ui.bar.h + S(34), ui.pan.hint, n, CK_RGB(170, 178, 210),
+             170 * A >> 8);
+    }
+    if (ui.pan.aside[0]) {
+        unsigned n = copy_len(ui.pan.aside);
+        int32_t aw = (int32_t)ck_af_measure(&ui.small, ui.pan.aside, n);
+        text(&ui.cv, r, &ui.small, (ui.w - aw) / 2, ui.bar.y + ui.bar.h + S(64), ui.pan.aside, n, CK_RGB(120, 130, 166),
              110 * A >> 8);
     }
 }
@@ -555,7 +672,9 @@ static void compose(const ck_rect *r)
     ck_mind_draw(&ui.mind, &ui.cv, r);
     draw_guest(r, t);
     draw_words(&ui.now, r, t);
-    draw_bar(r, t);
+    draw_panel(r, t);
+    if (!choices_up())
+        draw_bar(r, t);
     if (ui.dim)
         dusk(r);
     present(r);
@@ -699,9 +818,41 @@ static void take_notes(uint32_t t)
             ui.thinking = 0;
         }
         ui.input_len = 0;
+        if (note.input_gen != note.said_input_gen) { /* typed after the words came, in the same frame */
+            ui.input_len = note.input_len;
+            for (unsigned i = 0; i < ui.input_len; i++)
+                ui.input[i] = note.input[i];
+        }
         ui.input_moved = 1;
         ui.quiet_t = t;
         ck_mind_mode(&ui.mind, CK_MIND_THINK, t);
+    }
+    if (note.panel_gen != ui.seen_panel) {
+        ui.seen_panel = note.panel_gen;
+        const struct panel *p = &note.panel;
+        uint32_t at = t + 300; /* after the words have started */
+        for (unsigned i = 0; i < p->nline; i++) {
+            int kept = ui.pan.on && i < ui.pan.nline;
+            for (unsigned k = 0; kept && k < PL_MAX; k++) {
+                if (ui.pan.line[i][k] != p->line[i][k])
+                    kept = 0;
+                if (!p->line[i][k])
+                    break;
+            }
+            if (kept)
+                at = ui.pl_t[i];
+            else
+                ui.pl_t[i] = at = ck_max((int32_t)at, (int32_t)t + (i ? 0 : 300));
+            at += PANEL_STEP_MS;
+        }
+        if (p->lit != ui.pan.lit || !ui.pan.on)
+            ui.lit_was = ui.pan.on ? ui.pan.lit : -1, ui.lit_t = t;
+        if (ui.pan.on && !p->on && ui.now.len && !ui.now.fade)
+            ui.now.fade = t; /* the panel goes, and the words held with it go too */
+        ui.pan = *p;
+        ui.quiet_t = t;
+        mark(ui.pan_box);
+        mark(ui.row_box);
     }
     if (note.map_gen != ui.seen_map) {
         ui.seen_map = note.map_gen;
@@ -828,8 +979,24 @@ static void advance(uint32_t t)
             ui.guest_t = 0;
     }
 
+    /* the setup wizard's panel: in and out, its lines easing in, the lit choice moving */
+    ui.pan_a = toward(ui.pan_a, ui.pan.on ? 256 : 0, dt, ui.pan.on ? 600 : 900);
+    if (ui.pan_a != ui.pan_was) {
+        mark(ui.pan_box);
+        mark(ui.row_box);
+    }
+    ui.pan_was = ui.pan_a;
+    for (unsigned i = 0; ui.pan_a && i < ui.pan.nline; i++)
+        if (t > ui.pl_t[i] && prev < ui.pl_t[i] + 560) {
+            mark(ui.pan_box);
+            break;
+        }
+    if (ui.pan_a && t - ui.lit_t < 260)
+        mark(ui.row_box);
+
     /* the bar: up once Allen has formed and while in use; down when things rest */
-    int want = ui.on && t >= FORMED_MS && (ui.input_len || t - ui.quiet_t < BAR_REST_MS || speaking || ui.speak_t);
+    int want = ui.on && t >= FORMED_MS && !choices_up() &&
+               (ui.pan.on ? ui.pan.prompt[0] != 0 : ui.input_len || t - ui.quiet_t < BAR_REST_MS || speaking || ui.speak_t);
     ui.bar_a = toward(ui.bar_a, want ? 256 : 0, dt, want ? (t - ui.key_t < 300 ? 250 : 900) : 1400);
     if (ui.bar_a || ui.bar_was || ui.input_moved)
         mark(ui.bar_box);
@@ -956,12 +1123,16 @@ int ck_allen_ui_start(volatile uint32_t *fb, uint32_t w, uint32_t h, uint32_t pi
     ui.bar_box.w = ck_max(ui.bar_box.w, S(720));
     ui.mx = ui.w * 84 / 100, ui.my = ui.h * 42 / 100, ui.mr = S(130);
     ui.map_box = (ck_rect){ui.mx - S(190), ui.my - ui.mr - S(64), S(380), 2 * ui.mr + S(150)};
+    ui.pan_box = (ck_rect){ui.w / 2 - S(640), pan_line_y(0) - S(34), S(1280), (int32_t)CK_ALLEN_UI_PANEL_LINES * S(31) + S(30)};
+    ui.row_box = (ck_rect){ui.w / 2 - S(900), ui.bar.y - S(24), S(1800), ui.h - ui.bar.y + S(24)};
+    ui.lit_was = -1;
     ui.lit = -1;
     ui.ripple_was = -1;
     /* the typed line's ink leaves from just above the bar, so the hint under it stays clear */
     ck_flow_init(&ui.flow, ui.w, ui.h, ui.cx, ui.cy, ui.mind.R, ui.bar.x + ui.bar.w / 2, ui.bar.y - ui.bar.h / 2, 0);
     ui.seen_input = note.input_gen, ui.seen_said = note.said_gen, ui.seen_wake = note.wake_gen;
     ui.seen_map = note.map_gen - 1; /* the map kept from before is taken by the first frame */
+    ui.seen_panel = note.panel_gen - 1;
     ui.started = 1;
     ui.ticket = 0;
     return 0;
@@ -1014,6 +1185,7 @@ void ck_allen_ui_said(const char *line, const char *reply, uint64_t now)
     note.think = reply == 0;
     copy(note.line, line, TEXT_MAX);
     copy(note.reply, reply ? reply : "", TEXT_MAX);
+    note.said_input_gen = note.input_gen;
     note.said_gen++;
     unlock();
 }
@@ -1051,4 +1223,27 @@ void ck_allen_ui_named(const char *name)
     ui.hint_len = n;
     if (ui.started)
         mark(ui.bar);
+}
+
+void ck_allen_ui_panel(const ck_allen_ui_panel_view *p, uint64_t now)
+{
+    (void)now;
+    lock();
+    struct panel *d = &note.panel;
+    d->on = p != 0;
+    d->nline = d->nchoice = 0;
+    d->lit = 0;
+    d->hint[0] = d->aside[0] = d->prompt[0] = 0;
+    if (p) {
+        for (unsigned i = 0; i < p->nline && i < CK_ALLEN_UI_PANEL_LINES; i++)
+            copy(d->line[d->nline++], p->line[i], PL_MAX);
+        for (unsigned i = 0; i < p->nchoice && i < CK_ALLEN_UI_CHOICES; i++)
+            copy(d->choice[d->nchoice++], p->choice[i], PC_MAX);
+        d->lit = p->lit >= 0 && (unsigned)p->lit < d->nchoice ? p->lit : 0;
+        copy(d->hint, p->hint, PL_MAX);
+        copy(d->aside, p->aside, sizeof d->aside);
+        copy(d->prompt, p->prompt, sizeof d->prompt);
+    }
+    note.panel_gen++;
+    unlock();
 }
