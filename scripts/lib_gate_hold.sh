@@ -14,7 +14,9 @@
 #   aienos qemu-gate <name> start=<iso> expected_end=<iso> pid=<n> pidstart=<n> hold=<id>
 # (holder = the first three fields), so `quietlock check`-style readers see
 # the holder and whether it is alive. Taking, clearing and releasing run under
-# flock on "<lock>.mutex", and the record is created by exclusive create.
+# flock on "<lock>.mutex". The record is published atomically: written whole to
+# "<lock>.new.<pid>", then hard-linked to the lock name (ln fails if the lock
+# exists), so the lock never exists without a complete record.
 #
 # Rules (the quietlock rules, gate side):
 #  - a live holder is never removed;
@@ -134,6 +136,9 @@ gh_lock_take() { # NAME MINUTES
         gh_why="gate_hold: the clock (date) is unreadable; refusing to take the QEMU gate lock"
         return 3
     fi
+    # Temp records left by a taker killed before it published (see below). Every
+    # taker holds the mutex for its whole take, so none is in progress now.
+    rm -f "${gh_gate_lock}".new.* 2>/dev/null || true
     if [[ -e "${gh_gate_lock}" ]]; then
         if ! _gh_parse "${gh_gate_lock}"; then
             gh_why="QEMU gate lock ${gh_gate_lock} is held (unreadable record, treated as held and never removed: ${_gh_first:-?})"
@@ -151,12 +156,26 @@ gh_lock_take() { # NAME MINUTES
     fi
     if [[ ${rc} == 0 ]]; then
         line="aienos qemu-gate ${name} start=$(_gh_iso "${now}") expected_end=$(_gh_iso $((now + minutes * 60))) pid=$$ pidstart=$(_gh_pidstart $$) hold=gate-$$-${now}"
-        if ( set -C; printf '%s\n' "${line}" >"${gh_gate_lock}" ) 2>/dev/null; then
+        # Publish atomically. The whole record goes to a temp file in the same
+        # directory first; then ln hard-links it to the lock name. ln fails when
+        # the lock exists (exclusive, as before), and the lock name never points
+        # at a partial record, so a taker killed after writing the temp file
+        # leaves no lock behind. The temp name is removed either way.
+        tmp="${gh_gate_lock}.new.$$"
+        if ! ( set -C; printf '%s\n' "${line}" >"${tmp}" ) 2>/dev/null; then
+            gh_why="QEMU gate lock record ${tmp} cannot be written"
+            rc=3
+        elif ln "${tmp}" "${gh_gate_lock}" 2>/dev/null; then
             gh_line="${line}"
         else
-            gh_why="QEMU gate lock ${gh_gate_lock} appeared while taking it ($(_gh_describe "${gh_gate_lock}"))"
+            if [[ -e "${gh_gate_lock}" ]]; then
+                gh_why="QEMU gate lock ${gh_gate_lock} appeared while taking it ($(_gh_describe "${gh_gate_lock}"))"
+            else
+                gh_why="QEMU gate lock ${gh_gate_lock} cannot be published (hard link from ${tmp} failed)"
+            fi
             rc=3
         fi
+        rm -f "${tmp}"
     fi
     flock -u "${fd}"
     exec {fd}>&-

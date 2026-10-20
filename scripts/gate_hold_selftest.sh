@@ -23,6 +23,9 @@
 #   8 no script under scripts/ writes or removes the machine quiet flag
 #   9 a "*" in a record is not globbed; a reused pid (other start time) is
 #     dead; no date or no flock: the gate refuses and writes nothing
+#   10 a taker killed after it wrote its record but before it published it
+#     leaves no gate lock (the lock never exists without a full record); the
+#     next gate runs at once and leaves no temp record behind
 # Exit 0 when every case passes, 1 otherwise.
 set -uo pipefail
 
@@ -175,6 +178,27 @@ out="$(PATH="${tmp}/nodate" "${gate}" gateA true 2>&1)"; rc=$?
 check "9c no date: refuses and writes no record" '[[ ${rc} == 3 && ${out} == *"clock"* && ! -e ${AIENOS_GATE_LOCK} ]]'
 out="$(PATH="${tmp}/noflock" "${gate}" gateA true 2>&1)"; rc=$?
 check "9c no flock: refuses by name and writes no record" '[[ ${rc} == 3 && ${out} == *"flock not found"* && ! -e ${AIENOS_GATE_LOCK} ]]'
+
+# ---- 10: a taker killed between writing its record and publishing it
+# The publish step is the first ln of the taker. The shim below stands in for
+# it: it records that the publish step was reached, then SIGKILLs the taker
+# before any lock is published (the kill is the crash the gate must survive).
+mkdir -p "${tmp}/kill-shim"
+cat >"${tmp}/kill-shim/ln" <<'EOF'
+#!/usr/bin/env bash
+: >"${AIENOS_TEST_PUBLISH_REACHED:?}"
+kill -KILL "${PPID}"
+kill -KILL "$$"
+EOF
+chmod +x "${tmp}/kill-shim/ln"
+rm -f "${AIENOS_GATE_LOCK}" "${tmp}/reached"
+AIENOS_TEST_PUBLISH_REACHED="${tmp}/reached" PATH="${tmp}/kill-shim:${PATH}" "${gate}" gateK true >/dev/null 2>&1; rc=$?
+check "10 the taker reached its publish step" '[[ -e ${tmp}/reached ]]'
+check "10 the taker died (not a clean exit)" '[[ ${rc} != 0 && ${rc} != 3 ]]'
+check "10 killed before publishing: no gate lock is left" '[[ ! -e ${AIENOS_GATE_LOCK} ]]'
+out="$("${gate}" gateL true 2>&1)"; rc=$?
+check "10 the next gate runs at once" '[[ ${rc} == 0 ]]'
+check "10 and leaves no temp record behind" '[[ -z "$(ls -A "${tmp}" | grep -E "^qemu-gate-lock\.new\." || true)" ]]'
 
 # ---- 8: no script writes or removes the machine quiet flag
 # trust1_m5_qualify.sh is left out of the grep: it writes and removes a flag
