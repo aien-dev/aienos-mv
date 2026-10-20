@@ -91,7 +91,7 @@ int amd_compute_init(void)
     amd_wr(mmCP_HQD_PQ_RPTR_REPORT_ADDR_HI, (uint32_t)(rptr_pa >> 32));
     amd_wr(mmCP_HQD_PQ_WPTR_POLL_ADDR,    (uint32_t)(rptr_pa & 0xffffffffu));
     amd_wr(mmCP_HQD_PQ_WPTR_POLL_ADDR_HI, (uint32_t)(rptr_pa >> 32));
-    amd_wr(mmCP_HQD_PQ_CNTL, MEC_RB_BLKSZ); /* ring size log2 - 1 in bits [4:0] */
+    amd_wr(mmCP_HQD_PQ_CONTROL, MEC_RB_BLKSZ); /* ring size log2 - 1 in bits [4:0] */
     amd_wr(mmCP_HQD_EOP_BASE_ADDR,    (uint32_t)(eop_pa >> 8));
     amd_wr(mmCP_HQD_EOP_BASE_ADDR_HI, (uint32_t)(eop_pa >> 40));
     amd_wr(mmCP_HQD_EOP_CONTROL, 0x3u | (5u << 2u)); /* EOP_SIZE=5 (1<<5=32 entries), MTYPE=3 */
@@ -106,7 +106,8 @@ int amd_compute_init(void)
 
     /* Restore GRBM_GFX_INDEX to broadcast. */
     amd_wr(mmGRBM_GFX_INDEX,
-           GRBM_GFX_INDEX_SE_BROADCAST | GRBM_GFX_INDEX_SH_BROADCAST);
+           GRBM_GFX_INDEX_SE_BROADCAST | GRBM_GFX_INDEX_SH_BROADCAST |
+           GRBM_GFX_INDEX_INSTANCE_BROADCAST);
 
     uint32_t active_now = amd_rd(mmCP_HQD_ACTIVE);
     ck_printf("gpu: compute: HQD SE=0 SH=0 INSTANCE=0 active=%u ring_pa=0x%llx ring_dw=%u\n",

@@ -6,7 +6,8 @@
 #   ping 0 | pci_cfg 1 | bar5_read 1 | bar5_write 2 | bar5_rmw 3 | bar5_poll 4
 #   bar0_read 1 | bar0_write 2
 # Indices are DWORD indices in 0..65535 (BAR5 and the BAR0 window).
-# BAR5 write allowlist (DWORD index): 0x4800-0x4900 and 0x4A00-0x4C00. A write outside it
+# BAR5 write allowlist (DWORD index): 0x4800-0x4900, 0x4A00-0x4C00, GRPH 0x1a04-0x1a12 (DCP0),
+# SMC 0x94-0x95 and 0xa4 (feat/imac-gpu-bench, L142). A write outside it
 # is reported as NEEDS-ALLOWLIST: a missing console allowlist entry, not a grammar error.
 #
 # Usage: check_bench.sh [file...]     (default: STEP*.bench beside this script)
@@ -67,10 +68,12 @@ for f in "${files[@]}"; do
                 writes=$((writes + 1))
                 idx=${vals[0]}
                 if { [ "$idx" -ge $((0x4800)) ] && [ "$idx" -le $((0x4900)) ]; } ||
-                   { [ "$idx" -ge $((0x4A00)) ] && [ "$idx" -le $((0x4C00)) ]; }; then
+                   { [ "$idx" -ge $((0x4A00)) ] && [ "$idx" -le $((0x4C00)) ]; } ||
+                   { [ "$idx" -ge $((0x1a04)) ] && [ "$idx" -le $((0x1a12)) ]; } ||
+                   { [ "$idx" -ge $((0x94)) ] && [ "$idx" -le $((0x95)) ]; } || [ "$idx" -eq $((0xa4)) ]; then
                     :
                 else
-                    printf '%s:%s NEEDS-ALLOWLIST %s (BAR5 index 0x%x is outside 0x4800-0x4900, 0x4A00-0x4C00)\n' \
+                    printf '%s:%s NEEDS-ALLOWLIST %s (BAR5 index 0x%x is outside the console allowlist, see the header of this script)\n' \
                         "$base" "$n" "$cmd" "$idx"
                     need=1
                 fi ;;

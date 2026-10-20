@@ -15,11 +15,11 @@
  *
  * Sequence for each flip (follows dce_v11_0_page_flip in
  * drivers/gpu/drm/amd/amdgpu/dce_v11_0.c, MIT license):
- *   a. Lock the surface update: set GRPH_UPDATE[0] (GRPH_SURFACE_UPDATE_LOCK).
- *   b. Write GRPH_FLIP_CONTROL = 1 (flip at next vsync).
+ *   a. Lock the surface update: set GRPH_UPDATE_LOCK (bit 16).
+ *   b. Clear GRPH_FLIP_CONTROL retrace and immediate bits (flip at next vblank).
  *   c. Write new surface address HIGH then LOW.
- *   d. Unlock: clear GRPH_UPDATE[0].
- *   e. Wait for GRPH_UPDATE[1] (GRPH_SURFACE_UPDATE_PENDING) to clear,
+ *   d. Unlock: clear GRPH_UPDATE_LOCK.
+ *   e. Wait for GRPH_SURFACE_UPDATE_PENDING (bit 2) to clear,
  *      bounded by GPU_VBLANK_MS.
  *   f. Swap front/back pointers.
  *
@@ -144,8 +144,8 @@ int ck_gpu_flip(void)
     amd_wr(mmGRPH_UPDATE, upd);
     __asm__ volatile("" ::: "memory");
 
-    /* b. Request vsync flip. */
-    amd_wr(mmGRPH_FLIP_CONTROL, GRPH_FLIP_AT_VSYNC);
+    /* b. Flip at vblank: clear the retrace and immediate-flip bits (dce_v11_0.c:265-269). */
+    amd_wr(mmGRPH_FLIP_CONTROL, amd_rd(mmGRPH_FLIP_CONTROL) & ~GRPH_FLIP_MODE_BITS);
 
     /* c. Write new surface address (HIGH then LOW). */
     amd_wr(mmGRPH_PRIMARY_SURFACE_ADDRESS_HIGH, (uint32_t)(new_pa >> 32));

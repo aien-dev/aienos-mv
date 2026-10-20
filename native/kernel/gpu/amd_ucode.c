@@ -64,9 +64,9 @@ static const uint32_t g_mec2_ucode[] __attribute__((unused)) = {0};
 /* Ring buffer is 4096 dwords = 16 KiB.  Allocated from DMA pool. */
 #define GFX_RING_DW    AMD_RING_DWORDS  /* 4096 */
 
-/* CP_RB0_CNTL: ring buffer log2 size field.
- * CP_RB_BLKSZ(n) = log2(ring_entries) - 1.  For 4096 entries: log2=12, BLKSZ=11. */
-#define GFX_RB_BLKSZ    11u  /* 2^(11+1) = 4096 entries */
+/* CP_RB0_CNTL: RB_BUFSZ = log2(ring bytes / 8), RB_BLKSZ = RB_BUFSZ - 2 (gfx_v8_0.c:4248-4250).
+ * 4096 dwords = 16 KiB = 2^11 qwords: BUFSZ = 11. */
+#define GFX_RB_BUFSZ    11u  /* 8 << 11 = 16 KiB = 4096 dwords */
 
 /* Soft-reset CP and RLC, wait for reset to land, then clear. */
 static int __attribute__((unused)) gfx_soft_reset(void)
@@ -192,8 +192,8 @@ int amd_gfx_ring_init(void)
     amd_wr(mmCP_RB0_RPTR_ADDR,    (uint32_t)(rptr_pa & 0xffffffffu));
     amd_wr(mmCP_RB0_RPTR_ADDR_HI, (uint32_t)(rptr_pa >> 32));
 
-    /* Set ring buffer size: BLKSZ=11 (4096 dwords) and NO_UPDATE=0. */
-    amd_wr(mmCP_RB0_CNTL, CP_RB_BLKSZ(GFX_RB_BLKSZ));
+    /* Set ring buffer size (BUFSZ=11: 4096 dwords, BLKSZ=BUFSZ-2) and NO_UPDATE=0. */
+    amd_wr(mmCP_RB0_CNTL, CP_RB_BUFSZ(GFX_RB_BUFSZ) | CP_RB_BLKSZ(GFX_RB_BUFSZ - 2u));
 
     /* Set ring base address. */
     amd_wr(mmCP_RB0_BASE,    (uint32_t)(ring_pa >> 8));  /* base in 256-byte units */

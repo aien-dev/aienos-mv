@@ -78,7 +78,7 @@ struct amd_gpu_state {
     uint64_t           mc_sys_lo, mc_sys_hi; /* system aperture */
 
     /* SMU state as-found */
-    int                smu_alive;   /* SMU answered MSG_GetSMFWVersion */
+    int                smu_alive;   /* SMC firmware header readable (Version not 0 or all-ones) */
     uint32_t           smu_fw_ver;
 
     /* Ring state */

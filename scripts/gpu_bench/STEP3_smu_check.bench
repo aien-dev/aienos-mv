@@ -1,30 +1,15 @@
-# STEP3_smu_check.bench -- SMU state as the firmware left it.
+# STEP3_smu_check.bench -- SMU state as the firmware left it (reads only).
 # BAR5 DWORD indices (byte offset / 4). Source: amd_gpu_regs.h (smu_7_1_3_d.h).
 #
-# WRITE ALLOWLIST: the writes below (0x178, 0x179, 0x180) are NOT inside the console's
-# current allowlist. Run needs this entry added first: 0x0170-0x0180 (SMC message
-# registers, smu_7_1_3_d.h).
-#
-# Unverified: message 0x201 (GetSMFWVersion) is not in the smu7_ppsmc.h of Linux v6.6
-# (drivers/gpu/drm/amd/pm/powerplay/inc). The code must be checked against the real SMU
-# before the write runs. PPSMC_Result_OK = 0x01 (smu7_ppsmc.h:83) is verified.
+# No writes, so the allowlist does not apply. Earlier versions wrote message 0x201 as
+# "GetSMFWVersion"; Linux's smu7_ppsmc.h:335 has 0x201 as PPSMC_MSG_API_GetMclkFrequency and no
+# GetSMFWVersion exists, so that write is gone. No SMC message is sent until a verified safe
+# one is chosen.
 
 # All-ones on either read means the SMC is not reachable
-# mmSMC_MSG, byte 0x5E0
-bar5_read 0x178
-# mmSMC_MSG_RESP_0, byte 0x600
-bar5_read 0x180
-
-# Send the message: clear the response, clear the argument, write the message
-# SMC_MSG_RESP_0 = 0
-bar5_write 0x180 0x0
-# SMC_MSG_ARG_0 = 0 (byte 0x5E4)
-bar5_write 0x179 0x0
-# SMC_MSG = 0x0201 (unverified, see above)
-bar5_write 0x178 0x201
-
-# Wait for the SMU to answer with PPSMC_Result_OK (0x01), up to 50 ms
-bar5_poll 0x180 0xffffffff 0x1 50
-
-# the response (1 = OK)
-bar5_read 0x180
+# mmSMC_MESSAGE_0, byte 0x250
+bar5_read 0x94
+# mmSMC_RESP_0, byte 0x254 (PPSMC_Result_OK = 0x01, smu7_ppsmc.h:83)
+bar5_read 0x95
+# mmSMC_MSG_ARG_0, byte 0x290
+bar5_read 0xa4

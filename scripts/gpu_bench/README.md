@@ -10,32 +10,42 @@ Grammar is checked against the console's commands and argument counts. An allowl
 the entry below is added to its allowlist. The console lives on the bench branch, so this
 branch cannot add the entries itself.
 
-## Write allowlist entries STEP1-3 need (the required ones)
+## Register numbers are checked against AMD's headers
 
-The console's current allowlist is DWORD 0x4800-0x4900 and 0x4A00-0x4C00 (BAR5).
+    bash scripts/gpu_bench/check_regs.sh           # exit 0 when every number matches, 1 otherwise
 
-| Step  | Writes (BAR5 DWORD index)                | Entry to add                       |
-|-------|------------------------------------------|------------------------------------|
-| STEP1 | 0x5045-0x5048 (GRPH primary surface, flip, update) | 0x5040-0x5050 (DCE 11.2 GRPH, controller 0) |
-| STEP3 | 0x178, 0x179, 0x180 (SMC message, arg, response)   | 0x0170-0x0180 (SMU message registers) |
+It fetches AMD's MIT register headers from the Linux kernel (v6.12, cached in
+~/.cache/aienos-amd-hdr) and checks every `mm...` index, mask and shift in
+`native/kernel/gpu/amd_gpu_regs.h` (value and the cited `header:line`), the SMU constants, and
+every `bar5_*` index in the STEP files. Earlier versions of these files used numbers that were
+never checked (GRPH 0x5045 where the header says 0x1a04, SMC 0x178 where it says 0x94).
+
+## Write allowlist entries the STEPs need
+
+The console on feat/imac-gpu-bench allowlists BAR5 DWORD 0x4800-0x4900, 0x4A00-0x4C00,
+GRPH 0x1a04-0x1a12 (DCP0), SMC 0x94-0x95 and 0xa4.
+
+| Step  | Writes (BAR5 DWORD index)                          | In the allowlist |
+|-------|----------------------------------------------------|------------------|
+| STEP1 | 0x1a04, 0x1a07, 0x1a11, 0x1a12 (GRPH, controller 0) | yes |
+| STEP3 | none (reads 0x94, 0x95, 0xa4)                      | not needed |
 
 ## Entries STEP4-6 need (the same console change, for those runs)
 
 | Step  | Writes (BAR5 DWORD index)                        | Entry to add |
 |-------|--------------------------------------------------|--------------|
-| STEP4 | 0x817, 0x2150, 0x3100, 0x30d0, 0x20c1, 0x20c3    | 0x0800-0x0820, 0x2150, 0x3100, 0x30d0, 0x20c0-0x20c6 |
-| STEP5 | 0x3492, 0x3493, 0x3496                           | 0x3490-0x3496 |
-| STEP6 | 0x803, 0x2120, 0x2123, 0x2128, 0x213b           | 0x0803, 0x2120-0x213b |
+| STEP4 | 0x2008, 0xf814, 0xf83c, 0xec00, 0x3041, 0x3045   | those indices (GRBM_SOFT_RESET, CP_PFP_UCODE_ADDR, RLC_GPM_UCODE_ADDR, RLC_CNTL, CP_RB0_CNTL, CP_RB0_WPTR) |
+| STEP5 | 0x3480, 0x3483, 0x3484                           | 0x3480-0x3489 (SDMA0 gfx ring) |
+| STEP6 | 0xc200, 0x3247, 0x324f, 0x3256, 0x326c           | 0xc200, 0x3247-0x326c (review the queue-select step first, see STEP6) |
 
 ## Changes from the first version of these files
 
 - Commands were in an older form (`r32`, `w32`, `poll`) with byte offsets. Now they use
   the console's commands (`bar5_read`, `bar5_write`, `bar5_poll`) and DWORD indices
   (byte offset / 4, given in each comment).
-- STEP1: CRTC_STATUS was byte 0x1213C; the register is 0x604e, byte 0x18138.
-- STEP2: AGP_TOP and AGP_BOT were both read at byte 0x2C; now 0xb (byte 0x2C) and 0xc (byte 0x30).
-- STEP3: the "wait for a non-zero response" poll cannot be written with the console's
-  equal-to poll. It now waits for PPSMC_Result_OK (0x01).
+- STEP1: CRTC_STATUS is 0x1ba3 (byte 0x6E8C), not 0x604e; GRPH registers are 0x1a04-0x1a12, not 0x5045-0x5048 (Linux dce_11_2_d.h).
+- STEP2: all indices now from gmc_8_1_d.h (AGP_TOP 0x80a, AGP_BOT 0x80b).
+- STEP3: now reads only; the old 0x201 "GetSMFWVersion" message does not exist in smu7_ppsmc.h.
 - STEP4 and STEP6: a poll line had no arguments; fixed.
 - Inline comments moved to their own lines (the console doc says comments start with `#`).
 

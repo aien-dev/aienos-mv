@@ -11,24 +11,8 @@
 #include <stdlib.h>
 #include <assert.h>
 
-/* ---- Register definitions (from amd_gpu_regs.h) -----------------------*/
-/* DCE 11.2 dce_11_2_d.h */
-#define mmGRPH_PRIMARY_SURFACE_ADDRESS       0x5045u
-#define mmGRPH_PRIMARY_SURFACE_ADDRESS_HIGH  0x5046u
-#define mmGRPH_FLIP_CONTROL                  0x5047u
-#define mmGRPH_UPDATE                        0x5048u
-#define GRPH_UPDATE_LOCK                     0x00000001u
-#define GRPH_SURFACE_UPDATE_PENDING          0x00000002u
-#define GRPH_FLIP_AT_VSYNC                   0x00000001u
-/* GMC 8.1 gmc_8_1_d.h */
-#define mmMC_VM_FB_LOCATION                  0x0009u
-#define mmMC_VM_SYSTEM_APERTURE_LOW_ADDR     0x000eu
-#define mmMC_VM_SYSTEM_APERTURE_HIGH_ADDR    0x000fu
-/* SMU 7.1.3 smu_7_1_3_d.h */
-#define mmSMC_MSG                            0x0178u
-#define mmSMC_MSG_RESP_0                     0x0180u
-/* GFX 8.0 gfx_8_0_d.h */
-#define mmCP_RB0_WPTR                        0x20c3u
+/* ---- Register definitions: the driver's own header, so the test cannot drift from it. */
+#include "amd_gpu_regs.h"
 
 /* AMD ring IDs */
 #define AMD_RING_OK       0
@@ -115,7 +99,7 @@ static void test_flip_sequence(uint64_t new_pa)
 {
     uint32_t upd = mock_rd(mmGRPH_UPDATE) | GRPH_UPDATE_LOCK;
     mock_wr(mmGRPH_UPDATE, upd);
-    mock_wr(mmGRPH_FLIP_CONTROL, GRPH_FLIP_AT_VSYNC);
+    mock_wr(mmGRPH_FLIP_CONTROL, mock_rd(mmGRPH_FLIP_CONTROL) & ~GRPH_FLIP_MODE_BITS);
     mock_wr(mmGRPH_PRIMARY_SURFACE_ADDRESS_HIGH, (uint32_t)(new_pa >> 32));
     mock_wr(mmGRPH_PRIMARY_SURFACE_ADDRESS,      (uint32_t)(new_pa & 0xffffffffu));
     upd &= ~GRPH_UPDATE_LOCK;
@@ -169,9 +153,9 @@ static void test_T1_display_reads_surface_address(void)
     int rc = test_display_init_logic(vram_pa, fb_pa, &bb_pa, &bb_off);
 
     CHECK(log_find_read(0, mmGRPH_PRIMARY_SURFACE_ADDRESS) >= 0,
-          "reads mmGRPH_PRIMARY_SURFACE_ADDRESS (dce_11_2_d.h:0x5045)");
+          "reads mmGRPH_PRIMARY_SURFACE_ADDRESS (dce_11_2_d.h:3537)");
     CHECK(log_find_read(0, mmGRPH_PRIMARY_SURFACE_ADDRESS_HIGH) >= 0,
-          "reads mmGRPH_PRIMARY_SURFACE_ADDRESS_HIGH (dce_11_2_d.h:0x5046)");
+          "reads mmGRPH_PRIMARY_SURFACE_ADDRESS_HIGH (dce_11_2_d.h:3558)");
     CHECK(rc == 0, "display_init_logic returns OK");
 }
 
@@ -201,11 +185,12 @@ static void test_T3_flip_sequence(void)
     printf("T3: ck_gpu_flip writes correct register sequence\n");
     log_head = log_count = 0;
     fake_bar5[mmGRPH_UPDATE] = 0;
+    fake_bar5[mmGRPH_FLIP_CONTROL] = GRPH_FLIP_MODE_BITS;  /* firmware left the immediate-flip bit set */
     uint64_t new_pa = 0xc2400000ull;
     test_flip_sequence(new_pa);
 
     int lock_write = log_find_write(0, mmGRPH_UPDATE, 0, 0);
-    int flip_write = log_find_write(0, mmGRPH_FLIP_CONTROL, GRPH_FLIP_AT_VSYNC, 1);
+    int flip_write = log_find_write(0, mmGRPH_FLIP_CONTROL, 0, 1);
     int addr_hi    = log_find_write(0, mmGRPH_PRIMARY_SURFACE_ADDRESS_HIGH, 0, 0);
     int addr_lo    = log_find_write(0, mmGRPH_PRIMARY_SURFACE_ADDRESS,
                                     (uint32_t)(new_pa & 0xffffffffu), 1);
@@ -246,7 +231,7 @@ static void test_T5_mc_reads_fb_location(void)
     uint64_t fb_start = (uint64_t)(fb_loc & 0xffffu) << 24;
 
     CHECK(log_find_read(0, mmMC_VM_FB_LOCATION) >= 0,
-          "reads mmMC_VM_FB_LOCATION (gmc_8_1_d.h:0x0009)");
+          "reads mmMC_VM_FB_LOCATION (gmc_8_1_d.h:281)");
     CHECK(fb_start == 0xc0000000ull,
           "VRAM start decoded as 0xc0000000 from MC_VM_FB_LOCATION");
 }
@@ -270,19 +255,19 @@ static void test_T6_mc_vram_size(void)
 static void test_T7_smu_all_ones(void)
 {
     printf("T7: amd_smu_check handles all-ones registers gracefully\n");
-    fake_bar5[mmSMC_MSG]      = 0xffffffffu;
-    fake_bar5[mmSMC_MSG_RESP_0] = 0xffffffffu;
+    fake_bar5[mmSMC_MESSAGE_0]      = 0xffffffffu;
+    fake_bar5[mmSMC_RESP_0] = 0xffffffffu;
     log_head = log_count = 0;
 
-    uint32_t msg  = mock_rd(mmSMC_MSG);
-    uint32_t resp = mock_rd(mmSMC_MSG_RESP_0);
+    uint32_t msg  = mock_rd(mmSMC_MESSAGE_0);
+    uint32_t resp = mock_rd(mmSMC_RESP_0);
     int all_ones = (msg == 0xffffffffu && resp == 0xffffffffu);
 
     CHECK(all_ones,            "all-ones detected (chip not accessible)");
-    CHECK(log_find_read(0, mmSMC_MSG) >= 0,
-          "reads mmSMC_MSG (smu_7_1_3_d.h:0x0178)");
-    CHECK(log_find_read(0, mmSMC_MSG_RESP_0) >= 0,
-          "reads mmSMC_MSG_RESP_0 (smu_7_1_3_d.h:0x0180)");
+    CHECK(log_find_read(0, mmSMC_MESSAGE_0) >= 0,
+          "reads mmSMC_MESSAGE_0 (smu_7_1_3_d.h:97)");
+    CHECK(log_find_read(0, mmSMC_RESP_0) >= 0,
+          "reads mmSMC_RESP_0 (smu_7_1_3_d.h:98)");
 }
 
 /* ---- T8: ring submit writes dwords + advances WPTR ---------------------*/
@@ -303,12 +288,12 @@ static void test_T8_ring_submit(void)
     /* Simulate: write 2 dwords to ring, then advance WPTR to 2 */
     fake_ring[0] = 0xffff1000u;  /* NOP */
     fake_ring[1] = 0xdeadbeef;   /* data */
-    mock_wr(mmCP_RB0_WPTR, 2u);  /* CP_RB0_WPTR = 2 (gfx_8_0_d.h:0x20c3) */
+    mock_wr(mmCP_RB0_WPTR, 2u);  /* CP_RB0_WPTR = 2 (gfx_8_0_d.h:238) */
 
     CHECK(fake_ring[0] == 0xffff1000u, "NOP packet at ring[0]");
     CHECK(fake_ring[1] == 0xdeadbeef,  "data at ring[1]");
     CHECK(log_find_write(0, mmCP_RB0_WPTR, 2u, 1) >= 0,
-          "writes CP_RB0_WPTR (gfx_8_0_d.h:0x20c3) to advance ring");
+          "writes CP_RB0_WPTR (gfx_8_0_d.h:238) to advance ring");
 }
 
 /* ---- T9: fence_wait returns OK when seq matches -----------------------*/
