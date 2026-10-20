@@ -426,7 +426,12 @@ mod tests {
         let con = Console::new(None, &[], Instant::now());
         let mut s = spec(Arch::X86_64, 1, 1024, ImageKind::DiskQcow2);
         s.image = img;
+        let t = Instant::now();
         let (m, cpu) = build(&s, &con).unwrap();
+        eprintln!(
+            "whpx build (image read, 1024 MiB RAM, tables, kernel load): {:?}",
+            t.elapsed()
+        );
         assert_eq!(
             &m.mem.slice(cpu.rip - 0x1000, 2).unwrap(),
             b"MZ",

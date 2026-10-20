@@ -20,8 +20,6 @@
 //! The kernel takes frames only from conventional memory (native/kernel/mm/frames.c,
 //! ck_frames_from_efi), so nothing here is reused while it still runs on these tables.
 
-use std::alloc::{alloc_zeroed, dealloc, Layout};
-
 pub const PAGE: u64 = 4096;
 pub const LOW_FREE_END: u64 = 0xA_0000;
 pub const FW_BASE: u64 = 0x10_0000;
@@ -91,9 +89,7 @@ impl GuestMem {
 
     fn add(&mut self, gpa: u64, len: u64) -> Result<(), String> {
         let len = usize::try_from(len).map_err(|_| "guest RAM too big for this host")?;
-        let layout = Layout::from_size_align(len, PAGE as usize).map_err(|e| e.to_string())?;
-        // SAFETY: the layout has a non-zero size (len >= MIN_RAM or the high part > 0).
-        let ptr = unsafe { alloc_zeroed(layout) };
+        let ptr = os::map(len);
         if ptr.is_null() {
             return Err(format!("cannot allocate {} MiB of guest RAM", len >> 20));
         }
@@ -169,10 +165,61 @@ impl GuestMem {
 impl Drop for GuestMem {
     fn drop(&mut self) {
         for r in &self.regions {
-            let layout = Layout::from_size_align(r.len, PAGE as usize).expect("as allocated");
-            // SAFETY: allocated in `add` with this layout.
-            unsafe { dealloc(r.ptr, layout) };
+            os::unmap(r.ptr, r.len);
         }
+    }
+}
+
+/// Guest RAM comes straight from the OS: page-aligned and zero-filled on first touch, so
+/// a 1 GiB guest costs nothing until it uses the memory (the allocator would zero every
+/// byte up front for page alignment).
+mod os {
+    #[cfg(unix)]
+    pub fn map(len: usize) -> *mut u8 {
+        // SAFETY: a fresh private anonymous mapping.
+        let p = unsafe {
+            libc::mmap(
+                std::ptr::null_mut(),
+                len,
+                libc::PROT_READ | libc::PROT_WRITE,
+                libc::MAP_PRIVATE | libc::MAP_ANON,
+                -1,
+                0,
+            )
+        };
+        if p == libc::MAP_FAILED {
+            std::ptr::null_mut()
+        } else {
+            p.cast()
+        }
+    }
+
+    #[cfg(unix)]
+    pub fn unmap(p: *mut u8, len: usize) {
+        // SAFETY: a mapping made by `map` with this length.
+        unsafe { libc::munmap(p.cast(), len) };
+    }
+
+    #[cfg(windows)]
+    pub fn map(len: usize) -> *mut u8 {
+        use crate::win::{VirtualAlloc, MEM_COMMIT, MEM_RESERVE, PAGE_READWRITE};
+        // SAFETY: a fresh private allocation.
+        unsafe {
+            VirtualAlloc(
+                std::ptr::null_mut(),
+                len,
+                MEM_RESERVE | MEM_COMMIT,
+                PAGE_READWRITE,
+            )
+            .cast()
+        }
+    }
+
+    #[cfg(windows)]
+    pub fn unmap(p: *mut u8, _len: usize) {
+        use crate::win::{VirtualFree, MEM_RELEASE};
+        // SAFETY: an allocation made by `map`.
+        unsafe { VirtualFree(p.cast(), 0, MEM_RELEASE) };
     }
 }
 

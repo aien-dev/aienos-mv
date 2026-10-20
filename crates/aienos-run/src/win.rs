@@ -44,7 +44,21 @@ extern "system" {
     // libloaderapi.h
     pub fn LoadLibraryExW(lpLibFileName: *const u16, hFile: HANDLE, dwFlags: DWORD) -> HANDLE;
     pub fn GetProcAddress(hModule: HANDLE, lpProcName: *const u8) -> *mut c_void;
+    // memoryapi.h
+    pub fn VirtualAlloc(
+        lpAddress: *mut c_void,
+        dwSize: usize,
+        flAllocationType: DWORD,
+        flProtect: DWORD,
+    ) -> *mut c_void;
+    pub fn VirtualFree(lpAddress: *mut c_void, dwSize: usize, dwFreeType: DWORD) -> BOOL;
 }
+
+// winnt.h
+pub const MEM_COMMIT: DWORD = 0x0000_1000;
+pub const MEM_RESERVE: DWORD = 0x0000_2000;
+pub const MEM_RELEASE: DWORD = 0x0000_8000;
+pub const PAGE_READWRITE: DWORD = 0x04;
 
 /// LoadLibraryExW flag: search System32 only, so a planted DLL next to the downloaded exe
 /// is never loaded.
