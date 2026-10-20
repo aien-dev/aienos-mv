@@ -19,7 +19,9 @@
  *      verified kernel installed as \EFI\BOOT\BOOTX64.EFI so the disk starts
  *      AIENOS by itself;
  *   5. the write range is set to the units of the section Allen uses (the two
- *      memory copies and the note units, svc/allen_memory.h) and nothing
+ *      memory copies and the note units, svc/allen_memory.h), and the two
+ *      units after them for the setup wizard's records (svc/setup_store.h)
+ *      when the section has room for them, and nothing
  *      else; the newest valid copy is loaded, then the notes it counts.
  * NVMe disks are never written (no write path exists). With no usable disk
  * Allen remembers only until the power goes off. The conversation itself
@@ -27,6 +29,7 @@
  * ("3 facts", "2 notes"). */
 #include "../core/ck_internal.h"
 #include "../svc/allen_memory.h"
+#include "../svc/setup_store.h"
 #include "disk_part.h"
 #include "gpt_add.h"
 #include "fat_boot.h"
@@ -47,6 +50,7 @@ static ck_part part;
 static ck_allen_store store;
 static unsigned disk_index;
 static int lasting;
+static int setup_room; /* the setup wizard's two units are inside the write range */
 static uint64_t hz;
 
 static int same_text(const char *a, const char *b)
@@ -266,6 +270,10 @@ int ck_x86_memory_open(ck_allen_memory *mem, ck_allen_notes *notes, uint64_t tsc
     boot_section(d);
 
     uint64_t units = (uint64_t)CK_ALLEN_DISK_UNITS * CK_ALLEN_MEM_UNIT / d->block_size;
+    uint64_t with_setup = (uint64_t)(CK_SETUP_FIRST + CK_SETUP_UNITS) * CK_ALLEN_MEM_UNIT / d->block_size;
+    setup_room = part.blocks >= with_setup;
+    if (setup_room)
+        units = with_setup;
     if (part.blocks < units || ck_x86_ahci_allow(disk_index, part.first_lba, part.first_lba + units - 1u))
         return no_memory("could not open Allen's section for writing");
     rc = ck_allen_store_load(&store, &part.dev, mem);
@@ -296,6 +304,8 @@ static int failed(const char *what, int rc)
     ck_printf("allen_memory: %s FAILED (rc=%d); nothing more is written this start\n", what, rc);
     return -1;
 }
+
+const disk_dev *ck_x86_memory_part(void) { return lasting && setup_room ? &part.dev : 0; }
 
 int ck_x86_memory_save(const ck_allen_memory *mem)
 {

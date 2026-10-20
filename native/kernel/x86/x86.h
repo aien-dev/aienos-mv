@@ -116,6 +116,9 @@ struct ck_x86_storage_result {
 };
 const struct ck_x86_storage_result *ck_x86_storage(uint64_t rsdp, struct ck_frames *fr, uint64_t tsc_hz,
                                                    uint64_t map_top);
+/* The PCI functions that walk found, in order (at most 64): 0, or -1 past the last.
+ * cls is class, subclass and interface (0x030000: a VGA display controller). */
+int ck_x86_pci_fn(unsigned i, uint16_t *vendor, uint16_t *device, uint32_t *cls);
 /* kmain_x86.c: maps [pa, pa + len) uncached when it lies above the identity map. */
 int ck_x86_map_mmio(uint64_t pa, uint64_t len);
 /* ahci_x86.c: one AHCI controller at abar, polled; read-only until a write
@@ -150,6 +153,10 @@ void ck_x86_step(const char *name);
  * written this boot). */
 int ck_x86_memory_open(ck_allen_memory *mem, ck_allen_notes *notes, uint64_t tsc_hz);
 int ck_x86_memory_save(const ck_allen_memory *mem);
+/* The AIENOS partition, for the setup wizard's records (svc/setup_store.h) at
+ * units CK_SETUP_FIRST and +1, inside the open write range; NULL when Allen
+ * keeps nothing this start or the section has no room for them. */
+const disk_dev *ck_x86_memory_part(void);
 int ck_x86_notes_write(const ck_allen_notes *notes, uint32_t index);
 
 /* pci_x86.c: offers every xHCI controller the walk found to xhci_x86.c until
@@ -186,6 +193,30 @@ void ck_x86_kbd_done(void);
  * "keyboard_line:" line). Either may be NULL. */
 void ck_x86_kbd_sink(void (*edit)(const char *buf, unsigned len), void (*line)(const char *text));
 void ck_x86_kbd_discard(void); /* drop the line being typed (the key that woke Allen) */
+/* Every key, before the line editor (enum ck_key_kind, c for a character): a
+ * nonzero return takes it whole, so it is never echoed or logged (the setup
+ * wizard's key entry). NULL: keys go to the line as before. */
+void ck_x86_kbd_keys(int (*key)(int kind, char c));
+/* fwcfg_x86.c, launcher image only (CK_X86_HOSTDESC=1): reads the QEMU fw_cfg file "name"
+ * (read-only; only when the DSDT names the device):
+ * 0 whole, 1 cut at cap, -1 none. */
+int ck_x86_fwcfg_file(uint64_t rsdp, const char *name, char *buf, unsigned cap, unsigned *len);
+/* setup_x86.c: Allen's setup wizard in his window. open: reads the saved record
+ * and starts the wizard unless an earlier start finished it (again: start over
+ * whatever is saved); 1 when it is up. key: every key while it is up (1:
+ * taken). line: a courier line, 1 when it was the key test's answer. step:
+ * the clock, in the hold loop. */
+struct ck_courier;
+struct ck_x86_setup_facts {
+    uint64_t rsdp, ram_bytes;
+    unsigned cores;
+    uint32_t screen_w, screen_h;
+};
+int ck_x86_setup_open(const struct ck_x86_setup_facts *f, const struct ck_courier *c, uint64_t tsc_hz, int again);
+int ck_x86_setup_on(void);
+int ck_x86_setup_key(int kind, char c);
+int ck_x86_setup_line(const char *line);
+void ck_x86_setup_step(void);
 /* kmain_x86.c: one step of the screen hold: waiting keys (which may move *end
  * out) and the window's animation. Called in every hold loop. */
 void ck_x86_hold_step(uint64_t *end);

@@ -15,6 +15,10 @@
 //! two meet whichever was up first (the kernel's serial set-up clears its FIFOs
 //! and can eat a call sent too early; its own call then draws our answer).
 //!
+//! A key test for the setup wizard ("KEYTEST <seq> <kind> <base_url> <key>")
+//! makes one request to the service and answers "KEYOK <seq> <model>" or
+//! "KEYBAD <seq> <why>"; the key is used in that request and kept nowhere.
+//!
 //! Lengths and timings go to stdout; the words never do.
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpStream;
@@ -330,6 +334,77 @@ fn connect(path: &Path) -> UnixStream {
     }
 }
 
+/// What the key test found, in plain words for Allen's window.
+enum KeyTest {
+    Ok(String),  // the first model the service lists
+    Bad(String), // why not
+}
+
+/// One request with the key: GET <base>/v1/models (the OpenAI shape, or
+/// Anthropic's with its own headers). Plain http only: this relay has no TLS
+/// and does not make its own, so an https service is refused out loud. The
+/// key goes into the request header and nowhere else (no log, no file).
+fn key_test(kind: &str, base: &str, key: &str) -> KeyTest {
+    let Some(rest) = base.strip_prefix("http://") else {
+        return KeyTest::Bad(if base.starts_with("https://") {
+            "I can only reach plain http services from here so far".into()
+        } else {
+            "that address is not a web address".into()
+        });
+    };
+    let (host, path) = match rest.find('/') {
+        Some(i) => (&rest[..i], rest[i..].trim_end_matches('/')),
+        None => (rest, ""),
+    };
+    let host = if host.contains(':') { host.to_string() } else { format!("{}:80", host) };
+    let path = if path.ends_with("/v1") { format!("{}/models", path) } else { format!("{}/v1/models", path) };
+    let auth = if kind == "anthropic" {
+        format!("x-api-key: {}\r\nanthropic-version: 2023-06-01\r\n", key)
+    } else if key.is_empty() {
+        String::new()
+    } else {
+        format!("Authorization: Bearer {}\r\n", key)
+    };
+    let mut s = match TcpStream::connect(&host) {
+        Ok(s) => s,
+        Err(_) => return KeyTest::Bad("I could not reach it".into()),
+    };
+    s.set_read_timeout(Some(Duration::from_secs(20))).ok();
+    if write!(s, "GET {} HTTP/1.1\r\nHost: {}\r\n{}Connection: close\r\n\r\n", path, host, auth).is_err() {
+        return KeyTest::Bad("I could not reach it".into());
+    }
+    let mut raw = Vec::new();
+    if s.read_to_end(&mut raw).is_err() && raw.is_empty() {
+        return KeyTest::Bad("no answer came back".into());
+    }
+    let Some(head_end) = find(&raw, b"\r\n\r\n", 0) else {
+        return KeyTest::Bad("it did not answer like a web service".into());
+    };
+    let head = String::from_utf8_lossy(&raw[..head_end]).to_string();
+    let status: u16 = head.split_whitespace().nth(1).and_then(|s| s.parse().ok()).unwrap_or(0);
+    let mut body = raw[head_end + 4..].to_vec();
+    if head.to_ascii_lowercase().contains("transfer-encoding: chunked") {
+        body = dechunk(&body);
+    }
+    match status {
+        200 => {
+            let id = find(&body, b"\"id\"", 0)
+                .and_then(|i| {
+                    let mut j = i + 4;
+                    while j < body.len() && (body[j] == b' ' || body[j] == b':') {
+                        j += 1;
+                    }
+                    json_read_str(&body, j).map(|(s, _)| s)
+                })
+                .unwrap_or_default();
+            KeyTest::Ok(plain(&id))
+        }
+        401 | 403 => KeyTest::Bad("key not valid".into()),
+        0 => KeyTest::Bad("it did not answer like a web service".into()),
+        c => KeyTest::Bad(format!("the service answered {}", c)),
+    }
+}
+
 fn main() {
     let a = parse_args();
     std::fs::create_dir_all(&a.work).unwrap_or_else(|e| {
@@ -386,6 +461,31 @@ fn main() {
             if is_word(&text, "HELLO") {
                 let _ = tx.write_all(b"HI courier\n");
             }
+            continue;
+        }
+        if let Some(rest) = text.strip_prefix("KEYTEST ") {
+            // "KEYTEST <seq> <anthropic|openai> <base_url> <key or ->": one request, answered
+            // "KEYOK <seq> <model>" or "KEYBAD <seq> <why>". Only lengths are printed.
+            let p: Vec<&str> = rest.splitn(4, ' ').collect();
+            if p.len() != 4 {
+                println!("courier: a key test without its parts was dropped");
+                continue;
+            }
+            let key = if p[3] == "-" { "" } else { p[3] };
+            let t0 = Instant::now();
+            let (reply, ok) = match key_test(p[1], p[2], key) {
+                KeyTest::Ok(m) => (format!("KEYOK {} {}\n", p[0], if m.is_empty() { "auto" } else { &m }), true),
+                KeyTest::Bad(why) => (format!("KEYBAD {} {}\n", p[0], why), false),
+            };
+            let _ = tx.write_all(reply.as_bytes());
+            println!(
+                "courier: key test {} ({}, {} chars of key) -> {} in {} ms",
+                p[0],
+                p[1],
+                key.chars().count(),
+                if ok { "ok" } else { "refused" },
+                t0.elapsed().as_millis()
+            );
             continue;
         }
         let Some(rest) = text.strip_prefix("JOB ") else {
@@ -528,5 +628,71 @@ mod plain_tests {
         assert!(said.chars().count() <= 30, "{said}");
         assert!(said.ends_with("..."), "{said}");
         assert!(said.is_ascii());
+    }
+}
+
+#[cfg(test)]
+mod key_tests {
+    use super::*;
+    use std::net::TcpListener;
+    use std::thread;
+
+    /// A one-request service on 127.0.0.1: answers `status` with `body` and
+    /// hands back the request it was sent.
+    fn service(status: &'static str, body: &'static str) -> (String, thread::JoinHandle<String>) {
+        let l = TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}", l.local_addr().unwrap());
+        let h = thread::spawn(move || {
+            let (mut s, _) = l.accept().unwrap();
+            let mut req = Vec::new();
+            let mut b = [0u8; 1024];
+            while find(&req, b"\r\n\r\n", 0).is_none() {
+                let n = s.read(&mut b).unwrap();
+                if n == 0 {
+                    break;
+                }
+                req.extend_from_slice(&b[..n]);
+            }
+            write!(s, "HTTP/1.1 {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", status, body.len(), body)
+                .unwrap();
+            String::from_utf8_lossy(&req).to_string()
+        });
+        (url, h)
+    }
+
+    #[test]
+    fn a_good_key_is_sent_once_as_a_bearer_and_the_first_model_comes_back() {
+        let (url, h) = service("200 OK", r#"{"object":"list","data":[{"id":"qwen3.8-27b-fp8","object":"model"}]}"#);
+        match key_test("openai", &format!("{}/v1", url), "sk-test-123") {
+            KeyTest::Ok(m) => assert_eq!(m, "qwen3.8-27b-fp8"),
+            KeyTest::Bad(why) => panic!("{why}"),
+        }
+        let req = h.join().unwrap();
+        assert!(req.starts_with("GET /v1/models HTTP/1.1\r\n"), "{req}");
+        assert!(req.contains("Authorization: Bearer sk-test-123\r\n"), "{req}");
+    }
+
+    #[test]
+    fn claude_gets_its_own_headers_and_a_refused_key_says_so() {
+        let (url, h) = service("401 Unauthorized", r#"{"error":"no"}"#);
+        match key_test("anthropic", &url, "sk-ant-x") {
+            KeyTest::Bad(why) => assert_eq!(why, "key not valid"),
+            KeyTest::Ok(_) => panic!("a 401 passed"),
+        }
+        let req = h.join().unwrap();
+        assert!(req.contains("x-api-key: sk-ant-x\r\n") && req.contains("anthropic-version: "), "{req}");
+        assert!(!req.contains("Authorization"), "{req}");
+    }
+
+    #[test]
+    fn no_key_sends_no_header_and_https_is_refused_out_loud() {
+        let (url, h) = service("200 OK", r#"{"data":[]}"#);
+        assert!(matches!(key_test("openai", &url, ""), KeyTest::Ok(m) if m.is_empty()));
+        assert!(!h.join().unwrap().contains("Authorization"));
+        match key_test("anthropic", "https://api.anthropic.com", "k") {
+            KeyTest::Bad(why) => assert!(why.contains("plain http"), "{why}"),
+            KeyTest::Ok(_) => panic!("https passed"),
+        }
+        assert!(matches!(key_test("openai", "http://127.0.0.1:1", "k"), KeyTest::Bad(_)));
     }
 }

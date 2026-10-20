@@ -414,3 +414,13 @@ const struct ck_x86_storage_result *ck_x86_storage(uint64_t rsdp, struct ck_fram
               res.nvme_disks, res.gpt_valid);
     return &res;
 }
+
+int ck_x86_pci_fn(unsigned i, uint16_t *vendor, uint16_t *device, uint32_t *cls)
+{
+    if (i >= nfound)
+        return -1;
+    *vendor = found[i].vendor;
+    *device = found[i].device;
+    *cls = found[i].cls;
+    return 0;
+}

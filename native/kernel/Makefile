@@ -2260,6 +2260,11 @@ imac-diag: $(IMACDIAG_EFI)
 # must not contain it: the link step below fails a default image that has a report symbol.
 CK_X86_REPORT ?= 0
 X86K := $(KDIR)/x86
+# CK_X86_HOSTDESC=1 builds the launcher image (IMACKERN-HOST.EFI): the setup wizard also reads the host
+# description a launcher (aienos-run) hands over as the QEMU fw_cfg file opt/aienos/host
+# (x86/fwcfg_x86.c, read-only). The default and lab images carry no fw_cfg code or string;
+# the link step below checks it, like fwcfg_check for the core images.
+CK_X86_HOSTDESC ?= 0
 ifeq ($(CK_X86_REPORT),1)
 IMACKERN_DIR := $(OUT)/imackern-lab
 IMACKERN_EFI := $(OUT)/IMACKERN-LAB.EFI
@@ -2268,6 +2273,12 @@ IMACKERN_DIR := $(OUT)/imackern
 IMACKERN_EFI := $(OUT)/IMACKERN.EFI
 else
 $(error CK_X86_REPORT must be 0 (default) or 1 (lab-only network report))
+endif
+ifeq ($(CK_X86_HOSTDESC),1)
+IMACKERN_DIR := $(IMACKERN_DIR)-host
+IMACKERN_EFI := $(IMACKERN_EFI:.EFI=-HOST.EFI)
+else ifneq ($(CK_X86_HOSTDESC),0)
+$(error CK_X86_HOSTDESC must be 0 (default) or 1 (launcher image that reads the host description))
 endif
 IMACKERN_ELF := $(IMACKERN_DIR)/imackern.elf
 IMACKERN_CFLAGS := $(X86CFLAGS) -I$(KDIR)/include -I$(KDIR)/mm -I$(KDIR)/dev -I$(NATIVE)/disk -I$(NATIVE)/net \
@@ -2282,7 +2293,8 @@ IMACKERN_OBJS := $(IMACKERN_DIR)/efi_entry_x86_64.o $(IMACKERN_DIR)/efi_x86.o $(
 	$(IMACKERN_DIR)/allen_ui.o $(IMACKERN_DIR)/allen_font.o $(IMACKERN_DIR)/allen_reply.o $(IMACKERN_DIR)/allen_intent.o $(IMACKERN_DIR)/courier_x86.o \
 	$(IMACKERN_DIR)/paint.o $(IMACKERN_DIR)/night.o $(IMACKERN_DIR)/mind.o $(IMACKERN_DIR)/flow.o $(IMACKERN_DIR)/chirp.o \
 	$(IMACKERN_DIR)/allen_memory.o $(IMACKERN_DIR)/allen_notes.o $(IMACKERN_DIR)/gpt_add.o $(IMACKERN_DIR)/memory_x86.o \
-	$(IMACKERN_DIR)/fat_boot.o $(IMACKERN_DIR)/sha512.o $(IMACKERN_DIR)/ct.o
+	$(IMACKERN_DIR)/fat_boot.o $(IMACKERN_DIR)/sha512.o $(IMACKERN_DIR)/ct.o \
+	$(IMACKERN_DIR)/setup_inv.o $(IMACKERN_DIR)/setup_wizard.o $(IMACKERN_DIR)/setup_store.o $(IMACKERN_DIR)/setup_x86.o
 IMACKERN_REPORT_OBJS := $(IMACKERN_DIR)/report_x86.o $(IMACKERN_DIR)/aienos_net.o
 # Symbols only the lab image may contain; the default image is checked for them after linking.
 IMACKERN_REPORT_SYMS := ck_x86_report_hold|ck_x86_report_frame|ck_x86_report_filter|ck_x86_report_parts|ck_x86_tg3_send|ck_x86_tg3_drain|net_udp_build
@@ -2290,11 +2302,15 @@ ifeq ($(CK_X86_REPORT),1)
 IMACKERN_OBJS += $(IMACKERN_REPORT_OBJS)
 IMACKERN_CFLAGS += -DCK_X86_REPORT=1
 endif
+ifeq ($(CK_X86_HOSTDESC),1)
+IMACKERN_OBJS += $(IMACKERN_DIR)/fwcfg_x86.o
+IMACKERN_CFLAGS += -DCK_X86_HOSTDESC=1
+endif
 IMACKERN_HDRS := $(X86K)/x86.h $(BOOT)/handoff.h $(BOOT)/efi.h $(KDIR)/core/ck_internal.h $(KDIR)/include/ck.h
 $(IMACKERN_DIR)/efi_entry_x86_64.o: $(BOOT)/efi_entry_x86_64.S
 $(IMACKERN_DIR)/efi_x86.o: $(X86K)/efi_x86.c $(IMACKERN_HDRS) $(BOOT)/netboot_proto.h
 $(IMACKERN_DIR)/efi_gop.o: $(BOOT)/efi_gop.c $(IMACKERN_HDRS)
-$(IMACKERN_DIR)/kmain_x86.o: $(X86K)/kmain_x86.c $(IMACKERN_HDRS) $(KDIR)/core/handoff_check.h $(KDIR)/mm/frames.h $(KDIR)/mm/heap.h $(KDIR)/ui/allen_ui.h $(KDIR)/svc/allen_reply.h $(KDIR)/svc/allen_intent.h $(KDIR)/svc/courier.h $(OUT)/commit.stamp
+$(IMACKERN_DIR)/kmain_x86.o: $(X86K)/kmain_x86.c $(IMACKERN_HDRS) $(KDIR)/core/handoff_check.h $(KDIR)/mm/frames.h $(KDIR)/mm/heap.h $(KDIR)/ui/allen_ui.h $(KDIR)/svc/allen_reply.h $(KDIR)/svc/allen_intent.h $(KDIR)/svc/courier.h $(KDIR)/svc/setup_wizard.h $(OUT)/commit.stamp
 $(IMACKERN_DIR)/console_x86.o: $(X86K)/console_x86.c $(IMACKERN_HDRS) $(KDIR)/core/fbcon.h
 $(IMACKERN_DIR)/trap.o: $(X86K)/trap.S
 $(IMACKERN_DIR)/fbcon.o: $(KDIR)/core/fbcon.c $(KDIR)/core/fbcon.h $(KDIR)/core/font8x8.h
@@ -2329,10 +2345,16 @@ $(IMACKERN_DIR)/allen_notes.o: $(KDIR)/svc/allen_notes.c $(KDIR)/svc/allen_notes
 $(IMACKERN_DIR)/allen_memory.o: $(KDIR)/svc/allen_memory.c $(KDIR)/svc/allen_memory.h $(KDIR)/svc/allen_reply.h $(KDIR)/svc/allen_notes.h $(NATIVE)/disk/disk.h $(NATIVE)/argus/sha256.h
 $(IMACKERN_DIR)/gpt_add.o: $(KDIR)/dev/gpt_add.c $(KDIR)/dev/gpt_add.h $(KDIR)/dev/disk_part.h $(NATIVE)/disk/disk.h $(NATIVE)/argus/sha256.h
 $(IMACKERN_DIR)/memory_x86.o: $(X86K)/memory_x86.c $(IMACKERN_HDRS) $(KDIR)/svc/allen_memory.h $(KDIR)/svc/allen_notes.h $(KDIR)/dev/gpt_add.h $(KDIR)/dev/disk_part.h \
-	$(KDIR)/dev/fat_boot.h $(BOOT)/netboot_proto.h $(BOOT)/slot_format.h $(NATIVE)/sig/aienos_sig.h
+	$(KDIR)/dev/fat_boot.h $(BOOT)/netboot_proto.h $(BOOT)/slot_format.h $(NATIVE)/sig/aienos_sig.h $(KDIR)/svc/setup_store.h
 $(IMACKERN_DIR)/fat_boot.o: $(KDIR)/dev/fat_boot.c $(KDIR)/dev/fat_boot.h $(NATIVE)/disk/disk.h
 $(IMACKERN_DIR)/sha512.o: $(NATIVE)/sig/sha512.c $(NATIVE)/sig/aienos_sig.h
 $(IMACKERN_DIR)/ct.o: $(NATIVE)/sig/ct.c $(NATIVE)/sig/aienos_sig.h
+$(IMACKERN_DIR)/setup_inv.o: $(KDIR)/svc/setup_inv.c $(KDIR)/svc/setup_inv.h
+$(IMACKERN_DIR)/setup_wizard.o: $(KDIR)/svc/setup_wizard.c $(KDIR)/svc/setup_wizard.h $(KDIR)/svc/setup_inv.h
+$(IMACKERN_DIR)/setup_store.o: $(KDIR)/svc/setup_store.c $(KDIR)/svc/setup_store.h $(KDIR)/svc/allen_memory.h $(NATIVE)/disk/disk.h $(NATIVE)/argus/sha256.h
+$(IMACKERN_DIR)/setup_x86.o: $(X86K)/setup_x86.c $(IMACKERN_HDRS) $(KDIR)/svc/setup_inv.h $(KDIR)/svc/setup_wizard.h $(KDIR)/svc/setup_store.h \
+	$(KDIR)/ui/setup_view.h $(KDIR)/ui/allen_ui.h $(KDIR)/svc/courier.h $(KDIR)/dev/usb_hid.h
+$(IMACKERN_DIR)/fwcfg_x86.o: $(X86K)/fwcfg_x86.c $(IMACKERN_HDRS) $(KDIR)/core/acpi.h
 $(IMACKERN_DIR)/report_x86.o: $(X86K)/report_x86.c $(X86K)/report_x86.h $(IMACKERN_HDRS) $(NATIVE)/net/aienos_net.h
 $(IMACKERN_DIR)/aienos_net.o: $(NATIVE)/net/aienos_net.c $(NATIVE)/net/aienos_net.h
 $(sort $(IMACKERN_OBJS) $(IMACKERN_REPORT_OBJS)):
@@ -2365,6 +2387,10 @@ $(IMACKERN_ELF): $(IMACKERN_OBJS) $(BOOT)/image_x86_64.ld
 	  echo "$$r"; rm -f $@; exit 1; fi
 	@if [ "$(CK_X86_REPORT)" != 1 ] && grep -aq "AIENOS-REPORT" $@; then \
 	  echo "default iMac image carries the report header string"; rm -f $@; exit 1; fi
+	@f=$$($(X86NM) $@ | grep -E ' [TtDdBbRr] ck_x86_fwcfg_file$$' || true); s=$$(grep -aoE "opt/aienos/host|QEMU0002" $@ | sort -u | tr "\n" " "); \
+	if [ "$(CK_X86_HOSTDESC)" = 1 ]; then \
+	  [ -n "$$f" ] && grep -aqF "launcher image: the setup wizard reads the host description" $@ || { echo "launcher image lacks the host description reader or its announcement"; rm -f $@; exit 1; }; \
+	elif [ -n "$$f$$s" ]; then echo "default iMac image carries fw_cfg code (build it with CK_X86_HOSTDESC=1 only): $$f $$s"; rm -f $@; exit 1; fi
 $(IMACKERN_EFI): $(IMACKERN_ELF)
 	$(X86OBJCOPY) -O binary $< $@
 	@sz=$$(stat -c %s $@); pad=$$(( (4096 - sz % 4096) % 4096 )); \
