@@ -1,4 +1,4 @@
-/* smmu.h -- Arm SMMUv3 programming for the AIENOS C kernel, ported from the
+/* smmu.h -- Arm SMMUv3 programming for the Aienux C kernel, ported from the
  * Rust reference crates/aienos-kernel/src/smmu.rs (linear stream table,
  * stage-1 translation only, one linear context descriptor per stream). The
  * two-level stream table (FMT = 2-level) is C only, from Arm IHI 0070 H.a.

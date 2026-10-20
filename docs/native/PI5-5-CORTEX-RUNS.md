@@ -46,7 +46,7 @@ test fail (mutants killed).
 
 ## Pi runs (PASS, 2026-10-13, Raspberry Pi 5, main dd99eda, `make pi5-fact`)
 
-Each run is one tryboot of the hub (`~/workspace/pi5/pi5-run-fact.sh`, KLOG=1): a soft reboot into AIENOS and back, NOT a power cut. The Store partition head was zeroed before F1 (the PI5-4 Store's throwaway secret no longer exists). Secrets S and W are throwaway QUALIFICATION ONLY request files, kept outside git and deleted from the card after each run.
+Each run is one tryboot of the hub (`~/workspace/pi5/pi5-run-fact.sh`, KLOG=1): a soft reboot into Aienux and back, NOT a power cut. The Store partition head was zeroed before F1 (the PI5-4 Store's throwaway secret no longer exists). Secrets S and W are throwaway QUALIFICATION ONLY request files, kept outside git and deleted from the card after each run.
 
 F1 remember (UNLOCK.REQ S, FACT.REQ "prefer short notes"):
 ```

@@ -13,7 +13,7 @@
 #   - the collection method
 #   - whether Linux interpreted the value (true for sysfs attributes, false for
 #     raw configuration-space bytes that this script decodes itself)
-#   - whether native AIENOS has independently verified it (always false here;
+#   - whether native Aienux has independently verified it (always false here;
 #     this collector runs under Linux)
 #
 # Privilege: by default the collector runs unprivileged and reads only the

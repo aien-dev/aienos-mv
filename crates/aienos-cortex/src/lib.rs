@@ -1,4 +1,4 @@
-//! AIENOS Cortex Epistemic Store (§11).
+//! Aienux Cortex Epistemic Store (§11).
 //!
 //! Preserves durable epistemic memory with verifiable provenance:
 //! DirectObservation, VerifiedFact, Inference, Hypothesis, Contradiction, OperatorDecision.

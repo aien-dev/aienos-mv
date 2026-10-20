@@ -1,4 +1,4 @@
-# AIENOS native disk layer in C: disk_dev core (bounds, split, ordered queue),
+# Aienux native disk layer in C: disk_dev core (bounds, split, ordered queue),
 # hosted file backend for tests, and a freestanding polled NVMe driver
 # (disk_nvme.c) ported from the audited Rust path, and a polled PIO SD Host
 # Controller driver (disk_sdhci.c) for the Pi 5 microSD. No outside library.

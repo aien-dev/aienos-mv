@@ -101,4 +101,4 @@ store: REFUSED proof=keyed step="recovery secret rejected (K_vol unwrap tag fail
 agent: NOTHING RECOVERED: the Store is not open (recovery secret missing or rejected, or the disk was refused); the model was not read or hashed, nothing was generated, nothing was written
 AIENOS_PI5_AGENT: NOSTORE
 ```
-Limits: tryboot reset, not a power cut; the AIENOS partition was not hashed around G3 (PI5-4 run C proved the same refusal path leaves the partition byte-identical); one golden prompt; 1.20 tok/s; single runs; secret from the card, no TPM.
+Limits: tryboot reset, not a power cut; the Aienux partition was not hashed around G3 (PI5-4 run C proved the same refusal path leaves the partition byte-identical); one golden prompt; 1.20 tok/s; single runs; secret from the card, no TPM.

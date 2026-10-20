@@ -1,4 +1,4 @@
-/* test_pi5_marker.c -- AIENOS-PI5 step 3: the Pi 5 card layout (ESP + AIENOS
+/* test_pi5_marker.c -- AIENOS-PI5 step 3: the Pi 5 card layout (ESP + Aienux
  * partition under a protective MBR and a two-copy GPT) parsed by the kernel's
  * own dev/disk_part.c, and the scratch marker (core/pi5_marker.c) written
  * through the partition view with flush, "rebooted" (file closed and reopened,

@@ -1,4 +1,4 @@
-# AIENOS in-house crypto in C: AES-256, POLYVAL, AES-256-GCM-SIV (RFC 8452),
+# Aienux in-house crypto in C: AES-256, POLYVAL, AES-256-GCM-SIV (RFC 8452),
 # HMAC-SHA-256. Port of crates/aienos-crypto. No outside library: SHA-256 is
 # the in-house copy in ../argus/sha256.c. Library objects import no heap,
 # clock or I/O; the test uses hosted libc.

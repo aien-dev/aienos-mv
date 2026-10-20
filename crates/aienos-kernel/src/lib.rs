@@ -1,4 +1,4 @@
-//! AIENOS Bare-Metal Kernel Substrate for AArch64 (DGX Spark).
+//! Aienux Bare-Metal Kernel Substrate for AArch64 (DGX Spark).
 //!
 //! Provides minimal, sovereign, deterministic primitives:
 //! - AArch64 MMIO, UART, and exception-level access

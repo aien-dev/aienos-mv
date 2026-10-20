@@ -7,9 +7,9 @@
 //! - `Unknown`: no value was obtained. Absence of evidence is never a zero or
 //!   a default hardware property.
 //!
-//! Every value also carries its source, and a flag for whether native AIENOS
+//! Every value also carries its source, and a flag for whether native Aienux
 //! has independently verified it. A value observed through Linux sysfs is not
-//! the same claim as a value decoded by native AIENOS PCI enumeration, and the
+//! the same claim as a value decoded by native Aienux PCI enumeration, and the
 //! type keeps them distinct.
 
 use crate::pci::{
@@ -24,7 +24,7 @@ use core::fmt::{Debug, Write};
 pub enum Source {
     /// Read through UEFI firmware services before `ExitBootServices`.
     UefiFirmwareService,
-    /// Decoded by native AIENOS PCI enumeration.
+    /// Decoded by native Aienux PCI enumeration.
     AienosNativePci,
     /// Read from a Linux sysfs attribute.
     LinuxSysfs,
@@ -51,7 +51,7 @@ impl Source {
         }
     }
 
-    /// True when Linux, not AIENOS, interpreted the value.
+    /// True when Linux, not Aienux, interpreted the value.
     pub const fn linux_interpreted(self) -> bool {
         matches!(
             self,

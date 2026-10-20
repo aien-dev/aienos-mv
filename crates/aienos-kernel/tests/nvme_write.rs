@@ -1,4 +1,4 @@
-//! External integration tests for the AIENOS P3 native NVMe write + flush lane.
+//! External integration tests for the Aienux P3 native NVMe write + flush lane.
 //!
 //! Target: `crates/aienos-kernel/tests/nvme_write.rs`.
 //! Repo mirror (read-only): aien-spark/aienos @ ef359ec.

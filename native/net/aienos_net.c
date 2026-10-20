@@ -1,4 +1,4 @@
-/* AIENOS M6-A network protocol layer. See aienos_net.h. No heap, no clock, no I/O. */
+/* Aienux M6-A network protocol layer. See aienos_net.h. No heap, no clock, no I/O. */
 #include "aienos_net.h"
 
 #include <string.h>

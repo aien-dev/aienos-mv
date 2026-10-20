@@ -1,6 +1,6 @@
-# AIENOS Domain Model
+# Aienux Domain Model
 
-AIENOS is an agent-native, sovereign operating system wherein the persistent AIEN agent is the primary user interface and control plane, running directly on bare-metal hardware.
+AienOS is an agent-native, sovereign operating system wherein the persistent AIEN agent is the primary user interface and control plane, running directly on bare-metal hardware.
 
 ## Language
 
@@ -95,7 +95,7 @@ The branch-native prefix sharing architecture that shares common physical infere
 _Avoid_: Prefix cache, KV cache
 
 **Machine Capsule**:
-A portable hardware description generated on a host system that defines all CPU, accelerator, storage, memory, and firmware characteristics required for AIENOS to reproduce native execution.
+A portable hardware description generated on a host system that defines all CPU, accelerator, storage, memory, and firmware characteristics required for Aienux to reproduce native execution.
 _Avoid_: Hardware profile, sysinfo
 
 ---

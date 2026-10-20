@@ -1,4 +1,4 @@
-//! Crash Checkpoint ABI for AIENOS System Store transactions.
+//! Crash Checkpoint ABI for Aienux System Store transactions.
 //!
 //! Provides a tiny test-only checkpoint interface consumed by crash controllers,
 //! integration tests (e.g. QEMU crash injection), and the store transaction engine.

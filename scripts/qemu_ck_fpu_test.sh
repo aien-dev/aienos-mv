@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Boot the AIENOS C kernel with the FP/SIMD Rust probe linked in (QEMU AArch64,
+# Boot the Aienux C kernel with the FP/SIMD Rust probe linked in (QEMU AArch64,
 # UEFI/AAVMF, EL2 like Machine 1) and check that the kernel, built
 # -mgeneral-regs-only, ran ONE floating-point/SIMD-enabled Rust unit
 # (crates/aienos-fpu-probe: f32 dot product, exp approximation, NEON 4-lane

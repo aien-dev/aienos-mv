@@ -1,4 +1,4 @@
-/* mmio_window.h -- AIENOS C kernel: capability-bound, READ-ONLY MMIO window
+/* mmio_window.h -- Aienux C kernel: capability-bound, READ-ONLY MMIO window
  * for one discovered PCI function (aienos#286, cut B3).
  *
  * Freestanding. Reuses the existing capability code (core/ipc.h: rights,

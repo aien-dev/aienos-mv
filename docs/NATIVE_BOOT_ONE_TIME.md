@@ -1,6 +1,6 @@
 # Machine 1 Native Boot Qualification Procedure: Attended, One-Time, Secure Boot OFF for development (as of 2026-10-01), ON for release
 
-This document defines the safe, operator-attended qualification procedure for one-time native candidate boots of AIENOS on NVIDIA DGX Spark ("Machine 1", `spark-b87b`).
+This document defines the safe, operator-attended qualification procedure for one-time native candidate boots of Aienux on NVIDIA DGX Spark ("Machine 1", `spark-b87b`).
 
 ---
 
@@ -17,7 +17,7 @@ HARDWARE_QUALIFICATION_BLOCKED_BY_TRUST_CHAIN
 > **HISTORICAL (2026-09-24): do not flip Secure Boot without re-sealing the TPM stores.**
 > On Machine 1, turning Secure Boot off alters TPM PCR 7. On the historical 2026-09-24 first-boot test, changing PCR 7 prevented the TPM from unsealing the volume encryption keys for `atlas-private-storage` and `atlas-forgejo-storage`, locking the filesystem and causing severe service restart loops (`evidence/machine1_core_baseline_2026-09-24.md`). Secure Boot was restored then; as of 2026-10-01 it is OFF for development by owner decision (see note above).
 >
-> The native AIENOS boot images (`aienos-handoff.efi`, `aienos-boot.efi`) are not currently signed by a key enrolled in Machine 1's UEFI database (`db`). Direct execution under Secure Boot will fail with `Secure Boot Violation` (`evidence/gate1_machine1_selftest_2026-09-24.md`).
+> The native Aienux boot images (`aienos-handoff.efi`, `aienos-boot.efi`) are not currently signed by a key enrolled in Machine 1's UEFI database (`db`). Direct execution under Secure Boot will fail with `Secure Boot Violation` (`evidence/gate1_machine1_selftest_2026-09-24.md`).
 >
 > Physical hardware native boots remain **BLOCKED** until the owner-controlled boot trust chain (ADR 0007 / TRUST-1 implementation) is enrolled in firmware. **Do not attempt to bypass this boundary by turning Secure Boot off.** All rollback semantics must be validated in QEMU (`scripts/qemu_native_rollback_test.sh`).
 
@@ -90,7 +90,7 @@ One of the two flags is required. `--apply` stops before touching anything if th
    ```
 2. **Observe Physical Screen:**
    - Firmware starts and evaluates `BootNext`.
-   - If firmware accepts signature: AIENOS banner, memory map validation, `kernel: alive` on screen.
+   - If firmware accepts signature: Aienux banner, memory map validation, `kernel: alive` on screen.
    - Candidate counts down 30 seconds and calls cold reset via PSCI.
    - **If firmware reports `Secure Boot Violation`:** This is an expected STOP condition if keys are missing. Do not bypass. The machine will fall back to `BootOrder` (Linux).
 3. **If Machine Hangs:**

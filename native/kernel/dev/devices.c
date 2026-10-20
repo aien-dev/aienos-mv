@@ -14,14 +14,14 @@
 static pci_system g_pci;
 static ck_nvme g_nvme;
 
-/* Later stages get only the AIENOS partition view (dev/disk_part.h), never the
+/* Later stages get only the Aienux partition view (dev/disk_part.h), never the
  * whole namespace: every access they make goes through ck_part_xlate. */
 const disk_dev *ck_dev_boot_disk(void) { return g_nvme.bound && g_nvme.part.valid ? &g_nvme.part.dev : 0; }
 
-/* The AIENOS image slots partition (native/boot/slot_format.h, P11 cut 2b) and
+/* The Aienux image slots partition (native/boot/slot_format.h, P11 cut 2b) and
  * the update inbox partition (P11 cut 3) on the same bound NVMe disk: further
  * bounded partition views, found with the same strict GPT validation as the
- * AIENOS partition; never the whole namespace. Each is looked up once, on
+ * Aienux partition; never the whole namespace. Each is looked up once, on
  * first use. *rc_out: 0, a CK_GPT_* code, or CK_DEV_NO_BOOT_DISK when no disk
  * is bound (or it was released). */
 struct typed_part {

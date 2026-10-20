@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Runs from the Spark against the hub Pi 5 over ssh (host alias "hub"); never run it on the hub itself. Run folders go under $PI5_RUNS_DIR (default ~/workspace/pi5-runs).
-# pi5-run.sh -- one remote, one-shot AIENOS test run on the hub Raspberry Pi 5.
+# pi5-run.sh -- one remote, one-shot Aienux test run on the hub Raspberry Pi 5.
 #
 #   pi5-run.sh <EFI file> <tag> [wait-file]
 #
-# 1. Puts <EFI file> on the AIENOS test microSD (mmcblk0p1, label AIENOSPI5) as
+# 1. Puts <EFI file> on the Aienux test microSD (mmcblk0p1, label AIENOSPI5) as
 #    EFI/BOOT/BOOTAA64.EFI and removes the old report, so a report after the run
 #    proves this run wrote it.
 # 2. Makes sure the Pi 5 UEFI firmware from the card is also on the USB stick's
@@ -74,7 +74,7 @@ sync
 echo card+stick ready" 2>&1 | tee -a "${runs}/run.log"
 
 # ---- optional: KLOG slot for a kernel run (KLOG=1) ----
-# A 2 MiB contiguous file on the card plus \EFI\AIENOS\KLOG.MAP naming its
+# A 2 MiB contiguous file on the card plus \EFI\Aienux\KLOG.MAP naming its
 # absolute first sector and a fresh nonce (aienos core/klog_slot.h). The raw
 # card sector is read back and compared before the map is written, so the
 # kernel is never told a position that is not the file.

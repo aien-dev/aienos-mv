@@ -1,5 +1,5 @@
 #!/bin/bash
-# collect_recovery_boot_evidence.sh: Record evidence that the AIENOS recovery
+# collect_recovery_boot_evidence.sh: Record evidence that the Aienux recovery
 # USB actually booted Machine 1 into a rescue environment that can mount the
 # NVMe root, repair /boot/efi, and restore boot entries (issue #17).
 #

@@ -1,5 +1,5 @@
 /*
- * disk_sdhci.h -- AIENOS freestanding SD card driver over an SD Host
+ * disk_sdhci.h -- Aienux freestanding SD card driver over an SD Host
  * Controller (SDHCI) (C, no libc, no heap). Raspberry Pi 5 microSD slot
  * (Broadcom brcm,bcm2712-sdhci, Linux bcm2712.dtsi) and QEMU sdhci-pci.
  *

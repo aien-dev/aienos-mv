@@ -1,4 +1,4 @@
-//! AIENOS Agent State ABI (§9).
+//! Aienux Agent State ABI (§9).
 
 use crate::id::{LogicalAgentId, LogicalBranchId};
 use crate::incarnation::SequenceId;

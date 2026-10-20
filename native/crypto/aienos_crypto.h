@@ -1,4 +1,4 @@
-/* AIENOS in-house crypto primitives, C port of crates/aienos-crypto.
+/* Aienux in-house crypto primitives, C port of crates/aienos-crypto.
  *
  * AES-256 (FIPS 197), POLYVAL and AEAD_AES_256_GCM_SIV (RFC 8452), and
  * HMAC-SHA-256 over the in-house SHA-256 in native/argus/sha256.c.

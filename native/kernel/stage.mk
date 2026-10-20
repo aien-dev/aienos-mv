@@ -1,4 +1,4 @@
-# stage.mk -- Lane 18 boot stages (devices, security, Store) for the AIENOS
+# stage.mk -- Lane 18 boot stages (devices, security, Store) for the Aienux
 # C kernel. Included by native/kernel/Makefile, or run alone:
 #   make -C native/kernel -f stage.mk stage-test       host tests (libc, pthreads)
 #   make -C native/kernel -f stage.mk stage-sanitize   same under ASan + UBSan
@@ -176,7 +176,7 @@ pi5-store-sanitize: $(STAGE_OUT)/pi5_store_test_san
 stage-test: pi5-store-test
 stage-sanitize: pi5-store-sanitize
 
-# ---- AIENOS PI5-4 cut 1: the Pi unlock image's Store policy (dev/tests/pi5_unlock_test.c) ----
+# ---- Aienux PI5-4 cut 1: the Pi unlock image's Store policy (dev/tests/pi5_unlock_test.c) ----
 # store_boot.c is compiled with -DCK_PI5_UNLOCK, as "make pi5-unlock" builds it: no TEST keys, no TEST uuid.
 PI5_UNLOCK_TEST_SRCS := $(filter-out %/disk_part_test.c,$(DISK_PART_TEST_SRCS)) $(STAGE_CONT_SRCS) $(STAGE_DIR)/core/pi5_marker.c $(STAGE_DIR)/core/unlock_req.c $(STAGE_DIR)/dev/tests/pi5_unlock_test.c $(STAGE_DIR)/tools/pi5_store_locate.c
 $(STAGE_OUT)/pi5_unlock_test: $(PI5_UNLOCK_TEST_SRCS) $(DISK_PART_TEST_DEPS) $(STAGE_DIR)/core/pi5_marker.h
@@ -193,7 +193,7 @@ pi5-unlock-sanitize: $(STAGE_OUT)/pi5_unlock_test_san
 stage-test: pi5-unlock-test
 stage-sanitize: pi5-unlock-sanitize
 
-# ---- AIENOS PI5-4 cut 4: host locator for the KeySlotManifest on a copy of the Pi card's AIENOS partition ----
+# ---- Aienux PI5-4 cut 4: host locator for the KeySlotManifest on a copy of the Pi card's Aienux partition ----
 # tools/pi5_store_locate.c (used by the tamper run and by its rehearsal in pi5_unlock_test) and the CLI around it.
 PI5_LOCATE_TOOL_SRCS := $(filter-out %/pi5_unlock_test.c,$(PI5_UNLOCK_TEST_SRCS))
 $(STAGE_OUT)/ck_pi5_store_locate: $(PI5_LOCATE_TOOL_SRCS) $(STAGE_DIR)/tools/ck_pi5_store_locate.c $(STAGE_DIR)/tools/pi5_store_locate.h $(DISK_PART_TEST_DEPS)
@@ -202,7 +202,7 @@ $(STAGE_OUT)/ck_pi5_store_locate: $(PI5_LOCATE_TOOL_SRCS) $(STAGE_DIR)/tools/ck_
 .PHONY: pi5-store-locate
 pi5-store-locate: $(STAGE_OUT)/ck_pi5_store_locate
 
-# ---- AIENOS PI5-5: the Pi Cortex fact stage (dev/tests/pi5_fact_test.c) ----
+# ---- Aienux PI5-5: the Pi Cortex fact stage (dev/tests/pi5_fact_test.c) ----
 # store_boot.c is compiled with -DCK_PI5_UNLOCK -DCK_PI5_UNLOCK_CARD -DCK_PI5_FACT, as "make pi5-fact" builds it.
 PI5_FACT_TEST_SRCS := $(filter-out %/pi5_unlock_test.c,$(PI5_UNLOCK_TEST_SRCS)) $(STAGE_CORTEX_SRCS) $(STAGE_DIR)/svc/pi5_fact.c $(STAGE_DIR)/core/fact_req.c $(STAGE_DIR)/dev/tests/pi5_fact_test.c
 PI5_FACT_DEPS := $(PI5_FACT_TEST_SRCS) $(DISK_PART_TEST_DEPS) $(STAGE_DIR)/core/fact_req.h $(STAGE_DIR)/svc/pi5_fact.h
@@ -228,7 +228,7 @@ pi5-fact-mutants:
 stage-test: pi5-fact-test
 stage-sanitize: pi5-fact-sanitize
 
-# ---- AIENOS PI5-6 final cut: the Pi agent stage (dev/tests/pi5_agent_test.c) ----
+# ---- Aienux PI5-6 final cut: the Pi agent stage (dev/tests/pi5_agent_test.c) ----
 # store_boot.c is compiled with -DCK_PI5_UNLOCK -DCK_PI5_UNLOCK_CARD -DCK_PI5_AGENT, as "make pi5-agent" builds it. The inference unit
 # is a stub in the test (a 770 MiB model cannot run on the host); the stage's policy is the real svc/pi5_agent.c.
 PI5_AGENT_TEST_SRCS := $(filter-out %/pi5_unlock_test.c,$(PI5_UNLOCK_TEST_SRCS)) $(STAGE_DIR)/svc/pi5_agent.c $(STAGE_DIR)/dev/tests/pi5_agent_test.c

@@ -130,7 +130,7 @@ int ck_store_production_keys(ss_keys *k);
  * PRODUCTION always; TEST only when hardware_staging is 0. */
 int ck_store_keys_admissible(const ss_keys *k, int hardware_staging);
 
-/* One boot against disk d (the AIENOS partition view of dev/disk_part.h in the
+/* One boot against disk d (the Aienux partition view of dev/disk_part.h in the
  * kernel, a whole file in host tests; layout of dev/disk_layout.h, relative to d).
  * commit is the image commit string recorded in the new boot record.
  * Prints nothing; ck_stage_store prints. */

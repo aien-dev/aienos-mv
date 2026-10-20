@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# AIENOS End-to-End Build and Evidence Verification Harness
+# Aienux End-to-End Build and Evidence Verification Harness
 # Enforces sequential integration gates on the host DGX Spark environment.
 # Last line: VERIFY_ALL: PASS only when every step ran; VERIFY_ALL: NOT_RUN if any step
 # was skipped (scripts/lib_verify_summary.sh; test: bash scripts/lib_verify_summary.sh --self-test).

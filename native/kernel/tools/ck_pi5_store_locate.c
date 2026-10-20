@@ -1,5 +1,5 @@
 /* ck_pi5_store_locate.c -- host tool: print where the KeySlotManifest sits in a copy of the Pi card's
- * AIENOS partition (see pi5_store_locate.h). Read only, prints no secret and no key bytes.
+ * Aienux partition (see pi5_store_locate.h). Read only, prints no secret and no key bytes.
  *   ck_pi5_store_locate <partition image> */
 #include <stdio.h>
 #include "pi5_store_locate.h"

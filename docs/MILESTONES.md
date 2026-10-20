@@ -1,15 +1,15 @@
-# AIENOS Architectural Milestones Matrix & Execution Plan
+# Aienux Architectural Milestones Matrix & Execution Plan
 
-> **REFERENCE MILESTONE SPECIFICATION, NOT THE CURRENT EXECUTION ORDER.** Current AIENOS sequencing and status are in [../ROADMAP.md](../ROADMAP.md). Whole-system sequencing is owned by `aien-spark/aien-architecture/CURRENT_EXECUTION_PLAN.md`. See [PLAN_AUTHORITY.md](PLAN_AUTHORITY.md).
+> **REFERENCE MILESTONE SPECIFICATION, NOT THE CURRENT EXECUTION ORDER.** Current Aienux sequencing and status are in [../ROADMAP.md](../ROADMAP.md). Whole-system sequencing is owned by `aien-spark/aien-architecture/CURRENT_EXECUTION_PLAN.md`. See [PLAN_AUTHORITY.md](PLAN_AUTHORITY.md).
 
 **Status:** Reference Architectural Specification; execution order superseded by `../ROADMAP.md`
 **Version:** 1.0.0
 **Governing Documents:**
-- [AIENOS Governing Architecture](ARCHITECTURE.md)
-- [AIENOS Final Architectural Blueprint (37 Sections)](BLUEPRINT.md)
-- [AIENOS Technical Specification & Contracts (Phases 3–5)](PHASE_3_TO_5_SPECIFICATION.md)
-- [AIENOS Systems Integration Sequence & Epistemic Calibration](SYSTEMS_INTEGRATION_SEQUENCE.md)
-- [AIENOS Continuous-Existence Amendment](CONTINUOUS_EXISTENCE_AMENDMENT.md) (Operator-approved governing amendment: lifecycle semantics binding on all phases and the 10-gate sequence; gate order unchanged)
+- [Aienux Governing Architecture](ARCHITECTURE.md)
+- [Aienux Final Architectural Blueprint (37 Sections)](BLUEPRINT.md)
+- [Aienux Technical Specification & Contracts (Phases 3–5)](PHASE_3_TO_5_SPECIFICATION.md)
+- [Aienux Systems Integration Sequence & Epistemic Calibration](SYSTEMS_INTEGRATION_SEQUENCE.md)
+- [Aienux Continuous-Existence Amendment](CONTINUOUS_EXISTENCE_AMENDMENT.md) (Operator-approved governing amendment: lifecycle semantics binding on all phases and the 10-gate sequence; gate order unchanged)
 - [Architectural Decision Records (ADRs) Index](adr/README.md):
   - [ADR 0001: Native Boot Milestone & Linux Island](adr/0001-native-boot-milestone-and-linux-island.md)
   - [ADR 0002: Incumbent OS as Migration Environment](adr/0002-incumbent-os-as-migration-environment.md)
@@ -41,7 +41,7 @@ QEMU, or on hardware (Machine 1). A QEMU result is never a hardware result.
 | | Bootable recovery media | done on hardware (read-only inspection); no repair exercised | AIENOSRECOV boots with Secure Boot on and returns unattended (#53, [Gate 1 evidence](../evidence/gate1_machine1_selftest_2026-09-24.md)); PR #117: attended USB boot `RECOVERY_BOOT_GATE: PASS` on Machine 1, root and ESP mounted read-only, tools present, returned to Ubuntu; no filesystem repair or firmware mutation performed ([procedure](RECOVERY_MEDIA_MACHINE1.md), [evidence](../evidence/recovery_boot_machine1.md)) |
 | **M1** UEFI/QEMU substrate | Automated emulator boot proof | done | PR #42 (SPCR/boot harness) and PR #44 (CI automation). Reaches EL2, discovers MADT/SPCR, reports kernel alive. (Note: distinct from TRUST-1 Gate 4 security test suite) |
 | **M2A** Spark firmware handoff | Memory map into early allocator | done on hardware | PR #10; 184 descriptors, 36 conventional regions, 0 rejected ([M2 evidence](../evidence/m2_first_boot_2026-09-24.md)) |
-| | GB10 PCI identity, BAR0, PMC_BOOT registers | built, not found on hardware | PR #11; pre-exit discovery reported `gb10: unavailable` although Linux sees it at `000f:01:00.0`. PR #125: read-only Linux characterization on Machine 1 ([evidence](../evidence/gb10_linux_readonly_2026-09-25.md)); no native AIENOS GB10 observation exists; the updated discovery path is built, not booted on hardware |
+| | GB10 PCI identity, BAR0, PMC_BOOT registers | built, not found on hardware | PR #11; pre-exit discovery reported `gb10: unavailable` although Linux sees it at `000f:01:00.0`. PR #125: read-only Linux characterization on Machine 1 ([evidence](../evidence/gb10_linux_readonly_2026-09-25.md)); no native Aienux GB10 observation exists; the updated discovery path is built, not booted on hardware |
 | | CPU topology from the ACPI MADT (efficiency classes) and boot-core MIDR | done on hardware | 10 cores in class 0, 10 in class 1; boot core class 0, MIDR part `0xd87` (Cortex-A725) ([M2 evidence](../evidence/m2_first_boot_2026-09-24.md)) |
 | | Broader ACPI device discovery | pending | |
 | **M2B** Human bring-up console | GOP framebuffer text after firmware exit | built, unconfirmed | PR #13; the report does not record post-exit drawing, so the operator photograph is the evidence |
@@ -103,7 +103,7 @@ disabled for the first native boot, which passed. Disabling it changed TPM
 PCR 7, so the TPM-sealed private-storage key and vault credential on Machine 1
 no longer unsealed and dependent services failed. **Secure Boot is back on**,
 and the secrets must not be re-sealed to ignore it. Next real-hardware boots
-wait for the owner-controlled boot chain: operator signing key, signed AIENOS
+wait for the owner-controlled boot chain: operator signing key, signed Aienux
 loader and kernel, defined TPM PCR policy, independent recovery key, tested
 recovery, then secrets re-sealed to that policy. Development continues in QEMU
 (M1).
@@ -123,7 +123,7 @@ non-blocking program (see [GB10_NATIVE_STATUS.md](GB10_NATIVE_STATUS.md)).
   `aien-proof hold --resource machine-1`.
 
 **M2 gate (first native boot):** Machine 1 leaves firmware, enters native
-AIENOS code with no Linux underneath, produces independently recoverable
+Aienux code with no Linux underneath, produces independently recoverable
 evidence that it did so, and returns to the existing system without damaging
 it. `scripts/collect_boot_report.sh` prints `M2_GATE: PASS` only when all of
 those checks hold.
@@ -134,7 +134,7 @@ those checks hold.
 
 ## 1. Master Phased Execution Framework
 
-The AIENOS master execution sequence progresses across eight distinct phases. The order expresses architectural dependency, not administrative bureaucracy. Each phase establishes sovereign deliverables, enforceable invariants, objective acceptance tests, and explicit escalation triggers.
+The Aienux master execution sequence progresses across eight distinct phases. The order expresses architectural dependency, not administrative bureaucracy. Each phase establishes sovereign deliverables, enforceable invariants, objective acceptance tests, and explicit escalation triggers.
 
 ```text
 PHASE 1: Freeze Reality (Config A Ubuntu Reference Baseline)
@@ -166,8 +166,8 @@ Every implementation artifact must preserve these eleven foundational invariants
 2. **Separation of Authority and Proposal (Blueprint §5, ARCHITECTURE.md §1, ADR 0004):** The agent cannot authorize itself. Irreversible actions and external effects strictly flow: `Model Proposal -> EffectIntent -> AEGIS Policy -> Effect Broker -> Driver`.
 3. **Identity vs. Execution Separation & C1 Branch Isolation (Blueprint §2, §28, ADR 0005):** Losing physical inference state (GPU crash, bus reset, KV cache eviction, process restart) costs computation, never logical identity. Physical KV blocks are managed via explicit block tables and reservations; child branch memory corruption can never leak into parent state; logical token lineage survives indefinitely.
 4. **Sovereign Trusted Base (Blueprint §4, ARCHITECTURE.md §3, ADR 0006):** Boot, kernel, memory management, scheduler, storage core, cryptography, recovery core, and AEGIS build from inspectable open-source code with zero mandatory proprietary or cloud dependencies.
-5. **Compatibility as Island, Not Foundation (Blueprint §8, ADR 0001):** Compatibility layers (e.g. minimal Linux GPU island / Config B) are temporary acceleration mechanisms. Native Config C must never depend on Config B artifacts, CUDA userspace, or Linux kernel modules; removing Config B leaves native AIENOS fully buildable, bootable, and recoverable.
-6. **Reversible Autonomy & Explicit Effect Boundary (Blueprint §12, ARCHITECTURE.md §5, ADR 0004):** Agent is fully autonomous inside reversible Worlds where state changes remain under AIENOS transactional control. All outbound network traffic, telemetry, and uncheckpointed device state changes cross into AEGIS as external effects requiring explicit capability authorization, even when read-only.
+5. **Compatibility as Island, Not Foundation (Blueprint §8, ADR 0001):** Compatibility layers (e.g. minimal Linux GPU island / Config B) are temporary acceleration mechanisms. Native Config C must never depend on Config B artifacts, CUDA userspace, or Linux kernel modules; removing Config B leaves native Aienux fully buildable, bootable, and recoverable.
+6. **Reversible Autonomy & Explicit Effect Boundary (Blueprint §12, ARCHITECTURE.md §5, ADR 0004):** Agent is fully autonomous inside reversible Worlds where state changes remain under Aienux transactional control. All outbound network traffic, telemetry, and uncheckpointed device state changes cross into AEGIS as external effects requiring explicit capability authorization, even when read-only.
 7. **Capability-Centric Computing (Blueprint §13, ARCHITECTURE.md §2):** Functionality is organized into composable capabilities (`filesystem.read`, `mail.send`, `code.build`). Applications do not own underlying capabilities or personal data; personal data is native OS state.
 8. **Replaceable Model Intelligence (Blueprint §14):** The Model ABI decouples weights, tokenizers, backends, and sampling from agent identity. Changing models does not redefine agent identity.
 9. **Constrained "Fastest Wins" (Blueprint §31, ADR 0001):** Among implementations satisfying correctness, security, sovereignty, and interface contracts, the fastest measured implementation wins. Speed never overrides sovereignty.
@@ -187,7 +187,7 @@ Engineering agents operate autonomously within milestone boundaries (Blueprint �
   3. Modification of persistent identity semantics or the Agent State ABI hierarchy.
   4. Weakening of security boundaries, memory isolation, or J-Space World containment.
   5. Introduction of irreversible data formats into Cortex or persistent storage.
-  6. Permitting compatibility infrastructure (e.g. Linux or proprietary CUDA) to become a mandatory prerequisite for native AIENOS build, boot, or recovery (ADR 0001).
+  6. Permitting compatibility infrastructure (e.g. Linux or proprietary CUDA) to become a mandatory prerequisite for native Aienux build, boot, or recovery (ADR 0001).
   7. Introducing closed-source proprietary binaries, external cloud licensing, or opaque compiler toolchains into the trusted base.
   8. Removing or disabling recovery media, fallback boot targets, or system rollback guarantees.
   9. Alteration of externally visible protocol commitments or API contracts.
@@ -227,11 +227,11 @@ Engineering agents operate autonomously within milestone boundaries (Blueprint �
 
 ---
 
-### Phase 2: Native AIENOS Boot (Minimal Bare-Metal Substrate)
-- **Blueprint Sections Mapped:** §6 (The AIENOS Kernel), §16 (Phase 2 Native AIENOS boot).
+### Phase 2: Native Aienux Boot (Minimal Bare-Metal Substrate)
+- **Blueprint Sections Mapped:** §6 (The Aienux Kernel), §16 (Phase 2 Native Aienux boot).
 - **Secondary Sections:** §4 (Sovereignty Boundaries), §5 (Boot & Trust Substrate), §7 (Hardware Ownership), §27 (Evidence Architecture).
-- **Governing ADRs:** [ADR 0001](adr/0001-native-boot-milestone-and-linux-island.md) (mandates native AIENOS boot on bare-metal ARM64 as primary milestone; minimal Linux wrappers prohibited as native substrate), [ADR 0003](adr/0003-bootstrap-firmware-handoff-and-minimal-object-store.md) (firmware loads boot bundle; storage services are bootstrap only), [ADR 0006](adr/0006-deterministic-recovery-core-and-offline-operator-authority.md) (deterministic non-model Recovery Core and raw panic crash records).
-- **Mission:** Power on the DGX Spark and boot the sovereign `no_std` AIENOS kernel targeting 64-bit ARM (`aarch64`) directly on bare metal without Linux hosting the system.
+- **Governing ADRs:** [ADR 0001](adr/0001-native-boot-milestone-and-linux-island.md) (mandates native Aienux boot on bare-metal ARM64 as primary milestone; minimal Linux wrappers prohibited as native substrate), [ADR 0003](adr/0003-bootstrap-firmware-handoff-and-minimal-object-store.md) (firmware loads boot bundle; storage services are bootstrap only), [ADR 0006](adr/0006-deterministic-recovery-core-and-offline-operator-authority.md) (deterministic non-model Recovery Core and raw panic crash records).
+- **Mission:** Power on the DGX Spark and boot the sovereign `no_std` Aienux kernel targeting 64-bit ARM (`aarch64`) directly on bare metal without Linux hosting the system.
 - **Deliverables & Artifacts:**
   - `crates/aienos-kernel/Cargo.toml`: Standalone `no_std`, `no_main` bare-metal kernel crate targeting `aarch64-unknown-none`.
   - `crates/aienos-kernel/linker.ld`: Sovereign ARM64 linker script enforcing clean segment separation (`.text`, `.rodata`, `.data`, `.bss`, `.stack`) and deterministic entry point `_start`.
@@ -253,7 +253,7 @@ Engineering agents operate autonomously within milestone boundaries (Blueprint �
   - Any compilation requirement introducing dependencies on Linux libc, POSIX headers, or host kernel modules.
   - Firmware incompatibility requiring proprietary binary shims to achieve early CPU control.
   - Any modification, deletion, or tampering with host disk partitions, the physical EFI system partition (`/boot/efi`), host bootloaders, or firmware NVRAM bootloader variables (`efibootmgr`, `/sys/firmware/efi/efivars`, `BootOrder`, `BootNext`) outside the repository workspace without prior operator cryptographic authorization.
-  - Retaining UEFI/firmware runtime storage services as an AIENOS runtime dependency beyond the initial immutable boot bundle handoff (violating ADR 0003).
+  - Retaining UEFI/firmware runtime storage services as an Aienux runtime dependency beyond the initial immutable boot bundle handoff (violating ADR 0003).
   - Introducing AI model or external network dependencies into early kernel panic handling or recovery console routines (violating ADR 0006).
 
 ---
@@ -275,7 +275,7 @@ Engineering agents operate autonomously within milestone boundaries (Blueprint �
 - **Architectural Invariants:**
   - Identity vs Execution Separation (Blueprint §2): Restarting the model, clearing KV cache, or rebooting the machine must not create a new agent identity.
   - Provisioning-Once (Continuous-Existence Amendment, ADR 0007): Only initial provisioning may mint a durable `LogicalAgentId`; every later start resumes that identity or stops in Recovery Core.
-  - Self-Diagnostic Focus (Blueprint §17): The first agent's primary duty is observing, diagnosing, and repairing AIENOS itself; general conversational features are secondary.
+  - Self-Diagnostic Focus (Blueprint §17): The first agent's primary duty is observing, diagnosing, and repairing Aienux itself; general conversational features are secondary.
   - Model Replaceability (Blueprint §14): Changing model weights or backend leaves agent identity and Cortex history intact.
 - **Acceptance Criteria:**
   - Machine boots natively -> Runtime starts -> Local model weights load into RAM -> Agent prompts operator on console within 10 seconds.
@@ -322,7 +322,7 @@ Engineering agents operate autonomously within milestone boundaries (Blueprint �
 - **Blueprint Sections Mapped:** §7 (Hardware Sovereignty), §8 (Compatibility Islands), §19 (Phase 5 Native hardware acceleration), §31 ("Fastest Wins" Properly Defined).
 - **Secondary Sections:** §10 (CoW Prefix Sharing), §27 (Evidence Architecture).
 - **Governing ADR:** [ADR 0001](adr/0001-native-boot-milestone-and-linux-island.md) (defines 3-way configuration competition Config A vs B vs C; Config B must never become prerequisite for Config C; defines 9-11 benchmark metrics and scoped 'fastest wins').
-- **Mission:** Progressively transition hot hardware paths (accelerator, NVLink-C2C, NVMe storage, network) to native AIENOS ownership. Execute the standardized A/B/C benchmark competition across Config A (Ubuntu baseline), Config B (Minimal Linux compatibility island), and Config C (Native AIENOS bare-metal substrate) measuring the original performance metrics plus continuous-existence lifecycle metrics (wake-to-continuation and reconstruction latencies).
+- **Mission:** Progressively transition hot hardware paths (accelerator, NVLink-C2C, NVMe storage, network) to native Aienux ownership. Execute the standardized A/B/C benchmark competition across Config A (Ubuntu baseline), Config B (Minimal Linux compatibility island), and Config C (Native Aienux bare-metal substrate) measuring the original performance metrics plus continuous-existence lifecycle metrics (wake-to-continuation and reconstruction latencies).
 - **Deliverables & Artifacts:**
   - `crates/aienos-accel/`: Native GPU/NPU memory management and execution driver for NVIDIA Blackwell GB10 over NVLink-C2C.
   - `crates/aienos-nvme/`: Direct high-performance NVMe driver bypassing general-purpose VFS layers.
@@ -363,22 +363,22 @@ Engineering agents operate autonomously within milestone boundaries (Blueprint �
 ### Phase 6: Migration System (Machine Capsule, Dual-Boot & Reversible Install)
 - **Blueprint Sections Mapped:** §20 (Phase 6 Migration system), §21 (Machine Capsule), §22 (Reversible installation), §23 (Progressive escape from incumbent OS), §34 (The adoption proposition), ADR 0002.
 - **Secondary Sections:** §4 (Sovereignty Boundaries), §5 (Boot Trust).
-- **Governing ADR:** [ADR 0002](adr/0002-incumbent-os-as-migration-environment.md) (governs progressive escape from incumbent OS; AIENOS may learn from host but must not require host to survive).
-- **Mission:** Deploy host-side bootstrap tools on incumbent operating systems (Windows, macOS, Linux). Scaffolding inventories the machine, generates a Section 21 Machine Capsule, installs AIENOS with reversible dual-boot, and guides the operator through the 7-stage progressive escape lifecycle.
+- **Governing ADR:** [ADR 0002](adr/0002-incumbent-os-as-migration-environment.md) (governs progressive escape from incumbent OS; Aienux may learn from host but must not require host to survive).
+- **Mission:** Deploy host-side bootstrap tools on incumbent operating systems (Windows, macOS, Linux). Scaffolding inventories the machine, generates a Section 21 Machine Capsule, installs Aienux with reversible dual-boot, and guides the operator through the 7-stage progressive escape lifecycle.
 - **Deliverables & Artifacts:**
   - `tools/aienos-installer/`: Host-side inspection and partition setup CLI.
-  - Machine Capsule compiler validating host hardware against AIENOS BSP requirements.
+  - Machine Capsule compiler validating host hardware against Aienux BSP requirements.
   - Reversible EFI dual-boot installer configuring side-by-side boot entries without overwriting host bootloaders.
   - Automated watchdog recovery harness reverting to the incumbent OS if native boot fails.
   - Adoption lifecycle tracker managing progression across Stages 1 through 7.
 - **Architectural Invariants:**
-  - Host as Scaffolding (Blueprint §20, ADR 0002): AIENOS may learn from the host, but must never require the host to survive once installed.
+  - Host as Scaffolding (Blueprint §20, ADR 0002): Aienux may learn from the host, but must never require the host to survive once installed.
   - Reversible Installation (Blueprint §22): The incumbent OS bootloader, partition table, and user data remain intact and bootable at all times.
-  - Non-Coercive Migration (Blueprint §23): AIENOS never forces host removal; the operator retains full sovereignty over migration stages.
+  - Non-Coercive Migration (Blueprint §23): Aienux never forces host removal; the operator retains full sovereignty over migration stages.
 - **Acceptance Criteria:**
   - Installer runs non-destructively on host OS; outputs valid Section 21 Machine Capsule.
   - Dual-boot partition carved and formatted; EFI boot entry registered with watchdog counter.
-  - Test boot into AIENOS verifies kernel, storage, input, and model loading.
+  - Test boot into Aienux verifies kernel, storage, input, and model loading.
   - Simulated kernel panic during boot triggers watchdog reset into incumbent OS bootloader.
 - **Escalation Triggers:**
   - Incompatible host disk layout (e.g. unsupported software RAID or locked bootloader) that cannot be safely partitioned.
@@ -387,10 +387,10 @@ Engineering agents operate autonomously within milestone boundaries (Blueprint �
 
 ---
 
-### Phase 7: Multi-Hardware AIENOS (BSP Expansion Beyond DGX Spark)
-- **Blueprint Sections Mapped:** §7 (Hardware Sovereignty), §21 (Machine Capsule), §24 (Phase 7 Multi-hardware AIENOS).
+### Phase 7: Multi-Hardware Aienux (BSP Expansion Beyond DGX Spark)
+- **Blueprint Sections Mapped:** §7 (Hardware Sovereignty), §21 (Machine Capsule), §24 (Phase 7 Multi-hardware Aienux).
 - **Secondary Sections:** §2 (Identity Separation), §14 (Model ABI).
-- **Mission:** Decouple AIENOS from DGX Spark hardware assumptions. Generalize kernel and runtime abstractions into a formal Hardware Abstraction Layer (HAL) and Board Support Packages (BSPs) for desktop x86_64, generic ARM64, AMD accelerators, and Apple silicon.
+- **Mission:** Decouple Aienux from DGX Spark hardware assumptions. Generalize kernel and runtime abstractions into a formal Hardware Abstraction Layer (HAL) and Board Support Packages (BSPs) for desktop x86_64, generic ARM64, AMD accelerators, and Apple silicon.
 - **Deliverables & Artifacts:**
   - `crates/aienos-hal/`: Hardware Abstraction Layer defining standard CPU, MMU, interrupt, timer, and DMA interfaces.
   - `crates/bsp-dgx-spark/`: Reference BSP for NVIDIA Grace Blackwell P4242 board.
@@ -403,7 +403,7 @@ Engineering agents operate autonomously within milestone boundaries (Blueprint �
   - Uniform Contract Enforcement: All supported platforms must guarantee identical behavioral semantics for capability execution, branch isolation, and memory persistence.
 - **Acceptance Criteria:**
   - `cargo test --workspace` passes across both `aarch64` and `x86_64` targets.
-  - Automated QEMU test boots AIENOS on both `x86_64` and `aarch64`, initializing serial consoles, memory maps, and panic handlers.
+  - Automated QEMU test boots Aienux on both `x86_64` and `aarch64`, initializing serial consoles, memory maps, and panic handlers.
   - Agent state exported from DGX Spark loads and resumes execution on an x86_64 target under identical invariant proofs.
 - **Escalation Triggers:**
   - Platform-specific workarounds that leak architecture-dependent behavior into higher-level runtime or agent crates.
@@ -421,7 +421,7 @@ Engineering agents operate autonomously within milestone boundaries (Blueprint �
   - Heterogeneous compute scheduler placing model inference on accelerator nodes and UI projection on client devices.
   - Autonomous local fallback daemon ensuring disconnected nodes remain functional.
   - Blueprint Section 37 Master Verification Suite (`tests/section_37_audit.rs`).
-  - `evidence/phase8_final_success_receipt.json`: Signed verification receipt certifying full realization of the AIENOS vision.
+  - `evidence/phase8_final_success_receipt.json`: Signed verification receipt certifying full realization of the Aienux vision.
 - **Architectural Invariants:**
   - Identity Above Machines (Blueprint §25): The agent's identity exists above physical machines; computers are replaceable compute and I/O resources.
   - State Mobility Invariant (Blueprint §26): Logical state migrates; physical state is reconstructed or lazily synchronized; migration preserves continuous identity.
@@ -445,7 +445,7 @@ Engineering agents operate autonomously within milestone boundaries (Blueprint �
 | **3** | Final system architecture | Phase 4 | 7-layer stack in `crates/` | Strict layer boundary separation | End-to-end intent execution crossing layers |
 | **4** | Fixed vs decision space | Phase 2 | Cargo workspace, sovereign crates | Zero cloud or proprietary dependencies | Builds with open toolchains |
 | **5** | Boot and trust architecture | Phase 2 | Secure Boot hooks, AEGIS engine | Agent cannot authorize itself | Unauthorized intent rejected |
-| **6** | The AIENOS kernel | Phase 2 | `aienos-kernel`, `linker.ld` | Model is never the kernel | Boots without model loaded |
+| **6** | The Aienux kernel | Phase 2 | `aienos-kernel`, `linker.ld` | Model is never the kernel | Boots without model loaded |
 | **7** | Hardware sovereignty | Phase 5 | `crates/aienos-accel/`, NVMe | Direct hot-path hardware ownership | Native MMIO/DMA without host OS |
 | **8** | Compatibility islands | Phase 5 | Config B (`minimal-linux-island`) | Island is not the foundation | Boots with Config B deleted |
 | **9** | Agent State ABI | Phase 4 | `crates/aienos-state/` | Logical state decoupled from physical KV | Branch fork/suspend/resume unit tests |
@@ -455,7 +455,7 @@ Engineering agents operate autonomously within milestone boundaries (Blueprint �
 | **13** | Capability Graph | Phase 4 | `crates/aienos-capabilities/` | Capabilities replace applications | Intent executes via capability composition |
 | **14** | Model ABI | Phase 3 | `crates/aienos-model-abi/` | Models are replaceable components | Model swap leaves identity intact |
 | **15** | Phase 1 — Freeze reality | Phase 1 | `freeze_reality.sh`, bundle JSON | Non-destructive read-only capture | Script exits 0; schema validates |
-| **16** | Phase 2 — Native AIENOS boot | Phase 2 | `aienos-kernel`, UART driver | Boots bare metal without Linux host | Cargo build exits 0; emits banner |
+| **16** | Phase 2 — Native Aienux boot | Phase 2 | `aienos-kernel`, UART driver | Boots bare metal without Linux host | Cargo build exits 0; emits banner |
 | **17** | Phase 3 — The agent wakes up | Phase 3 | Runtime, CPU model, console loop | Agent wakes natively; Cortex persists | Console dialogue; persists post-reboot |
 | **18** | Phase 4 — Native intelligence | Phase 4 | AEGIS, Broker, Capabilities, Worlds | Natural language operating control | Intent diagnostics pass in sandbox |
 | **19** | Phase 5 — Hardware acceleration | Phase 5 | Native GB10 driver, benchmark suite | Constrained "fastest wins"; accelerator state is Class B | Performance + lifecycle benchmark report emitted |
@@ -474,7 +474,7 @@ Engineering agents operate autonomously within milestone boundaries (Blueprint �
 | **32** | Self-improvement | Phase 4 | World canary evaluation pipeline | Out-of-band evaluation; no live patch | Canary test rejects flawed patch |
 | **33** | Finished system feel | Phase 8 | Dynamic UI projection engine | Power on → AIEN wakes | Cold boot wakes interactive agent |
 | **34** | The adoption proposition | Phase 6 | Host discovery onboarding flow | Non-coercive adoption | Native boot target prepared safely |
-| **35** | The strategic endpoint | Phase 8 | Complete architectural runtime | Operator → Agent → Capabilities → AIENOS | Total agent-native computing realized |
+| **35** | The strategic endpoint | Phase 8 | Complete architectural runtime | Operator → Agent → Capabilities → Aienux | Total agent-native computing realized |
 | **36** | Master execution sequence | Phase 1–8 | Milestone dependency DAG | Phased dependency ordering | Exit criteria verified before unlock |
 | **37** | Final definition of success | Phase 8 | Master Audit Suite | All 15 criteria verified true | 15/15 binary conditions passing |
 
@@ -485,7 +485,7 @@ Engineering agents operate autonomously within milestone boundaries (Blueprint �
 | # | Blueprint Section 37 Success Condition | Verifying Phase | Implementing Artifact / Crate | Objective Verification Test Method |
 |---|---|---|---|---|
 | **1** | The machine can boot without Windows, macOS or Linux acting as its host. | Phase 2 | `crates/aienos-kernel` (`_start`) | Power-on boot test into native bare-metal ELF on DGX Spark; kernel emits UART banner. |
-| **2** | AIENOS can recover without an AI model. | Phase 2 | `crates/aienos-kernel` (`recovery.rs`) | Boot into recovery mode with zero model files on storage; mount storage and execute diagnostic shell. |
+| **2** | Aienux can recover without an AI model. | Phase 2 | `crates/aienos-kernel` (`recovery.rs`) | Boot into recovery mode with zero model files on storage; mount storage and execute diagnostic shell. |
 | **3** | The AIEN agent survives reboot as the same logical entity. | Phase 3 | `crates/aienos-runtime`, `cortex` | Soft reboot during active conversation; agent wakes and verifies prior interaction history. |
 | **4** | Cortex survives and preserves evidence/provenance semantics. | Phase 3 | `crates/aienos-cortex` | Write epistemic graph with observations and facts; power cycle; query Cortex and verify hashes. |
 | **5** | The model can be replaced without replacing AIEN. | Phase 3 | `crates/aienos-model-abi` | Swap underlying model weights from Model A to Model B; verify agent identity and history remain intact. |
@@ -494,8 +494,8 @@ Engineering agents operate autonomously within milestone boundaries (Blueprint �
 | **8** | Irreversible effects cross enforceable authorization boundaries. | Phase 4 | `crates/aienos-aegis`, `broker` | Attempt disk partition format; verify AEGIS blocks execution pending operator cryptographic grant. |
 | **9** | The operator can recover from AIEN failure. | Phase 3 | Kernel fallback console & recovery media | Kill runtime process; kernel falls back to deterministic low-level recovery console. |
 | **10** | No outside company is required for ordinary continued operation. | Phase 2 | Sovereign build chain & local model | Disconnect physical network cable; execute complete boot, inference, storage, and agent loop. |
-| **11** | Important native hardware paths are directly controlled by AIENOS. | Phase 5 | `crates/aienos-accel`, `nvme`, `net` | Direct MMIO register access to GB10 accelerator and NVMe block devices without host drivers. |
-| **12** | Compatibility layers are optional rather than foundational. | Phase 5 | Benchmark Config B isolation | Delete Config B Linux compatibility image; confirm native AIENOS boots, executes, and recovers. |
+| **11** | Important native hardware paths are directly controlled by Aienux. | Phase 5 | `crates/aienos-accel`, `nvme`, `net` | Direct MMIO register access to GB10 accelerator and NVMe block devices without host drivers. |
+| **12** | Compatibility layers are optional rather than foundational. | Phase 5 | Benchmark Config B isolation | Delete Config B Linux compatibility image; confirm native Aienux boots, executes, and recovers. |
 | **13** | The system can prove its important performance and correctness claims. | Phase 1 | `scripts/verify_evidence.sh` | Every benchmark and test emits cryptographically signed JSON evidence receipts into `evidence/`. |
 | **14** | The user can move to another supported machine without their AIEN being permanently tied to old hardware. | Phase 7 | `crates/aienos-fabric`, `aienos-hal` | Export agent state from DGX Spark; import and resume on x86_64 host under identical identity. |
-| **15** | Ordinary experience: Power on the machine. AIEN wakes up. | Phase 8 | Complete integrated AIENOS | Cold power button press leads directly to interactive AIEN agent greeting without intermediate desktop. |
+| **15** | Ordinary experience: Power on the machine. AIEN wakes up. | Phase 8 | Complete integrated Aienux | Cold power button press leads directly to interactive AIEN agent greeting without intermediate desktop. |

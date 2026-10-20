@@ -1,4 +1,4 @@
-# D2 Flush Review  -  AIENOS P3 NVMe Flush lane
+# D2 Flush Review  -  Aienux P3 NVMe Flush lane
 
 Base: `aien-spark/aienos` @ `ef359ec` (read-only mirror `/Users/drakestapleton/aienos-nvme-rw`).
 Files read in full: `crates/aienos-kernel/src/nvme.rs`,

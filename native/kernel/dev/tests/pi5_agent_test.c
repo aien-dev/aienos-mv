@@ -1,4 +1,4 @@
-/* pi5_agent_test.c -- AIENOS PI5-6 final cut host test: the Pi agent stage (svc/pi5_agent.c, hooked by svc/store_boot.c
+/* pi5_agent_test.c -- Aienux PI5-6 final cut host test: the Pi agent stage (svc/pi5_agent.c, hooked by svc/store_boot.c
  * ck_store_pi5_agent_stage, compiled with -DCK_PI5_UNLOCK -DCK_PI5_UNLOCK_CARD -DCK_PI5_AGENT exactly as "make pi5-agent"
  * builds it) over the Pi card layout. A file stands in for the card; every "boot" reopens the file and starts from a cold C
  * state. The inference unit is a STUB defined here (a real 770 MiB model cannot run on the host); the stage's own policy

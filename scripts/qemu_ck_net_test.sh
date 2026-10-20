@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Network gate for the AIENOS C kernel: AIENOS_CK_NET (C-only gate; the Rust
+# Network gate for the Aienux C kernel: AIENOS_CK_NET (C-only gate; the Rust
 # kernel has no virtio-net queue driver, so there is no Rust counterpart).
 # Boots the full C image (make full) in QEMU AArch64 with UEFI (AAVMF), an
 # NVMe disk (so the boot is the normal full boot) and a virtio-net-pci NIC on
@@ -127,7 +127,7 @@ echo "PASS  UDP echo helper listening on 127.0.0.1:${port} (token ${token})"
 source "${repo_root}/scripts/lib_ck_m1_checks.sh"
 img_bytes=67108864
 image="${top}/nvme.img"
-# GPT boot disk with an AIENOS partition (native/kernel/tools/ck_gpt_image.c):
+# GPT boot disk with an Aienux partition (native/kernel/tools/ck_gpt_image.c):
 # the kernel binds NVMe only when it finds one (dev/disk_part.h).
 "${out}/host/ck_gpt_image" create "${image}" 512 $(( img_bytes / 1048576 )) aienos-middle >/dev/null
 net_fail=0; m1_fail=0

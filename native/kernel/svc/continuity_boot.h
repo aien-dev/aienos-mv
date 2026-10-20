@@ -9,7 +9,7 @@
  * the console and never counts toward anything but M4_CONTINUITY / M4_RECOVERY.
  *
  * Mode selection (contract K-7, DECIDED): the host writes one ASCII line into the
- * last 4096-byte unit of the AIENOS partition (the rw-probe scratch unit, which
+ * last 4096-byte unit of the Aienux partition (the rw-probe scratch unit, which
  * the devices stage restores byte for byte, dev/nvme_bind.c ck_disk_rw_probe; the
  * same carrier as svc/store_crash.h):
  *     AIENCONT v1 mode=<N>[ cp=<checkpoint>][ response=<64 hex>]\n

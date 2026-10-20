@@ -1,6 +1,6 @@
 # GB10 hardware profile v1
 
-This document defines the typed GB10 characterization used by AIENOS and the
+This document defines the typed GB10 characterization used by Aienux and the
 read-only Linux collector that fills it. It is characterization only. Nothing
 here initializes the GPU, talks to GSP, submits a command, allocates GPU
 memory, executes a kernel, or performs inference.
@@ -22,12 +22,12 @@ default:
 
 Every observed value also records:
 
-- its `source` (UEFI firmware service, native AIENOS PCI enumeration, Linux
+- its `source` (UEFI firmware service, native Aienux PCI enumeration, Linux
   sysfs, Linux procfs, Linux ACPI, a synthetic fixture, or derived);
 - whether Linux interpreted the value (`true` for a kernel sysfs attribute that
   the kernel decoded, `false` for raw configuration bytes this project decodes
   itself);
-- whether native AIENOS has independently verified the value.
+- whether native Aienux has independently verified the value.
 
 `BAR0 base observed through Linux sysfs` and `BAR0 base independently decoded
 by native AIENOS PCI enumeration` are different claims, and the type keeps
@@ -126,7 +126,7 @@ An example committed run on Machine 1 is
 ## What this is not
 
 The Linux collector observes facts through Linux. Those facts are Linux
-observations, not native AIENOS proofs. The current UEFI discovery path
+observations, not native Aienux proofs. The current UEFI discovery path
 observes a subset (identity, BAR0, and two PMC registers); those are UEFI
 observations. Nothing here claims GSP ownership, GPU initialization, command
 submission, GPU DMA readiness, native Blackwell execution, or native inference.

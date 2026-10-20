@@ -1,4 +1,4 @@
-//! Sovereign cryptographic primitives for AIENOS.
+//! Sovereign cryptographic primitives for Aienux.
 
 pub mod envelope;
 pub mod hkdf;

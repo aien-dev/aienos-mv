@@ -1,7 +1,7 @@
 //! Early serial console chosen from the firmware's ACPI SPCR table.
 //!
 //! The console never depends on accelerator discovery: the firmware says where
-//! the serial port is, and AIENOS drives it if it knows the register model.
+//! the serial port is, and Aienux drives it if it knows the register model.
 //! Every transmit is bounded, so an absent or unclocked UART cannot hang boot.
 
 use crate::acpi::UartKind;

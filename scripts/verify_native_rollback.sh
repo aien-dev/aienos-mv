@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # verify_native_rollback.sh
-# Host-side automated verifier for AIENOS native-boot rollback observations.
+# Host-side automated verifier for Aienux native-boot rollback observations.
 #
 # Consumes pre-boot and post-return evidence captures and determines whether
 # rollback invariants held.

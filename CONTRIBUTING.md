@@ -1,6 +1,6 @@
-# Contributing to AIENOS
+# Contributing to Aienux
 
-Thank you for considering it. AIENOS is experimental and pre-alpha; we welcome
+Thank you for considering it. Aienux is experimental and pre-alpha; we welcome
 contributions of code, review, design and testing.
 
 ## Find something to work on
@@ -69,7 +69,7 @@ Report vulnerabilities privately through GitHub's "Report a vulnerability"
 
 ## License
 
-AIENOS is licensed under AGPL-3.0-or-later. By submitting a
+Aienux is licensed under AGPL-3.0-or-later. By submitting a
 contribution you agree that it is licensed under the same terms.
 
 ## Crumbs

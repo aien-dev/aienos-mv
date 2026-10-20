@@ -80,7 +80,7 @@ void ck_pi5_start(void)
     rc = disk_read(&sd.dev, 0, 1, s0);
     ck_printf("pi5_sd: read sector 0 rc=%d signature=%02x%02x (%s)\n", rc, s0[510], s0[511],
               rc == 0 && s0[510] == 0x55 && s0[511] == 0xaa ? "MBR ok" : "no MBR signature");
-    /* Step 3: the AIENOS partition through the same GPT partition view the NVMe path uses (dev/disk_part.c),
+    /* Step 3: the Aienux partition through the same GPT partition view the NVMe path uses (dev/disk_part.c),
      * then the scratch marker at its end (core/pi5_marker.c): formatted on a blank card, reopened after a reboot. */
     ck_gpt_info gi;
     rc = ck_gpt_find_aienos(&sd.dev, &part, &gi);
@@ -208,7 +208,7 @@ void ck_pi5_before_reset(void)
 #if defined(CK_PI5_STORE) && defined(CK_PI5_UNLOCK)
 #error "CK_PI5_STORE (TEST keys) and CK_PI5_UNLOCK (production class keys) are separate images"
 #endif
-/* Hand the card's AIENOS partition view to the sealed Store stage (svc/store_boot.c ck_stage_store), the
+/* Hand the card's Aienux partition view to the sealed Store stage (svc/store_boot.c ck_stage_store), the
  * same stage the QEMU "full" image runs. Tier: SEED-0B-PI5, the Pi counterpart of SEED-0B-QEMU. The Store
  * keys are the labelled TEST keys (ck_store_test_keys); the production key source stays BLOCKED_OPERATOR
  * and is not touched here. CK_HARDWARE_STAGING and CK_PI5 cannot be combined (Makefile), so no hardware

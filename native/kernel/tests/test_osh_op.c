@@ -1,4 +1,4 @@
-/* test_osh_op.c -- host tests for core/osh_op.c: the AIENOS adapter's capability-authorized console write (`klog`).
+/* test_osh_op.c -- host tests for core/osh_op.c: the Aienux adapter's capability-authorized console write (`klog`).
  * Requests are built as the expander's request record (OSH_PLATFORM_ABI section 7) without calling the shell core. */
 #include <string.h>
 #include "ck_test.h"

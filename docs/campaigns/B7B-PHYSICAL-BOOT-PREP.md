@@ -12,7 +12,7 @@ Related, read first: `docs/native/PREFLIGHT-AND-RECOVERY.md`, `docs/NATIVE_BOOT_
 
 ## 1. What B7b is, and what is already built
 
-Goal in plain words: boot a special test build of the AIENOS kernel once, let it switch on the second memory-protection
+Goal in plain words: boot a special test build of the Aienux kernel once, let it switch on the second memory-protection
 chip ("SMMUv3 B", at 0x13000000) for one made-up device slot, read two read-only identity registers of that chip, switch
 the slot off again, print one summary line, and return to Linux. No device is allowed to move data; the GPU is not
 touched.
@@ -119,7 +119,7 @@ that Drake wants answered first.
 
 | when | what to read | meaning |
 |---|---|---|
-| after the reboot, before any AIENOS text | firmware messages | `Secure Boot Violation` means the image was refused: a STOP condition, do not bypass; the machine falls back to Linux |
+| after the reboot, before any Aienux text | firmware messages | `Secure Boot Violation` means the image was refused: a STOP condition, do not bypass; the machine falls back to Linux |
 | `kernel: alive` | banner, memory map | the probe image started; the probe runs only after this line |
 | `route ...` line | instance, base, stream | must read instance 1, base 0x13000000, stream 0x100. Anything else is a finding about the IORT decode (`GB10_IORT_DECODE.md` section 3), not a reason to retry |
 | IDR0/IDR1 line | two register values | record verbatim; SIDSIZE must cover 0x100 |

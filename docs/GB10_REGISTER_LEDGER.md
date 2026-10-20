@@ -1,6 +1,6 @@
 # GB10 register knowledge ledger
 
-This is a source-backed inventory of GB10 registers AIENOS can point at a
+This is a source-backed inventory of GB10 registers Aienux can point at a
 source for. It is not a driver and it does not read any register. Unknown
 registers stay unknown. Meanings are not inferred from register names or from
 Linux driver behaviour.
@@ -18,7 +18,7 @@ The machine-readable form is `GB10_REGISTERS` in
 
 ## Ledger
 
-| Block | Register | Offset | Width | Access | Evidence source | Observed value | Confidence / status | Safe to read | Native AIENOS observed | Semantics known |
+| Block | Register | Offset | Width | Access | Evidence source | Observed value | Confidence / status | Safe to read | Native Aienux observed | Semantics known |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | GB10 PMC | `BOOT_0` | `0x0000` | 32 bit | read only (per current use) | `crates/aienos-accel` offset used by the UEFI handoff | none recorded here | offset established in the repository; meaning not established | established read through the UEFI handoff path | no | no |
 | GB10 PMC | `BOOT_42` | `0x0a00` | 32 bit | read only (per current use) | `crates/aienos-accel` offset used by the UEFI handoff | none recorded here | offset established in the repository; meaning not established | established read through the UEFI handoff path | no | no |
@@ -30,7 +30,7 @@ The machine-readable form is `GB10_REGISTERS` in
 - **Access.** The repository only ever reads these two. No write path exists,
   and none is proposed here.
 - **Observed value.** Left empty. The register values are read at boot into the
-  handoff report and the firmware variable, but no native AIENOS observation of
+  handoff report and the firmware variable, but no native Aienux observation of
   them exists yet, so there is nothing verified to record. A Linux read was
   deliberately not performed: reading BAR MMIO outside the established safe set
   needs separate approval.
@@ -40,7 +40,7 @@ The machine-readable form is `GB10_REGISTERS` in
   through the UEFI root bridge memory protocol. A read outside this set would
   need explicit, separate approval, on the principle that a register being
   readable is not evidence that it is safe to read.
-- **Native AIENOS observed.** False for both. Only UEFI firmware services have
+- **Native Aienux observed.** False for both. Only UEFI firmware services have
   read them so far.
 
 ## Rules for adding a register
@@ -55,5 +55,5 @@ The machine-readable form is `GB10_REGISTERS` in
    argument.
 5. Leave semantics unknown until there is evidence to establish them. Do not
    guess a bit layout from a downstream driver's use.
-6. Set native-observed only after a native AIENOS path actually reads the
+6. Set native-observed only after a native Aienux path actually reads the
    register on hardware.

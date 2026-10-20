@@ -1,14 +1,14 @@
 # Sovereignty flags: systemd and tpm2-tools
 
 Status: flag only. Nothing here changes behaviour. Standing rules: no systemd anywhere in
-AIENOS boot, init, services or tooling (see `.github/copilot-instructions.md:22`), and no
+Aienux boot, init, services or tooling (see `.github/copilot-instructions.md:22`), and no
 outside dependencies. Each in-script hit carries a `# FLAG(sovereignty):` comment.
 Found with `git grep -n -iE 'systemd|systemctl|tpm2_|tpm2-tools|journalctl'` on origin/main.
 No earlier equivalent document existed. All results are NOT_RUN (documentation only).
 
 Line numbers are origin/main numbering (before the added FLAG comment lines), checked after merging a047289 and 7a16a9f.
 
-"Runs on" key: IMAGE = executes inside the AIENOS recovery image; HOST = Linux host only
+"Runs on" key: IMAGE = executes inside the Aienux recovery image; HOST = Linux host only
 (TRUST-1 operator steps, CI, or the software-TPM test); DOC = text only.
 
 ## systemd

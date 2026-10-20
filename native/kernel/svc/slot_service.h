@@ -1,4 +1,4 @@
-/* slot_service.h -- the kernel side of the AIENOS image slots (native v1
+/* slot_service.h -- the kernel side of the Aienux image slots (native v1
  * plan P11 cut 2b, gate N7; docs/NATIVE_IMAGE_SLOTS.md "Kernel promotion").
  *
  * Linked only into a CK_SERVICE=1 image. SLOTLDR.EFI hands the kernel one

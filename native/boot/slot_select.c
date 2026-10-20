@@ -1,4 +1,4 @@
-/* slot_select.c -- AIENOS native image slots: structural checks, slot
+/* slot_select.c -- Aienux native image slots: structural checks, slot
  * verification and the loader's / kernel's decision rules (slot_format.h).
  *
  * Freestanding C: no libc, no allocation, no I/O. The only outside symbols

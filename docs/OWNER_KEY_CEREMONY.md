@@ -46,7 +46,7 @@ believe. It comes in two halves:
 
 What it protects, in this project:
 
-- **Which software the native machine will start.** Every AIENOS image slot
+- **Which software the native machine will start.** Every Aienux image slot
   carries a manifest (a small signed label saying "this exact image,
   generation N, built from commit C") signed by the Owner Root Ed25519 key
   (`native/boot/slot_format.h`, lines 32-33; `docs/NATIVE_IMAGE_SLOTS.md`

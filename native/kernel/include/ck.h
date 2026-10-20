@@ -1,4 +1,4 @@
-/* ck.h -- AIENOS C kernel core: the services the core gives to device,
+/* ck.h -- Aienux C kernel core: the services the core gives to device,
  * Store and security code. Freestanding; no libc.
  *
  * Owner split (Lane 18):

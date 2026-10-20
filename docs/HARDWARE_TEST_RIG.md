@@ -23,7 +23,7 @@ functions for Machine 1, all serialized through
 2. **Display or console capture**: the screen from cold boot through the
    post-exit report, replacing the operator photograph.
 3. **Deterministic input and boot selection**: scripted keystrokes into the
-   firmware boot menu, the firmware setup screen, and later the AIENOS early
+   firmware boot menu, the firmware setup screen, and later the Aienux early
    console, so the same image boot can be driven the same way every time.
 
 Independence matters: a hung capture dongle must not block a power cut, and a
@@ -120,7 +120,7 @@ steps. Examples:
   entry, send `Enter`.
 - Firmware setup: the documented `systemctl reboot --firmware-setup` path is
   preferred; the gadget is the fallback when Linux is not running.
-- AIENOS console: once the early console takes keyboard input, sequences come
+- Aienux console: once the early console takes keyboard input, sequences come
   from the same runner.
 
 The keystroke sets, frame references and expected end states are versioned in
@@ -171,7 +171,7 @@ maps onto the rig without changing the image:
 
 Until the owner-controlled boot chain exists (see the Secure Boot note in
 [MILESTONES.md](MILESTONES.md)), the rig changes how boots are driven, not
-what is booted: Secure Boot stays on, native AIENOS boots stay paused, and the
+what is booted: Secure Boot stays on, native Aienux boots stay paused, and the
 rig's first job is running attended flows like recovery-media testing and the
 TRUST-1 100-boot campaign without a person in front of the machine.
 

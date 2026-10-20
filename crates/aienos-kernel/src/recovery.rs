@@ -1,4 +1,4 @@
-//! AIENOS Deterministic Recovery Core (ADR 0006).
+//! Aienux Deterministic Recovery Core (ADR 0006).
 //!
 //! A non-model, deterministic subsystem for:
 //! - Offline local operator credential authentication

@@ -1,4 +1,4 @@
-/* efi_fact.c -- read \EFI\AIENOS\FACT.REQ from the boot volume before ExitBootServices
+/* efi_fact.c -- read \EFI\Aienux\FACT.REQ from the boot volume before ExitBootServices
  * (Raspberry Pi 5 Cortex qualification image, CK_PI5_FACT). Nothing is written. The file holds one short
  * fact placed by the run tool (native/kernel/core/fact_req.h). Result in ck_fact_req_boot (stub and
  * kernel are one image): ABSENT (no file: boot 2 recalls, not an error), REFUSED (printed why), FOUND. */

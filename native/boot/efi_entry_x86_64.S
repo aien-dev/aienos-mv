@@ -1,4 +1,4 @@
-/* efi_entry_x86_64.S -- UEFI entry of an AIENOS x86_64 image (AIENOS-IMAC-BOOT-0).
+/* efi_entry_x86_64.S -- UEFI entry of an Aienux x86_64 image (AIENOS-IMAC-BOOT-0).
  * Firmware calls _start(ImageHandle, SystemTable) in long mode with the
  * Microsoft x64 convention (RCX, RDX; UEFI 2.10 section 2.3.4). The image is
  * linked at 0 and loaded anywhere: apply our R_X86_64_RELATIVE relocations

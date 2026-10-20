@@ -1042,7 +1042,7 @@ static void t_ksm_refusals(void)
 static void t_recovery_kek_vector(void)
 {
     /* openssl kdf -keylen 32 -kdfopt digest:SHA256 -kdfopt hexkey:<secret>
-     * -kdfopt hexsalt:<salt> -kdfopt info:AIENOS/M5/RECOVERY-KEK-V1 HKDF */
+     * -kdfopt hexsalt:<salt> -kdfopt info:Aienux/M5/RECOVERY-KEK-V1 HKDF */
     uint8_t secret[32], salt[16], out[32], out2[32];
     for (int i = 0; i < 32; i++) secret[i] = (uint8_t)i;
     for (int i = 0; i < 16; i++) salt[i] = (uint8_t)(0xa0 + i);

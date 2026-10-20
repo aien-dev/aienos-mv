@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# CONSOLE gate for the AIENOS C kernel (Campaign 3 cut C3-1a): rows 146-155 of
+# CONSOLE gate for the Aienux C kernel (Campaign 3 cut C3-1a): rows 146-155 of
 # native/kernel/GATES.md "C3-1a console session". C-only (no Rust oracle).
 # QEMU is not hardware: a PASS here qualifies nothing physical.
 #

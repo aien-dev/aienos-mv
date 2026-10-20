@@ -1,4 +1,4 @@
-/* pci.h -- AIENOS C kernel stage: PCIe ECAM discovery from ACPI MCFG.
+/* pci.h -- Aienux C kernel stage: PCIe ECAM discovery from ACPI MCFG.
  *
  * Freestanding. The only outside services are ck.h ones (ck_printf,
  * ck_mmio_map, ck_acpi_find). The pure parts (MCFG parse, BAR sizing math)

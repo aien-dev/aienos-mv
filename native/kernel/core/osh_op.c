@@ -1,4 +1,4 @@
-/* osh_op.c -- see osh_op.h. The adapter side of OSH on AIENOS: request record in, one capability-checked platform
+/* osh_op.c -- see osh_op.h. The adapter side of OSH on Aienux: request record in, one capability-checked platform
  * operation out. No lexing, parsing or expansion happens here. No libc calls (host and kernel builds share it). */
 #include "osh_op.h"
 #include "fmt.h"

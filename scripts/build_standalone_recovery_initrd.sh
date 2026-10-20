@@ -155,7 +155,7 @@ echo "Packaged $(wc -l < "$WORK_DIR/etc/aienos-modules.order") kernel modules fo
 # Create standalone init script
 cat << 'INIT_EOF' > "$WORK_DIR/init"
 #!/bin/busybox sh
-# Standalone AIENOS Recovery Environment
+# Standalone Aienux Recovery Environment
 # Runs completely in RAM, independently of internal NVMe storage
 
 /bin/busybox --install -s /bin

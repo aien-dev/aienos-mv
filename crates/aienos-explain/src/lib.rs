@@ -1,4 +1,4 @@
-//! AIENOS explanation bridge: think in graphs, speak in paths.
+//! Aienux explanation bridge: think in graphs, speak in paths.
 //!
 //! Machine artifacts (Cortex records, agent branches, RSI hypothesis contracts,
 //! evaluation receipts) are expressed in the language-neutral evidence-graph contract

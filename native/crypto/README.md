@@ -45,7 +45,7 @@ RFC 4231 HMAC cases 1 and 2, and every vector in the Rust crate's unit tests.
 
 ## Limitations
 
-- Host-tested port only: run on the build machine, not in the AIENOS kernel,
+- Host-tested port only: run on the build machine, not in the Aienux kernel,
   not under QEMU, not on bare metal.
 - Constant-time by construction (computed S-box, no tables; masks instead of
   branches behind compiler barriers). Checked by reading the source and

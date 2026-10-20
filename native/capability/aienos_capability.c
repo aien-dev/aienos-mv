@@ -1,5 +1,5 @@
 /*
- * aienos_capability.c -- native AIENOS capability authority.
+ * aienos_capability.c -- native Aienux capability authority.
  *
  * AienosCapView can check a reference. It cannot mint, revoke, reclaim, move
  * the clock, or change the epoch. Those operations take AienosCapAdmin, and

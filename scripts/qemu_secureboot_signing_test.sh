@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # qemu_secureboot_signing_test.sh: TRUST-1 Gate 4, Secure Boot enforcement in QEMU.
 #
-# Boots the AIENOS handoff loader under AArch64 UEFI firmware with Secure
+# Boots the Aienux handoff loader under AArch64 UEFI firmware with Secure
 # Boot ON, using the Debian "snakeoil" test key set (AAVMF_CODE.snakeoil.fd +
 # AAVMF_VARS.snakeoil.fd). The snakeoil key is a published TEST key shipped
 # with qemu-efi-aarch64 (password "snakeoil"); it is never an owner key and

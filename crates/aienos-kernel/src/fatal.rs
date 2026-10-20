@@ -2,7 +2,7 @@
 //!
 //! After firmware exit the firmware's exception vectors are still installed,
 //! and on a fault they typically print to a serial port and hang, leaving no
-//! evidence. `install_exception_vectors` replaces them with AIENOS vectors
+//! evidence. `install_exception_vectors` replaces them with Aienux vectors
 //! that switch to a dedicated stack, read the syndrome registers, and call a
 //! registered hook (which reports the fault and resets). The decoding is pure
 //! and host-tested; the vectors and register reads exist only on AArch64.
@@ -384,7 +384,7 @@ mod vectors {
     }
 }
 
-/// Replace the firmware's exception vectors with AIENOS ones. Call only after
+/// Replace the firmware's exception vectors with Aienux ones. Call only after
 /// firmware boot services have exited; firmware may rely on its own vectors
 /// until then.
 pub fn install_exception_vectors() {

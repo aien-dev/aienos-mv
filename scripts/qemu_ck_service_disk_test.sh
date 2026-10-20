@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SERVICE_DISK gate for the AIENOS C kernel (native v1 P06 / gate N3,
+# SERVICE_DISK gate for the Aienux C kernel (native v1 P06 / gate N3,
 # aienos#34): rows 200-211 of native/kernel/GATES.md "SERVICE_DISK". C-only.
 # QEMU is not hardware: a PASS here qualifies nothing physical.
 #
@@ -8,7 +8,7 @@
 # CK_OWNER_PUBKEYS= CK_MACHINE_ID= CK_INFER_LIB=, CK_FB_HOLD_S=120), staged by
 # scripts/stage_one_time_boot_ck_service.sh onto ONE emulated NVMe disk that
 # holds the ESP (image + MODEL.MAP), the model bytes (three out-of-order
-# extents) and the all-zero AIENOS partition for the sealed Store. No fw_cfg
+# extents) and the all-zero Aienux partition for the sealed Store. No fw_cfg
 # model, no CK_TEST_* flag, no test-keys image: the owner files (a fresh
 # Ed25519 public key, a random machine id and Store uuid) and the 32-byte
 # recovery secrets are generated for this run and never stored.
@@ -58,7 +58,7 @@
 #            stub reads the bytes, the kernel refuses to decode (`sha256
 #            mismatch`), no resident session, prompt refused
 #   row 210  limits (declared): QEMU only; the Spark console receive path, the
-#            AIENOS partition on the Spark NVMe and the owner key ceremony are
+#            Aienux partition on the Spark NVMe and the owner key ceremony are
 #            separate items; int8 stays off
 # Final line: AIENOS_CK_SERVICE_DISK: PASS|FAIL|NOT_RUN. No Python.
 set -euo pipefail
@@ -176,7 +176,7 @@ secret_ok="$(rnd 32)"
 secret_bad="$(rnd 32)"
 [[ "${secret_ok}" != "${secret_bad}" && ${#secret_ok} == 64 ]] || { echo "${final_tag}: FAIL (secret generation)"; exit 1; }
 
-# --- scratch disk: ESP + model (3 out-of-order extents) + AIENOS partition ---
+# --- scratch disk: ESP + model (3 out-of-order extents) + Aienux partition ---
 make -s -C native/kernel OUT="${top}/host" gpt-image model-map >/dev/null
 img="${top}/disk.img"
 model_bytes="$(stat -c %s "${model}")"

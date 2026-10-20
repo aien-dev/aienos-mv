@@ -218,7 +218,7 @@ fn decode_bars(bytes: &[u8], offset: usize) -> Result<[Bar; 6], PciError> {
 ///
 /// This is a pure decoder for a probe result the caller already has. It does
 /// not perform the probe: writing all ones to a BAR is a PCI configuration
-/// write and lies outside AIENOS's read-only characterization boundary. A
+/// write and lies outside Aienux's read-only characterization boundary. A
 /// non-power-of-two or out-of-range mask returns `None` rather than a size.
 pub fn memory_bar_size(low: u32, high: u32, is_64_bit: bool) -> Option<u64> {
     // A probe writes all ones; the device returns ones for every unimplemented

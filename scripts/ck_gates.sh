@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ck_gates.sh: one entrypoint for the AIENOS C kernel ("CK", Lane 18) QEMU
+# ck_gates.sh: one entrypoint for the Aienux C kernel ("CK", Lane 18) QEMU
 # gates, with a content-addressed receipt.
 #
 # It refuses a dirty tree, runs the C kernel QEMU scripts that exist

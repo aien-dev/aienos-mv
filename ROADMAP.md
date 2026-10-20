@@ -1,8 +1,8 @@
-# AIENOS Roadmap
+# Aienux Roadmap
 
-> **Plan authority:** This is the current AIENOS component roadmap. Whole-system sequencing is owned by `aien-spark/aien-architecture/CURRENT_EXECUTION_PLAN.md`. See [docs/PLAN_AUTHORITY.md](docs/PLAN_AUTHORITY.md).
+> **Plan authority:** This is the current Aienux component roadmap. Whole-system sequencing is owned by `aien-spark/aien-architecture/CURRENT_EXECUTION_PLAN.md`. See [docs/PLAN_AUTHORITY.md](docs/PLAN_AUTHORITY.md).
 
-AIENOS is an agent-native operating system built in the open. This file is the
+AienOS is an agent-native operating system built in the open. This file is the
 public map: where the project is, what is next, and where you can help.
 **Live progress** is on the GitHub milestone pages linked below: each progress
 bar moves as issues close. This file is updated at every gate.
@@ -10,7 +10,7 @@ bar moves as issues close. This file is updated at every gate.
 ## Status (updated 2026-10-01)
 
 This block is newer than the 2026-09-27 block below, which is kept as history.
-Nothing in AIENOS is physically qualified. Verdict vocabulary: PASS, FAIL,
+Nothing in Aienux is physically qualified. Verdict vocabulary: PASS, FAIL,
 NOT_RUN, BLOCKED_HARDWARE, BLOCKED_OPERATOR, MISSING_IMPLEMENTATION.
 
 ```text
@@ -106,7 +106,7 @@ M5: Encryption and identity (key hierarchy, sealed keys, encrypted Store v1 obje
 ```
 
 The first native boot on the NVIDIA DGX Spark ("Machine 1") passed on
-2026-09-24: the machine left firmware, ran AIENOS code at EL2 with no Linux
+2026-09-24: the machine left firmware, ran Aienux code at EL2 with no Linux
 underneath (`kernel: alive`), left a report that Linux read after the reset,
 and returned to Linux undamaged. Full record:
 [evidence/m2_first_boot_2026-09-24.md](evidence/m2_first_boot_2026-09-24.md).
@@ -133,7 +133,7 @@ Generations admitted by deterministic gates. Generated native code reaches the
 physical machine only after M3 can confine it. SEED-0A experiment #1 is
 `input.keyboard.usb` ([#58](https://github.com/aien-spark/aienos/pull/58)).
 
-The first public demonstration is M8: power on, AIENOS boots, you talk to the
+The first public demonstration is M8: power on, Aienux boots, you talk to the
 local agent, power off, power on, and it remembers.
 
 ## Gates
@@ -164,7 +164,7 @@ and hardware-test ledger ([#124](https://github.com/aien-spark/aien-sovereign-co
 
 ## Help build it
 
-AIENOS is a lot of low-level Rust, and most of it does not need our hardware.
+Aienux is a lot of low-level Rust, and most of it does not need our hardware.
 Everything labelled [`emulator-ok`](https://github.com/aien-spark/aienos/labels/emulator-ok)
 can be built and tested in QEMU on any machine. Good places to start:
 

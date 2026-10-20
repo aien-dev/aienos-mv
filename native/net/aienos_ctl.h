@@ -1,4 +1,4 @@
-/* AIENOS M6-A framed control-transport STUB, TEST identity only.
+/* Aienux M6-A framed control-transport STUB, TEST identity only.
  *
  * There is no Rust reference for this layer; this file is its spec. It is a
  * reliable, ordered, authenticated message channel carried in UDP payloads,

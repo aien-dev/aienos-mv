@@ -1,4 +1,4 @@
-//! Architecture-specific abstractions for AIENOS bare-metal substrate.
+//! Architecture-specific abstractions for Aienux bare-metal substrate.
 
 pub mod aarch64;
 

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# pi5-run-artifact.sh (pi5-run.sh plus ARTIFACT_BND=<bundle file>, PI5-7 cut 3) -- one remote, one-shot AIENOS test run on the hub Raspberry Pi 5.
+# pi5-run-artifact.sh (pi5-run.sh plus ARTIFACT_BND=<bundle file>, PI5-7 cut 3) -- one remote, one-shot Aienux test run on the hub Raspberry Pi 5.
 #
 #   [KLOG=1] [UNLOCK_REQ=<512-byte request file>] [MODEL_MAP=<4096-byte MODEL.MAP>] pi5-run.sh <EFI file> <tag> [wait-file]
 #
-# 1. Puts <EFI file> on the AIENOS test microSD (mmcblk0p1, label AIENOSPI5) as
+# 1. Puts <EFI file> on the Aienux test microSD (mmcblk0p1, label AIENOSPI5) as
 #    EFI/BOOT/BOOTAA64.EFI and removes the old report, so a report after the run
 #    proves this run wrote it.
 # 2. Makes sure the Pi 5 UEFI firmware from the card is also on the USB stick's
@@ -61,7 +61,7 @@ sync
 echo card+stick ready" 2>&1 | tee -a "${runs}/run.log"
 
 # ---- optional: KLOG slot for a kernel run (KLOG=1) ----
-# A 2 MiB contiguous file on the card plus \EFI\AIENOS\KLOG.MAP naming its
+# A 2 MiB contiguous file on the card plus \EFI\Aienux\KLOG.MAP naming its
 # absolute first sector and a fresh nonce (aienos core/klog_slot.h). The raw
 # card sector is read back and compared before the map is written, so the
 # kernel is never told a position that is not the file.
@@ -99,7 +99,7 @@ fi
 
 # ---- optional: unlock request for the PI5-4 qualification image (UNLOCK_REQ=<file>) ----
 # QUALIFICATION ONLY: the file holds a THROWAWAY recovery secret (aienos native/kernel/core/unlock_req.h:
-# 512 bytes, magic AIENUNQ1, tier tag QUALIF-THROWAWAY). It is copied to \EFI\AIENOS\UNLOCK.REQ on the
+# 512 bytes, magic AIENUNQ1, tier tag QUALIF-THROWAWAY). It is copied to \EFI\Aienux\UNLOCK.REQ on the
 # card before the run and zeroed + deleted from the card (and checked gone) after the run, before the
 # card's EFI/AIENOS tree is copied back. Never put a real operator secret in it.
 if [[ -n "${UNLOCK_REQ:-}" ]]; then
@@ -119,7 +119,7 @@ echo unlock_req_placed" 2>&1 | tee -a "${runs}/run.log"
     log "UNLOCK.REQ placed on the card (QUALIFICATION ONLY, throwaway secret; sha256 of the request ${req_sha}); will be deleted after the run"
 fi
 # ---- optional: MODEL.MAP for the inference image (MODEL_MAP=<4096-byte map file>) ----
-# aienos native/boot/model_map.h: the UEFI stub reads \EFI\AIENOS\MODEL.MAP and then the model bytes by
+# aienos native/boot/model_map.h: the UEFI stub reads \EFI\Aienux\MODEL.MAP and then the model bytes by
 # absolute LBA from the disk (here the raw card partition AIENOS-MODEL, mmcblk0p3, written once by hand,
 # never touched by this script). Only the 4 KiB map goes on the ESP. The map is also left in the copied
 # EFI/AIENOS tree as evidence.
@@ -141,7 +141,7 @@ echo model_map_placed" 2>&1 | tee -a "${runs}/run.log"
 fi
 # ---- optional: signed artifact bundle for the PI5-7 cut 3 EL0 artifact image (ARTIFACT_BND=<bundle file, "AIENBND\0" ...>) ----
 # QUALIFICATION ONLY, TEST keys (aienos native/kernel/core/artifact_card.h: at most 131072 bytes, produced by ck_artifact_tool "bundle").
-# Copied to \EFI\AIENOS\ARTIFACT.BND on the card before the run; zeroed + deleted from the card (and checked gone) after the run;
+# Copied to \EFI\Aienux\ARTIFACT.BND on the card before the run; zeroed + deleted from the card (and checked gone) after the run;
 # a copy stays in the run directory as evidence. Negative runs simply leave ARTIFACT_BND unset.
 if [[ -n "${ARTIFACT_BND:-}" ]]; then
     [[ -r "${ARTIFACT_BND}" && "$(stat -c %s "${ARTIFACT_BND}")" -le 131072 && "$(head -c 7 "${ARTIFACT_BND}")" == "AIENBND" ]] \

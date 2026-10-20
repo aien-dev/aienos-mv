@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# efi-commit.sh -- print the source commit stamp compiled into an AIENOS kernel EFI.
+# efi-commit.sh -- print the source commit stamp compiled into an Aienux kernel EFI.
 #
 #   efi-commit.sh <EFI file>
 #

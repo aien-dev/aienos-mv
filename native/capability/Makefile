@@ -1,4 +1,4 @@
-# Native AIENOS capability authority, in C. No Rust. Needs only the hosted C
+# Native Aienux capability authority, in C. No Rust. Needs only the hosted C
 # library and pthreads (it reads /dev/urandom for the office token).
 #
 #   make          build out/libaienos_capability.a

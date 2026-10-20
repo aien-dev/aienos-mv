@@ -1,7 +1,7 @@
 //! Legacy ADR 0003 storage plus the canonical System Store v1 engine.
 //!
 //! Note: This module provides a host-tested implementation of ADR 0003 storage semantics,
-//! not yet native AIENOS storage on bare-metal block devices.
+//! not yet native Aienux storage on bare-metal block devices.
 //!
 //! Content-addressed extents (`model/<hash>`, `cortex/wal`, `agent/<id>`)
 //! rather than a general-purpose POSIX filesystem.

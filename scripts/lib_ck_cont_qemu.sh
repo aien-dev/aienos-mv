@@ -5,7 +5,7 @@
 # Mode selection is contract K-7 (native/kernel/CONTINUITY_RECOVERY_CONTRACT.md,
 # native/kernel/svc/continuity_boot.h): the host writes one ASCII plan line
 #     AIENCONT v1 mode=<N>[ cp=<checkpoint>][ response=<64 hex>]
-# into the last 4096-byte unit of the AIENOS partition of a 4096-byte-LBA GPT
+# into the last 4096-byte unit of the Aienux partition of a 4096-byte-LBA GPT
 # image; the TEST image "make full CK_TEST_CONTINUITY=1" (refused with
 # CK_HARDWARE_STAGING / CK_QEMU_UNSAFE_DMA / CK_TEST_STORE_CRASH) runs the
 # continuity or Recovery Core wiring instead of the boot-record commit. Every

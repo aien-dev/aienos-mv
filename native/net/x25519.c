@@ -1,4 +1,4 @@
-/* AIENOS X25519 (RFC 7748). See x25519.h.
+/* Aienux X25519 (RFC 7748). See x25519.h.
  *
  * Field GF(2^255 - 19) in 16 signed 64-bit limbs of 16 bits each (the
  * TweetNaCl representation), rewritten here with every shift of a possibly

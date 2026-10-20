@@ -1,4 +1,4 @@
-//! AIENOS ABI v1: the frozen wire contract for handles, rights, capabilities,
+//! Aienux ABI v1: the frozen wire contract for handles, rights, capabilities,
 //! memory regions and messages (ADR 0013).
 //!
 //! Every type here has an explicit little-endian byte encoding that does not

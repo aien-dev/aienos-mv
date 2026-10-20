@@ -1,4 +1,4 @@
-//! AIENOS Agent State ABI & Execution Incarnation Substrate (§9).
+//! Aienux Agent State ABI & Execution Incarnation Substrate (§9).
 //!
 //! Provides sovereign logical agent identities, deterministic branch derivation,
 //! append-only token history logs with rolling cryptographic hash chains,

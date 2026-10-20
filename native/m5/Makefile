@@ -1,4 +1,4 @@
-# AIENOS M5 encrypted-object envelope and security layer in C: key hierarchy,
+# Aienux M5 encrypted-object envelope and security layer in C: key hierarchy,
 # keyslots, SecurityManifest, chunked AES-256-GCM-SIV envelopes, commit
 # records, anti-rollback anchors, migration authorization, deterministic
 # recovery, owner-signed migration records. Built on ../crypto (in-house

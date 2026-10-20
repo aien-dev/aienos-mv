@@ -5,7 +5,7 @@
 # Deterministically exercises one-time native candidate selection and rollback
 # semantics across six required failure and completion branches without
 # touching physical hardware:
-#   1. normal AIENOS candidate exit/reset
+#   1. normal Aienux candidate exit/reset
 #   2. candidate panic/fault
 #   3. candidate timeout/hang followed by host reset
 #   4. malformed/rejected candidate image

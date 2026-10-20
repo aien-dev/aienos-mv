@@ -480,7 +480,7 @@ main design point of this contract.
   (`full-test-continuity`), using the same pattern as `CK_TEST_STORE_CRASH`. The
   host writes one ASCII plan line
   `AIENCONT v1 mode=<N>[ cp=<checkpoint>][ response=<64 hex>]` into the last
-  4096-byte unit of the AIENOS partition (the read-write probe scratch unit, which
+  4096-byte unit of the Aienux partition (the read-write probe scratch unit, which
   the devices stage restores byte for byte). Modes use the Rust numbers: 5
   provision, 6 resume, 7 resume + remember, 8 resume + commit with crash point
   `cp` (halts at the C checkpoint name, section 5.2), 9 Recovery inspect, 10

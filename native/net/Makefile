@@ -1,4 +1,4 @@
-# AIENOS M6-A hosted network stack, in C. No Rust, no Python, no outside
+# Aienux M6-A hosted network stack, in C. No Rust, no Python, no outside
 # library: SHA-256 is the in-house copy in ../argus/sha256.c.
 # Protocol objects import no heap, clock or I/O; tests use hosted libc.
 # Hosted only: native binding waits for a C kernel, production keys for M5.

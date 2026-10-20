@@ -1,5 +1,5 @@
 /* disk_part.c -- read-only GPT parser and the single bounds-checked LBA
- * translation layer of the AIENOS C kernel (see disk_part.h). Freestanding:
+ * translation layer of the Aienux C kernel (see disk_part.h). Freestanding:
  * no libc, no heap; all disk reads go through disk_read on the parent. */
 #include "disk_part.h"
 

@@ -7,7 +7,7 @@
 //! and the firmware display mode, prints a pre-exit report on the firmware
 //! console, and saves it to `\EFI\AIENOS\BOOTREPORT.TXT`.
 //!
-//! After `ExitBootServices` it installs AIENOS exception vectors, writes an
+//! After `ExitBootServices` it installs Aienux exception vectors, writes an
 //! early progress record, enters the kernel, and reports the result on the
 //! screen, in the `AienosBootReportV1` firmware variable and on the Spark UART
 //! (bounded). A panic or CPU fault takes the same reporting path with the last
@@ -502,7 +502,7 @@ fn enter_kernel_mmu(
     }
 }
 
-/// Result of `enter_kernel_mmu`: the AIENOS table root and what firmware
+/// Result of `enter_kernel_mmu`: the Aienux table root and what firmware
 /// was using before the switch.
 struct KernelMmu {
     pt_frames_used: usize,
@@ -1825,7 +1825,7 @@ fn main() -> Status {
     fatal::install_exception_vectors();
     stage(VECTORS_INSTALLED);
 
-    // Early progress record: proves native AIENOS code ran after firmware exit
+    // Early progress record: proves native Aienux code ran after firmware exit
     // even if a later step hangs.
     let mut progress = Report::new();
     header(&mut progress, "progress");
@@ -1875,9 +1875,9 @@ fn main() -> Status {
         if mmu_on { "enabled" } else { "disabled" }
     );
     let _ = writeln!(report, "pt_frames_used: {pt_frames_used}");
-    // Issue #27: prove the kernel runs on AIENOS tables, not firmware's. Every
+    // Issue #27: prove the kernel runs on Aienux tables, not firmware's. Every
     // field is read from live registers; switched=yes needs EL1 with SCTLR_EL1.M
-    // set, TTBR0_EL1 pointing at the root AIENOS built, and that root differing
+    // set, TTBR0_EL1 pointing at the root Aienux built, and that root differing
     // from the table firmware was translating with.
     let firmware = kernel_mmu.firmware;
     let el1_base = current_ttbr0_el1() & TTBR_BADDR_MASK;

@@ -1,4 +1,4 @@
-/* AIENOS M6-B secure control transport (hosted), in C. No heap, clock or I/O.
+/* Aienux M6-B secure control transport (hosted), in C. No heap, clock or I/O.
  *
  * A mutually authenticated, encrypted datagram channel between two machines,
  * carried in M6-A UDP payloads. This header is the wire spec. The caller

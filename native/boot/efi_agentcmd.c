@@ -1,4 +1,4 @@
-/* efi_agentcmd.c -- read \EFI\AIENOS\AGENT.CMD from the boot volume before ExitBootServices
+/* efi_agentcmd.c -- read \EFI\Aienux\AGENT.CMD from the boot volume before ExitBootServices
  * (Raspberry Pi 5 resident-lifecycle qualification image, CK_PI5_LIFECYCLE). Nothing is written. The file
  * holds a short list of lifecycle verbs placed by the run tool (native/kernel/core/agent_cmd.h). Result in
  * ck_agent_cmd_boot (stub and kernel are one image): ABSENT (no file: the lifecycle just stops), REFUSED

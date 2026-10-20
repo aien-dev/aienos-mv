@@ -1,5 +1,5 @@
 /* cortex_config.h -- CX_CONFIG_H for the vendored Omega Cortex store
- * (third_party/omega/rx_cortex.c) inside AIENOS. The kernel has no general
+ * (third_party/omega/rx_cortex.c) inside Aienux. The kernel has no general
  * heap: the store's allocations come from one bounded region handed over
  * by ck_cx_heap_init (svc/cortex_journal.c). */
 #ifndef AIENOS_CORTEX_CONFIG_H

@@ -1,7 +1,7 @@
 # GB10 platform topology and discovery cross-check
 
 This document maps the physical interfaces that reach the GB10 on Machine 1,
-and compares them against what the existing AIENOS UEFI discovery path already
+and compares them against what the existing Aienux UEFI discovery path already
 assumes. It is a Linux and firmware observation exercise. It does not
 initialize the GPU or submit a command.
 
@@ -10,7 +10,7 @@ Governing: issue [#36](https://github.com/aien-spark/aienos/issues/36),
 [GB10_NATIVE_STATUS.md](GB10_NATIVE_STATUS.md).
 
 All values below are Linux observed (sysfs and ACPI tables read read-only) on
-the current Machine 1 Linux boot. They are not native AIENOS observations.
+the current Machine 1 Linux boot. They are not native Aienux observations.
 
 ## Observed platform path
 
@@ -57,7 +57,7 @@ ECAM base `0x29000000` and covers buses 0 to 1:
 | 11 to 14 | `0xF3B0000000` to `0xF3E0000000` | 0 to 255 |
 | 15 (GB10) | `0x29000000` | 0 to 1 |
 
-The GB10 is on segment 15 bus 1, inside the declared window. A native AIENOS
+The GB10 is on segment 15 bus 1, inside the declared window. A native Aienux
 ECAM mapper would compute the configuration address as
 `ecam_base + (bus - start_bus) * 1 MiB + device * 32 KiB + function * 4 KiB`,
 so `000f:01:00.0` maps to `0x29000000 + 0x100000`.
@@ -95,10 +95,10 @@ field reports 9 vectors, and the kernel exposes 8 entries under `msi_irqs`
 for this device. This is recorded as an observed value (`-1`), not converted
 into node 0.
 
-## What AIENOS must own after ExitBootServices
+## What Aienux must own after ExitBootServices
 
 To discover, map, isolate, and eventually interrupt-drive this GB10 natively,
-AIENOS must own exactly these physical interfaces:
+Aienux must own exactly these physical interfaces:
 
 1. **ECAM discovery.** The MCFG segment 15 window at `0x29000000` covering
    buses 0 to 1, to reach `000f:01:00.0` and its root bridge without firmware
@@ -109,14 +109,14 @@ AIENOS must own exactly these physical interfaces:
    region at `0x24000000`, granted through a capability, not ambient physical
    memory access. Reading or writing it is outside this characterization phase.
 4. **SMMU / DMA authority.** The stream table entry that maps the GB10's
-   stream ID to a translation context. AIENOS must program this through the
+   stream ID to a translation context. Aienux must program this through the
    SMMUv3, bound to a capability, before any DMA. It must not bypass the SMMU.
 5. **Interrupt resource.** The MSI-X table and PBA in BAR0, plus the GIC ITS/MSI
    path that delivers the vectors. This is a separate capability from MMIO.
 6. **Firmware objects.** The GB10 firmware image and the GSP transport once a
    later milestone authorizes them.
 
-## Cross-check against existing AIENOS discovery
+## Cross-check against existing Aienux discovery
 
 The existing UEFI handoff discovery (`crates/aienos-boot/src/handoff.rs`) and
 `aienos-accel` were checked against the observed profile.

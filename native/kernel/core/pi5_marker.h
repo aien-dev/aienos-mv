@@ -3,7 +3,7 @@
  * BLOCKED_OPERATOR (svc/store_boot.c), so the Pi image does not open it. What
  * the Store needs from the card is: GPT partition view in, multi-sector
  * writes with flush, bytes back identical after a reboot. This module
- * proves exactly that on a bounded scratch region at the END of the AIENOS
+ * proves exactly that on a bounded scratch region at the END of the Aienux
  * partition view, written only through that view (dev/disk_part.h).
  *
  * Region: CK_PI5_MARKER_SECS sectors. Sector 0 is the header, the rest a
@@ -38,12 +38,12 @@ enum {
     CK_PI5_MARKER_ESIZE = -505,    /* view smaller than the region, or not 512-byte blocks */
 };
 
-/* d is the AIENOS partition view. buf is CK_PI5_MARKER_BUF_BYTES, 64-aligned.
+/* d is the Aienux partition view. buf is CK_PI5_MARKER_BUF_BYTES, 64-aligned.
  * *generation is set on success. */
 int ck_pi5_marker_run(const disk_dev *d, uint8_t *buf, uint64_t *generation);
 const char *ck_pi5_marker_strerror(int rc);
 
-/* The sealed Store's view of the AIENOS partition on the Pi card: the same
+/* The sealed Store's view of the Aienux partition on the Pi card: the same
  * partition with the marker region reserved. *out ends before the last
  * CK_PI5_MARKER_SECS sectors, rounded down to whole CK_LAYOUT_UNIT units, so
  * the Store's units 4..U-2 and its probe unit U-1 (dev/disk_layout.h) never

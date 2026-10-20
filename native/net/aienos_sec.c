@@ -1,4 +1,4 @@
-/* AIENOS M6-B secure control transport. See aienos_sec.h for the wire spec.
+/* Aienux M6-B secure control transport. See aienos_sec.h for the wire spec.
  * No heap, clock or I/O. Lines tagged GUARD:<name> are removed one at a time
  * by `make mutants`; the tests must catch every removal.
  */

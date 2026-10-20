@@ -205,7 +205,7 @@ enum {
  * The store reaches its journal only through this table. cx_journal_posix is
  * the file backend (one file, flock for the writer lock); it is the default
  * of cx_open and is compiled out under CX_NO_POSIX, where a freestanding host
- * (AIENOS: sealed Store objects, P06 adapter) supplies its own table through
+ * (Aienux: sealed Store objects, P06 adapter) supplies its own table through
  * cx_open_with. Memory comes from CX_MALLOC / CX_REALLOC / CX_FREE, which a
  * config header named by CX_CONFIG_H may define; the default is libc.
  * The record format, the digests, the chain and every check in cx_open are

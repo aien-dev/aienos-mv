@@ -1,10 +1,10 @@
-/* disk_part.h -- the AIENOS C kernel's partition-aware disk footprint.
+/* disk_part.h -- the Aienux C kernel's partition-aware disk footprint.
  *
  * The kernel never writes a whole NVMe namespace. At bind time it parses the
  * disk's GUID Partition Table (UEFI 2.10, section 5.3) READ-ONLY and selects
- * exactly one AIENOS partition by its fixed partition type GUID:
+ * exactly one Aienux partition by its fixed partition type GUID:
  *
- *     AIENOS partition type GUID  38DAAC89-5EAD-4B40-8B1E-3687A7418061
+ *     Aienux partition type GUID  38DAAC89-5EAD-4B40-8B1E-3687A7418061
  *     (generated once from /dev/urandom on 2026-10-01, version 4 / variant 1;
  *      on-disk bytes, mixed endian: 89 AC DA 38 AD 5E 40 4B 8B 1E 36 87 A7 41 80 61)
  *
@@ -20,7 +20,7 @@
  * primary entry array CRC32, backup header (CRC32, MyLBA = last, AlternateLBA
  * 1, same disk GUID / entry geometry / entry CRC) and the backup entry array
  * CRC32; every used entry inside the usable range, no two used entries
- * overlapping, exactly one AIENOS entry. Any failure: the caller prints
+ * overlapping, exactly one Aienux entry. Any failure: the caller prints
  * "disk: no AIENOS partition, refusing writes" and never writes the disk.
  *
  * Freestanding: no libc, no heap; reads through disk_read only. Shared with
@@ -91,7 +91,7 @@ int ck_gpt_find_aienos(const disk_dev *d, ck_part *p, ck_gpt_info *info);
 
 /* The same strict validation for exactly one partition of an arbitrary type
  * (on-disk byte order): CK_GPT_ENOPART / CK_GPT_EMULTI then mean "none" /
- * "more than one" of THAT type. Used for the AIENOS image slots partition
+ * "more than one" of THAT type. Used for the Aienux image slots partition
  * (native/boot/slot_format.h, svc/slot_service.c): a second bounded view
  * over the same parent, never a whole-disk handle. */
 int ck_gpt_find_type(const disk_dev *d, const uint8_t type[16], ck_part *p, ck_gpt_info *info);

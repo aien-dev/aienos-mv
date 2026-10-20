@@ -1,5 +1,5 @@
-/* cortex_journal.h -- the Omega Cortex journal over the AIENOS sealed Store
- * (native v1 plan P06: "an AIENOS persistence adapter for canonical Omega
+/* cortex_journal.h -- the Omega Cortex journal over the Aienux sealed Store
+ * (native v1 plan P06: "an Aienux persistence adapter for canonical Omega
  * CxStore"; CURRENT_EXECUTION_PLAN addendum conflict 3: the native
  * continuity record of N2/N3 is the sealed C Store written and read through
  * this adapter).

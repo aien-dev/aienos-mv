@@ -28,7 +28,7 @@
 #      firmware will read);
 #   4. sudo scripts/verify_native_rollback.sh --capture-pre (before BootNext,
 #      which the capture requires absent);
-#   5. copies the image and MODEL.MAP to \EFI\AIENOS on the ESP (the only
+#   5. copies the image and MODEL.MAP to \EFI\Aienux on the ESP (the only
 #      scratch directory, docs/NATIVE_BOOT_ONE_TIME.md invariant 4) with a
 #      STAGED-CK.TXT record;
 #   6. creates a boot entry WITHOUT adding it to BootOrder (BootOrder is
@@ -174,7 +174,7 @@ fi
 run mkdir -p "${evidence_dir}"
 run sudo scripts/verify_native_rollback.sh --capture-pre "${evidence_dir}/pre_boot_capture.json"
 
-# ---- 5. ESP scratch directory \EFI\AIENOS ----
+# ---- 5. ESP scratch directory \EFI\Aienux ----
 record="${evidence_dir}/STAGED-CK.TXT"
 if [[ "${mode}" == apply ]]; then
     cat >"${record}" <<EOF

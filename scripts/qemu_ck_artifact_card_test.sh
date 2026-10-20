@@ -2,7 +2,7 @@
 # QEMU twin of the Raspberry Pi 5 EL0 artifact qualification image (PI5-7 cut 3, native/kernel/core/artifact_card.h).
 # Builds the SAME code the Pi image runs (make CK_ARTIFACT_CARD=1 CK_SEED0B_TEST_ANCHOR=1, the core image with the card
 # bundle source; the Pi image adds only CK_PI5) and boots it in QEMU AArch64 + UEFI (AAVMF) with the signed artifacts in ONE
-# file on the ESP, \EFI\AIENOS\ARTIFACT.BND. QEMU is not hardware: a PASS here qualifies nothing physical; it is the red-
+# file on the ESP, \EFI\Aienux\ARTIFACT.BND. QEMU is not hardware: a PASS here qualifies nothing physical; it is the red-
 # before-green run that must pass before a Pi run is spent.
 #
 # TEST keys only: every artifact is signed by the in-tree C tool with the public RFC 8032 TEST 1 key (SEED-0B, TEST ONLY).

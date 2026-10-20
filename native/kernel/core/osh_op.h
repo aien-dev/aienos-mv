@@ -1,4 +1,4 @@
-/* osh_op.h -- the AIENOS adapter's platform-operation layer for OSH (aien-architecture#158, contract: aien-protocols PR #16
+/* osh_op.h -- the Aienux adapter's platform-operation layer for OSH (aien-architecture#158, contract: aien-protocols PR #16
  * OSH_PLATFORM_ABI.md sections 7 to 12, DRAFT, ABIs unfrozen).
  *
  * One real operation: `klog <words...>` writes one line to the kernel console ("osh_op_out: <words>"). It needs a

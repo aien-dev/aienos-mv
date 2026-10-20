@@ -1,5 +1,5 @@
 //! SEED-0A candidate `input.keyboard.usb` (ADR 0012): after firmware exit,
-//! drive the xHCI controller with the polled AIENOS driver and echo typed
+//! drive the xHCI controller with the polled Aienux driver and echo typed
 //! keys on the SPCR console and the screen.
 //!
 //! Built only with the `usb-keyboard` feature, which the QEMU keyboard test

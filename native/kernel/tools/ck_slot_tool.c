@@ -1,4 +1,4 @@
-/* ck_slot_tool -- host tool for the AIENOS native image slots
+/* ck_slot_tool -- host tool for the Aienux native image slots
  * (native/boot/slot_format.h, slot_select.c; native v1 plan P11, gate N7).
  * Builds, signs, verifies and inspects slot manifests and control records,
  * and simulates the loader's decision over them. Hosted C, test and

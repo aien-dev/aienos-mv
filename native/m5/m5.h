@@ -1,4 +1,4 @@
-/* AIENOS M5 encrypted-object envelope and security layer, in C.
+/* Aienux M5 encrypted-object envelope and security layer, in C.
  *
  * Port of crates/aienos-kernel/src/crypto/envelope.rs and
  * crates/aienos-kernel/src/security.rs on top of native/crypto

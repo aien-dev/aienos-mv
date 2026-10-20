@@ -1,6 +1,6 @@
 /* disk_part_test.c -- host tests for the GPT parser and the LBA translation
  * layer (dev/disk_part.c), hostile inputs included, plus a whole sealed-Store
- * boot on the AIENOS partition view proving nothing outside the partition
+ * boot on the Aienux partition view proving nothing outside the partition
  * changes. Hosted test code only.
  *
  * Built twice by stage.mk (make disk-part-test): normally (must PASS) and
@@ -107,7 +107,7 @@ static void patch_header(uint32_t bs, uint64_t lba, size_t off, uint64_t v, int 
 }
 
 /* Crafted GPT with num entries of esize bytes; `used` consecutive 8-block
- * Linux partitions starting at first_usable; the last one is AIENOS. */
+ * Linux partitions starting at first_usable; the last one is Aienux. */
 static void craft(uint32_t bs, uint64_t blocks, uint32_t num, uint32_t esize, uint32_t used)
 {
     uint64_t eb = ((uint64_t)num * esize + bs - 1u) / bs, last = blocks - 1u;
@@ -214,7 +214,7 @@ static void test_good_and_xlate(uint32_t bs)
     CHECK(find_rc(bs) == CK_GPT_OK);
 }
 
-/* A whole sealed-Store boot (format + two commits) on the AIENOS partition
+/* A whole sealed-Store boot (format + two commits) on the Aienux partition
  * view: the GPT, both sentinels and the backup stay byte-identical. */
 static void test_store_on_partition(uint32_t bs)
 {

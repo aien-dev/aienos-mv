@@ -1,4 +1,4 @@
-//! Epistemic status classifications conforming to AIENOS Blueprint §11 and Specs §2.3.
+//! Epistemic status classifications conforming to Aienux Blueprint §11 and Specs §2.3.
 
 use serde::{Deserialize, Serialize};
 

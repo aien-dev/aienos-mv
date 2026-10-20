@@ -52,7 +52,7 @@
 
 /* The gate's executor subject. Chosen by lane G: 43, next to the AEGIS
  * subjects 41 (RX_AEGIS_SUBJ) and 42 (RX_AEGIS_ROOT_SUBJ), unused by any
- * Omega or AIENOS subject. Protected like 41 and 42 (I5.b). */
+ * Omega or Aienux subject. Protected like 41 and 42 (I5.b). */
 #define AIENOS_CONTAIN_SUBJ 43u
 #define AIENOS_CONTAIN_SUBJ_AEGIS 41u      /* == RX_AEGIS_SUBJ, ARGUS_SUBJ_AEGIS */
 #define AIENOS_CONTAIN_SUBJ_AEGIS_ROOT 42u /* == RX_AEGIS_ROOT_SUBJ, ARGUS_SUBJ_AEGIS_ROOT */

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Boot the AIENOS handoff image in QEMU AArch64 with UEFI (AAVMF) and check the
+# Boot the Aienux handoff image in QEMU AArch64 with UEFI (AAVMF) and check the
 # serial console for the pre-exit report, the kernel reaching `kernel: alive`,
 # and the final report. The guest starts at EL2 like Machine 1, and PSCI reset
 # ends the run (-no-reboot). No physical hardware is touched.
@@ -74,7 +74,7 @@ else
     echo "FAIL  timer IRQ count reported"
     failed=1
 fi
-# Issue #27: the kernel left firmware's EL2 translation for AIENOS EL1 tables.
+# Issue #27: the kernel left firmware's EL2 translation for Aienux EL1 tables.
 # The script re-checks the register values itself instead of trusting switched=yes.
 switch_re='mmu_switch: firmware=EL2 firmware_mmu=on firmware_ttbr0=(0x[0-9a-f]+) aienos_root=(0x[0-9a-f]+) ttbr0_el1=(0x[0-9a-f]+) switched=yes'
 switch_line=$(grep -E "${switch_re}" "${work}/serial.txt" | tail -1 || true)

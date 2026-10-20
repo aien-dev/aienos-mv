@@ -1,5 +1,5 @@
 /* cortex_store.c -- the canonical Omega Cortex store (CxStore) built
- * freestanding inside AIENOS: no POSIX journal, no libc allocation. The
+ * freestanding inside Aienux: no POSIX journal, no libc allocation. The
  * source is vendored byte for byte from the omega.lock commit
  * (third_party/omega/rx_cortex.c, checked by scripts/omega_lock_check.sh);
  * this wrapper only sets the build switches so the vendored file stays

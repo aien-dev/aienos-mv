@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Boot the AIENOS C kernel core (native/boot + native/kernel, Lane 18) in QEMU
+# Boot the Aienux C kernel core (native/boot + native/kernel, Lane 18) in QEMU
 # AArch64 with UEFI (AAVMF) and check the serial console with the same QEMU
 # invocation and the same patterns as scripts/qemu_boot_test.sh (the Rust
 # kernel's test). The guest starts at EL2 like Machine 1 and PSCI reset ends

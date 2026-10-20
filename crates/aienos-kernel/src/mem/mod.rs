@@ -1,4 +1,4 @@
-//! Physical memory management primitives for AIENOS kernel.
+//! Physical memory management primitives for Aienux kernel.
 
 pub mod frame_allocator;
 pub mod map_plan;

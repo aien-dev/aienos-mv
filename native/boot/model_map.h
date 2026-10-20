@@ -4,7 +4,7 @@
  * ingest). Shared by the stub (native/boot/efi_model.c), the kernel's
  * handoff checks and the hosted map tool (native/kernel/tools/ck_model_map.c).
  *
- * The file is exactly 4096 bytes, little endian, at \EFI\AIENOS\MODEL.MAP on
+ * The file is exactly 4096 bytes, little endian, at \EFI\Aienux\MODEL.MAP on
  * the boot volume (the ESP the stub was loaded from). It names the whole disk
  * by its GPT disk GUID (header LBA 1, bytes 56..71, raw on-disk order) and
  * lists the model's extents as absolute LBAs of that disk, in FILE order

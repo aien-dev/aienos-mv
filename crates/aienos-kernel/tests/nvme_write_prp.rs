@@ -1,4 +1,4 @@
-//! D3 adversarial tests for the AIENOS P3 native NVMe **write + flush** lane.
+//! D3 adversarial tests for the Aienux P3 native NVMe **write + flush** lane.
 //!
 //! Target: `crates/aienos-kernel/tests/nvme_write_prp.rs`. Baseline:
 //! aien-spark/aienos @ ef359ec.

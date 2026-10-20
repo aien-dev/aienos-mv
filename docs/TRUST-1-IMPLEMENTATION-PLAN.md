@@ -1,4 +1,4 @@
-# AIENOS TRUST-1 Implementation Plan: Owner-Controlled Boot & Recovery Gate
+# Aienux TRUST-1 Implementation Plan: Owner-Controlled Boot & Recovery Gate
 
 Status: Proposed. Requires operator approval before any trust mutation.
 Scope: Transition from M2 (proven native boot, Secure Boot restored, native boots paused) to owner-controlled Secure Boot, TPM re-seal, emulator-first development, and safe resumption of native boots.
@@ -71,7 +71,7 @@ Preconditions: Gate 0 PASS.
 Permitted mutations: Create recovery image on build host; write to separate physical USB (not ATLAS_RECOV); boot it once via operator-attended boot with Secure Boot enabled. No internal trust, TPM, or slot mutation.
 
 Acceptance tests (Q17, all must pass with Secure Boot ON):
-1. Firmware accepts recovery image. 2. Environment starts without internal Linux. 3. No network required. 4. No model required. 5. No Cortex required. 6. Identifies NVMe and encrypted volumes. 7. Inspects Secure Boot state. 8. Inspects PCRs/event data. 9. Shows AIENOS A/B slots and manifests. 10. Verifies signatures/hashes. 11. Accesses independent recovery mechanism only when explicitly authorized. 12. Mounts recovered storage safely. 13. Can reinstall known-good loader/slot. 14. Can restore documented boot config. 15. Returns machine to known-good Linux boot. 16. No destructive overwrite unless operator explicitly chooses it.
+1. Firmware accepts recovery image. 2. Environment starts without internal Linux. 3. No network required. 4. No model required. 5. No Cortex required. 6. Identifies NVMe and encrypted volumes. 7. Inspects Secure Boot state. 8. Inspects PCRs/event data. 9. Shows Aienux A/B slots and manifests. 10. Verifies signatures/hashes. 11. Accesses independent recovery mechanism only when explicitly authorized. 12. Mounts recovered storage safely. 13. Can reinstall known-good loader/slot. 14. Can restore documented boot config. 15. Returns machine to known-good Linux boot. 16. No destructive overwrite unless operator explicitly chooses it.
 - Harmless test artifact round-trip: create known file → shutdown → recovery boot → unlock via recovery path → verify → normal boot. No destructive test of real dataset.
 
 Evidence required: Recovery receipt (image SHA-256 + BLAKE3, layout digest, tool manifest, signing cert fingerprint, boot result, test-artifact digest, unlock method, return-to-Linux proof) plus `aien-proof` ledger receipt.
@@ -183,13 +183,13 @@ Objective: With Secure Boot ON, owner-signed loader boots once, Linux remains de
 
 Preconditions: Gates 0-6 PASS; recovery USB proven; owner keys backed up; Secure Boot variables archived; emulator suite passing; operator TRUST-1 approval receipt.
 
-Permitted mutations (only these, in order): add owner trust without deleting factory trust; one-time BootNext AIENOS entry; add new TPM authorization path without removing current one. No BootOrder default change, no Linux entry replacement, no AIENOS default, no factory-trust removal, no old-TPM removal.
+Permitted mutations (only these, in order): add owner trust without deleting factory trust; one-time BootNext Aienux entry; add new TPM authorization path without removing current one. No BootOrder default change, no Linux entry replacement, no Aienux default, no factory-trust removal, no old-TPM removal.
 
 Checkpoints (Q18):
 - Preflight bundle captured (variables, PCRs/event log, boot entries, unlock methods, volume metadata, kernel identity, candidate digest, key fingerprints, recovery digest, service state, approval).
 - A: recovery media boots or STOP.
 - B: add owner trust → reboot Linux → Secure Boot on, Linux boots, storage unlocks or restore trust and STOP.
-- C: stage owner-signed AIENOS BootNext only → boot → loader accepted, chain valid, kernel entered, measurements recorded, timed return or recover and STOP.
+- C: stage owner-signed Aienux BootNext only → boot → loader accepted, chain valid, kernel entered, measurements recorded, timed return or recover and STOP.
 - D: Linux returns → Secure Boot on, storage unlocks, vault unlocks, default unchanged, services stable.
 - E: test new TPM path only after chain proven; never enroll trust + replace policy in one irreversible step.
 - Every mutation: before evidence → one mutation → validation → rollback checkpoint. Unexpected state → STOP-PRESERVE-OBSERVE-REPORT, no improvisation; documented non-boundary rollback only.
@@ -198,7 +198,7 @@ Acceptance tests: Secure Boot stayed ON; owner loader accepted; unsigned/tampere
 
 Evidence required: TRUST-1 receipt chain (pre-state, each mutation/validation/checkpoint, final state, approvals) + aien-proof hold ledger + PCR/event snapshots + artifact digests.
 
-Rollback: Level 1 candidate→known-good; Level 2 AIENOS→Linux default; Level 3 restore prior Secure Boot variables/keys; Level 4 previous TPM enrollment or offline credential; Level 5 dedicated recovery media (Q11).
+Rollback: Level 1 candidate→known-good; Level 2 Aienux→Linux default; Level 3 restore prior Secure Boot variables/keys; Level 4 previous TPM enrollment or offline credential; Level 5 dedicated recovery media (Q11).
 
 ---
 
@@ -208,9 +208,9 @@ Objective: Prove reliability before retiring anything.
 
 Preconditions: Gate 7 PASS.
 
-Permitted mutations: Normal Linux boots + controlled AIENOS candidate cycles under new chain. No retirement.
+Permitted mutations: Normal Linux boots + controlled Aienux candidate cycles under new chain. No retirement.
 
-Acceptance tests: Several successful Linux boots and AIENOS candidate cycles with old + new + offline paths retained and healthy.
+Acceptance tests: Several successful Linux boots and Aienux candidate cycles with old + new + offline paths retained and healthy.
 
 Evidence required: Ongoing boot/storage receipts chained to TRUST-1.
 
@@ -220,13 +220,13 @@ Rollback: Any regression → retain all paths, return to Gate 7 analysis.
 
 ## Gate 9: Retire legacy TPM policy; resume native development (Owner: Operator approval required)
 
-Objective: Owner-controlled policy becomes primary; ordinary native AIENOS development resumes under new chain.
+Objective: Owner-controlled policy becomes primary; ordinary native Aienux development resumes under new chain.
 
 Preconditions: Gate 8 evidence shows repeatable reliability.
 
 Permitted mutations: Retire old TPM enrollment only. No other trust change in same step.
 
-Acceptance tests: Owner policy unlocks repeatedly across boots/updates/rollbacks; offline recovery still valid; Linux default intact; AIENOS A/B discipline holds (write inactive → verify → boot once → health → promote → retain rollback; bounded attempts, no boot-loop, last-good never erased by candidate/agent; dual-invalid → recovery media; root-of-trust promotion still needs operator approval even if tests pass).
+Acceptance tests: Owner policy unlocks repeatedly across boots/updates/rollbacks; offline recovery still valid; Linux default intact; Aienux A/B discipline holds (write inactive → verify → boot once → health → promote → retain rollback; bounded attempts, no boot-loop, last-good never erased by candidate/agent; dual-invalid → recovery media; root-of-trust promotion still needs operator approval even if tests pass).
 
 Evidence required: Retirement receipt + updated policy manifest.
 
@@ -250,6 +250,6 @@ Unexpected states (Q25): STOP → PRESERVE → OBSERVE → REPORT with Unexpecte
 
 Firmware policy (Q29): No auto firmware update during transition; record version before every TRUST-1-class op; firmware change = new measurement input; never auto-relax policy; recover via recovery path and deliberately authorize new state.
 
-Disaster recovery (Q29, architectural now, required before AIENOS becomes sole environment): Off-machine encrypted backups for Owner Root, storage recovery, AIEN identity, Cortex, source/provenance, manifests/recovery artifacts. Invariant: loss of Machine 1 costs hardware and unreplicated execution state, never ownership, data, authority, or rebuild ability.
+Disaster recovery (Q29, architectural now, required before Aienux becomes sole environment): Off-machine encrypted backups for Owner Root, storage recovery, AIEN identity, Cortex, source/provenance, manifests/recovery artifacts. Invariant: loss of Machine 1 costs hardware and unreplicated execution state, never ownership, data, authority, or rebuild ability.
 
 Documentation: This plan + receipts live in `docs/` and `evidence/` with hash-linked chain. Every important claim has an artifact, not a memory.

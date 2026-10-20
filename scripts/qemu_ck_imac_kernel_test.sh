@@ -10,7 +10,7 @@
 # page, measure the TSC against the HPET, take 20 local APIC timer interrupts, print
 # start the three other cores (-smp 4) and park them, find both SATA disks behind
 # the q35 AHCI controller and an NVMe disk with its own GPT and read them without
-# writing (the ESP, and a data disk with a GPT whose AIENOS partition the kernel
+# writing (the ESP, and a data disk with a GPT whose Aienux partition the kernel
 # must locate where ck_gpt_image wrote it; the data disk must be byte-identical
 # afterwards), print "kernel: alive", hold the screen and power QEMU off through
 # ACPI S5 by itself.

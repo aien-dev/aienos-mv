@@ -1,7 +1,7 @@
 //! C binding for the 32-bit-generation Rust capability authority
 //! (`aienos-capability`).
 //!
-//! This is NOT the native AIENOS capability ABI. The production ABI is the C
+//! This is NOT the native Aienux capability ABI. The production ABI is the C
 //! library in `native/capability` (`aienos_capability.h`): 64-bit
 //! generations, `AienosCapRef` of 16 bytes, symbols `aienos_cap_*`. That is
 //! the library omega links into the reaction world.
@@ -27,7 +27,7 @@ use aienos_capability::{
 };
 
 /// Capability reference in the 32-bit-generation Rust authority ABI
-/// (8 bytes, align 4, generation at offset 4). NOT the native AIENOS
+/// (8 bytes, align 4, generation at offset 4). NOT the native Aienux
 /// capability ABI, whose `AienosCapRef` is 16 bytes with a 64-bit
 /// generation at offset 8.
 #[repr(C)]
@@ -38,7 +38,7 @@ pub struct AienosCapRef {
 }
 
 /// Table entry in the 32-bit-generation Rust authority ABI (64 bytes).
-/// NOT the native AIENOS capability ABI (88 bytes there).
+/// NOT the native Aienux capability ABI (88 bytes there).
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct AienosCapEntry {
@@ -58,7 +58,7 @@ pub struct AienosCapEntry {
 }
 
 /// Mint request in the 32-bit-generation Rust authority ABI (48 bytes).
-/// NOT the native AIENOS capability ABI (64 bytes there).
+/// NOT the native Aienux capability ABI (64 bytes there).
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct AienosCapMint {

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# qemu_ck_slot_loader_test.sh -- QEMU gate for SLOTLDR.EFI, the AIENOS signed
+# qemu_ck_slot_loader_test.sh -- QEMU gate for SLOTLDR.EFI, the Aienux signed
 # A/B image slot loader (native/boot/slot_loader.c; native v1 plan P11 cut 2a,
 # gate N7; docs/NATIVE_IMAGE_SLOTS.md section 7). QEMU is an emulator: a PASS
 # here qualifies nothing physical (hardware NOT_RUN).
@@ -319,7 +319,7 @@ row_end 8
 
 
 # ==== P11 cut 2b: the service kernel promotes / abandons (svc/slot_service.c) =====
-# One NVMe disk (ck_gpt_image layout aienos-slots: AIENOS Store partition + slots
+# One NVMe disk (ck_gpt_image layout aienos-slots: Aienux Store partition + slots
 # partition), the ESP as above. Payloads: the TEST-key service image built twice
 # (slotA- / slotB- commits: Store formats, continuity provisions, lifecycle READY =
 # healthy) and the plain service image as slot L (no production keys in a QEMU
@@ -473,7 +473,7 @@ ctl_is 11 "control untouched" "seq=1 control: active=0 candidate=1 tries=3"
 row_end 11
 
 # ==== P11 cut 3: the inactive-slot updater (operator verb `update`) ================
-# Disk layout aienos-slots-inbox: AIENOS Store + slots + the update inbox partition
+# Disk layout aienos-slots-inbox: Aienux Store + slots + the update inbox partition
 # (ck_slot_tool inbox-image writes a signed candidate there; the kernel reads it).
 # The running service (slot A, TEST keys) verifies the inbox image (signature + digest)
 # before writing anything, writes the INACTIVE slot only, reads it back, then stages it.

@@ -1,4 +1,4 @@
-/* efi_artifact.c -- read \EFI\AIENOS\ARTIFACT.BND from the boot volume before ExitBootServices
+/* efi_artifact.c -- read \EFI\Aienux\ARTIFACT.BND from the boot volume before ExitBootServices
  * (EL0 artifact qualification image, CK_ARTIFACT_CARD: the Raspberry Pi 5 image and its QEMU twin).
  * Nothing is written. The file is a bundle of signed artifacts placed by the run tool
  * (native/kernel/core/artifact_card.h); it is untrusted input, parsed strictly here and verified by the

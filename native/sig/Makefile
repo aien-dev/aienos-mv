@@ -1,4 +1,4 @@
-# AIENOS in-house signatures in C: Ed25519 (RFC 8032, pure Ed25519) and
+# Aienux in-house signatures in C: Ed25519 (RFC 8032, pure Ed25519) and
 # SHA-512 (FIPS 180-4). No outside library. Library objects import no heap,
 # clock or I/O; the test uses hosted libc.
 #

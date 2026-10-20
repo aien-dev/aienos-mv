@@ -4,7 +4,7 @@
  *   net_diff run < corpus.bin              one canonical result line per record
  *
  * The same corpus is fed to the unmodified Rust reference (net.rs and
- * virtio_net.rs) by a driver kept OUTSIDE this repository (no Rust in AIENOS
+ * virtio_net.rs) by a driver kept OUTSIDE this repository (no Rust in Aienux
  * code). Both outputs must be byte-identical; the agreed output digest is
  * pinned in the Makefile (`make diff-check`) so C regressions are caught
  * without Rust. Record: kind u8, length u16 big-endian, bytes. */

@@ -1,4 +1,4 @@
-//! AIENOS C1 Copy-On-Write Prefix Tree (§10, §28).
+//! Aienux C1 Copy-On-Write Prefix Tree (§10, §28).
 //!
 //! Provides zero-duplication prefix sharing across reasoning branches,
 //! deterministic Copy-On-Write divergence, and complete eviction independence.

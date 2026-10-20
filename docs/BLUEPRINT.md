@@ -1,10 +1,10 @@
-# AIENOS — Final Architectural Blueprint
+# Aienux — Final Architectural Blueprint
 
-> **REFERENCE DESIGN SNAPSHOT, NOT AN ACTIVE EXECUTION PLAN.** Current AIENOS sequencing is [../ROADMAP.md](../ROADMAP.md). Whole-system sequencing is owned by `aien-spark/aien-architecture/CURRENT_EXECUTION_PLAN.md`. See [PLAN_AUTHORITY.md](PLAN_AUTHORITY.md).
+> **REFERENCE DESIGN SNAPSHOT, NOT AN ACTIVE EXECUTION PLAN.** Current Aienux sequencing is [../ROADMAP.md](../ROADMAP.md). Whole-system sequencing is owned by `aien-spark/aien-architecture/CURRENT_EXECUTION_PLAN.md`. See [PLAN_AUTHORITY.md](PLAN_AUTHORITY.md).
 
 ## 1. The final vision
 
-AIENOS is an agent-native operating system.
+AienOS is an agent-native operating system.
 
 The end state is a machine where the user presses the power button and AIEN wakes up directly.
 
@@ -82,7 +82,7 @@ It is not the authority that decides what it is allowed to do.
 
 # 2. The central architectural principle
 
-AIENOS separates four things that conventional AI systems usually blur together:
+Aienux separates four things that conventional AI systems usually blur together:
 
 ```text
 WHO AM I?
@@ -227,11 +227,11 @@ The architecture is defined by behavior and boundaries, not by arbitrary code la
 
 What is not free to drift is the destination.
 
-AIENOS must remain independently bootable.
+Aienux must remain independently bootable.
 
 The agent cannot become the root of trust.
 
-Native AIENOS cannot require Windows, macOS or Linux to survive.
+Native Aienux cannot require Windows, macOS or Linux to survive.
 
 The trusted core cannot require a proprietary cloud service, licensing server or opaque compiler/runtime to boot, recover or control the machine.
 
@@ -299,7 +299,7 @@ That separation is fundamental.
 
 ---
 
-# 6. The AIENOS kernel
+# 6. The Aienux kernel
 
 The kernel should remain small relative to the whole AIEN system.
 
@@ -335,7 +335,7 @@ The model must not be necessary to:
 * roll back an update;
 * kill a malfunctioning service.
 
-AIENOS must remain a functioning computer even if no model loads.
+Aienux must remain a functioning computer even if no model loads.
 
 ---
 
@@ -400,7 +400,7 @@ The project measures each of these instead of assuming bare metal is automatical
 
 # 8. Compatibility islands
 
-During the transition, AIENOS is allowed to use compatibility islands.
+During the transition, Aienux is allowed to use compatibility islands.
 
 For example:
 
@@ -428,7 +428,7 @@ That is acceptable.
 
 What matters is:
 
-> The island is not AIENOS's foundation.
+> The island is not Aienux's foundation.
 
 Removing it must not make the native system impossible to build, boot, recover or control.
 
@@ -644,7 +644,7 @@ This allows considerable autonomy without making autonomy equivalent to unlimite
 
 Traditional operating systems organize software around programs.
 
-AIENOS should increasingly organize functionality around capabilities.
+Aienux should increasingly organize functionality around capabilities.
 
 Examples:
 
@@ -687,7 +687,7 @@ That is how the computer stops being a collection of application silos and becom
 
 Models are replaceable intelligence engines.
 
-AIENOS should eventually be able to say:
+Aienux should eventually be able to say:
 
 ```text
 load model A
@@ -756,19 +756,19 @@ Produce a verified reference bundle.
 
 After this phase we can answer:
 
-> What exactly did native AIENOS replace?
+> What exactly did native Aienux replace?
 
 without relying on memory or marketing.
 
 ---
 
-# 16. Phase 2 — Native AIENOS boot
+# 16. Phase 2 — Native Aienux boot
 
 Now the actual operating system begins.
 
 Objective:
 
-> Power on the DGX Spark and boot AIENOS itself.
+> Power on the DGX Spark and boot Aienux itself.
 
 Minimum milestone:
 
@@ -802,7 +802,7 @@ No networking required to claim this milestone.
 
 The proof is brutally simple:
 
-> The machine boots AIENOS without Linux being the host.
+> The machine boots Aienux without Linux being the host.
 
 ---
 
@@ -834,7 +834,7 @@ The objective isn't speed yet.
 
 The objective is continuity.
 
-The first native AIEN should primarily understand and operate AIENOS itself.
+The first native AIEN should primarily understand and operate Aienux itself.
 
 Its earliest job is:
 
@@ -889,9 +889,9 @@ AIEN translates intent into capabilities rather than requiring the user to manua
 
 # 19. Phase 5 — Native hardware acceleration
 
-Only after native AIENOS itself exists do we aggressively optimize.
+Only after native Aienux itself exists do we aggressively optimize.
 
-AIENOS progressively takes ownership of hot paths:
+Aienux progressively takes ownership of hot paths:
 
 ```text
 accelerator
@@ -950,7 +950,7 @@ No single synthetic “speed score.”
 
 # 20. Phase 6 — Migration system
 
-Once AIENOS can survive independently, adoption becomes important.
+Once Aienux can survive independently, adoption becomes important.
 
 The existing OS becomes an installer.
 
@@ -982,7 +982,7 @@ It is not the destination.
 
 The core migration rule:
 
-> AIENOS may learn from the host, but it must not require the host to survive.
+> Aienux may learn from the host, but it must not require the host to survive.
 
 ---
 
@@ -1013,7 +1013,7 @@ MachineCapsule
 
 The Machine Capsule is not itself a driver implementation.
 
-It describes what AIENOS needs to reproduce.
+It describes what Aienux needs to reproduce.
 
 The engineering agent may then determine the best path for supporting that machine.
 
@@ -1021,7 +1021,7 @@ The engineering agent may then determine the best path for supporting that machi
 
 # 22. Reversible installation
 
-AIENOS should initially install beside the existing OS.
+Aienux should initially install beside the existing OS.
 
 Conceptually:
 
@@ -1050,7 +1050,7 @@ recovery
 
 before encouraging broader migration.
 
-If AIENOS fails:
+If Aienux fails:
 
 > Boot the old system.
 
@@ -1095,7 +1095,7 @@ It makes migration increasingly unnecessary to resist.
 
 ---
 
-# 24. Phase 7 — Multi-hardware AIENOS
+# 24. Phase 7 — Multi-hardware Aienux
 
 Once Spark proves the architecture, expand outward.
 
@@ -1103,7 +1103,7 @@ Do not hard-code the system conceptually around NVIDIA DGX Spark.
 
 Spark is the reference machine, not AIEN's identity.
 
-Port AIENOS to additional targets based on engineering value and available resources.
+Port Aienux to additional targets based on engineering value and available resources.
 
 Examples could eventually include:
 
@@ -1185,7 +1185,7 @@ Again:
 
 # 27. Evidence architecture
 
-Every major AIENOS technical claim should be backed by a reproducible evidence bundle.
+Every major Aienux technical claim should be backed by a reproducible evidence bundle.
 
 That means:
 
@@ -1221,7 +1221,7 @@ Evidence does not earn adjectives.
 
 C1 remains foundational.
 
-Before AIENOS uses branch-native inference as a major architectural advantage, C1 establishes that:
+Before Aienux uses branch-native inference as a major architectural advantage, C1 establishes that:
 
 ```text
 identity survives
@@ -1234,7 +1234,7 @@ parents survive child behavior
 state continuity survives resource events
 ```
 
-AIENOS can inherit those semantics.
+Aienux can inherit those semantics.
 
 It should not create weaker OS-specific versions.
 
@@ -1363,7 +1363,7 @@ fastest wins
 
 # 32. Self-improvement
 
-Eventually AIEN should help improve AIENOS.
+Eventually AIEN should help improve Aienux.
 
 But it must not mutate its trusted foundation arbitrarily while running.
 
@@ -1413,7 +1413,7 @@ AIEN does not simply declare its own rewrite trustworthy.
 
 The user presses power.
 
-AIENOS verifies itself.
+Aienux verifies itself.
 
 The resident agent wakes.
 
@@ -1574,11 +1574,11 @@ It should take it if the architectural invariants and milestone proofs remain in
 
 # 37. Final definition of success
 
-AIENOS has achieved its core vision when all of these statements are true:
+Aienux has achieved its core vision when all of these statements are true:
 
 The machine can boot without Windows, macOS or Linux acting as its host.
 
-AIENOS can recover without an AI model.
+Aienux can recover without an AI model.
 
 The AIEN agent survives reboot as the same logical entity.
 
@@ -1596,7 +1596,7 @@ The operator can recover from AIEN failure.
 
 No outside company is required for ordinary continued operation.
 
-Important native hardware paths are directly controlled by AIENOS.
+Important native hardware paths are directly controlled by Aienux.
 
 Compatibility layers are optional rather than foundational.
 

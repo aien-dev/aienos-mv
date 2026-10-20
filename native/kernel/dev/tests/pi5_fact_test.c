@@ -1,4 +1,4 @@
-/* pi5_fact_test.c -- AIENOS PI5-5 host test: the Pi Cortex fact stage (svc/pi5_fact.c, hooked by
+/* pi5_fact_test.c -- Aienux PI5-5 host test: the Pi Cortex fact stage (svc/pi5_fact.c, hooked by
  * svc/store_boot.c ck_store_pi5_fact_stage, compiled with -DCK_PI5_UNLOCK -DCK_PI5_UNLOCK_CARD -DCK_PI5_FACT
  * exactly as "make pi5-fact" builds it) over the Pi card layout. A file stands in for the card; every "boot"
  * reopens the file and starts from a cold C state (no Store or Cortex object survives between boots).

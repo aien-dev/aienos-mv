@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Boot the AIENOS C kernel with the P2 sealed-artifact loader
+# Boot the Aienux C kernel with the P2 sealed-artifact loader
 # (native/kernel/core/artifact_loader.c) in QEMU AArch64 + UEFI (AAVMF) and
 # check the serial console against the same expectations as the Rust gate
 # scripts/qemu_artifact_test.sh (SEED-0B / P2-5). QEMU is not hardware: a
@@ -128,7 +128,7 @@ id_prefix() { awk -v n="$1" '$1 == n { print substr($2, 1, 16) }' "${work}/ids.t
 
 # ---- boot disk: signed artifacts into the sealed Store (image build time) ----
 disk="${work}/nvme.img"
-# GPT boot disk: the Store lives only inside its AIENOS partition (dev/disk_part.h).
+# GPT boot disk: the Store lives only inside its Aienux partition (dev/disk_part.h).
 "${out_prod}/host/ck_gpt_image" create "${disk}" 512 64 aienos-middle >/dev/null || fail "GPT boot disk image created"
 if "${simg}" build "${disk}" 512 "${files[@]}" "missing:${missing}:${missing_len}" >"${work}/build.txt" 2>&1; then
     pass "boot disk built: $(head -1 "${work}/build.txt")"

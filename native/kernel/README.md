@@ -1,6 +1,6 @@
-# native/kernel: AIENOS C kernel core (Lane 18)
+# native/kernel: Aienux C kernel core (Lane 18)
 
-The first AIENOS kernel written in C for AArch64. It boots in QEMU through
+The first Aienux kernel written in C for AArch64. It boots in QEMU through
 UEFI (AAVMF) the way the Rust kernel does and prints the same observables.
 QEMU qualifies nothing physical: a PASS here says nothing about real hardware.
 
@@ -28,7 +28,7 @@ QEMU qualifies nothing physical: a PASS here says nothing about real hardware.
     scripts/qemu_ck_store_test.sh    # QEMU NVMe + Store gate (full image, QEMU-only
                                      # CK_QEMU_UNSAFE_DMA=1 build), ends AIENOS_CK_M4_NVME,
                                      # AIENOS_CK_M4_STORE, AIENOS_CK_ARGUS1_REVOKE
-    scripts/qemu_ck_disk_layout_test.sh # QEMU GPT / AIENOS partition gate, ends AIENOS_CK_DISK_LAYOUT
+    scripts/qemu_ck_disk_layout_test.sh # QEMU GPT / Aienux partition gate, ends AIENOS_CK_DISK_LAYOUT
 
 Toolchain: gcc, binutils (ld, objcopy, nm, readelf), make, shell. On a
 non-aarch64 host the Makefile uses the `aarch64-linux-gnu-` prefix.
@@ -167,7 +167,7 @@ build refuses any other ATA command); NVMe through the shared
 `../disk/disk_nvme.c` (the build refuses any nvme_write or nvme_flush call from
 `x86/`). Both disk_dev write hooks always refuse, serial numbers and MAC
 addresses are never printed, and each disk's GPT is checked by the shared
-`dev/disk_part.c` (both copies, CRCs, the AIENOS partition located if present).
+`dev/disk_part.c` (both copies, CRCs, the Aienux partition located if present).
 The Broadcom BCM57766 Ethernet chip (14e4:1686) gets a transmit-only, polled
 driver (`x86/tg3_x86.c`: core reset, bootcode handshake, rings in one DMA block
 below 4 GiB, PHY autonegotiation; it never receives and the MAC address is
@@ -187,7 +187,7 @@ when a 16550 answers there (QEMU; the iMac has none). Shared, unchanged:
 `dev/disk_part.c`, `../disk/disk.c`, `../disk/disk_nvme.c`. The QEMU test runs four
 cores and attaches a SATA data disk and an NVMe disk, each with a GPT from
 `ck_gpt_image`, and fails unless three cores check in, the kernel finds each
-AIENOS partition where the tool wrote it and both disks are byte-identical
+Aienux partition where the tool wrote it and both disks are byte-identical
 afterwards. Not yet: work scheduled on the other cores, x2APIC, NX, disk writes,
 VT-d, receiving on the network, a store. QEMU (no BCM57766 there)
 qualifies nothing physical; copy the image to a FAT stick as
@@ -450,7 +450,7 @@ improvise.
    ending without `FAIL`.
 
 3. **Restart** with `sudo reboot`. Do not touch the keyboard until the screen
-   shows AIENOS lines (white text on black, starting with the boot report).
+   shows Aienux lines (white text on black, starting with the boot report).
 
 4. **Normal boot (do nothing).** Watch for, in order:
    `xhci_acpi: 6 platform controller(s)`, `xhci_plat: USBn try ...`,
@@ -589,10 +589,10 @@ low-water free bytes.
   Span, L1 descriptors valid before any grant, a misaligned L1 table, and an
   L2 page published without abort STEs.
 
-- The kernel writes only inside the AIENOS partition of the boot disk
+- The kernel writes only inside the Aienux partition of the boot disk
   (`dev/disk_part.h`, gate `DISK_LAYOUT`). The GPT is parsed read-only:
   protective MBR, primary and backup headers and entry arrays, all CRC32
-  checked and required to agree. Exactly one partition must carry the AIENOS
+  checked and required to agree. Exactly one partition must carry the Aienux
   type GUID `38DAAC89-5EAD-4B40-8B1E-3687A7418061` (on-disk bytes
   `89 AC DA 38 AD 5E 40 4B 8B 1E 36 87 A7 41 80 61`), inside the usable range
   and overlapping no other partition. The Store, torn-slot device and rw probe
@@ -603,7 +603,7 @@ low-water free bytes.
   `CK_TEST_DISK_XLATE_BYPASS=1` (TEST-ONLY mutation, refused with
   `CK_HARDWARE_STAGING`) drops the partition offset so the gate can prove it
   catches that. QEMU disk images come from `make gpt-image`
-  (`tools/ck_gpt_image.c`); `ck_store_image` also opens only the AIENOS
+  (`tools/ck_gpt_image.c`); `ck_store_image` also opens only the Aienux
   partition.
 
 ## Differences from the Rust kernel

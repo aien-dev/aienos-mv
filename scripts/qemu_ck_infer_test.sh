@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Boot the AIENOS C kernel with the inference unit linked in (QEMU AArch64,
+# Boot the Aienux C kernel with the inference unit linked in (QEMU AArch64,
 # UEFI/AAVMF, EL2 like Machine 1, -m 4096), let the kernel ingest the
 # Llama-3.2-1B-Instruct Q4_K_M GGUF (807,694,368 bytes) into its own RAM over
 # QEMU fw_cfg DMA, then check that the Rust crate crates/aienos-infer, called

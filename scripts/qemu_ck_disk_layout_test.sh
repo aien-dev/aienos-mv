@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# DISK_LAYOUT gate for the AIENOS C kernel (CK-4, audit row R2 of
+# DISK_LAYOUT gate for the Aienux C kernel (CK-4, audit row R2 of
 # track4-aienos-trust.md): the kernel writes to a disk only inside the one
-# partition whose GPT type GUID is the AIENOS type
+# partition whose GPT type GUID is the Aienux type
 # 38DAAC89-5EAD-4B40-8B1E-3687A7418061 (native/kernel/dev/disk_part.h), and
 # every write goes through the bounds-checked translation layer ck_part_xlate.
 # QEMU AArch64 + UEFI (AAVMF) + NVMe, same base invocation as
@@ -16,21 +16,21 @@
 #    an #error in dev/disk_part.h). It must make this gate's positive checks
 #    FAIL; it never counts toward a PASS.
 # Disk images: native/kernel/tools/ck_gpt_image.c, 64 MiB: protective MBR,
-# primary + backup GPT, sentinel-a [1,9) MiB filled, AIENOS [9,57) MiB all
+# primary + backup GPT, sentinel-a [1,9) MiB filled, Aienux [9,57) MiB all
 # zero, sentinel-b [57,63) MiB filled.
 #
 # Positive (default image): one 512 B disk booted twice, one 4096 B disk booted
 #   once. Each boot: M1 checks (scripts/lib_ck_m1_checks.sh); "disk: gpt ok"
-#   with the AIENOS range the image tool wrote; partition LBA 0 -> disk LBA =
+#   with the Aienux range the image tool wrote; partition LBA 0 -> disk LBA =
 #   partition start; write past the partition end refused; the NVMe rw probe's
 #   disk LBA inside the partition; stage store ok and a Store commit; every
 #   byte outside the partition unchanged (sha256 with the partition cut out)
 #   and the partition itself changed (not all zero any more); no bypass text.
 # Hostile (default image, 512 B, each a fresh disk): no-gpt (no protective
 #   MBR, no GPT), bad CRC32 on BOTH headers, bad entry-array CRC32 on BOTH
-#   arrays, AIENOS partition ending past the disk, no AIENOS partition. Each:
+#   arrays, Aienux partition ending past the disk, no Aienux partition. Each:
 #   the host tool's own parser run ("ck_gpt_image find") refuses with the same
-#   reason; the kernel prints "disk: no AIENOS partition, refusing writes
+#   reason; the kernel prints "disk: no Aienux partition, refusing writes
 #   (gpt: <reason>, ...)", no "disk: gpt ok", no rw probe, the Store is
 #   refused with no boot disk, and the whole image sha256 is unchanged.
 #   Firmware caveat: EDK2/AAVMF PartitionDxe may repair a GPT when only ONE
@@ -96,7 +96,7 @@ fail_into_gate() { if [[ "${failed}" != 0 ]]; then gate_fail=1; fi; failed=0; }
 sha() { sha256sum "$1" | cut -d' ' -f1; }
 
 # new_disk IMG BS LAYOUT [CORRUPTION...]: create it; sets part_first/part_last
-# (the AIENOS range as WRITTEN by the tool; 0 0 when the layout has none).
+# (the Aienux range as WRITTEN by the tool; 0 0 when the layout has none).
 new_disk() {
     local img="$1" bs="$2" lay="$3" l re='^gpt_image bs=[0-9]+ blocks=[0-9]+ aienos_first_lba=([0-9]+) aienos_last_lba=([0-9]+)$'
     shift 3
@@ -104,17 +104,17 @@ new_disk() {
     if [[ "${l}" =~ ${re} ]]; then part_first="${BASH_REMATCH[1]}"; part_last="${BASH_REMATCH[2]}"
     else echo "FAIL  GPT disk image ${lay} not created (${l})"; part_first=0; part_last=0; gate_fail=1; fi
 }
-# outside_sha IMG BS: sha256 of the image with the AIENOS partition cut out.
+# outside_sha IMG BS: sha256 of the image with the Aienux partition cut out.
 outside_sha() {
     { head -c $(( part_first * $2 )) "$1"; tail -c +$(( (part_last + 1) * $2 + 1 )) "$1"; } | sha256sum | cut -d' ' -f1
 }
-# inside_sha IMG BS: sha256 of the AIENOS partition bytes only.
+# inside_sha IMG BS: sha256 of the Aienux partition bytes only.
 inside_sha() {
     # head reads the file itself and tail drains all of head's output, so no
     # producer is cut off early (a "tail | head" pipe dies of SIGPIPE under pipefail).
     head -c $(( (part_last + 1) * $2 )) "$1" | tail -c $(( (part_last - part_first + 1) * $2 )) | sha256sum | cut -d' ' -f1
 }
-# zero_sha BS: sha256 of an all-zero AIENOS partition of the current size.
+# zero_sha BS: sha256 of an all-zero Aienux partition of the current size.
 zero_sha() {
     head -c $(( (part_last - part_first + 1) * $1 )) /dev/zero | sha256sum | cut -d' ' -f1
 }

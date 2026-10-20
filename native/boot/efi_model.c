@@ -12,7 +12,7 @@
  * Flow (UEFI 2.10; edk2 LoadedImage.h, SimpleFileSystem.h, BlockIo.h):
  *   1. HandleProtocol(image, LoadedImage) -> DeviceHandle = the boot volume;
  *      HandleProtocol(DeviceHandle, SimpleFileSystem) -> OpenVolume -> Open
- *      \EFI\AIENOS\MODEL.MAP read-only. Absent map: "model_map: absent",
+ *      \EFI\Aienux\MODEL.MAP read-only. Absent map: "model_map: absent",
  *      nothing recorded, boot continues (the kernel then has no disk model).
  *   2. ck_model_map_check (native/boot/model_map.h): magic, version, sector
  *      size, extents, exact coverage. Refused -> "model_map: refused (...)".

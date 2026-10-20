@@ -1,6 +1,6 @@
-# AIENOS Systems Integration Sequence & Epistemic Calibration
+# Aienux Systems Integration Sequence & Epistemic Calibration
 
-> **HISTORICAL INTEGRATION SEQUENCE, SUPERSEDED AS EXECUTION ORDER.** Preserve this document for rationale and acceptance-history context. Current AIENOS sequencing is [../ROADMAP.md](../ROADMAP.md). Whole-system sequencing is owned by `aien-spark/aien-architecture/CURRENT_EXECUTION_PLAN.md`. See [PLAN_AUTHORITY.md](PLAN_AUTHORITY.md).
+> **HISTORICAL INTEGRATION SEQUENCE, SUPERSEDED AS EXECUTION ORDER.** Preserve this document for rationale and acceptance-history context. Current Aienux sequencing is [../ROADMAP.md](../ROADMAP.md). Whole-system sequencing is owned by `aien-spark/aien-architecture/CURRENT_EXECUTION_PLAN.md`. See [PLAN_AUTHORITY.md](PLAN_AUTHORITY.md).
 
 > **Status:** Historical Integration Framework; execution order superseded by `../ROADMAP.md`
 > **Authority:** Operator Directive (2026-09-23)
@@ -17,7 +17,7 @@ To preserve intellectual integrity across all public documentation, benchmark cl
 1. **Host-Tested vs. Native-Qualified**:
    - The modular crates (`aienos-kernel`, `aienos-agent-state`, `aienos-cortex`, `aienos-aegis`, `aienos-c1-tree`) currently have **phase-targeted crates implemented and host-tested**.
    - Host unit tests (`cargo test`) demonstrate component logic on Linux userspace; they **do not** claim that those phases are completed on bare metal.
-   - Phases 1 through 8 are marked complete only when their invariants survive execution under real AIENOS boot, hardware resets, and native storage on the DGX Spark.
+   - Phases 1 through 8 are marked complete only when their invariants survive execution under real Aienux boot, hardware resets, and native storage on the DGX Spark.
 
 2. **Prefix Sharing Claims**:
    - “Zero-memory prefix sharing” specifically means **zero duplicated physical KV tensor payload** for the shared token prefix.
@@ -79,7 +79,7 @@ Capture the working Linux/NVIDIA reference baseline on the DGX Spark into `evide
 **Continuous existence:** No structural change. Also baseline host cold-start behavior, model reload time, and measurable state-restoration behavior. Config A remains the historical comparison.
 
 #### Step 2: Create the Native Boot Spine
-Make the DGX Spark reach AIENOS code directly from UEFI firmware (`_start` / `efi_main`). The milestone requires that AIENOS owns CPU execution, initial physical memory, timer/interrupt setup, early UART console output (`0x16A00000`), and a deterministic panic/halt loop (`wfi`).
+Make the DGX Spark reach Aienux code directly from UEFI firmware (`_start` / `efi_main`). The milestone requires that Aienux owns CPU execution, initial physical memory, timer/interrupt setup, early UART console output (`0x16A00000`), and a deterministic panic/halt loop (`wfi`).
 
 **Continuous existence:** The boot spine initializes the physical machine. It does not define or create an AIEN identity. No `LogicalAgentId` is minted merely because Gate 2 code starts.
 
@@ -104,7 +104,7 @@ Boot the system, create/modify logical agent state, persist it to the native obj
 **Continuous existence — first empirical qualification:** `LogicalAgentId = X` → create Cortex/branch/task state → commit → full power cycle → cold native start → recover → same `LogicalAgentId = X`. Proof must show preserved committed Cortex state, branch lineage, durable task metadata, WAL handling of uncommitted tails, and no hidden replacement identity. Only after this passes: *AIEN logical identity survives a real Spark power cycle.*
 
 #### Step 7: Load Inference
-Bring up local quantized CPU inference (e.g. 1B parameter GGUF). The acceptance condition is continuity: power on → native AIENOS → persistent agent → local model → console dialogue → reboot → continuity.
+Bring up local quantized CPU inference (e.g. 1B parameter GGUF). The acceptance condition is continuity: power on → native Aienux → persistent agent → local model → console dialogue → reboot → continuity.
 
 **Continuous existence:** Identity X → model loads → conversation continues → model unload/reboot/reload → same identity X → conversation/state continuity preserved. The model must be replaceable/reloadable beneath the same logical agent. Proves inference execution can disappear and return without redefining AIEN.
 

@@ -53,7 +53,7 @@ claimed until each has hardware evidence.
 Today `aienos-accel` is pure decoding: it turns byte slices into typed facts
 and validates the GB10 contract. That property is permanent. When accelerator
 code eventually needs MMIO, interrupts, or DMA, it receives them as explicit
-capabilities granted through AEGIS, exactly like every other AIENOS physical
+capabilities granted through AEGIS, exactly like every other Aienux physical
 resource. There is to be no global "map physical memory" call, no
 `/dev/mem`-style escape, and no untyped physical address that a device driver
 can dereference on its own.
@@ -65,7 +65,7 @@ Concretely:
 - Mapping MMIO is a separate, capability-gated kernel service. The discovery
   layer cannot map.
 - DMA is a separate, capability-gated SMMU service. A device cannot DMA until
-  AIENOS programs its stream table entry.
+  Aienux programs its stream table entry.
 - An interrupt line or MSI-X vector is an interrupt capability, distinct from
   the MMIO capability that contains the MSI-X table.
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Store gate for the AIENOS C kernel (Lane 18): boots the full C image (core +
+# Store gate for the Aienux C kernel (Lane 18): boots the full C image (core +
 # devices, security and Store stages) in QEMU AArch64 with UEFI (AAVMF) and an
 # NVMe disk, using the base QEMU invocation of scripts/qemu_boot_test.sh plus
 # the NVMe device flags of the Rust NVMe/Store QEMU tests. QEMU is not
@@ -15,8 +15,8 @@
 # Per NVMe geometry (512 B blocks like qemu_nvme_test.sh, 4 KiB blocks like
 # qemu_store_crash_test.sh / qemu_continuity_test.sh), on one fresh 64 MiB GPT
 # disk image from native/kernel/tools/ck_gpt_image.c (protective MBR, primary
-# and backup GPT, sentinel-a [1,9) MiB filled, AIENOS partition [9,57) MiB all
-# zero, sentinel-b [57,63) MiB filled). The kernel works only inside the AIENOS
+# and backup GPT, sentinel-a [1,9) MiB filled, Aienux partition [9,57) MiB all
+# zero, sentinel-b [57,63) MiB filled). The kernel works only inside the Aienux
 # partition (dev/disk_part.h); boots 1-3 also check the GPT line, the
 # translation-layer lines and that every byte outside the partition is
 # unchanged (sha256 of the image with the partition cut out):
@@ -145,9 +145,9 @@ fail_into() { # bucket variable name: move the current failed flag into it
     failed=0
 }
 sha() { sha256sum "$1" | cut -d' ' -f1; }
-# GPT boot disk (tools/ck_gpt_image.c): sentinel-a, AIENOS (all zero), sentinel-b.
+# GPT boot disk (tools/ck_gpt_image.c): sentinel-a, Aienux (all zero), sentinel-b.
 # new_disk IMG BS: create it, set part_first/part_last (as WRITTEN by the tool)
-# and outside_ref (sha256 of every byte outside the AIENOS partition: MBR,
+# and outside_ref (sha256 of every byte outside the Aienux partition: MBR,
 # primary + backup GPT and both sentinels).
 new_disk() {
     local l re='^gpt_image bs=[0-9]+ blocks=[0-9]+ aienos_first_lba=([0-9]+) aienos_last_lba=([0-9]+)$'
@@ -156,11 +156,11 @@ new_disk() {
     else echo "FAIL  GPT boot disk image not created (${l})"; part_first=0; part_last=0; m1_fail=1; fi
     outside_ref=$(outside_sha "$1" "$2")
 }
-# outside_sha IMG BS: sha256 of the image with the AIENOS partition cut out.
+# outside_sha IMG BS: sha256 of the image with the Aienux partition cut out.
 outside_sha() {
     { head -c $(( part_first * $2 )) "$1"; tail -c +$(( (part_last + 1) * $2 + 1 )) "$1"; } | sha256sum | cut -d' ' -f1
 }
-# layout_checks BS: the kernel found the AIENOS partition where the tool wrote
+# layout_checks BS: the kernel found the Aienux partition where the tool wrote
 # it, its translation refuses past the end, and nothing outside it changed.
 layout_checks() {
     check "GPT parsed, AIENOS partition found where the image tool wrote it (C only)" \
@@ -356,7 +356,7 @@ for bs in 512 4096; do
 
     # Boot 4: corrupt the Store superblock on the host image.
     store_lba=$(field '^store: TEST identity.* store lba=([0-9]+) ')
-    # store lba is relative to the AIENOS partition (dev/disk_layout.h).
+    # store lba is relative to the Aienux partition (dev/disk_layout.h).
     soff=$(( ${store_lba:-0} * bs ))
     if [[ -z "${store_lba}" || "${soff}" != 16384 ]]; then
         store_fail_msg "Store region offset ${soff} in the partition (lba ${store_lba:-?}), expected byte 16384 (4 anchor units)"

@@ -1,4 +1,4 @@
-# native/disk: AIENOS disk layer in C
+# native/disk: Aienux disk layer in C
 
 - `disk.h` / `disk.c`: the `disk_dev` contract (512 or 4096 byte blocks),
   bounds checks, splitting by `max_blocks_per_io`, and an ordered 32-entry

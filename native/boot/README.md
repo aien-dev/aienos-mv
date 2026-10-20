@@ -49,7 +49,7 @@ Build: `make -C native/kernel pi5-diag` (output `PI5DIAG.EFI`, copy to the card 
 (`AIENOS_PI5_DIAG`; an emulator, nothing about a Pi 5 is qualified by it).
 
 **AIENOS-IMAC-BOOT-0 diagnostic, the same `diag_main.c` built for x86_64 ->
-`IMACDIAG.EFI`:** the first AIENOS code for an x86_64 machine, a 2017 iMac (Intel
+`IMACDIAG.EFI`:** the first Aienux code for an x86_64 machine, a 2017 iMac (Intel
 Core i7, AMD Radeon Pro, Fusion Drive; no T2 chip, so its firmware starts unsigned
 images). Same report and ACPI copies as the Pi diagnostic, plus `diag_x86.c`:
 CPUID identity, features, topology and CPU mode; SMBIOS type 0/1/2 identity (no

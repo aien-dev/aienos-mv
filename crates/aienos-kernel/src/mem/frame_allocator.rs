@@ -1,4 +1,4 @@
-//! Deterministic physical memory and frame allocator primitives for AIENOS.
+//! Deterministic physical memory and frame allocator primitives for Aienux.
 
 /// Physical Page Size on AArch64 (4 KiB standard).
 pub const PAGE_SIZE: usize = 4096;

@@ -12,7 +12,7 @@ disk, found by the GPT disk GUID; the stub (native/boot/efi_model.c, read_map / 
 So the ESP is not enlarged and p1/p2 are not touched. A third GPT partition `AIENOS-MODEL` (784 MiB, type Linux filesystem, no file system) was appended
 in the free space after p2, the GGUF was written to it raw, and the map has one extent (LBA 9439232, 1577529 sectors).
 Written with `sfdisk --append`; read back through p3 and checked to equal the host sha256 before any reboot.
-The AIENOS Store finder matches its own type GUID, so p3 is invisible to it (kernel.log: `pi5_part: ... entries_used=` line).
+The Aienux Store finder matches its own type GUID, so p3 is invisible to it (kernel.log: `pi5_part: ... entries_used=` line).
 
 ### Card layout, before (`sudo sfdisk -d /dev/mmcblk0`)
 ```

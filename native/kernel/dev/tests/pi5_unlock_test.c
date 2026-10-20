@@ -1,4 +1,4 @@
-/* pi5_unlock_test.c -- AIENOS PI5-4 cut 1 host test: the Pi unlock image's Store policy
+/* pi5_unlock_test.c -- Aienux PI5-4 cut 1 host test: the Pi unlock image's Store policy
  * (svc/store_boot.c ck_store_pi5_unlock_run, compiled with -DCK_PI5_UNLOCK exactly as
  * "make pi5-unlock" builds it) over the Pi card layout. A file stands in for the card.
  *

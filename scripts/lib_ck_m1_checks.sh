@@ -1,4 +1,4 @@
-# Shared AIENOS C kernel M1 checks (Lane 18). Sourced by qemu_ck_boot_test.sh
+# Shared Aienux C kernel M1 checks (Lane 18). Sourced by qemu_ck_boot_test.sh
 # and qemu_ck_store_test.sh so both gates run the identical M1 checks; the
 # patterns are those of qemu_boot_test.sh (the Rust kernel's test) except
 # where qemu_ck_boot_test.sh's header lists a deliberate difference.
@@ -53,7 +53,7 @@ ck_m1_checks() {
         echo "FAIL  timer IRQ count reported"
         failed=1
     fi
-    # Issue #27: the kernel left firmware's EL2 translation for AIENOS EL1 tables.
+    # Issue #27: the kernel left firmware's EL2 translation for Aienux EL1 tables.
     # The script re-checks the register values itself instead of trusting switched=yes.
     switch_re='mmu_switch: firmware=EL2 firmware_mmu=on firmware_ttbr0=(0x[0-9a-f]+) aienos_root=(0x[0-9a-f]+) ttbr0_el1=(0x[0-9a-f]+) switched=yes'
     switch_line=$(grep -E "${switch_re}" "${work}/serial.txt" | tail -1 || true)

@@ -88,7 +88,7 @@ sudo efibootmgr --bootnext 0004
 sudo reboot
 ```
 
-Expect the AIENOS GRUB menu and the rescue banner `AIENOS Standalone Hardware
+Expect the Aienux GRUB menu and the rescue banner `AIENOS Standalone Hardware
 Recovery Core` / `Root filesystem: 100% RAM disk`. The shell reports Secure
 Boot, PCRs, devices, and firmware entries. The NVMe is initially unmounted.
 

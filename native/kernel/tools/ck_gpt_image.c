@@ -6,29 +6,29 @@
  *   ck_gpt_image create IMG BS MIB LAYOUT [CORRUPTION...]
  *       BS 512|4096, MIB >= 16. LAYOUT (MiB offsets, M = MIB):
  *         aienos-middle   sentinel-a [1,9) Linux type, filled with a pattern;
- *                         AIENOS [9,M-7) all zero; sentinel-b [M-7,M-1) filled
+ *                         Aienux [9,M-7) all zero; sentinel-b [M-7,M-1) filled
  *         no-aienos       same, middle partition has the Linux type
- *         two-aienos      same, sentinel-b also has the AIENOS type
- *         aienos-outside  sentinel-a, AIENOS [9, M+1): ends past the disk
- *         aienos-overlap  sentinel-a [1,9), AIENOS [5,M-7), sentinel-b
+ *         two-aienos      same, sentinel-b also has the Aienux type
+ *         aienos-outside  sentinel-a, Aienux [9, M+1): ends past the disk
+ *         aienos-overlap  sentinel-a [1,9), Aienux [5,M-7), sentinel-b
  *         no-gpt          sentinel fills only: no protective MBR, no GPT
  *         esp-model ESP_MIB MODEL_FILE   ESP + model in 3 out-of-order
  *                         extents (see esp_model below; model ingest gate)
- *         slots           one AIENOS image slots partition [1, M-1) (type
+ *         slots           one Aienux image slots partition [1, M-1) (type
  *                         CK_SLOT_PART_TYPE_TEXT, native/boot/slot_format.h), left
  *                         zero; prints "gpt_image bs=B blocks=N slots_first_lba=F
  *                         slots_last_lba=L" (slot loader gate)
- *         aienos-slots    AIENOS [1,41) all zero + slots [41,M-1) (MIB >= 48;
+ *         aienos-slots    Aienux [1,41) all zero + slots [41,M-1) (MIB >= 48;
  *                         P11 cut 2b service boot disk); prints both ranges
  *         esp-model-aienos ESP_MIB MODEL_FILE STORE_MIB   esp-model plus an
- *                         all-zero AIENOS partition of STORE_MIB at the end:
+ *                         all-zero Aienux partition of STORE_MIB at the end:
  *                         one disk with ESP, model and Store (service gate)
- *         aienos-slots-inbox  AIENOS [1,41) + slots [41,M-17) + update inbox
+ *         aienos-slots-inbox  Aienux [1,41) + slots [41,M-17) + update inbox
  *                         [M-17,M-1) (MIB >= 64; P11 cut 3); prints all three ranges
  *       CORRUPTION: bad-primary-crc bad-backup-crc bad-primary-entries
  *         bad-backup-entries no-pmbr
  *       Prints one line: "gpt_image bs=B blocks=N aienos_first_lba=F
- *       aienos_last_lba=L" (the AIENOS range as WRITTEN, from this tool's own
+ *       aienos_last_lba=L" (the Aienux range as WRITTEN, from this tool's own
  *       layout, not from the kernel parser; 0 0 when the layout has none).
  *   ck_gpt_image find IMG BS
  *       Runs the kernel's own parser (dev/disk_part.c) read-only; prints
@@ -63,7 +63,7 @@ static int usage(void)
 static int esp_model(int argc, char **argv, uint32_t bs, uint64_t blocks, uint64_t per, unsigned flags)
 {
     /* esp-model-aienos (argc 9): the model-home partition ends STORE_MIB
-     * earlier and an all-zero AIENOS partition takes [M-1-STORE_MIB, M-1). */
+     * earlier and an all-zero Aienux partition takes [M-1-STORE_MIB, M-1). */
     int with_store = argc == 9;
     if (argc != 8 && !with_store) return usage();
     uint64_t esp_mib = strtoull(argv[6], NULL, 10);

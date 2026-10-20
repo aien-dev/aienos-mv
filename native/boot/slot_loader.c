@@ -1,4 +1,4 @@
-/* slot_loader.c -- SLOTLDR.EFI: the AIENOS signed A/B image slot loader
+/* slot_loader.c -- SLOTLDR.EFI: the Aienux signed A/B image slot loader
  * (native v1 plan P11 cut 2a, gate N7; docs/NATIVE_IMAGE_SLOTS.md).
  *
  * A separate UEFI application that runs IN FRONT of the unchanged native

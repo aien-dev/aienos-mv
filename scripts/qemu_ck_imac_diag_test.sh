@@ -5,8 +5,8 @@
 #
 # Builds IMACDIAG.EFI, puts it on a FAT image as EFI/BOOT/BOOTX64.EFI attached as a
 # SATA disk (q35 AHCI, like the iMac's internal drives), boots it in QEMU x86_64
-# with OVMF, waits for the app to power QEMU off, reads \EFI\AIENOS\IMACBOOT.TXT and
-# every \EFI\AIENOS\ACPI\*.BIN back with mtools and checks the firmware, CPU,
+# with OVMF, waits for the app to power QEMU off, reads \EFI\Aienux\IMACBOOT.TXT and
+# every \EFI\Aienux\ACPI\*.BIN back with mtools and checks the firmware, CPU,
 # SMBIOS, PCI, screen and disk lines, the ACPI copies, "DONE", and that the app
 # wrote the file and asked for a shutdown.
 # Needs qemu-system-x86_64, OVMF, mtools and an x86_64 gcc (x86_64-linux-gnu- on

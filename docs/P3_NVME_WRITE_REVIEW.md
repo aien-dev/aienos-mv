@@ -1,4 +1,4 @@
-# D1 Write-Path Correctness Review  -  AIENOS P3 Native NVMe Write + Flush
+# D1 Write-Path Correctness Review  -  Aienux P3 Native NVMe Write + Flush
 
 Repo: aien-spark/aienos @ `ef359ec` (mirror `/Users/drakestapleton/aienos-nvme-rw`, read-only).
 Scope: `crates/aienos-kernel/src/nvme.rs` (`Submission::write`, `io_command`,

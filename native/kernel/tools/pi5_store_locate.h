@@ -1,5 +1,5 @@
 /* pi5_store_locate.h -- host side only. Where the KeySlotManifest (Store object kind 21, ADR 0017 section
- * 2.4) sits inside a copy of the Pi card's AIENOS partition, found the way the kernel finds it:
+ * 2.4) sits inside a copy of the Pi card's Aienux partition, found the way the kernel finds it:
  * the unkeyed st_open catalog (svc/store_boot.c ck_store_unlock_boot -> ss_keyslot_bootstrap) lists the
  * object's first_unit; the Store view starts CK_LAYOUT_ANCHOR_UNITS units into the partition and ends
  * before the 64-sector marker tail (core/pi5_marker.c ck_pi5_store_view). Used by the PI5-4 tamper run

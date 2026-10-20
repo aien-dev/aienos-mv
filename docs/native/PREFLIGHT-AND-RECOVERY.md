@@ -1,4 +1,4 @@
-# Native AIENOS: preflight and recovery for an attended Spark boot
+# Native Aienux: preflight and recovery for an attended Spark boot
 
 Status: NOT A MASTER PLAN. A checklist and a procedure, nothing more. Nothing in
 the change that adds this page runs on the physical Spark. Every PASS cited in
@@ -84,7 +84,7 @@ printed as ASK lines: they are Drake's, a script cannot see them.
 
 ## 3. Getting back to Linux
 
-In plain words: the AIENOS test gets one try. Whatever it does (finishes,
+In plain words: the Aienux test gets one try. Whatever it does (finishes,
 crashes, freezes, or the computer refuses to start it), the next start of the
 machine goes back to Linux by itself. If the screen stops changing for a full
 minute, hold the power button until the machine turns off, wait ten seconds,

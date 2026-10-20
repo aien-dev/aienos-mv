@@ -1,7 +1,7 @@
 /* ck_cont_tool -- host tool for the continuity / Recovery Core QEMU gates
  * (scripts/qemu_ck_continuity_test.sh, scripts/qemu_ck_recovery_test.sh). It
  * reuses the kernel's own Store and continuity code on a boot-disk image made by
- * tools/ck_gpt_image.c (AIENOS GPT partition, TEST keys). Hosted C; test
+ * tools/ck_gpt_image.c (Aienux GPT partition, TEST keys). Hosted C; test
  * tooling, never in an image. No Python, no outside libraries.
  *
  *   ck_cont_tool respond KEY_HEX CHALLENGE_HEX

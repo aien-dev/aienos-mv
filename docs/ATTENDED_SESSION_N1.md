@@ -35,7 +35,7 @@ the same disk, with Linux returning between them by the firmware's one-time
 | step | what is proved | gate it feeds (aien-architecture N1 to N7 ledger) |
 |---|---|---|
 | boot the candidate | the service image starts on the Spark, its console is readable and takes operator input | N1 ("boot is observable and recoverable; operator input and abort work") |
-| unlock | `unlock <64-hex recovery secret>` formats a production Store on a blank AIENOS partition (genesis) and opens it | N1 (operator input), N2 (real owner state) |
+| unlock | `unlock <64-hex recovery secret>` formats a production Store on a blank Aienux partition (genesis) and opens it | N1 (operator input), N2 (real owner state) |
 | bounded CPU inference | `prompt <text>` generates at most 16 tokens on the CPU from the model read off the boot disk; a second prompt is cancelled between steps | N3 ("supplies a new prompt, sees bounded generated output ... cancels another request") |
 | approve and remember | `approve` commits the reply as one sealed Store object; `remember <text>` appends one fact to the Omega Cortex journal on the Store | N3 ("approves a useful local artifact"), N2 ("committed Store objects") |
 | restart | `shutdown` runs the stop order and resets; Linux comes up (BootNext consumed); `BootNext` is armed once more and the machine reboots into the same image | N1 (rollback evidence), N2 (one physical cold start) |
@@ -62,7 +62,7 @@ What this session does **not** prove, stated so nobody reads more into it:
 | R2 | The service image built from the RC-1 aienos commit twice, byte-identical, digests written to a `SHA256SUMS` kept with the RC-1 record, together with source revision, toolchain and inputs (Drake decision 7) | NOT BUILT: no build recipe exists yet (R2 depends on B2) | `scripts/native_package.sh` (aienos#322) does this for the slot package; the staging scripts each build twice and compare (`scripts/stage_one_time_boot_ck_b7b.sh` header) |
 | R3 | The model file pinned and immutable: `Llama-3.2-1B-Instruct-Q4_K_M.gguf`, sha256 `3f5a22426976ab26cfe84dba63c1d08391717abb1af893e10f1b2968d862dcc1`, `chattr +i` before `MODEL.MAP` is made | procedure exists for the one-shot inference image | `scripts/stage_one_time_boot_ck.sh` lines 2-40 and `pinned_sha` |
 | R4 | Owner files for a hardware staging image (`CK_OWNER_PUBKEYS`, `CK_MACHINE_ID`); the TEST-FIXTURE files are refused for a boot | NOT DONE: the owner key ceremony is decided (MacBook, Wi-Fi off) but the key is generated only when Drake says he is present | `native/kernel/Makefile` lines 13-18; Drake decision 1; `docs/OWNER_KEY_CEREMONY.md` (in preparation by another worker, not merged) |
-| R5 | The 64-hex recovery secret written on paper, generated offline, never typed into any chat, file or terminal on the Spark except the AIENOS console | NOT DONE; how it is generated and backed up must be written down before the window (if the ceremony document does not cover it, this is an open item) | ADR 0017 Slot 1 (`docs/adr/`), `native/kernel/GATES.md` row 170 (secret hygiene) |
+| R5 | The 64-hex recovery secret written on paper, generated offline, never typed into any chat, file or terminal on the Spark except the Aienux console | NOT DONE; how it is generated and backed up must be written down before the window (if the ceremony document does not cover it, this is an open item) | ADR 0017 Slot 1 (`docs/adr/`), `native/kernel/GATES.md` row 170 (secret hygiene) |
 
 ### 2.2 Blocking prerequisites (each one alone makes today a NO-GO)
 
@@ -95,7 +95,7 @@ PL011); the PL011 path passes the full lifecycle QEMU gate.
 Still an operator step and UNVERIFIED: (1) whether the Spark's 16550 is
 wired to a connector you can reach (no documented external serial port;
 `docs/HARDWARE_TEST_RIG.md` plans the hub Pi's 3.3 V GPIO UART); (2) the
-line speed AIENOS inherits, because the kernel never reprograms the UART
+line speed Aienux inherits, because the kernel never reprograms the UART
 (try 115200 from the SPCR first, then 921600, 8N1, no flow control).
 **A prompt on the screen does not prove input.** What proves it: the bytes
 you type echo back on the serial terminal, `status` is answered with a
@@ -125,7 +125,7 @@ disk (two boots, same disk), and a staging variant
 (`stage_one_time_boot_ck_service.sh`, same shape as the B7b variant) that
 builds twice, makes `MODEL.MAP`, stages once and sets `BootNext` once.
 
-**B3. An AIENOS partition on the Spark's NVMe.** The kernel writes only
+**B3. An Aienux partition on the Spark's NVMe.** The kernel writes only
 inside the one GPT partition of type `38DAAC89-5EAD-4B40-8B1E-3687A7418061`;
 otherwise it prints `disk: no AIENOS partition, refusing writes` and the
 Store reports `no boot disk` (`native/kernel/README.md` lines 439-450). The
@@ -134,7 +134,7 @@ Spark has one NVMe, `nvme0n1`, with exactly two partitions: the ESP
 (`nvme0n1p2`, start 612352, 8000961167 sectors). The disk has 8001573552
 sectors, so after the root partition only the 33 sectors of the backup GPT
 remain (read 2026-10-12 from `/sys/block/nvme0n1/`). There is no room for an
-AIENOS partition without shrinking the Linux root filesystem, which can only
+Aienux partition without shrinking the Linux root filesystem, which can only
 be done with it unmounted (ext4 does not shrink online; whether the recovery stick carries the tools is not checked), and which changes the
 Linux disk. That conflicts with "Linux side left untouched" and needs its
 own owner decision and its own attended window, with a verified backup
@@ -233,7 +233,7 @@ section 7): touch nothing for 60 s, then hold the chassis power button until
 the machine is off, wait ten seconds, press it again. `BootNext` was consumed
 before the image started, so the firmware boots `BootOrder` (Linux, `0001`).
 Nothing on the Linux side and no boot variable is changed by the candidate
-(`docs/NATIVE_BOOT_ROLLBACK_CONTRACT.md` section 5). Plainly: the AIENOS
+(`docs/NATIVE_BOOT_ROLLBACK_CONTRACT.md` section 5). Plainly: the Aienux
 partition may hold Store generations committed before the abort; that is by
 design (every commit is durable when the line prints) and is recorded, not
 repaired. A power cut during a commit is one of N2's declared fault cases and
@@ -258,7 +258,7 @@ second time, change `BootOrder`, change firmware settings or Secure Boot, or
    has not been booted since Secure Boot was turned OFF on 2026-10-01
    (UNVERIFIED that it still boots; preflight P13). It is not a key backup.
 
-**What does not exist yet.** The known-good AIENOS recovery image (P11 cut 4
+**What does not exist yet.** The known-good Aienux recovery image (P11 cut 4
 in `docs/NATIVE_IMAGE_SLOTS.md` section 6, item 4: "the same loader plus a slot
 image on recovery media built by our tools, for the dual-invalid case") is
 not built, and the slot loader (cut 2a) is not merged.
@@ -289,12 +289,12 @@ stays NOT_RUN; any deviation is a finding.
 
 Before the day:
 
-1. The four missing pieces are done and merged: typing commands into AIENOS
-   (B1), the AIENOS build that has the language model and the safe-box
-   together (B2), a separate area on the drive for AIENOS's safe-box (B3,
+1. The four missing pieces are done and merged: typing commands into Aienux
+   (B1), the Aienux build that has the language model and the safe-box
+   together (B2), a separate area on the drive for Aienux's safe-box (B3,
    your decision first, because it means shrinking Linux's area), and your
    owner key plus the long unlock code on paper (B4).
-2. One frozen set of versions ("RC-1") is written down, and the AIENOS build
+2. One frozen set of versions ("RC-1") is written down, and the Aienux build
    made from it twice came out identical.
 3. The recovery stick has been booted once since Secure Boot was turned off,
    and Linux came back.

@@ -1,4 +1,4 @@
-/* slot_format.h -- AIENOS native image slots: the on-disk formats a loader
+/* slot_format.h -- Aienux native image slots: the on-disk formats a loader
  * reads to choose which native image boots, and a kernel writes to install,
  * update and roll back WITHOUT Linux (native v1 plan P11, gate N7).
  *
@@ -21,7 +21,7 @@
  * never erased by a candidate; dual-invalid = recovery").
  *
  * Where it lives: its own GPT partition with the type GUID below, NOT inside
- * the AIENOS Store partition (dev/disk_layout.h is untouched). In 4096-byte
+ * the Aienux Store partition (dev/disk_layout.h is untouched). In 4096-byte
  * units from the partition's first LBA:
  *
  *   unit 0..3        control record, torn-write safe (native/store/torn_slot.c
@@ -81,12 +81,12 @@ static inline uint64_t ck_slot_manifest_unit(unsigned slot, uint64_t cap_units)
     return CK_SLOT_FIRST_UNIT + (uint64_t)slot * cap_units;
 }
 
-/* 8B1096CD-7928-4E08-B5E4-C19B6B532760: AIENOS image slots partition type. */
+/* 8B1096CD-7928-4E08-B5E4-C19B6B532760: Aienux image slots partition type. */
 #define CK_SLOT_PART_TYPE_TEXT "8B1096CD-7928-4E08-B5E4-C19B6B532760"
 #define CK_SLOT_PART_TYPE_BYTES \
     {0xcd, 0x96, 0x10, 0x8b, 0x28, 0x79, 0x08, 0x4e, 0xb5, 0xe4, 0xc1, 0x9b, 0x6b, 0x53, 0x27, 0x60}
 
-/* 58D9C90E-497A-4848-95DD-EB7E22B0CE96: AIENOS update inbox partition type (P11
+/* 58D9C90E-497A-4848-95DD-EB7E22B0CE96: Aienux update inbox partition type (P11
  * cut 3, native/boot/slot_update.h). Same shape as ONE slot: unit 0 is the
  * signed manifest, the image starts at unit 1. The desk tool writes it
  * (ck_slot_tool inbox-image); the kernel only reads it. */

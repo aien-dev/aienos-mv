@@ -16,7 +16,7 @@ Ground rules for every step:
 - If anything prints `FAIL` or looks different from "What you should see",
   stop and hand the output to the orchestrator. Do not retry or improvise.
 
-All commands below assume this folder (the Spark's copy of the AIENOS repository):
+All commands below assume this folder (the Spark's copy of the Aienux repository):
 
 ```bash
 cd ~/workspace/aienos-recovery-gate
@@ -189,7 +189,7 @@ with nothing in front.
 
    *What it does:* tells the firmware to start from the stick **once only**.
    *Changes:* a one-time setting that the firmware erases itself after use;
-   the normal boot order stays as it is. *You should see:* the AIENOS menu,
+   the normal boot order stays as it is. *You should see:* the Aienux menu,
    then the banner `AIENOS Standalone Hardware Recovery Core`.
 
 2. At the recovery prompt, open the internal drive read-only and the key stick:
@@ -247,7 +247,7 @@ report.
 (`scripts/trust1_key_ceremony.sh`) is written and tested with throwaway keys.
 It creates four keys: the Owner Root (the master key that never touches the
 Spark), the Boot Signer (signs the small startup loader), the Release Signer
-(signs each AIENOS release) and the Operator Approval key (signs your
+(signs each Aienux release) and the Operator Approval key (signs your
 approvals). Every private key is locked with a passphrase from the moment it
 is created. Nothing is installed into the Spark's firmware at this gate.
 

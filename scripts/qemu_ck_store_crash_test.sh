@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Store crash gate for the AIENOS C kernel: CK gate M4_STORE_CRASH.
+# Store crash gate for the Aienux C kernel: CK gate M4_STORE_CRASH.
 # C-kernel port of the Rust campaigns scripts/qemu_store_crash_test.sh
 # (4096-byte LBA) and scripts/qemu_store_512b_crash_test.sh (512-byte LBA).
 # QEMU is not hardware: a PASS here qualifies nothing physical.
@@ -13,7 +13,7 @@
 #                                  CK_HARDWARE_STAGING and CK_QEMU_UNSAFE_DMA.
 #
 # Power-cut model. The host writes a crash plan into the last 4096-byte unit
-# of the AIENOS partition (the rw-probe scratch unit, restored by the devices
+# of the Aienux partition (the rw-probe scratch unit, restored by the devices
 # stage; the kernel sees only that partition, dev/disk_part.h):
 # "AIENCRSH v1 cp=<checkpoint> policy=<drop|all|newest|torn>". The TEST image
 # then runs the Store on a volatile write cache: nothing reaches the disk until
@@ -35,7 +35,7 @@
 #   after_anchor                                commit and anchor durable
 #
 # Campaign, per geometry (512 B and 4096 B namespaces, fresh 64 MiB GPT image
-# from native/kernel/tools/ck_gpt_image.c, AIENOS partition [9,57) MiB, as in
+# from native/kernel/tools/ck_gpt_image.c, Aienux partition [9,57) MiB, as in
 # scripts/qemu_ck_store_test.sh; all Store offsets below are partition offsets
 # plus the partition start) and
 # per settle (0: the crash boot formats a blank disk; 3: three default boots
@@ -110,7 +110,7 @@ unit=4096
 units=$(( img_bytes / unit ))
 plan_unit=$(( units - 1 ))
 store_off=16384            # 4 anchor units (dev/disk_layout.h; qemu_ck_store_test.sh checks it)
-# set_part BS FIRST_LBA LAST_LBA: the AIENOS partition of a GPT image. Sets
+# set_part BS FIRST_LBA LAST_LBA: the Aienux partition of a GPT image. Sets
 # sb_base (image byte offset of the Store region: partition start + store_off)
 # and plan_unit (the last 4096-byte unit of the partition). Default: the whole
 # image is the partition (self-test synthetic images).
@@ -306,7 +306,7 @@ self_test() {
     cmp -s <(dd if="${t}/img" bs="${unit}" skip="${plan_unit}" count=1 status=none) <(plan_bytes after_anchor all) \
         && [[ "$(stat -c %s "${t}/img")" == "${img_bytes}" ]] && ok "plan written into the last unit only" || bad "plan placement"
     clear_plan "${t}/img"; cmp -s "${t}/img" <(head -c "${img_bytes}" /dev/zero) && ok "plan cleared" || bad "plan clear"
-    # GPT disks: the plan goes into the last unit of the AIENOS partition
+    # GPT disks: the plan goes into the last unit of the Aienux partition
     # [9,57) MiB and the Store region starts store_off into it.
     ( set_part 512 18432 116735; [[ "${plan_unit}" == 14591 && "${sb_base}" == $(( 9 * 1048576 + store_off )) ]] ) \
         && ( set_part 4096 2304 14591; [[ "${plan_unit}" == 14591 && "${sb_base}" == $(( 9 * 1048576 + store_off )) ]] ) \
@@ -424,7 +424,7 @@ else
     plain_efi="${out}/full/BOOTAA64.EFI"
 fi
 # GPT boot disk tool (native/kernel/tools/ck_gpt_image.c): the kernel binds
-# NVMe only when it finds exactly one AIENOS partition (dev/disk_part.h).
+# NVMe only when it finds exactly one Aienux partition (dev/disk_part.h).
 if ! make -s -C native/kernel OUT="${out}" gpt-image >/dev/null; then
     echo "GPT image tool build failed"; verdict NOT_RUN; exit 2
 fi
@@ -538,7 +538,7 @@ run_case() {
     [[ "${ok}" == 1 ]] || { fail=1; geo_ok[${bs}]=0; }
 }
 
-# new_disk BS: the fresh GPT template image for geometry BS (sentinel-a, AIENOS
+# new_disk BS: the fresh GPT template image for geometry BS (sentinel-a, Aienux
 # all zero, sentinel-b), and set_part from the range the tool WROTE.
 new_disk() {
     local l re='^gpt_image bs=[0-9]+ blocks=[0-9]+ aienos_first_lba=([0-9]+) aienos_last_lba=([0-9]+)$'

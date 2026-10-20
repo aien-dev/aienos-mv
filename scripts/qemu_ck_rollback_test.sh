@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # qemu_ck_rollback_test.sh -- CK gate M0_ROLLBACK: one-time BootNext rollback
-# with the AIENOS C kernel image as the candidate, in QEMU AArch64 with AAVMF.
+# with the Aienux C kernel image as the candidate, in QEMU AArch64 with AAVMF.
 #
 # Design (ACCEPTED, no A/B slots, ADR 0024 Q3): docs/BOOT_HANDOFF_CONTRACT.md
 # section 7 and 7.1, docs/NATIVE_BOOT_ROLLBACK_CONTRACT.md. The Rust
 # aienos-rollback-mock stays the stager (\EFI\BOOT\BOOTAA64.EFI: writes
 # Boot0001 "Default Linux OS", Boot0000 "AIENOS Candidate", BootOrder=0001,
 # BootNext=0000, resets) and the Default entry (\EFI\DEFAULT\default.efi).
-# Only the candidate changes: \EFI\AIENOS\candidate.efi is a C kernel image
+# Only the candidate changes: \EFI\Aienux\candidate.efi is a C kernel image
 # built here with make. The Rust-mock run (scripts/qemu_native_rollback_test.sh)
 # is untouched and keeps its own labels; this script prints CK_ROLLBACK_* and
 # AIENOS_CK_M0_ROLLBACK lines only.

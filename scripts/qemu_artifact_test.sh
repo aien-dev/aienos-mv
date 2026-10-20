@@ -2,7 +2,7 @@
 # SEED-0B QEMU qualification (P2-5 loader, P2-6 SEED-0B artifact and
 # Admission Receipt v0, P2-7 negative matrix) in QEMU AArch64 (UEFI, EL2).
 #
-# Firmware reads signed .AIEN files from \EFI\AIENOS\ARTIFACTS on the ESP and
+# Firmware reads signed .AIEN files from \EFI\Aienux\ARTIFACTS on the ESP and
 # hands their bytes to the kernel, which stages, verifies, admits, loads and
 # runs each one as an isolated EL0 task, then reclaims it. Two boots:
 #

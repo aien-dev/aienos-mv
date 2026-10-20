@@ -1,4 +1,4 @@
-/* efi_entry.S -- UEFI entry of the AIENOS C kernel image (AArch64).
+/* efi_entry.S -- UEFI entry of the Aienux C kernel image (AArch64).
  * Firmware calls _start(ImageHandle, SystemTable) at its own EL (EL2 on QEMU
  * virtualization=on and on Machine 1) with its translation and stack. The
  * image is linked at 0 and loaded anywhere: apply our R_AARCH64_RELATIVE

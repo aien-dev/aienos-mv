@@ -1,4 +1,4 @@
-# AIENOS C kernel core (Lane 18): UEFI entry stub + kernel core as one
+# Aienux C kernel core (Lane 18): UEFI entry stub + kernel core as one
 # AArch64 PE32+ image, plus host unit tests. Toolchain: gcc, binutils, make.
 #
 #   make                 core-only image $(OUT)/BOOTAA64.EFI (stages print
@@ -66,10 +66,10 @@
 #                        the SMP gate must FAIL on it (scripts/qemu_ck_smp_test.sh
 #                        --mutation); refused with CK_HARDWARE_STAGING
 #   make store-image     host tool $(OUT)/host/ck_store_image: signed artifacts
-#                        into the sealed Store inside the AIENOS GPT partition
+#                        into the sealed Store inside the Aienux GPT partition
 #                        of an NVMe disk image
 #   make gpt-image       host tool $(OUT)/host/ck_gpt_image: GPT boot-disk images
-#                        (AIENOS partition between two sentinels, hostile variants)
+#                        (Aienux partition between two sentinels, hostile variants)
 #                        for the QEMU gates; "find" runs the kernel GPT parser
 #   make full CK_TEST_DISK_XLATE_BYPASS=1
 #                        TEST-ONLY mutation image for the DISK_LAYOUT gate: the
@@ -207,7 +207,7 @@ endif
 # ck_store_test_keys and ck_store_test_uuid are not compiled, so no TEST key or TEST uuid can reach it.
 # It is a separate image from CK_PI5_STORE (TEST keys) and cannot be combined with any other tier flag.
 # PI5-4 cut 2: CK_PI5_UNLOCK_CARD=1 (QUALIFICATION ONLY, "make pi5-unlock-card") adds one secret source to the
-# unlock image: a THROWAWAY recovery secret from \EFI\AIENOS\UNLOCK.REQ on the card (core/unlock_req.h). It
+# unlock image: a THROWAWAY recovery secret from \EFI\Aienux\UNLOCK.REQ on the card (core/unlock_req.h). It
 # needs CK_PI5_UNLOCK=1 and is a separate image with its own OUT. CK_PI5_PRODUCTION is reserved for a future
 # production Pi image; it is not implemented and can never be combined with the card request source.
 CK_PI5_UNLOCK_CARD ?=
@@ -244,7 +244,7 @@ endif
 
 # Pi Cortex fact image (CK_PI5_FACT=1, "make pi5-fact", PI5-5): the Pi unlock-card image (production-class Store
 # opened by the Slot 1 recovery secret from the card request file) plus the Cortex fact stage (svc/pi5_fact.c): a
-# fact from \EFI\AIENOS\FACT.REQ (QUALIFICATION ONLY, core/fact_req.h) is appended to the Cortex journal of the
+# fact from \EFI\Aienux\FACT.REQ (QUALIFICATION ONLY, core/fact_req.h) is appended to the Cortex journal of the
 # sealed Store, and a boot without that file recalls it. It needs CK_PI5_UNLOCK=1 and CK_PI5_UNLOCK_CARD=1, refuses
 # every other tier flag and has its own OUT.
 CK_PI5_FACT ?=
@@ -287,7 +287,7 @@ endif
 # card request file): the Pi unlock-card image (production-class Store opened by the Slot 1 recovery secret) plus the resident
 # production lifecycle (core/lifecycle.c: remember, prefer, update, recall, approve, status, help, N3 context assembly) plus the resident
 # inference unit (CK_INFER_LIB, model from MODEL.MAP only). Nothing reads the Pi's serial port, so the lifecycle takes its lines from the
-# card command script \EFI\AIENOS\AGENT.CMD (core/agent_cmd.h) instead of the console and then runs its stop order. The lifecycle sources
+# card command script \EFI\Aienux\AGENT.CMD (core/agent_cmd.h) instead of the console and then runs its stop order. The lifecycle sources
 # are the CK_SERVICE ones (-DCK_SERVICE=1 reaches only the stage sources, see the service block below); the secret still comes from the
 # card (unlock and rotate are not script verbs). Needs CK_PI5_UNLOCK=1, CK_PI5_UNLOCK_CARD=1 and CK_INFER_LIB, refuses every other tier
 # flag and has its own OUT.
@@ -308,7 +308,7 @@ endif
 CK_EXTRA_CFLAGS += -DCK_PI5_LIFECYCLE=1 -DCK_INFER_DISK_ONLY=1 -DCK_INFER_RESIDENT=1
 endif
 # EL0 artifact qualification image (CK_ARTIFACT_CARD=1, "make pi5-artifact" for the Pi, PI5-7 cut 3, QUALIFICATION ONLY, TEST keys only):
-# the plain core image (no Store stage, no NVMe) whose signed artifact candidates come from ONE card file, \EFI\AIENOS\ARTIFACT.BND
+# the plain core image (no Store stage, no NVMe) whose signed artifact candidates come from ONE card file, \EFI\Aienux\ARTIFACT.BND
 # (core/artifact_card.h, read by native/boot/efi_artifact.c), and which trusts the RFC 8032 TEST 1 public key only
 # (CK_SEED0B_TEST_ANCHOR=1, forced by CK_PI5_ARTIFACT=1; the image prints "artifact_trust: ... TEST ONLY"). CK_PI5_ARTIFACT=1 is the Pi
 # image (CK_PI5=1); CK_ARTIFACT_CARD=1 CK_SEED0B_TEST_ANCHOR=1 alone is its QEMU twin (scripts/qemu_ck_artifact_card_test.sh). Both
@@ -2151,7 +2151,7 @@ slot-loader-check:
 
 # ---- PI5DIAG.EFI: AIENOS-PI5-BOOT-0, the Raspberry Pi 5 firmware diagnostic ----
 # native/boot/diag_main.c: a UEFI application that reports what the firmware shows
-# (ConOut + \EFI\AIENOS\PI5BOOT0.TXT) and returns. Own object list, no kernel, no
+# (ConOut + \EFI\Aienux\PI5BOOT0.TXT) and returns. Own object list, no kernel, no
 # ExitBootServices (checked). Copy to the card as EFI/BOOT/BOOTAA64.EFI.
 #   make pi5-diag     -> $(OUT)/PI5DIAG.EFI      QEMU test: scripts/qemu_ck_pi5_diag_test.sh
 PI5DIAG_DIR := $(OUT)/pi5diag
@@ -2182,7 +2182,7 @@ pi5-diag: $(PI5DIAG_EFI)
 
 # ---- IMACDIAG.EFI: AIENOS-IMAC-BOOT-0, the same diagnostic for x86_64 (2017 iMac) ----
 # diag_main.c + diag_x86.c (CPUID, SMBIOS identity, PCI, GOP, disks), report in
-# \EFI\AIENOS\IMACBOOT.TXT, then power off. The only x86_64 image in this tree: its own
+# \EFI\Aienux\IMACBOOT.TXT, then power off. The only x86_64 image in this tree: its own
 # cross toolchain and flags (-mabi=ms: every function uses the UEFI x64 convention),
 # its own entry (efi_entry_x86_64.S) and PE header (image_x86_64.ld, Machine 0x8664).
 # Copy to a FAT stick as EFI/BOOT/BOOTX64.EFI.

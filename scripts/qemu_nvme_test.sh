@@ -4,7 +4,7 @@
 # Boot the handoff image built with the `nvme-read` feature with a raw,
 # disposable NVMe namespace attached as
 #   -drive if=none,id=nvme0,... -device nvme,drive=nvme0,serial=aienos-nvme-test
-# and let the native AIENOS driver drive the controller directly after
+# and let the native Aienux driver drive the controller directly after
 # ExitBootServices: ECAM discovery, BAR0 MMIO, polled admin/I/O queues, and a
 # read of a deterministic sentinel LBA. The host builds the same sentinel and
 # checks the exact bytes and SHA-256 the kernel reports.
@@ -22,8 +22,8 @@
 #                              function DMA to physical memory unconfined.
 #                              QEMU debugging only; never part of verify_all.sh.
 #
-# A boot that shows no AIENOS output at all is retried (firmware hang before
-# AIENOS runs, issue #61); any failure after AIENOS output fails at once.
+# A boot that shows no Aienux output at all is retried (firmware hang before
+# Aienux runs, issue #61); any failure after Aienux output fails at once.
 #
 # Needs qemu-system-aarch64 and AAVMF (Ubuntu: qemu-system-arm qemu-efi-aarch64).
 #
@@ -156,7 +156,7 @@ boot_once() {
     rm -f "${work}/serial.log" "${work}/mon.in" "${work}/mon.out"
     mkfifo "${work}/mon.in" "${work}/mon.out"
     # Single-threaded TCG: multi-threaded TCG intermittently loses the
-    # firmware's timer wake-up and hangs before AIENOS output (#61).
+    # firmware's timer wake-up and hangs before Aienux output (#61).
     local -a smmu_trace=()
     if [[ "${AIENOS_QEMU_SMMU_TRACE:-0}" == "1" ]]; then
         smmu_trace=(-d unimp,guest_errors -trace "smmuv3_*")

@@ -3,7 +3,7 @@
  * red-before-green run, see scripts/qemu_ck_artifact_card_test.sh).
  *
  * QUALIFICATION ONLY, TEST keys only. The Pi image has no Store stage and no NVMe, so the signed artifacts
- * reach the loader as ONE file on the card's EFI partition, \EFI\AIENOS\ARTIFACT.BND, placed by the run
+ * reach the loader as ONE file on the card's EFI partition, \EFI\Aienux\ARTIFACT.BND, placed by the run
  * tool before the run and deleted after it. The UEFI stub (native/boot/efi_artifact.c) reads it before
  * ExitBootServices into ck_acard_buf; core/artifact_card_stage.c hands the entries to the unchanged core
  * loader (core/artifact_loader.c) through the same hook the boot-disk Store uses (ck_stage_disk_artifacts).

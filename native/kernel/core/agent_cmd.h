@@ -2,7 +2,7 @@
  * (PI5-7 cut 2, build flag CK_PI5_LIFECYCLE, only with CK_PI5_UNLOCK_CARD).
  *
  * QUALIFICATION ONLY. Nothing reads the Pi's serial port during a run, so the run tool may place
- * \EFI\AIENOS\AGENT.CMD on the card's EFI partition holding a short list of lifecycle verbs. The UEFI
+ * \EFI\Aienux\AGENT.CMD on the card's EFI partition holding a short list of lifecycle verbs. The UEFI
  * stub (native/boot/efi_agentcmd.c) reads it before ExitBootServices; after the Store stage the resident
  * lifecycle (core/lifecycle.c) takes each line in order, exactly as if an operator had typed it on the
  * console, prints the reply on the console and the klog, then runs its stop order. The run tool deletes

@@ -6,13 +6,13 @@ Status: source inventory. No builds, no tests, no hardware runs, no GPU access w
 
 Today the GPU works on this machine because a Linux program talks to NVIDIA's Linux driver through special device files. Omega's code never touches the chip directly. Everything it does goes through two small layers in the PHYSICS repo, which in turn ask the NVIDIA driver to do the hard work (wake the chip, load firmware, build memory maps, create a work queue, report faults).
 
-For AIENOS to run the GPU without Linux, three things have to be true:
+For Aienux to run the GPU without Linux, three things have to be true:
 
 1. The part of Omega that makes GPU programs (instruction encoding, work descriptors, constant banks) must keep working. It is mostly plain C with no Linux dependency, so it can be reused. OBSERVED.
-2. Everything the Linux driver does for us today must be done by AIENOS code instead. That is the long list in section 3. Nothing in the current code does any of it by itself. OBSERVED.
+2. Everything the Linux driver does for us today must be done by Aienux code instead. That is the long list in section 3. Nothing in the current code does any of it by itself. OBSERVED.
 3. The pieces of Omega that are tangled up with Linux (a global lock, clocks, memory allocation, sleeping, threads) need a small "platform services" layer so the same code can run on both. OBSERVED that the tangle exists, INFERRED (medium) that a services layer is the right fix.
 
-The vector engine (`OmegaGpuBackend`) is already a clean seam. The persistent session, the numerical launchers, the resident runtime and the accelerator world are not: they call the driver layer directly. Section 5 says which cut moves each one. Section 6 says what waits on the open execution-order decision and which steps only Drake can do (boots, firmware, chip use under AIENOS).
+The vector engine (`OmegaGpuBackend`) is already a clean seam. The persistent session, the numerical launchers, the resident runtime and the accelerator world are not: they call the driver layer directly. Section 5 says which cut moves each one. Section 6 says what waits on the open execution-order decision and which steps only Drake can do (boots, firmware, chip use under Aienux).
 
 ## Pins and how they were checked
 
@@ -21,7 +21,7 @@ The vector engine (`OmegaGpuBackend`) is already a clean seam. The persistent se
 | Omega | `2ae8677c604fb1b9566d27412cff7b0339e5df55` | checked out, `git rev-parse HEAD` matches |
 | PHYSICS | `6d7cf0d4d8eb2cda7b512100ff6058e25dbb3ddf` | checked out, matches |
 | Omega `physics.lock` | contains exactly the PHYSICS sha above | OBSERVED, pin confirmed |
-| AIENOS code | `fa209e454dda90d933076e5fd1f333731fd9a3c1` (docs-only ADR 0019 merge `bf475a08`) | from the issue, not re-read here |
+| Aienux code | `fa209e454dda90d933076e5fd1f333731fd9a3c1` (docs-only ADR 0019 merge `bf475a08`) | from the issue, not re-read here |
 
 Line numbers below are at those pins. Omega links look like `omega:src/file.c#Lnn`, PHYSICS links look like `physics:path#Lnn`. Full URL form: `https://github.com/aien-spark/omega/blob/2ae8677c604fb1b9566d27412cff7b0339e5df55/<path>#Lnn` and `https://github.com/aien-spark/physics/blob/6d7cf0d4d8eb2cda7b512100ff6058e25dbb3ddf/<path>#Lnn`. Files under Omega `evidence/` are frozen snapshots of older copies of these sources and are excluded from the inventory (OBSERVED: they hold copies of `omega_gpu_session.c`, `*_api.c` and so on).
 
@@ -120,7 +120,7 @@ Totals: 24 rows, 7 subsystem groups (S1 to S7). Direct callers with live driver 
 | `fopen`, `realpath` | [blackwell_submit.c:711](https://github.com/aien-spark/omega/blob/2ae8677c604fb1b9566d27412cff7b0339e5df55/src/omega_blackwell_submit.c#L711), [omega_physics_dir.h:14,33,63](https://github.com/aien-spark/omega/blob/2ae8677c604fb1b9566d27412cff7b0339e5df55/src/omega_physics_dir.h#L14) | File access in launch and build helpers. |
 | signals | none found in these files | OBSERVED absent (grep for `signal(`, `sigaction`). |
 | ARM barriers and `yield` | `dsb sy` [session.c:231,284](https://github.com/aien-spark/omega/blob/2ae8677c604fb1b9566d27412cff7b0339e5df55/src/omega_gpu_session.c#L231), [nvrm.c:735,737](https://github.com/aien-spark/physics/blob/6d7cf0d4d8eb2cda7b512100ff6058e25dbb3ddf/nvrm/nvrm.c#L735); `yield` [session.c:51](https://github.com/aien-spark/omega/blob/2ae8677c604fb1b9566d27412cff7b0339e5df55/src/omega_gpu_session.c#L51) | Inline assembly, portable to bare-metal AArch64. Not Linux-only. |
-| `stdatomic` | [engine.c:84-85](https://github.com/aien-spark/omega/blob/2ae8677c604fb1b9566d27412cff7b0339e5df55/src/omega_gpu_engine.c#L84), session stats | Portable if the freestanding toolchain provides it. UNKNOWN for the AIENOS C toolchain. |
+| `stdatomic` | [engine.c:84-85](https://github.com/aien-spark/omega/blob/2ae8677c604fb1b9566d27412cff7b0339e5df55/src/omega_gpu_engine.c#L84), session stats | Portable if the freestanding toolchain provides it. UNKNOWN for the Aienux C toolchain. |
 | libc string/stdio | `snprintf`, `vsnprintf` for error text ([nvrm.c:50-56](https://github.com/aien-spark/physics/blob/6d7cf0d4d8eb2cda7b512100ff6058e25dbb3ddf/nvrm/nvrm.c#L50), [session.c:59-65](https://github.com/aien-spark/omega/blob/2ae8677c604fb1b9566d27412cff7b0339e5df55/src/omega_gpu_session.c#L59)) | Needs a freestanding formatter or a diagnostics service. |
 
 ## 4. Driver responsibility map
@@ -156,7 +156,7 @@ For each duty listed in issue #286 cut A: where today's code gets it, and what t
 | Method header builder `nvrm_mthd` | [nvrm.h:112-114](https://github.com/aien-spark/physics/blob/6d7cf0d4d8eb2cda7b512100ff6058e25dbb3ddf/nvrm/nvrm.h#L112) | Static inline arithmetic. Lives in a Linux header today. It should move to a shared encoding header (cut A "factor shared hardware encoding"). |
 | GP entry encoder `nvrm_gp_entry` | [nvrm.c:715](https://github.com/aien-spark/physics/blob/6d7cf0d4d8eb2cda7b512100ff6058e25dbb3ddf/nvrm/nvrm.c#L715) | Pure arithmetic; declared in `nvrm.h`. Same move. |
 | Pushbuffer assembly (launch method stream) | [session.c:232-270](https://github.com/aien-spark/omega/blob/2ae8677c604fb1b9566d27412cff7b0339e5df55/src/omega_gpu_session.c#L232) | Builds words in a local array. Only the submit and wait calls are driver-tied. Today this logic is duplicated across [session.c](https://github.com/aien-spark/omega/blob/2ae8677c604fb1b9566d27412cff7b0339e5df55/src/omega_gpu_session.c#L22), [blackwell_submit.c](https://github.com/aien-spark/omega/blob/2ae8677c604fb1b9566d27412cff7b0339e5df55/src/omega_blackwell_submit.c#L19), [blackwell_engine.c](https://github.com/aien-spark/omega/blob/2ae8677c604fb1b9566d27412cff7b0339e5df55/src/omega_blackwell_engine.c#L301), [accelerator_world.c](https://github.com/aien-spark/omega/blob/2ae8677c604fb1b9566d27412cff7b0339e5df55/src/omega_accelerator_world.c#L980) and the numeric launchers. INFERRED (medium): a single shared builder is a precondition for a clean port. |
-| AIENOS pure BAR/identity decoding | [crates/aienos-accel/src/lib.rs](https://github.com/aien-spark/aienos/blob/fa209e454dda90d933076e5fd1f333731fd9a3c1/crates/aienos-accel/src/lib.rs) | Per issue; not re-read here. |
+| Aienux pure BAR/identity decoding | [crates/aienos-accel/src/lib.rs](https://github.com/aien-spark/aienos/blob/fa209e454dda90d933076e5fd1f333731fd9a3c1/crates/aienos-accel/src/lib.rs) | Per issue; not re-read here. |
 
 ### Caveats on "reusable"
 
@@ -196,7 +196,7 @@ No whole-project independence claim follows from migrating any one row (issue re
 
 Sources: `CURRENT_EXECUTION_PLAN.md` line 720 and NEXT-PHASE-3 (lines 791 to 800) in aien-architecture; issue #286 text; issue #285.
 
-Two orders exist for native AIENOS. Order 1 (older): M5 trust, M6 network, M7 inference, M8 persistent agent. Order 2 (NEXT-PHASE-3, newer): operator input, boot selection and rollback, PCI discovery, real-device storage, owner identity and trust, native inference, then GPU later. Both place GPU after native CPU inference (OBSERVED in the plan; the plan states Campaign 3 lists "later GPU"). The plan recommends Order 2 but records that Drake decides.
+Two orders exist for native Aienux. Order 1 (older): M5 trust, M6 network, M7 inference, M8 persistent agent. Order 2 (NEXT-PHASE-3, newer): operator input, boot selection and rollback, PCI discovery, real-device storage, owner identity and trust, native inference, then GPU later. Both place GPU after native CPU inference (OBSERVED in the plan; the plan states Campaign 3 lists "later GPU"). The plan recommends Order 2 but records that Drake decides.
 
 ### Can proceed now (host-only, no physical device, no kernel-order commitment)
 
@@ -223,9 +223,9 @@ These items change shared kernel code or occupy a place in the native sequence, 
 
 Each of these needs Drake and the existing attended-hardware, quiet-window and recovery procedures. None are authorized by this document or by the issue.
 
-- OPERATOR STEP: boot AIENOS on the physical Spark (any native boot with the GB10 visible).
+- OPERATOR STEP: boot Aienux on the physical Spark (any native boot with the GB10 visible).
 - OPERATOR STEP: any firmware load or GSP handoff on real hardware.
-- OPERATOR STEP: any GPU use under native AIENOS, including the first vector-add run and repeated runs.
+- OPERATOR STEP: any GPU use under native Aienux, including the first vector-add run and repeated runs.
 - OPERATOR STEP: a cold or warm start from a documented power/reset state without prior Linux GPU driver initialization (cut C proof).
 - OPERATOR STEP: device reset or power cycle to test recovery.
 - OPERATOR STEP: Secure Boot, boot menu or recovery-stick actions if a native image must be booted.
@@ -240,17 +240,17 @@ Where it may bite here. A GPU channel is the likely domain-1 kernel channel (INF
 
 ## 8. Known unknowns
 
-1. PARTLY RESOLVED 2026-10-12 (docs/GB10_FIRMWARE_INVENTORY.md): the blobs, versions, digests, the SEC2-boots-GSP-FMC path on GB10B and the licence limits are now inventoried from the public driver source at tag 580.173.02; what is public: everything the host hands to the chip. Still UNKNOWN: the COT payload and WPR-meta layouts, SEC2 preconditions at AIENOS entry, and the mandatory RPC subset (inventory section 8). Our source contains none of it (RM does it, [nvrm.c:223](https://github.com/aien-spark/physics/blob/6d7cf0d4d8eb2cda7b512100ff6058e25dbb3ddf/nvrm/nvrm.c#L223)). Still blocks the machine-side part of cut C.
+1. PARTLY RESOLVED 2026-10-12 (docs/GB10_FIRMWARE_INVENTORY.md): the blobs, versions, digests, the SEC2-boots-GSP-FMC path on GB10B and the licence limits are now inventoried from the public driver source at tag 580.173.02; what is public: everything the host hands to the chip. Still UNKNOWN: the COT payload and WPR-meta layouts, SEC2 preconditions at Aienux entry, and the mandatory RPC subset (inventory section 8). Our source contains none of it (RM does it, [nvrm.c:223](https://github.com/aien-spark/physics/blob/6d7cf0d4d8eb2cda7b512100ff6058e25dbb3ddf/nvrm/nvrm.c#L223)). Still blocks the machine-side part of cut C.
 2. UNKNOWN: GPU MMU page-table format, TLB invalidation and fault-reporting registers on GB10, as implemented by the pinned driver. Our code only requests mappings.
 3. UNKNOWN: how the work-submit token is derived and the channel is made runnable without RM (`GET_WORK_SUBMIT_TOKEN`, `GPFIFO_SCHEDULE`).
 4. UNKNOWN: which words of the captured constant bank 0 template and the 18-word setup prefix are context-independent versus values RM chose. Needed before a native context can reuse the Omega QMD and cbank builders.
 5. UNKNOWN: the per-context compute engine state RM initializes during compute-object allocation (local memory, shader memory windows).
 6. UNKNOWN: whether GPU memory traffic on GB10 passes through the AIENOS-confinable SMMU window or uses another path (the issue flags this; [GB10_PLATFORM_TOPOLOGY.md](https://github.com/aien-spark/aienos/blob/fa209e454dda90d933076e5fd1f333731fd9a3c1/docs/GB10_PLATFORM_TOPOLOGY.md) not re-read here).
 7. UNKNOWN: whether the GPU interrupt route (MSI-X/ITS/LPI) is required for correctness or only for efficiency, given the current code is polling only.
-8. RESOLVED for the host build, 2026-10-16 (omega [`docs/numeric/OMEGA_GPU_NATIVE_BOUNDARY.md`](https://github.com/aien-spark/omega/blob/278b6c3c5840e5f13472a2f60f50542d81c3821e/docs/numeric/OMEGA_GPU_NATIVE_BOUNDARY.md), cut A.2, omega#419): `omega_blackwell_codegen.c` and `omega_blackwell_matmul.c` are in the `-ffreestanding -fno-builtin` closure, and `make test-codegen-freestanding` finds the instruction streams of 14 fixture kernels byte-identical between the hosted and the freestanding build. That is host evidence only: a link inside the AIENOS kernel image and any device run remain NOT_RUN. Original entry: UNKNOWN whether the codegen files link freestanding; `omega_blackwell_codegen.c` includes `omega_blackwell_submit.h` ([L2](https://github.com/aien-spark/omega/blob/2ae8677c604fb1b9566d27412cff7b0339e5df55/src/omega_blackwell_codegen.c#L2)).
-9. UNKNOWN: the AIENOS C toolchain's support for `stdatomic.h`, 64-bit atomics and inline AArch64 assembly in the freestanding target.
+8. RESOLVED for the host build, 2026-10-16 (omega [`docs/numeric/OMEGA_GPU_NATIVE_BOUNDARY.md`](https://github.com/aien-spark/omega/blob/278b6c3c5840e5f13472a2f60f50542d81c3821e/docs/numeric/OMEGA_GPU_NATIVE_BOUNDARY.md), cut A.2, omega#419): `omega_blackwell_codegen.c` and `omega_blackwell_matmul.c` are in the `-ffreestanding -fno-builtin` closure, and `make test-codegen-freestanding` finds the instruction streams of 14 fixture kernels byte-identical between the hosted and the freestanding build. That is host evidence only: a link inside the Aienux kernel image and any device run remain NOT_RUN. Original entry: UNKNOWN whether the codegen files link freestanding; `omega_blackwell_codegen.c` includes `omega_blackwell_submit.h` ([L2](https://github.com/aien-spark/omega/blob/2ae8677c604fb1b9566d27412cff7b0339e5df55/src/omega_blackwell_codegen.c#L2)).
+9. UNKNOWN: the Aienux C toolchain's support for `stdatomic.h`, 64-bit atomics and inline AArch64 assembly in the freestanding target.
 10. UNKNOWN: contents and Linux dependence of the bench files (row 23) and of every tool script beyond the lines cited. Not read in full.
-11. UNKNOWN: the AIENOS-side current state. The AIENOS rows in this document repeat the issue's findings at `fa209e45`; they were not re-read here.
+11. UNKNOWN: the AIENOS-side current state. The Aienux rows in this document repeat the issue's findings at `fa209e45`; they were not re-read here.
 12. UNKNOWN: relationship of Xid 31 fault in omega#323 (padded code fix) to a native page-fault handler. The padding cause is INFERRED in the source comment itself ([omega_gpu_code_alloc.h:8-10](https://github.com/aien-spark/omega/blob/2ae8677c604fb1b9566d27412cff7b0339e5df55/src/omega_gpu_code_alloc.h#L8)).
 13. UNKNOWN: whether the 4096-entry fixed tables in `Nvrm` ([nvrm.h:15-16](https://github.com/aien-spark/physics/blob/6d7cf0d4d8eb2cda7b512100ff6058e25dbb3ddf/nvrm/nvrm.h#L15)) are the right bound for a native allocator.
 

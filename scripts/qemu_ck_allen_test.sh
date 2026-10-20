@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # CK gate M4_ALLEN: the ALLEN subject (ARCH-0035 / OS-0018, both PROPOSED) in
-# the AIENOS lifecycle, on a 4096-byte-LBA emulated NVMe image under QEMU, one
+# the Aienux lifecycle, on a 4096-byte-LBA emulated NVMe image under QEMU, one
 # cold QEMU process per boot (scripts/lib_ck_cont_qemu.sh: every boot is a new
 # qemu-system-aarch64 process; the ESP folder and the UEFI vars are rebuilt for
 # every boot; only the NVMe image file carries state from one boot to the next).

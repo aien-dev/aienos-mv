@@ -1,10 +1,10 @@
-# AIENOS: Technical Specification & Contracts (Phases 3 – 5)
+# Aienux: Technical Specification & Contracts (Phases 3 – 5)
 
-> **REFERENCE TECHNICAL SPECIFICATION, NOT AN ACTIVE ROADMAP.** Current AIENOS sequencing is [../ROADMAP.md](../ROADMAP.md). Whole-system sequencing is owned by `aien-spark/aien-architecture/CURRENT_EXECUTION_PLAN.md`. See [PLAN_AUTHORITY.md](PLAN_AUTHORITY.md).
+> **REFERENCE TECHNICAL SPECIFICATION, NOT AN ACTIVE ROADMAP.** Current Aienux sequencing is [../ROADMAP.md](../ROADMAP.md). Whole-system sequencing is owned by `aien-spark/aien-architecture/CURRENT_EXECUTION_PLAN.md`. See [PLAN_AUTHORITY.md](PLAN_AUTHORITY.md).
 
 > **Status:** Reference Architecture/Contract Snapshot
 > **Target:** Native Agent Wakeup, Epistemic Memory, Capability Enforcement, and C1 Branch-Native Compute
-> **Authority:** AIENOS Final Architectural Blueprint §§ 9–14, 17–19, 28
+> **Authority:** Aienux Final Architectural Blueprint §§ 9–14, 17–19, 28
 
 ---
 
@@ -183,7 +183,7 @@ A World is an isolated, transactional sandbox with copy-on-write semantics:
 ### 4.1 Hardware-Accelerated C1 Copy-On-Write Engine (§10, §19, §28)
 > *Note:* The algorithmic C1 Copy-On-Write prefix tree data structure and §28 invariants are established in Phase 4 (`crates/aienos-c1-tree`); Phase 5 binds physical KV page frames directly to the NVIDIA Blackwell GB10 accelerator over NVLink-C2C.
 
-Instead of replicating common prefix KV states across $N$ parallel reasoning branches, AIENOS maintains a shared physical prefix tree:
+Instead of replicating common prefix KV states across $N$ parallel reasoning branches, Aienux maintains a shared physical prefix tree:
 
 ```text
 Root Prefix: System Prompt + Codebase Context (100K Tokens)
@@ -207,7 +207,7 @@ Physical Address: [Page 0x1000 .. 0x4000] (RefCount: 3)
 Performance is measured systematically across three configurations:
 - **Config A**: Reference baseline on Ubuntu 24.04 LTS (frozen in Phase 1).
 - **Config B**: Minimal Linux compatibility island.
-- **Config C**: Native AIENOS bare-metal substrate.
+- **Config C**: Native Aienux bare-metal substrate.
 
 ```text
 Benchmark Metrics:

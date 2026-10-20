@@ -1,4 +1,4 @@
-/* handoff.h -- what the AIENOS UEFI boot stub passes to the C kernel core
+/* handoff.h -- what the Aienux UEFI boot stub passes to the C kernel core
  * after ExitBootServices. Everything referenced here lives in memory the
  * frame allocator never hands out (the loaded image, LoaderData, ACPI).
  *

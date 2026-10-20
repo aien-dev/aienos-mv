@@ -39,7 +39,7 @@ typedef struct {
  * gate DMA, map BAR0, init the
  * controller, fill n->disk, print identify/geometry/atomicity lines, run the
  * read-only checks (bounds refusal, read LBA 0), parse the GPT read-only and
- * select the AIENOS partition (n->part; none or an invalid GPT: print
+ * select the Aienux partition (n->part; none or an invalid GPT: print
  * "disk: no AIENOS partition, refusing writes" and return the CK_GPT_* code
  * with nothing written), check the translation layer refuses past the
  * partition end, then run the write+flush+read-back probe on the last 4 KiB
@@ -54,7 +54,7 @@ int ck_nvme_bind(ck_nvme *n, const pci_found *found, uint32_t nfound, const pci_
 int ck_nvme_shutdown_bound(ck_nvme *n);
 
 /* Run the write/flush/read-back probe on the last whole unit of `d` (the
- * kernel passes the AIENOS partition view, never the whole namespace;
+ * kernel passes the Aienux partition view, never the whole namespace;
  * shared with the host tests). `*lba_out` is relative to `d`. `seed` varies the pattern per boot.
  * The unit's original bytes are read first and written back (flushed and
  * verified) afterwards, so a boot leaves the disk bytes as it found them. */

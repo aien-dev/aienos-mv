@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# KEYBOARD gate for the AIENOS C kernel: rows 25-32 (C-only 30a-30c, 32a, 32b) of native/kernel/GATES.md
+# KEYBOARD gate for the Aienux C kernel: rows 25-32 (C-only 30a-30c, 32a, 32b) of native/kernel/GATES.md
 # "SEED-0A keyboard" (Rust oracle: scripts/qemu_keyboard_test.sh with SMMU=1
 # and SMMU=0) plus the C-only rows 30a-30c (recovery access, line overflow).
 # QEMU is not hardware: a PASS here qualifies nothing physical.

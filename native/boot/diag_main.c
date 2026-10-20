@@ -3,7 +3,7 @@
  * Prints what the firmware tells an application (vendor, revisions, EL, memory
  * map summary, every ConfigurationTable GUID) to ConOut and to a buffer, copies
  * every ACPI table the XSDT (and the FADT DSDT pointer) names, byte for byte, to
- * \EFI\AIENOS\ACPI\<SIG>[n].BIN, writes the buffer to \EFI\AIENOS\PI5BOOT0.TXT
+ * \EFI\Aienux\ACPI\<SIG>[n].BIN, writes the buffer to \EFI\Aienux\PI5BOOT0.TXT
  * on the volume the image was loaded from, waits ~5 s so a person can read the
  * screen, and cold-resets the machine through ResetSystem (on the Pi this ends a
  * one-shot tryboot run: the next boot is the normal OS). A 180 s firmware watchdog
@@ -14,7 +14,7 @@
  * AIENOS-IMAC-BOOT-0: the same source built for x86_64 (make -C native/kernel
  * imac-diag -> IMACDIAG.EFI, on the stick EFI/BOOT/BOOTX64.EFI) for the first
  * boot on a 2017 iMac. diag_x86.c adds CPUID, SMBIOS identity, PCI devices,
- * screen modes and disks; the report is \EFI\AIENOS\IMACBOOT.TXT; it holds the
+ * screen modes and disks; the report is \EFI\Aienux\IMACBOOT.TXT; it holds the
  * screen ~30 s and then powers the machine off (a Mac has no one-shot boot to
  * fall back from). Test: scripts/qemu_ck_imac_diag_test.sh. */
 #include <stdarg.h>
@@ -306,7 +306,7 @@ static void acpi_dump_all(EFI_HANDLE image, EFI_SYSTEM_TABLE *st)
     uint64_t xsdt_addr = rd64(rsdp + 24);
     say("acpi_rsdp: rev=%u oem=%c%c%c%c%c%c xsdt=0x%llx\n", rsdp[15], rsdp[9], rsdp[10], rsdp[11], rsdp[12],
         rsdp[13], rsdp[14], (unsigned long long)xsdt_addr);
-    /* FAT creates one level per Open: make \EFI\AIENOS before \EFI\AIENOS\ACPI. */
+    /* FAT creates one level per Open: make \EFI\Aienux before \EFI\Aienux\ACPI. */
     EFI_FILE_PROTOCOL *parent = 0;
     EFI_STATUS s = open_dir(image, st, "\\EFI\\AIENOS", &parent);
     if (s == EFI_SUCCESS) {

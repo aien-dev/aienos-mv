@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Boot the AIENOS C kernel core in QEMU AArch64 (UEFI/AAVMF, EL2 like
+# Boot the Aienux C kernel core in QEMU AArch64 (UEFI/AAVMF, EL2 like
 # Machine 1) with a ramfb display and check that the kernel drew its console
 # on the UEFI Graphics Output Protocol framebuffer the boot stub handed over
 # in the CHANDOF3 record (native/boot/efi_gop.c, native/kernel/core/fbcon.c).

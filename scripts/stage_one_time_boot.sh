@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Stage the AIENOS first-boot evidence image for exactly one boot.
+# Stage the Aienux first-boot evidence image for exactly one boot.
 #
 # Dry run by default: prints what it would do and changes nothing.
 # With --apply (needs sudo) it copies the image to the EFI system partition,
-# writes \EFI\AIENOS\STAGED.TXT (commit, image digest, prior boot state),
+# writes \EFI\Aienux\STAGED.TXT (commit, image digest, prior boot state),
 # creates a boot entry WITHOUT adding it to BootOrder, and sets BootNext.
 # The firmware consumes BootNext on that boot, so the following boot returns to
-# the normal BootOrder (Linux) whether AIENOS succeeds, hangs, or is powered off.
+# the normal BootOrder (Linux) whether Aienux succeeds, hangs, or is powered off.
 # Run it under `aien-proof hold --resource machine-1` so the attempt is recorded.
 set -euo pipefail
 

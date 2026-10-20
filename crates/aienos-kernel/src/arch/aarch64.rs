@@ -1,4 +1,4 @@
-//! AArch64 bare-metal architecture primitives, MMIO, and UART for AIENOS.
+//! AArch64 bare-metal architecture primitives, MMIO, and UART for Aienux.
 
 use core::marker::PhantomData;
 use core::ptr::{read_volatile, write_volatile};

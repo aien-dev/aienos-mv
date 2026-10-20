@@ -108,7 +108,7 @@ or trust mutation is marked:
 
 This includes, without exception:
 
-- the PMC `BOOT_0` and `BOOT_42` values read natively by AIENOS (only the UEFI
+- the PMC `BOOT_0` and `BOOT_42` values read natively by Aienux (only the UEFI
   handoff path may read them, and only in a separately authorized native boot);
 - any BAR MMIO read outside the established safe set;
 - any GPU reset, FLR, or power state change;

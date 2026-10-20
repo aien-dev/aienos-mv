@@ -5,7 +5,7 @@
 #
 # Builds PI5DIAG.EFI, puts it on a FAT image as EFI/BOOT/BOOTAA64.EFI, boots it in
 # QEMU AArch64 with AAVMF (-no-reboot), waits for the app to cold-reset QEMU,
-# reads \EFI\AIENOS\PI5BOOT0.TXT and every \EFI\AIENOS\ACPI\*.BIN back with mtools and
+# reads \EFI\Aienux\PI5BOOT0.TXT and every \EFI\Aienux\ACPI\*.BIN back with mtools and
 # checks: the title and vendor lines, a firmware table line (ACPI or Device Tree),
 # the memory summary, "DONE", and that the app wrote the file (serial says so).
 # Needs qemu-system-aarch64, AAVMF, mtools. Final line:

@@ -1,13 +1,13 @@
 /* pi5_store_test.c -- AIENOS-PI5 step 3b host test: the sealed Store stage
  * (svc/store_boot.c, the same one the QEMU full image runs) over the Pi 5
- * card layout (protective MBR, ESP, AIENOS partition, two-copy GPT), in the
+ * card layout (protective MBR, ESP, Aienux partition, two-copy GPT), in the
  * TEST-key qualification tier (SEED-0B-PI5). A file stands in for the card;
  * the SD controller itself is proved on the hub Pi (pi5-run.sh).
  *
  * Checks: blank card formats and commits boot 1; after a "reboot" (file
  * closed, GPT parsed again, nothing kept in memory) the Store reopens and
  * commits boot 2 and 3 with the generation advancing; every byte outside the
- * AIENOS partition (MBR, GPT copies, ESP) is unchanged; the production key
+ * Aienux partition (MBR, GPT copies, ESP) is unchanged; the production key
  * source still refuses and hands out no key bytes; a hardware-staging policy
  * refuses the TEST keys before touching the card. The Store runs on the
  * partition view minus the marker region (core/pi5_marker.h
@@ -126,7 +126,7 @@ int main(void)
     rc = boot(0, &k, &r);
     CHECK(rc == 0 && r.formatted == 0 && r.boot_count_new == 3 && r.gen_commit > g2);
     CHECK(strcmp(r.prev_commit, "pi5-store-test") == 0);
-    /* AIENOS partition is 8192 sectors = 1024 units; the Store view drops the 64-sector (8-unit) marker
+    /* Aienux partition is 8192 sectors = 1024 units; the Store view drops the 64-sector (8-unit) marker
      * region: 1016 units, anchor 4, probe 1. */
     CHECK(r.store_units == (8192u - CK_PI5_MARKER_SECS) / 8u - CK_LAYOUT_ANCHOR_UNITS - CK_LAYOUT_PROBE_UNITS);
 

@@ -65,7 +65,7 @@ one in the QEMU evidence.
 
 ## 2. Sign the image with the TRUST-1 chain
 
-Sign `~/seed0b-machine1/BOOTAA64.EFI` with the owner-controlled AIENOS
+Sign `~/seed0b-machine1/BOOTAA64.EFI` with the owner-controlled Aienux
 signing key exactly as TRUST-1 specifies, and record the signed image's
 SHA-256. The `.AIEN` files are not re-signed: their test signatures are what
 the qualification checks.

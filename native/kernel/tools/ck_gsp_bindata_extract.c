@@ -48,7 +48,7 @@
  *     bindata file that must extract, and every mutation that must be refused.
  *
  * Licence note: the driver files are MIT (SPDX in their header). This tool
- * reads them at run time; nothing from them is vendored into AIENOS.
+ * reads them at run time; nothing from them is vendored into Aienux.
  */
 #include <errno.h>
 #include <stdint.h>

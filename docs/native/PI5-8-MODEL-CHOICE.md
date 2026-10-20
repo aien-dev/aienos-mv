@@ -1,6 +1,6 @@
 # PI5-8: choosing the open release model for the Pi 5 (decision PD4, settled by measurement)
 
-Scope: which Apache-2.0 or MIT model the AIENOS Pi 5 image should ship, measured on the same engine (`crates/aienos-infer`,
+Scope: which Apache-2.0 or MIT model the Aienux Pi 5 image should ship, measured on the same engine (`crates/aienos-infer`,
 image `make pi5-infer`) and the same card that produced the PI5-6 numbers (docs/native/PI5-6-INFER-RUNS.md).
 The Llama model used by PI5-6 stays an internal yardstick (Llama licence). It is not a candidate and is not named as the release model.
 

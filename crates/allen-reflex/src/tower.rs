@@ -1,6 +1,6 @@
-//! ALLEN Tower: scheduling core for a Pi 5 bare-metal AIENOS test and verification orchestrator.
+//! ALLEN Tower: scheduling core for a Pi 5 bare-metal Aienux test and verification orchestrator.
 //!
-//! Intended pairing: the persistent 8 GB Raspberry Pi 5 (bare-metal AIENOS + ALLEN REFLEX)
+//! Intended pairing: the persistent 8 GB Raspberry Pi 5 (bare-metal Aienux + ALLEN REFLEX)
 //! with the DGX Spark. Status: library only. Nothing links this module into the Pi kernel or
 //! any test runner yet, and no Pi or Spark run has exercised it.
 //!

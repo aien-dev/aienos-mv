@@ -54,7 +54,7 @@
 #      the map declares the pinned model hash;
 #   4. (machine) sudo scripts/verify_native_rollback.sh --capture-pre;
 #   5. writes the image, MODEL.MAP and a STAGED-CK-SERVICE.TXT record to
-#      \EFI\AIENOS on the ESP (image mode: also \EFI\BOOT\BOOTAA64.EFI);
+#      \EFI\Aienux on the ESP (image mode: also \EFI\BOOT\BOOTAA64.EFI);
 #   6. (machine) creates a boot entry WITHOUT adding it to BootOrder, checks
 #      Boot0004 AIENOSRECOV is still there, sets BootNext once.
 # It never reboots. The attended session (docs/ATTENDED_SESSION_N1.md) then

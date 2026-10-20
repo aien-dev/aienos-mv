@@ -1,4 +1,4 @@
-/* disk_sdhci.c -- AIENOS freestanding SD card driver over SDHCI; see
+/* disk_sdhci.c -- Aienux freestanding SD card driver over SDHCI; see
  * disk_sdhci.h for the contract, sources and refusals. No libc. */
 #include "disk_sdhci.h"
 

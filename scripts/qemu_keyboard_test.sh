@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # SEED-0A `input.keyboard.usb` proof in QEMU (ADR 0012): boot the handoff
 # image built with the `usb-keyboard` feature on a qemu-xhci controller with
-# a usb-kbd, wait until the AIENOS driver reports the keyboard ready after
+# a usb-kbd, wait until the Aienux driver reports the keyboard ready after
 # ExitBootServices, type keys through the QEMU monitor (`sendkey`), and check
 # that the same text comes back on the serial console. Emulator only: it says
 # nothing about Machine 1 hardware.
 #
-# A boot that shows no AIENOS output at all is retried (firmware hang before
-# AIENOS runs, issue #61); any failure after AIENOS output fails at once.
+# A boot that shows no Aienux output at all is retried (firmware hang before
+# Aienux runs, issue #61); any failure after Aienux output fails at once.
 #
 # Needs qemu-system-aarch64 and AAVMF (Ubuntu: qemu-system-arm qemu-efi-aarch64).
 set -euo pipefail
@@ -107,7 +107,7 @@ boot_once() {
     rm -f "${work}/serial.log" "${work}/mon.in" "${work}/mon.out"
     mkfifo "${work}/mon.in" "${work}/mon.out"
     # Single-threaded TCG: multi-threaded TCG intermittently loses the
-    # firmware's timer wake-up and hangs before AIENOS output (#61).
+    # firmware's timer wake-up and hangs before Aienux output (#61).
     local -a smmu_trace=()
     if [[ "${AIENOS_QEMU_SMMU_TRACE:-0}" == "1" ]]; then
         smmu_trace=(-d unimp,guest_errors -trace "smmuv3_*")

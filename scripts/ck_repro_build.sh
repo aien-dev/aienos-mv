@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ck_repro_build.sh -- build the AIENOS C kernel UEFI image twice from the same
+# ck_repro_build.sh -- build the Aienux C kernel UEFI image twice from the same
 # clean commit, in two fresh output folders, and compare the sha256 digests
 # (docs/native/PREFLIGHT-AND-RECOVERY.md section 1). Host only: builds files
 # under a temp folder, never touches the ESP, NVRAM, firmware, keys or any disk.

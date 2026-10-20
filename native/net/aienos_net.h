@@ -1,4 +1,4 @@
-/* AIENOS M6-A hosted network protocol layer, in C. No Rust, no heap.
+/* Aienux M6-A hosted network protocol layer, in C. No Rust, no heap.
  *
  * Port of the Rust reference crates/aienos-kernel/src/net.rs (read as the
  * spec, not extended). Every parser takes (pointer, length), checks every

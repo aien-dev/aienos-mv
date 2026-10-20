@@ -1,4 +1,4 @@
-/* AIENOS X25519 (RFC 7748 Section 5), in C. No heap, clock or I/O.
+/* Aienux X25519 (RFC 7748 Section 5), in C. No heap, clock or I/O.
  *
  * Why native/net and not native/sig: X25519 is only used here, for the M6-B
  * handshake's ephemeral key agreement. native/sig is signatures (Ed25519 +

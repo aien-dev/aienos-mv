@@ -886,7 +886,7 @@ static int rx_line(void)
 #endif /* !CK_PI5_LIFECYCLE */
 
 #ifdef CK_PI5_LIFECYCLE
-/* PI5-7 cut 2 (QUALIFICATION ONLY): the operator input is the card command script \EFI\AIENOS\AGENT.CMD
+/* PI5-7 cut 2 (QUALIFICATION ONLY): the operator input is the card command script \EFI\Aienux\AGENT.CMD
  * (core/agent_cmd.h), already parsed and bounded by the UEFI stub. Each line goes through the same
  * handle_line the console path uses, so every reply is the one an operator would see; the line is echoed
  * after "> " first. The parser lets no secret-carrying or control verb through (unlock, rotate, update,

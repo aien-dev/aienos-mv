@@ -1,5 +1,5 @@
 /*
- * disk.h -- AIENOS native block-device interface (C, no outside library).
+ * disk.h -- Aienux native block-device interface (C, no outside library).
  *
  * One narrow interface between the Store engine (native/store) and a block
  * device backend. Backends:

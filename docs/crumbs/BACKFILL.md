@@ -119,7 +119,7 @@ History that crumbs would have recorded, reconstructed from git first-parent his
 - 2026-09-29 f854586 #153 aien-dev: Merge pull request #153: test(m5): reject tampered late envelope chunks [backfill-git]
 - 2026-09-29 e954b0b #163 aien-dev: Merge pull request #163: ARGUS-1 L0 ABI v1.2 header (additive), Makefile lanes, pre-registered spec [backfill-git]
 - 2026-09-29 7523933 #160 aien-dev: Merge pull request #160: ARGUS-0 defensive-plane substrate (C), complete under documented limits [backfill-git]
-- 2026-09-29 7ff5d7c #152 aien-dev: Merge pull request #152: establish AIENOS plan authority and retire competing execution orders [backfill-git]
+- 2026-09-29 7ff5d7c #152 aien-dev: Merge pull request #152: establish Aienux plan authority and retire competing execution orders [backfill-git]
 - 2026-09-29 d39dd5b #161 aien-dev: Merge pull request #161: capability observer callback (AEGIS -> ARGUS) [backfill-git]
 - 2026-09-28 8706fb8 #159 aien-dev: Merge pull request #159 from aien-dev/fix/envelope-preauth-alloc [backfill-git]
 - 2026-09-28 4c21386 #158 aien-dev: Merge pull request #158 from aien-dev/fix/cap-generation-restart [backfill-git]
@@ -174,7 +174,7 @@ History that crumbs would have recorded, reconstructed from git first-parent his
 - 2026-09-24 4183ef8 #111 aien-dev: feat(kernel): device authority module tying DMA to capabilities (M3 1D) (#111) [backfill-git]
 - 2026-09-24 35b3086 #110 aien-dev: feat(smmu): fail-closed DMA bring-up and PCI bus master sweep (M3 1C) (#110) [backfill-git]
 - 2026-09-24 e943690 #109 aien-dev: feat(abi): unify kernel subsystems and syscall boundary onto ABI v1 types (closes #30) (#109) [backfill-git]
-- 2026-09-24 d4a6844 #107 aien-dev: feat(abi): freeze AIENOS ABI v1 with golden-byte encoding and ADR 0013 (part of #30, M3) (#107) [backfill-git]
+- 2026-09-24 d4a6844 #107 aien-dev: feat(abi): freeze Aienux ABI v1 with golden-byte encoding and ADR 0013 (part of #30, M3) (#107) [backfill-git]
   - lane30 (2026-10-01-push-lane30-report.md): Drafts: /tmp/lane30/drafts/OSC-IDENTITY-0.md and OSC-3-ADR0013-REQUEST.md (ADR 0013 read live at aienos d4a6844: Handle 8 B u32+u32; request ABI v2 16 B with u6 [backfill-lane-report]
 - 2026-09-24 78cec64 #106 aien-dev: feat(ipc): typed channels with attenuated, revocable capability delegation (part of #30, M3) (#106) [backfill-git]
 - 2026-09-24 c4eec66 #108 aien-dev: M3 1A: report the MMU switch and tick statistics, reconcile #27 and #28 (#108) [backfill-git]
@@ -194,7 +194,7 @@ History that crumbs would have recorded, reconstructed from git first-parent his
 - 2026-09-24 d60fc85 #92 aien-dev: kernel: SMMUv3 core for per-device DMA confinement, host-tested (M3) (#92) [backfill-git]
 - 2026-09-24 75f6720 #91 aien-dev: feat(crypto): add HMAC and HKDF-SHA256 primitives (#91) [backfill-git]
 - 2026-09-24 9ee4d98 #90 aien-dev: boot: fail closed with evidence when the EL1h switch is refused (#90) [backfill-git]
-- 2026-09-24 ca7562a #89 aien-dev: boot: early console shell on the AIENOS keyboard (help, el, mem, report, uptime) (#89) [backfill-git]
+- 2026-09-24 ca7562a #89 aien-dev: boot: early console shell on the Aienux keyboard (help, el, mem, report, uptime) (#89) [backfill-git]
 - 2026-09-24 32a47f7 #88 aien-dev: kernel(infer): NEON matvec/matmul, RMSNorm, softmax, SiLU (part of #34) (#88) [backfill-git]
 - 2026-09-24 3f22ea1 #87 aien-dev: feat(kernel): add byte-level BPE tokenizer (#87) [backfill-git]
 - 2026-09-24 9ebb187 #86 aien-dev: feat(nvme): create polled I/O queues (#86) [backfill-git]
@@ -202,7 +202,7 @@ History that crumbs would have recorded, reconstructed from git first-parent his
 - 2026-09-24 38001c0 #83 aien-dev: kernel: crash-consistent block store with exhaustive torn-write tests (part of #31) (#83) [backfill-git]
 - 2026-09-24 b295a87 #82 aien-dev: kernel: polled NVMe controller init and Identify, host-tested (part of #31) (#82) [backfill-git]
 - 2026-09-24 f410415 #81 aien-dev: test(qemu): single-threaded TCG to stop intermittent firmware hangs (fixes #61) (#81) [backfill-git]
-- 2026-09-24 6b4290f #80 aien-dev: boot: enter EL1h with AIENOS page tables and caches on (#66, ADR 0009) (#80) [backfill-git]
+- 2026-09-24 6b4290f #80 aien-dev: boot: enter EL1h with Aienux page tables and caches on (#66, ADR 0009) (#80) [backfill-git]
 - 2026-09-24 2522802 #79 aien-dev: kernel: minimal network protocol core, host-tested (part of #33) (#79) [backfill-git]
 - 2026-09-24 deafa82 #78 aien-dev: kernel: PE section and UEFI Memory Attributes Table parsers (part of #66) (#78) [backfill-git]
 - 2026-09-24 d6d45df #77 aien-dev: boot(usb): wire and prove QEMU keyboard input (SEED-0A 2d) (#77) [backfill-git]
@@ -255,9 +255,9 @@ History that crumbs would have recorded, reconstructed from git first-parent his
 - 2026-09-23 d1ae435 #5 aien-dev: feat(boot): compile explicit UEFI to early-kernel handoff image (#5) [backfill-git]
 - 2026-09-23 f9e55d3 #4 aien-dev: feat(boot): build AArch64 UEFI firmware-entry diagnostic (#4) [backfill-git]
 - 2026-09-23 28c939c #3 aien-dev: fix(kernel): use Spark 8250 MMIO UART register layout (#3) [backfill-git]
-- 2026-09-23 bc25e73 #2 aien-dev: Integrate AIENOS blueprint, Config A capture, and host components (#2) [backfill-git]
+- 2026-09-23 bc25e73 #2 aien-dev: Integrate Aienux blueprint, Config A capture, and host components (#2) [backfill-git]
 - 2026-09-23 b6ef95f #1 aien-dev: docs(adr): native boot stays next milestone; minimal Linux is Benchmark Config B only (#1) [backfill-git]
-- 2026-09-23 6fca19b AIEN Atlas: docs: AIENOS README (experimental / pre-alpha), NOTICE, governing architecture [backfill-git]
+- 2026-09-23 6fca19b AIEN Atlas: docs: Aienux README (experimental / pre-alpha), NOTICE, governing architecture [backfill-git]
 - 2026-09-23 760b02d AIEN Atlas: chore(license): Apache-2.0 WITH LLVM-exception, verbatim from LLVM Project [backfill-git]
 
 ## crates
@@ -298,7 +298,7 @@ History that crumbs would have recorded, reconstructed from git first-parent his
 - 2026-09-24 4183ef8 #111 aien-dev: feat(kernel): device authority module tying DMA to capabilities (M3 1D) (#111) [backfill-git]
 - 2026-09-24 35b3086 #110 aien-dev: feat(smmu): fail-closed DMA bring-up and PCI bus master sweep (M3 1C) (#110) [backfill-git]
 - 2026-09-24 e943690 #109 aien-dev: feat(abi): unify kernel subsystems and syscall boundary onto ABI v1 types (closes #30) (#109) [backfill-git]
-- 2026-09-24 d4a6844 #107 aien-dev: feat(abi): freeze AIENOS ABI v1 with golden-byte encoding and ADR 0013 (part of #30, M3) (#107) [backfill-git]
+- 2026-09-24 d4a6844 #107 aien-dev: feat(abi): freeze Aienux ABI v1 with golden-byte encoding and ADR 0013 (part of #30, M3) (#107) [backfill-git]
   - lane30 (2026-10-01-push-lane30-report.md): Drafts: /tmp/lane30/drafts/OSC-IDENTITY-0.md and OSC-3-ADR0013-REQUEST.md (ADR 0013 read live at aienos d4a6844: Handle 8 B u32+u32; request ABI v2 16 B with u6 [backfill-lane-report]
 - 2026-09-24 78cec64 #106 aien-dev: feat(ipc): typed channels with attenuated, revocable capability delegation (part of #30, M3) (#106) [backfill-git]
 - 2026-09-24 c4eec66 #108 aien-dev: M3 1A: report the MMU switch and tick statistics, reconcile #27 and #28 (#108) [backfill-git]
@@ -317,13 +317,13 @@ History that crumbs would have recorded, reconstructed from git first-parent his
 - 2026-09-24 d60fc85 #92 aien-dev: kernel: SMMUv3 core for per-device DMA confinement, host-tested (M3) (#92) [backfill-git]
 - 2026-09-24 75f6720 #91 aien-dev: feat(crypto): add HMAC and HKDF-SHA256 primitives (#91) [backfill-git]
 - 2026-09-24 9ee4d98 #90 aien-dev: boot: fail closed with evidence when the EL1h switch is refused (#90) [backfill-git]
-- 2026-09-24 ca7562a #89 aien-dev: boot: early console shell on the AIENOS keyboard (help, el, mem, report, uptime) (#89) [backfill-git]
+- 2026-09-24 ca7562a #89 aien-dev: boot: early console shell on the Aienux keyboard (help, el, mem, report, uptime) (#89) [backfill-git]
 - 2026-09-24 32a47f7 #88 aien-dev: kernel(infer): NEON matvec/matmul, RMSNorm, softmax, SiLU (part of #34) (#88) [backfill-git]
 - 2026-09-24 3f22ea1 #87 aien-dev: feat(kernel): add byte-level BPE tokenizer (#87) [backfill-git]
 - 2026-09-24 9ebb187 #86 aien-dev: feat(nvme): create polled I/O queues (#86) [backfill-git]
 - 2026-09-24 38001c0 #83 aien-dev: kernel: crash-consistent block store with exhaustive torn-write tests (part of #31) (#83) [backfill-git]
 - 2026-09-24 b295a87 #82 aien-dev: kernel: polled NVMe controller init and Identify, host-tested (part of #31) (#82) [backfill-git]
-- 2026-09-24 6b4290f #80 aien-dev: boot: enter EL1h with AIENOS page tables and caches on (#66, ADR 0009) (#80) [backfill-git]
+- 2026-09-24 6b4290f #80 aien-dev: boot: enter EL1h with Aienux page tables and caches on (#66, ADR 0009) (#80) [backfill-git]
 - 2026-09-24 2522802 #79 aien-dev: kernel: minimal network protocol core, host-tested (part of #33) (#79) [backfill-git]
 - 2026-09-24 deafa82 #78 aien-dev: kernel: PE section and UEFI Memory Attributes Table parsers (part of #66) (#78) [backfill-git]
 - 2026-09-24 d6d45df #77 aien-dev: boot(usb): wire and prove QEMU keyboard input (SEED-0A 2d) (#77) [backfill-git]
@@ -354,14 +354,14 @@ History that crumbs would have recorded, reconstructed from git first-parent his
 - 2026-09-23 d1ae435 #5 aien-dev: feat(boot): compile explicit UEFI to early-kernel handoff image (#5) [backfill-git]
 - 2026-09-23 f9e55d3 #4 aien-dev: feat(boot): build AArch64 UEFI firmware-entry diagnostic (#4) [backfill-git]
 - 2026-09-23 28c939c #3 aien-dev: fix(kernel): use Spark 8250 MMIO UART register layout (#3) [backfill-git]
-- 2026-09-23 bc25e73 #2 aien-dev: Integrate AIENOS blueprint, Config A capture, and host components (#2) [backfill-git]
+- 2026-09-23 bc25e73 #2 aien-dev: Integrate Aienux blueprint, Config A capture, and host components (#2) [backfill-git]
 
 ## crates/aienos-accel
 
 4 commit(s) touched this tree
 
 - 2026-09-25 3e71759 #125 aien-dev: GB10 read-only hardware characterization and native accelerator contract (#125) [backfill-git]
-- 2026-09-24 6b4290f #80 aien-dev: boot: enter EL1h with AIENOS page tables and caches on (#66, ADR 0009) (#80) [backfill-git]
+- 2026-09-24 6b4290f #80 aien-dev: boot: enter EL1h with Aienux page tables and caches on (#66, ADR 0009) (#80) [backfill-git]
 - 2026-09-24 79d2d00 #56 Copilot: Fix GB10 UEFI PCI discovery: shared root-bridge open plus failure diagnostics in the report (#56) [backfill-git]
 - 2026-09-23 180020a #11 aien-dev: Merge pull request #11 from aien-dev/feat/native-gb10-discovery [backfill-git]
 
@@ -370,7 +370,7 @@ History that crumbs would have recorded, reconstructed from git first-parent his
 4 commit(s) touched this tree
 
 - 2026-09-25 3e71759 #125 aien-dev: GB10 read-only hardware characterization and native accelerator contract (#125) [backfill-git]
-- 2026-09-24 6b4290f #80 aien-dev: boot: enter EL1h with AIENOS page tables and caches on (#66, ADR 0009) (#80) [backfill-git]
+- 2026-09-24 6b4290f #80 aien-dev: boot: enter EL1h with Aienux page tables and caches on (#66, ADR 0009) (#80) [backfill-git]
 - 2026-09-24 79d2d00 #56 Copilot: Fix GB10 UEFI PCI discovery: shared root-bridge open plus failure diagnostics in the report (#56) [backfill-git]
 - 2026-09-23 180020a #11 aien-dev: Merge pull request #11 from aien-dev/feat/native-gb10-discovery [backfill-git]
 
@@ -386,7 +386,7 @@ History that crumbs would have recorded, reconstructed from git first-parent his
 
 - 2026-09-23 4a5d9df #7 aien-dev: Merge pull request #7 from aien-dev/feat/aienos-world-bound-effects [backfill-git]
 - 2026-09-23 b900485 #6 aien-dev: Merge pull request #6 from aien-dev/fix/aienos-aegis-boundaries [backfill-git]
-- 2026-09-23 bc25e73 #2 aien-dev: Integrate AIENOS blueprint, Config A capture, and host components (#2) [backfill-git]
+- 2026-09-23 bc25e73 #2 aien-dev: Integrate Aienux blueprint, Config A capture, and host components (#2) [backfill-git]
 
 ## crates/aienos-aegis/src
 
@@ -394,7 +394,7 @@ History that crumbs would have recorded, reconstructed from git first-parent his
 
 - 2026-09-23 4a5d9df #7 aien-dev: Merge pull request #7 from aien-dev/feat/aienos-world-bound-effects [backfill-git]
 - 2026-09-23 b900485 #6 aien-dev: Merge pull request #6 from aien-dev/fix/aienos-aegis-boundaries [backfill-git]
-- 2026-09-23 bc25e73 #2 aien-dev: Integrate AIENOS blueprint, Config A capture, and host components (#2) [backfill-git]
+- 2026-09-23 bc25e73 #2 aien-dev: Integrate Aienux blueprint, Config A capture, and host components (#2) [backfill-git]
 
 ## crates/aienos-aegis/tests
 
@@ -402,21 +402,21 @@ History that crumbs would have recorded, reconstructed from git first-parent his
 
 - 2026-09-23 4a5d9df #7 aien-dev: Merge pull request #7 from aien-dev/feat/aienos-world-bound-effects [backfill-git]
 - 2026-09-23 b900485 #6 aien-dev: Merge pull request #6 from aien-dev/fix/aienos-aegis-boundaries [backfill-git]
-- 2026-09-23 bc25e73 #2 aien-dev: Integrate AIENOS blueprint, Config A capture, and host components (#2) [backfill-git]
+- 2026-09-23 bc25e73 #2 aien-dev: Integrate Aienux blueprint, Config A capture, and host components (#2) [backfill-git]
 
 ## crates/aienos-agent-state
 
 2 commit(s) touched this tree
 
 - 2026-09-25 39e246a #143 aien-dev: fix(agent-state): preserve branch identity across restore (#143) [backfill-git]
-- 2026-09-23 bc25e73 #2 aien-dev: Integrate AIENOS blueprint, Config A capture, and host components (#2) [backfill-git]
+- 2026-09-23 bc25e73 #2 aien-dev: Integrate Aienux blueprint, Config A capture, and host components (#2) [backfill-git]
 
 ## crates/aienos-agent-state/src
 
 2 commit(s) touched this tree
 
 - 2026-09-25 39e246a #143 aien-dev: fix(agent-state): preserve branch identity across restore (#143) [backfill-git]
-- 2026-09-23 bc25e73 #2 aien-dev: Integrate AIENOS blueprint, Config A capture, and host components (#2) [backfill-git]
+- 2026-09-23 bc25e73 #2 aien-dev: Integrate Aienux blueprint, Config A capture, and host components (#2) [backfill-git]
 
 ## crates/aienos-artifact
 
@@ -521,8 +521,8 @@ History that crumbs would have recorded, reconstructed from git first-parent his
 - 2026-09-24 3e873b4 #95 aien-dev: kernel: EL1 timer interrupts through GICv3; QEMU on GICv3 (part of #28) (#95) [backfill-git]
 - 2026-09-24 7a5913a #94 aien-dev: kernel: cooperative EL1 threads with a global-asm context switch (part of #29) (#94) [backfill-git]
 - 2026-09-24 9ee4d98 #90 aien-dev: boot: fail closed with evidence when the EL1h switch is refused (#90) [backfill-git]
-- 2026-09-24 ca7562a #89 aien-dev: boot: early console shell on the AIENOS keyboard (help, el, mem, report, uptime) (#89) [backfill-git]
-- 2026-09-24 6b4290f #80 aien-dev: boot: enter EL1h with AIENOS page tables and caches on (#66, ADR 0009) (#80) [backfill-git]
+- 2026-09-24 ca7562a #89 aien-dev: boot: early console shell on the Aienux keyboard (help, el, mem, report, uptime) (#89) [backfill-git]
+- 2026-09-24 6b4290f #80 aien-dev: boot: enter EL1h with Aienux page tables and caches on (#66, ADR 0009) (#80) [backfill-git]
 - 2026-09-24 d6d45df #77 aien-dev: boot(usb): wire and prove QEMU keyboard input (SEED-0A 2d) (#77) [backfill-git]
 - 2026-09-24 79d2d00 #56 Copilot: Fix GB10 UEFI PCI discovery: shared root-bridge open plus failure diagnostics in the report (#56) [backfill-git]
 - 2026-09-23 37e7a93 #42 aien-dev: Add ACPI SPCR console discovery and QEMU AArch64 boot test harness (#42) [backfill-git]
@@ -562,8 +562,8 @@ History that crumbs would have recorded, reconstructed from git first-parent his
 - 2026-09-24 3e873b4 #95 aien-dev: kernel: EL1 timer interrupts through GICv3; QEMU on GICv3 (part of #28) (#95) [backfill-git]
 - 2026-09-24 7a5913a #94 aien-dev: kernel: cooperative EL1 threads with a global-asm context switch (part of #29) (#94) [backfill-git]
 - 2026-09-24 9ee4d98 #90 aien-dev: boot: fail closed with evidence when the EL1h switch is refused (#90) [backfill-git]
-- 2026-09-24 ca7562a #89 aien-dev: boot: early console shell on the AIENOS keyboard (help, el, mem, report, uptime) (#89) [backfill-git]
-- 2026-09-24 6b4290f #80 aien-dev: boot: enter EL1h with AIENOS page tables and caches on (#66, ADR 0009) (#80) [backfill-git]
+- 2026-09-24 ca7562a #89 aien-dev: boot: early console shell on the Aienux keyboard (help, el, mem, report, uptime) (#89) [backfill-git]
+- 2026-09-24 6b4290f #80 aien-dev: boot: enter EL1h with Aienux page tables and caches on (#66, ADR 0009) (#80) [backfill-git]
 - 2026-09-24 d6d45df #77 aien-dev: boot(usb): wire and prove QEMU keyboard input (SEED-0A 2d) (#77) [backfill-git]
 - 2026-09-24 79d2d00 #56 Copilot: Fix GB10 UEFI PCI discovery: shared root-bridge open plus failure diagnostics in the report (#56) [backfill-git]
 - 2026-09-23 37e7a93 #42 aien-dev: Add ACPI SPCR console discovery and QEMU AArch64 boot test harness (#42) [backfill-git]
@@ -580,13 +580,13 @@ History that crumbs would have recorded, reconstructed from git first-parent his
 
 1 commit(s) touched this tree
 
-- 2026-09-23 bc25e73 #2 aien-dev: Integrate AIENOS blueprint, Config A capture, and host components (#2) [backfill-git]
+- 2026-09-23 bc25e73 #2 aien-dev: Integrate Aienux blueprint, Config A capture, and host components (#2) [backfill-git]
 
 ## crates/aienos-c1-tree/src
 
 1 commit(s) touched this tree
 
-- 2026-09-23 bc25e73 #2 aien-dev: Integrate AIENOS blueprint, Config A capture, and host components (#2) [backfill-git]
+- 2026-09-23 bc25e73 #2 aien-dev: Integrate Aienux blueprint, Config A capture, and host components (#2) [backfill-git]
 
 ## crates/aienos-capability
 
@@ -618,13 +618,13 @@ History that crumbs would have recorded, reconstructed from git first-parent his
 
 1 commit(s) touched this tree
 
-- 2026-09-23 bc25e73 #2 aien-dev: Integrate AIENOS blueprint, Config A capture, and host components (#2) [backfill-git]
+- 2026-09-23 bc25e73 #2 aien-dev: Integrate Aienux blueprint, Config A capture, and host components (#2) [backfill-git]
 
 ## crates/aienos-cortex/src
 
 1 commit(s) touched this tree
 
-- 2026-09-23 bc25e73 #2 aien-dev: Integrate AIENOS blueprint, Config A capture, and host components (#2) [backfill-git]
+- 2026-09-23 bc25e73 #2 aien-dev: Integrate Aienux blueprint, Config A capture, and host components (#2) [backfill-git]
 
 ## crates/aienos-crypto
 
@@ -687,7 +687,7 @@ History that crumbs would have recorded, reconstructed from git first-parent his
 - 2026-09-24 4183ef8 #111 aien-dev: feat(kernel): device authority module tying DMA to capabilities (M3 1D) (#111) [backfill-git]
 - 2026-09-24 35b3086 #110 aien-dev: feat(smmu): fail-closed DMA bring-up and PCI bus master sweep (M3 1C) (#110) [backfill-git]
 - 2026-09-24 e943690 #109 aien-dev: feat(abi): unify kernel subsystems and syscall boundary onto ABI v1 types (closes #30) (#109) [backfill-git]
-- 2026-09-24 d4a6844 #107 aien-dev: feat(abi): freeze AIENOS ABI v1 with golden-byte encoding and ADR 0013 (part of #30, M3) (#107) [backfill-git]
+- 2026-09-24 d4a6844 #107 aien-dev: feat(abi): freeze Aienux ABI v1 with golden-byte encoding and ADR 0013 (part of #30, M3) (#107) [backfill-git]
   - lane30 (2026-10-01-push-lane30-report.md): Drafts: /tmp/lane30/drafts/OSC-IDENTITY-0.md and OSC-3-ADR0013-REQUEST.md (ADR 0013 read live at aienos d4a6844: Handle 8 B u32+u32; request ABI v2 16 B with u6 [backfill-lane-report]
 - 2026-09-24 78cec64 #106 aien-dev: feat(ipc): typed channels with attenuated, revocable capability delegation (part of #30, M3) (#106) [backfill-git]
 - 2026-09-24 668202e #105 aien-dev: feat(scheduler): timer-driven preemption and MADT-aware placement (closes #29) (#105) [backfill-git]
@@ -704,13 +704,13 @@ History that crumbs would have recorded, reconstructed from git first-parent his
 - 2026-09-24 68835b8 #93 aien-dev: kernel: World resource budgets and watchdog, host-tested (M3) (#93) [backfill-git]
 - 2026-09-24 d60fc85 #92 aien-dev: kernel: SMMUv3 core for per-device DMA confinement, host-tested (M3) (#92) [backfill-git]
 - 2026-09-24 75f6720 #91 aien-dev: feat(crypto): add HMAC and HKDF-SHA256 primitives (#91) [backfill-git]
-- 2026-09-24 ca7562a #89 aien-dev: boot: early console shell on the AIENOS keyboard (help, el, mem, report, uptime) (#89) [backfill-git]
+- 2026-09-24 ca7562a #89 aien-dev: boot: early console shell on the Aienux keyboard (help, el, mem, report, uptime) (#89) [backfill-git]
 - 2026-09-24 32a47f7 #88 aien-dev: kernel(infer): NEON matvec/matmul, RMSNorm, softmax, SiLU (part of #34) (#88) [backfill-git]
 - 2026-09-24 3f22ea1 #87 aien-dev: feat(kernel): add byte-level BPE tokenizer (#87) [backfill-git]
 - 2026-09-24 9ebb187 #86 aien-dev: feat(nvme): create polled I/O queues (#86) [backfill-git]
 - 2026-09-24 38001c0 #83 aien-dev: kernel: crash-consistent block store with exhaustive torn-write tests (part of #31) (#83) [backfill-git]
 - 2026-09-24 b295a87 #82 aien-dev: kernel: polled NVMe controller init and Identify, host-tested (part of #31) (#82) [backfill-git]
-- 2026-09-24 6b4290f #80 aien-dev: boot: enter EL1h with AIENOS page tables and caches on (#66, ADR 0009) (#80) [backfill-git]
+- 2026-09-24 6b4290f #80 aien-dev: boot: enter EL1h with Aienux page tables and caches on (#66, ADR 0009) (#80) [backfill-git]
 - 2026-09-24 2522802 #79 aien-dev: kernel: minimal network protocol core, host-tested (part of #33) (#79) [backfill-git]
 - 2026-09-24 deafa82 #78 aien-dev: kernel: PE section and UEFI Memory Attributes Table parsers (part of #66) (#78) [backfill-git]
 - 2026-09-24 a07d288 #76 aien-dev: kernel(usb): bring up polled xHCI keyboard controller (SEED-0A 2c) (#76) [backfill-git]
@@ -736,7 +736,7 @@ History that crumbs would have recorded, reconstructed from git first-parent his
 - 2026-09-23 b900485 #6 aien-dev: Merge pull request #6 from aien-dev/fix/aienos-aegis-boundaries [backfill-git]
 - 2026-09-23 d1ae435 #5 aien-dev: feat(boot): compile explicit UEFI to early-kernel handoff image (#5) [backfill-git]
 - 2026-09-23 28c939c #3 aien-dev: fix(kernel): use Spark 8250 MMIO UART register layout (#3) [backfill-git]
-- 2026-09-23 bc25e73 #2 aien-dev: Integrate AIENOS blueprint, Config A capture, and host components (#2) [backfill-git]
+- 2026-09-23 bc25e73 #2 aien-dev: Integrate Aienux blueprint, Config A capture, and host components (#2) [backfill-git]
 
 ## crates/aienos-kernel/src
 
@@ -768,7 +768,7 @@ History that crumbs would have recorded, reconstructed from git first-parent his
 - 2026-09-24 4183ef8 #111 aien-dev: feat(kernel): device authority module tying DMA to capabilities (M3 1D) (#111) [backfill-git]
 - 2026-09-24 35b3086 #110 aien-dev: feat(smmu): fail-closed DMA bring-up and PCI bus master sweep (M3 1C) (#110) [backfill-git]
 - 2026-09-24 e943690 #109 aien-dev: feat(abi): unify kernel subsystems and syscall boundary onto ABI v1 types (closes #30) (#109) [backfill-git]
-- 2026-09-24 d4a6844 #107 aien-dev: feat(abi): freeze AIENOS ABI v1 with golden-byte encoding and ADR 0013 (part of #30, M3) (#107) [backfill-git]
+- 2026-09-24 d4a6844 #107 aien-dev: feat(abi): freeze Aienux ABI v1 with golden-byte encoding and ADR 0013 (part of #30, M3) (#107) [backfill-git]
   - lane30 (2026-10-01-push-lane30-report.md): Drafts: /tmp/lane30/drafts/OSC-IDENTITY-0.md and OSC-3-ADR0013-REQUEST.md (ADR 0013 read live at aienos d4a6844: Handle 8 B u32+u32; request ABI v2 16 B with u6 [backfill-lane-report]
 - 2026-09-24 78cec64 #106 aien-dev: feat(ipc): typed channels with attenuated, revocable capability delegation (part of #30, M3) (#106) [backfill-git]
 - 2026-09-24 668202e #105 aien-dev: feat(scheduler): timer-driven preemption and MADT-aware placement (closes #29) (#105) [backfill-git]
@@ -785,13 +785,13 @@ History that crumbs would have recorded, reconstructed from git first-parent his
 - 2026-09-24 68835b8 #93 aien-dev: kernel: World resource budgets and watchdog, host-tested (M3) (#93) [backfill-git]
 - 2026-09-24 d60fc85 #92 aien-dev: kernel: SMMUv3 core for per-device DMA confinement, host-tested (M3) (#92) [backfill-git]
 - 2026-09-24 75f6720 #91 aien-dev: feat(crypto): add HMAC and HKDF-SHA256 primitives (#91) [backfill-git]
-- 2026-09-24 ca7562a #89 aien-dev: boot: early console shell on the AIENOS keyboard (help, el, mem, report, uptime) (#89) [backfill-git]
+- 2026-09-24 ca7562a #89 aien-dev: boot: early console shell on the Aienux keyboard (help, el, mem, report, uptime) (#89) [backfill-git]
 - 2026-09-24 32a47f7 #88 aien-dev: kernel(infer): NEON matvec/matmul, RMSNorm, softmax, SiLU (part of #34) (#88) [backfill-git]
 - 2026-09-24 3f22ea1 #87 aien-dev: feat(kernel): add byte-level BPE tokenizer (#87) [backfill-git]
 - 2026-09-24 9ebb187 #86 aien-dev: feat(nvme): create polled I/O queues (#86) [backfill-git]
 - 2026-09-24 38001c0 #83 aien-dev: kernel: crash-consistent block store with exhaustive torn-write tests (part of #31) (#83) [backfill-git]
 - 2026-09-24 b295a87 #82 aien-dev: kernel: polled NVMe controller init and Identify, host-tested (part of #31) (#82) [backfill-git]
-- 2026-09-24 6b4290f #80 aien-dev: boot: enter EL1h with AIENOS page tables and caches on (#66, ADR 0009) (#80) [backfill-git]
+- 2026-09-24 6b4290f #80 aien-dev: boot: enter EL1h with Aienux page tables and caches on (#66, ADR 0009) (#80) [backfill-git]
 - 2026-09-24 2522802 #79 aien-dev: kernel: minimal network protocol core, host-tested (part of #33) (#79) [backfill-git]
 - 2026-09-24 deafa82 #78 aien-dev: kernel: PE section and UEFI Memory Attributes Table parsers (part of #66) (#78) [backfill-git]
 - 2026-09-24 a07d288 #76 aien-dev: kernel(usb): bring up polled xHCI keyboard controller (SEED-0A 2c) (#76) [backfill-git]
@@ -817,14 +817,14 @@ History that crumbs would have recorded, reconstructed from git first-parent his
 - 2026-09-23 b900485 #6 aien-dev: Merge pull request #6 from aien-dev/fix/aienos-aegis-boundaries [backfill-git]
 - 2026-09-23 d1ae435 #5 aien-dev: feat(boot): compile explicit UEFI to early-kernel handoff image (#5) [backfill-git]
 - 2026-09-23 28c939c #3 aien-dev: fix(kernel): use Spark 8250 MMIO UART register layout (#3) [backfill-git]
-- 2026-09-23 bc25e73 #2 aien-dev: Integrate AIENOS blueprint, Config A capture, and host components (#2) [backfill-git]
+- 2026-09-23 bc25e73 #2 aien-dev: Integrate Aienux blueprint, Config A capture, and host components (#2) [backfill-git]
 
 ## crates/aienos-kernel/src/arch
 
 10 commit(s) touched this tree
 
 - 2026-09-25 a2a0382 #142 aien-dev: M4: continuity objects over Store v1; same identity and memory across cold restarts (CONTINUITY_QEMU) (#142) [backfill-git]
-- 2026-09-24 6b4290f #80 aien-dev: boot: enter EL1h with AIENOS page tables and caches on (#66, ADR 0009) (#80) [backfill-git]
+- 2026-09-24 6b4290f #80 aien-dev: boot: enter EL1h with Aienux page tables and caches on (#66, ADR 0009) (#80) [backfill-git]
 - 2026-09-24 acba849 #75 aien-dev: kernel(usb): add xHCI discovery and keyboard descriptors (SEED-0A 2c) (#75) [backfill-git]
 - 2026-09-23 52109bc #15 aien-dev: First-boot evidence image for Machine 1 and ADR 0008 bring-up exception (#15) [backfill-git]
 - 2026-09-23 44fcba7 #14 aien-dev: Discover CPU topology from the ACPI MADT and record the revised critical path (#14) [backfill-git]
@@ -832,7 +832,7 @@ History that crumbs would have recorded, reconstructed from git first-parent his
 - 2026-09-23 e37bd2b #9 aien-dev: Merge pull request #9 from aien-dev/feat/aienos-boot-timing [backfill-git]
 - 2026-09-23 d1ae435 #5 aien-dev: feat(boot): compile explicit UEFI to early-kernel handoff image (#5) [backfill-git]
 - 2026-09-23 28c939c #3 aien-dev: fix(kernel): use Spark 8250 MMIO UART register layout (#3) [backfill-git]
-- 2026-09-23 bc25e73 #2 aien-dev: Integrate AIENOS blueprint, Config A capture, and host components (#2) [backfill-git]
+- 2026-09-23 bc25e73 #2 aien-dev: Integrate Aienux blueprint, Config A capture, and host components (#2) [backfill-git]
 
 ## crates/aienos-kernel/src/crypto
 
@@ -845,7 +845,7 @@ History that crumbs would have recorded, reconstructed from git first-parent his
 - 2026-09-24 7604b6e #119 aien-dev: Merge pull request #119 from aien-dev/phase2/binary-artifact-v0 [backfill-git]
 - 2026-09-24 75f6720 #91 aien-dev: feat(crypto): add HMAC and HKDF-SHA256 primitives (#91) [backfill-git]
 - 2026-09-23 b900485 #6 aien-dev: Merge pull request #6 from aien-dev/fix/aienos-aegis-boundaries [backfill-git]
-- 2026-09-23 bc25e73 #2 aien-dev: Integrate AIENOS blueprint, Config A capture, and host components (#2) [backfill-git]
+- 2026-09-23 bc25e73 #2 aien-dev: Integrate Aienux blueprint, Config A capture, and host components (#2) [backfill-git]
 
 ## crates/aienos-kernel/src/display
 
@@ -866,12 +866,12 @@ History that crumbs would have recorded, reconstructed from git first-parent his
 7 commit(s) touched this tree
 
 - 2026-09-25 3a6174a #122 aien-dev: P2-5: Binary Artifact loader — exact-byte W^X EL0 execution with full rollback (#122) [backfill-git]
-- 2026-09-24 6b4290f #80 aien-dev: boot: enter EL1h with AIENOS page tables and caches on (#66, ADR 0009) (#80) [backfill-git]
+- 2026-09-24 6b4290f #80 aien-dev: boot: enter EL1h with Aienux page tables and caches on (#66, ADR 0009) (#80) [backfill-git]
 - 2026-09-24 deafa82 #78 aien-dev: kernel: PE section and UEFI Memory Attributes Table parsers (part of #66) (#78) [backfill-git]
 - 2026-09-24 6af6e01 #69 aien-dev: kernel(mem): EL1 identity map plan and MAIR/TCR/SCTLR values (part of #66) (#69) [backfill-git]
 - 2026-09-24 1d723bf #63 aien-dev: kernel(mem): AArch64 stage-1 page-table builder (host-tested) (#63) [backfill-git]
 - 2026-09-23 7b1f0c4 #8 aien-dev: Merge pull request #8 from aien-dev/fix/aienos-frame-allocator-bounds [backfill-git]
-- 2026-09-23 bc25e73 #2 aien-dev: Integrate AIENOS blueprint, Config A capture, and host components (#2) [backfill-git]
+- 2026-09-23 bc25e73 #2 aien-dev: Integrate Aienux blueprint, Config A capture, and host components (#2) [backfill-git]
 
 ## crates/aienos-kernel/src/nvme
 
@@ -898,7 +898,7 @@ History that crumbs would have recorded, reconstructed from git first-parent his
 
 1 commit(s) touched this tree
 
-- 2026-09-23 bc25e73 #2 aien-dev: Integrate AIENOS blueprint, Config A capture, and host components (#2) [backfill-git]
+- 2026-09-23 bc25e73 #2 aien-dev: Integrate Aienux blueprint, Config A capture, and host components (#2) [backfill-git]
 
 ## crates/aienos-kernel/src/usb
 
@@ -992,7 +992,7 @@ History that crumbs would have recorded, reconstructed from git first-parent his
 - 2026-09-30 30d98b9 #177 aien-dev: Merge pull request #177 from aien-dev/m20/trust1-gate4-secureboot [backfill-git]
 - 2026-09-30 6093f5c #176 aien-dev: Merge pull request #176 from aien-dev/m20/trust1-gate0-gate2 [backfill-git]
 - 2026-09-29 f0facc7 #174 dhgmonkey: Close key and plaintext cleanup gaps with in-house crypto (#174) [backfill-git]
-- 2026-09-29 7ff5d7c #152 aien-dev: Merge pull request #152: establish AIENOS plan authority and retire competing execution orders [backfill-git]
+- 2026-09-29 7ff5d7c #152 aien-dev: Merge pull request #152: establish Aienux plan authority and retire competing execution orders [backfill-git]
 - 2026-09-25 e3d3a10 #149 aien-dev: docs(adr): adopt ADR 0017 (M5 architecture) and amend ADR 0016 migration boundary (#149) [backfill-git]
 - 2026-09-25 b52f307 #148 aien-dev: docs(m5): codify Round 2 verdicts and Round 3 frontier (#148) [backfill-git]
 - 2026-09-25 059a859 #147 aien-dev: docs(m5): record settled Round 1 decisions (C\x27, B\x27, AES-256-GCM-SIV, C\x27) (#147) [backfill-git]
@@ -1014,7 +1014,7 @@ History that crumbs would have recorded, reconstructed from git first-parent his
 - 2026-09-24 952e53e #120 aien-dev: Merge pull request #120 from aien-dev/phase2/binary-artifact-v0 [backfill-git]
 - 2026-09-24 a6363cb #118 aien-dev: Merge pull request #118 from aien-dev/phase2/binary-artifact-v0 [backfill-git]
 - 2026-09-24 0418941 #117 aien-dev: Merge pull request #117 from aien-dev/fix/recovery-evidence-closure [backfill-git]
-- 2026-09-24 d4a6844 #107 aien-dev: feat(abi): freeze AIENOS ABI v1 with golden-byte encoding and ADR 0013 (part of #30, M3) (#107) [backfill-git]
+- 2026-09-24 d4a6844 #107 aien-dev: feat(abi): freeze Aienux ABI v1 with golden-byte encoding and ADR 0013 (part of #30, M3) (#107) [backfill-git]
   - lane30 (2026-10-01-push-lane30-report.md): Drafts: /tmp/lane30/drafts/OSC-IDENTITY-0.md and OSC-3-ADR0013-REQUEST.md (ADR 0013 read live at aienos d4a6844: Handle 8 B u32+u32; request ABI v2 16 B with u6 [backfill-lane-report]
 - 2026-09-24 4a8e428 #84 aien-dev: docs(adr): amend ADR 0012 with voice-first interaction and survival kit (#84) [backfill-git]
 - 2026-09-24 fdff1db #55 Copilot: Recovery media: package /boot/efi and root repair tools in the initrd (issue #17) (#55) [backfill-git]
@@ -1034,9 +1034,9 @@ History that crumbs would have recorded, reconstructed from git first-parent his
 - 2026-09-23 44fcba7 #14 aien-dev: Discover CPU topology from the ACPI MADT and record the revised critical path (#14) [backfill-git]
 - 2026-09-23 a22b1d8 #13 aien-dev: Make the native boot report visible without serial and self-returning (#13) [backfill-git]
 - 2026-09-23 180020a #11 aien-dev: Merge pull request #11 from aien-dev/feat/native-gb10-discovery [backfill-git]
-- 2026-09-23 bc25e73 #2 aien-dev: Integrate AIENOS blueprint, Config A capture, and host components (#2) [backfill-git]
+- 2026-09-23 bc25e73 #2 aien-dev: Integrate Aienux blueprint, Config A capture, and host components (#2) [backfill-git]
 - 2026-09-23 b6ef95f #1 aien-dev: docs(adr): native boot stays next milestone; minimal Linux is Benchmark Config B only (#1) [backfill-git]
-- 2026-09-23 6fca19b AIEN Atlas: docs: AIENOS README (experimental / pre-alpha), NOTICE, governing architecture [backfill-git]
+- 2026-09-23 6fca19b AIEN Atlas: docs: Aienux README (experimental / pre-alpha), NOTICE, governing architecture [backfill-git]
 
 ## docs/adr
 
@@ -1052,7 +1052,7 @@ History that crumbs would have recorded, reconstructed from git first-parent his
 - 2026-09-24 1a62ca3 #121 aien-dev: Merge pull request #121 from aien-dev/phase2/binary-artifact-v0 [backfill-git]
 - 2026-09-24 952e53e #120 aien-dev: Merge pull request #120 from aien-dev/phase2/binary-artifact-v0 [backfill-git]
 - 2026-09-24 a6363cb #118 aien-dev: Merge pull request #118 from aien-dev/phase2/binary-artifact-v0 [backfill-git]
-- 2026-09-24 d4a6844 #107 aien-dev: feat(abi): freeze AIENOS ABI v1 with golden-byte encoding and ADR 0013 (part of #30, M3) (#107) [backfill-git]
+- 2026-09-24 d4a6844 #107 aien-dev: feat(abi): freeze Aienux ABI v1 with golden-byte encoding and ADR 0013 (part of #30, M3) (#107) [backfill-git]
   - lane30 (2026-10-01-push-lane30-report.md): Drafts: /tmp/lane30/drafts/OSC-IDENTITY-0.md and OSC-3-ADR0013-REQUEST.md (ADR 0013 read live at aienos d4a6844: Handle 8 B u32+u32; request ABI v2 16 B with u6 [backfill-lane-report]
 - 2026-09-24 4a8e428 #84 aien-dev: docs(adr): amend ADR 0012 with voice-first interaction and survival kit (#84) [backfill-git]
 - 2026-09-24 60faa8f #57 Copilot: docs(rig): Machine 1 hardware test rig design and ADR 0011 (power, HDMI capture, HID input) (#57) [backfill-git]
@@ -1060,7 +1060,7 @@ History that crumbs would have recorded, reconstructed from git first-parent his
 - 2026-09-24 017a9a8 #62 aien-dev: docs(adr): ADR 0012 self-construction, capability growth, generations (#62) [backfill-git]
 - 2026-09-23 a1babb4 #52 aien-dev: docs(adr): formalize two-stage EL2 bootstrap to EL1h kernel transition (#52) [backfill-git]
 - 2026-09-23 52109bc #15 aien-dev: First-boot evidence image for Machine 1 and ADR 0008 bring-up exception (#15) [backfill-git]
-- 2026-09-23 bc25e73 #2 aien-dev: Integrate AIENOS blueprint, Config A capture, and host components (#2) [backfill-git]
+- 2026-09-23 bc25e73 #2 aien-dev: Integrate Aienux blueprint, Config A capture, and host components (#2) [backfill-git]
 - 2026-09-23 b6ef95f #1 aien-dev: docs(adr): native boot stays next milestone; minimal Linux is Benchmark Config B only (#1) [backfill-git]
 
 ## native
@@ -1718,9 +1718,9 @@ History that crumbs would have recorded, reconstructed from git first-parent his
 - 2026-09-24 5332bf4 #99 aien-dev: scripts: verify_recovery_tools uses a private temp initrd; fail on a missing image (#99) [backfill-git]
 - 2026-09-24 3e873b4 #95 aien-dev: kernel: EL1 timer interrupts through GICv3; QEMU on GICv3 (part of #28) (#95) [backfill-git]
 - 2026-09-24 7a5913a #94 aien-dev: kernel: cooperative EL1 threads with a global-asm context switch (part of #29) (#94) [backfill-git]
-- 2026-09-24 ca7562a #89 aien-dev: boot: early console shell on the AIENOS keyboard (help, el, mem, report, uptime) (#89) [backfill-git]
+- 2026-09-24 ca7562a #89 aien-dev: boot: early console shell on the Aienux keyboard (help, el, mem, report, uptime) (#89) [backfill-git]
 - 2026-09-24 f410415 #81 aien-dev: test(qemu): single-threaded TCG to stop intermittent firmware hangs (fixes #61) (#81) [backfill-git]
-- 2026-09-24 6b4290f #80 aien-dev: boot: enter EL1h with AIENOS page tables and caches on (#66, ADR 0009) (#80) [backfill-git]
+- 2026-09-24 6b4290f #80 aien-dev: boot: enter EL1h with Aienux page tables and caches on (#66, ADR 0009) (#80) [backfill-git]
 - 2026-09-24 d6d45df #77 aien-dev: boot(usb): wire and prove QEMU keyboard input (SEED-0A 2d) (#77) [backfill-git]
 - 2026-09-24 fdff1db #55 Copilot: Recovery media: package /boot/efi and root repair tools in the initrd (issue #17) (#55) [backfill-git]
 - 2026-09-24 0379b2f #53 aien-dev: fix(recovery): package drivers, shell on screen, unattended self-test (#53) [backfill-git]
@@ -1740,4 +1740,4 @@ History that crumbs would have recorded, reconstructed from git first-parent his
 - 2026-09-23 180020a #11 aien-dev: Merge pull request #11 from aien-dev/feat/native-gb10-discovery [backfill-git]
 - 2026-09-23 d1ae435 #5 aien-dev: feat(boot): compile explicit UEFI to early-kernel handoff image (#5) [backfill-git]
 - 2026-09-23 f9e55d3 #4 aien-dev: feat(boot): build AArch64 UEFI firmware-entry diagnostic (#4) [backfill-git]
-- 2026-09-23 bc25e73 #2 aien-dev: Integrate AIENOS blueprint, Config A capture, and host components (#2) [backfill-git]
+- 2026-09-23 bc25e73 #2 aien-dev: Integrate Aienux blueprint, Config A capture, and host components (#2) [backfill-git]

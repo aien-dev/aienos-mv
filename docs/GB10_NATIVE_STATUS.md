@@ -12,7 +12,7 @@ NVIDIA `10de:2e12` with a programmed 64-bit memory BAR and PCI memory
 decoding enabled. Through the UEFI PCI root bridge protocol, it reads the
 read-only PMC `BOOT_0` and `BOOT_42` registers from BAR0. It carries the
 location, BAR address, and register values across `ExitBootServices` into the
-AIENOS kernel's serial boot report. No Linux service is involved in that image.
+Aienux kernel's serial boot report. No Linux service is involved in that image.
 
 When the GB10 is not found, the pre-exit report and the final
 firmware-variable report record why: how many root bridges carry the protocol
@@ -28,12 +28,12 @@ on hardware**. These register reads still use firmware services before
 handoff. They establish a device identity path; they do not initialize the
 GPU or execute a GPU command.
 
-To reach independent GPU execution, AIENOS still needs a native MMU mapping for
+To reach independent GPU execution, Aienux still needs a native MMU mapping for
 GPU MMIO, GPU resource and interrupt management, GB10/GSP firmware loading and
 RPC, GPU memory allocation and synchronization, a command submission path, a
 GPU code toolchain, and an inference runtime. Each stage needs hardware
 evidence before the next can be claimed. The UEFI boot path is only a loader;
-the intended runtime owner is the AIENOS kernel on Arm with GB10 as the primary
+the intended runtime owner is the Aienux kernel on Arm with GB10 as the primary
 compute device.
 
 The image has not been installed, selected as the host boot target, or allowed
@@ -48,7 +48,7 @@ source map for KV ownership, write rules, GPU visibility, queue bounds,
 cancellation, reuse and restart recovery lives with the code that owns the
 pool, in sovereign-core
 [`crates/aien-kv-cache/OWNERSHIP.md`](https://github.com/aien-spark/aien-sovereign-core/blob/a78ee68ab9a1285a7d4e8a983a7738ff2e1b7d4a/crates/aien-kv-cache/OWNERSHIP.md)
-(aien-spark/aien-sovereign-core#588). What it says about AIENOS, at aienos
+(aien-spark/aien-sovereign-core#588). What it says about Aienux, at aienos
 `b7ebf7c`:
 
 - Native GB10 GPU: no KV code exists. Nothing above allocates GPU memory,

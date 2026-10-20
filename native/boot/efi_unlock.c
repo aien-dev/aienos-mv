@@ -1,4 +1,4 @@
-/* efi_unlock.c -- read \EFI\AIENOS\UNLOCK.REQ from the boot volume before
+/* efi_unlock.c -- read \EFI\Aienux\UNLOCK.REQ from the boot volume before
  * ExitBootServices (Raspberry Pi 5 qualification image, CK_PI5_UNLOCK_CARD).
  * Nothing is written. The file holds a THROWAWAY recovery secret placed by the
  * run tool (see native/kernel/core/unlock_req.h); the secret is never printed.

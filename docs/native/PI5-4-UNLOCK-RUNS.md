@@ -3,11 +3,11 @@
 Tier: PI5-UNLOCK-QUALIFICATION. Image: `make pi5-unlock-card` at commit 55f6cc0130d2932263ef0baece5a89c88a99c739
 (BOOTAA64.EFI sha256 8936579f86eb367fb14fef725bc363e647d2ee46b914a7b57397fa3741f3e10a). The recovery secret is a
 THROWAWAY (32 random bytes from /dev/urandom, never committed, never printed); the request file
-\EFI\AIENOS\UNLOCK.REQ was placed on the card by `pi5-run.sh UNLOCK_REQ=...` and zeroed, deleted and checked
+\EFI\Aienux\UNLOCK.REQ was placed on the card by `pi5-run.sh UNLOCK_REQ=...` and zeroed, deleted and checked
 absent after each run (`unlock_req_deleted_verified`). Not a production Store: no TPM (Slot 0), the secret came
 from the card. Logs: `~/workspace/pi5-runs/<tag>/kernel.log` on the Spark (not committed).
 
-Before run A the AIENOS partition (/dev/mmcblk0p2 on the hub, 8388608 sectors, not mounted) held a TEST-tier Store.
+Before run A the Aienux partition (/dev/mmcblk0p2 on the hub, 8388608 sectors, not mounted) held a TEST-tier Store.
 Its first 48 sectors were zeroed and read back as zeros (`head_zeroed_readback_ok`), so the new Store is
 production-class from its first byte and never reuses TEST content.
 
@@ -47,7 +47,7 @@ SecurityManifest sequence advances to 2 and links the first.
 
 ## How "nothing written" was checked (cut 4)
 
-After each refused run, the hub (Linux, partition not mounted) read the Store view of the AIENOS partition (sectors
+After each refused run, the hub (Linux, partition not mounted) read the Store view of the Aienux partition (sectors
 0 to 8388543, so the 64-sector run marker at the end is excluded because it changes every run) and took its SHA-256.
 
 - H0, taken after Run B and before Run C: 7954edfc924ac4c20d3599757149b81b9497a110757f6ea83ef30bc4b94a9943

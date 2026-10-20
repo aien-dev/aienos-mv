@@ -1,4 +1,4 @@
-/* slot_service.c -- kernel-side promotion and abandon of AIENOS image slots
+/* slot_service.c -- kernel-side promotion and abandon of Aienux image slots
  * (P11 cut 2b). Contract in slot_service.h. Freestanding. */
 #include "ck.h"
 #include "handoff.h"

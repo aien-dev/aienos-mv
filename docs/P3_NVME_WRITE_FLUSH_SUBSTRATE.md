@@ -95,8 +95,8 @@ runtime environment and `AIENOS_RESTART_SECS` is a **compile-time** env var
 | 2 | `verify` | Discover, identify, `read_blocks(4096)`; report guest hash and durability | Cross-check guest hash == `new_sha`; require it to match the host hash |
 
 Each boot copies a fresh `vars.fd` from `AAVMF_VARS`, exactly as
-`qemu_nvme_test.sh:157`. A boot with no AIENOS output is retried (firmware hang,
-issue #61, `qemu_nvme_test.sh:25-26,185-189`); a failure after AIENOS output
+`qemu_nvme_test.sh:157`. A boot with no Aienux output is retried (firmware hang,
+issue #61, `qemu_nvme_test.sh:25-26,185-189`); a failure after Aienux output
 fails immediately. Retrying boot 1 is safe because the mode is explicit
 (`write` rewrites NEW idempotently); it does not depend on image state.
 

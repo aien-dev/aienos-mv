@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Boot the AIENOS C kernel core image in QEMU AArch64 (UEFI/AAVMF, EL2 like
+# Boot the Aienux C kernel core image in QEMU AArch64 (UEFI/AAVMF, EL2 like
 # Machine 1, -smp 4) and check the secondary-core bring-up of core/smp.c:
 # PSCI CPU_ON for every MADT core except the boot core, each core on its own
 # stack with the MMU on the boot core's tables, checked in (its own MPIDR

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# MEMORY gate for the AIENOS C kernel (native v1 gate N3, aienos#329): rows
+# MEMORY gate for the Aienux C kernel (native v1 gate N3, aienos#329): rows
 # 211-220 of native/kernel/GATES.md "MEMORY memory-conditioned generation".
 # C-only. QEMU is not hardware: a PASS here qualifies nothing physical.
 #

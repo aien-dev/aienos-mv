@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # native_boot_preflight.sh -- READ-ONLY preflight before an attended one-time
-# native AIENOS boot on the Spark (docs/native/PREFLIGHT-AND-RECOVERY.md
+# native Aienux boot on the Spark (docs/native/PREFLIGHT-AND-RECOVERY.md
 # section 2). It only reads: `efibootmgr` with no arguments, the SecureBoot
 # EFI variable file, findmnt, git status, the image file and the quiet flag.
 # It never writes a variable, never stages, never reboots, needs no sudo.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# native_package.sh -- reproducible AIENOS native package with exact manifests
+# native_package.sh -- reproducible Aienux native package with exact manifests
 # and owner-signed verification (AIEN native v1 plan, P11 cut 1b, gate N7).
 #
 # A package is a directory:

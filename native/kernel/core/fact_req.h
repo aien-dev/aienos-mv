@@ -2,7 +2,7 @@
  * (PI5-5, build flag CK_PI5_FACT, only with CK_PI5_UNLOCK_CARD).
  *
  * QUALIFICATION ONLY. Nothing reads the Pi's serial port during a run, so the run tool may place
- * \EFI\AIENOS\FACT.REQ on the card's EFI partition holding ONE short fact. The UEFI stub
+ * \EFI\Aienux\FACT.REQ on the card's EFI partition holding ONE short fact. The UEFI stub
  * (native/boot/efi_fact.c) reads it before ExitBootServices; after the Store is open the fact stage
  * (svc/pi5_fact.c) appends it to the Cortex journal of the sealed Store, the same record
  * `remember <text>` writes in the service lifecycle. The run tool deletes the file after the run.

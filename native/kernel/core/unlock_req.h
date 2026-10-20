@@ -3,7 +3,7 @@
  *
  * QUALIFICATION ONLY. The Pi has no TPM and nothing reads its serial port
  * during a run, so the run tool (pi5-run.sh UNLOCK_REQ=<file>) may place
- * \EFI\AIENOS\UNLOCK.REQ on the card's EFI partition holding a THROWAWAY
+ * \EFI\Aienux\UNLOCK.REQ on the card's EFI partition holding a THROWAWAY
  * 32-byte recovery secret. The UEFI stub (native/boot/efi_unlock.c) reads it
  * before ExitBootServices, the Store stage takes the secret exactly once and
  * runs the same Slot 1 path an operator's `unlock <64-hex>` would. The file

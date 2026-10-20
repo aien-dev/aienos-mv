@@ -1,4 +1,4 @@
-/* AIENOS M6-A control-transport stub. See aienos_ctl.h. No heap, clock or I/O. */
+/* Aienux M6-A control-transport stub. See aienos_ctl.h. No heap, clock or I/O. */
 #include "aienos_ctl.h"
 
 #include <string.h>

@@ -1,4 +1,4 @@
-/* efi_main.c -- minimal AIENOS UEFI entry stub for the C kernel core.
+/* efi_main.c -- minimal Aienux UEFI entry stub for the C kernel core.
  *
  * Loads nothing and checks nothing: the image already contains the kernel.
  * It prints the pre-exit report on ConOut, captures the firmware facts the

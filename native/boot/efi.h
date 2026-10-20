@@ -1,4 +1,4 @@
-/* efi.h -- the slice of UEFI the AIENOS C boot stub uses: system table,
+/* efi.h -- the slice of UEFI the Aienux C boot stub uses: system table,
  * boot services it calls (GetMemoryMap, ExitBootServices, SetWatchdogTimer,
  * AllocatePages, FreePages, FreePool, HandleProtocol, LocateHandleBuffer),
  * the Loaded Image, Simple File System and Block I/O protocols (model ingest,

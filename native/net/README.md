@@ -1,4 +1,4 @@
-# native/net: AIENOS M6-A hosted network stack (C)
+# native/net: Aienux M6-A hosted network stack (C)
 
 C port of the Rust reference `crates/aienos-kernel/src/net.rs` and
 `virtio_net.rs` (read as the spec, not extended), plus a framed
@@ -28,7 +28,7 @@ control-transport stub. No Rust, no Python, no heap, no outside library.
 - `tests/net_diff.c` + `make diff-check`: a 200,000-record structure-aware
   hostile corpus. Its canonical output was compared byte for byte with the
   unmodified Rust reference run by a scratch driver kept outside this repo
-  (no Rust in AIENOS code); the agreed digest is pinned in the Makefile.
+  (no Rust in Aienux code); the agreed digest is pinned in the Makefile.
 - `make receipt`: clean-tree-only, content-addressed receipt in `receipts/`.
 
 ## Deliberate differences from the reference
@@ -55,7 +55,7 @@ control-transport stub. No Rust, no Python, no heap, no outside library.
 ## M6-B: secure control transport (hosted)
 
 `aienos_sec` puts a mutually authenticated, encrypted session between two
-AIENOS machines. Each datagram is one UDP payload of the M6-A stack. Make
+Aienux machines. Each datagram is one UDP payload of the M6-A stack. Make
 targets: `make secure` runs everything below and prints
 `AIENOS_NET_SECURE: PASS/FAIL`; `make mutants` runs the mutant pass alone.
 

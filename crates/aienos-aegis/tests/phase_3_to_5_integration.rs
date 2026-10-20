@@ -1,4 +1,4 @@
-//! AIENOS Phases 3–5 Full Architecture Integration Verification Suite.
+//! Aienux Phases 3–5 Full Architecture Integration Verification Suite.
 //!
 //! Validates:
 //! 1. AgentStateAbi reboot survival and state reconstruction (§9).

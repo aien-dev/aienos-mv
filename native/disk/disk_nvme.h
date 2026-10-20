@@ -1,5 +1,5 @@
 /*
- * disk_nvme.h -- AIENOS freestanding NVMe driver (C, no libc, no heap).
+ * disk_nvme.h -- Aienux freestanding NVMe driver (C, no libc, no heap).
  *
  * Ported from the audited Rust path (crates/aienos-kernel/src/nvme.rs,
  * nvme/driver.rs, nvme/atomicity.rs; docs/P3_NVME_*.md). Polled, one admin

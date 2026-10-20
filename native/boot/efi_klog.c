@@ -1,4 +1,4 @@
-/* efi_klog.c -- read \EFI\AIENOS\KLOG.MAP from the boot volume before
+/* efi_klog.c -- read \EFI\Aienux\KLOG.MAP from the boot volume before
  * ExitBootServices and find the card that carries the matching log slot,
  * through the firmware's own Block I/O (Raspberry Pi 5 build, CK_KLOG).
  * The kernel later writes its console log into that slot with its own SD

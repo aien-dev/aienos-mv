@@ -11,6 +11,6 @@ Rules:
 - `scripts/omega_lock_check.sh` (CI, workflow ck-kernel.yml) fails when a
   file differs from its recorded sha256, and when it can reach the omega
   commit, when the recorded sha256 differs from that commit's file.
-- AIENOS builds them through `svc/cortex_store.c` (`CX_NO_POSIX`,
+- Aienux builds them through `svc/cortex_store.c` (`CX_NO_POSIX`,
   `CX_CONFIG_H` = `svc/cortex_config.h`) and backs the journal with
   `svc/cortex_journal.c` over the sealed Store. Native v1 plan P06.

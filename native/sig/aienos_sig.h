@@ -1,4 +1,4 @@
-/* AIENOS in-house signatures in C: Ed25519 (RFC 8032 Section 5.1, pure
+/* Aienux in-house signatures in C: Ed25519 (RFC 8032 Section 5.1, pure
  * Ed25519 only: no Ed25519ph, no Ed25519ctx) and SHA-512 (FIPS 180-4).
  *
  * No heap, no clock, no I/O. Signing and public-key derivation are written

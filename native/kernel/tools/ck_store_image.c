@@ -1,12 +1,12 @@
 /* ck_store_image -- host tool: put signed P2 artifacts into the sealed C Store
- * inside the AIENOS GPT partition of a boot disk image (made by
+ * inside the Aienux GPT partition of a boot disk image (made by
  * tools/ck_gpt_image.c), at image build time, so the C kernel's loader
  * reads them from NVMe (svc/artifact_store.h). It reuses the kernel's own
  * Store code (store_boot.c formats and commits the boot record exactly as a
  * first boot would; artifact_store.c writes and reads the artifact objects),
  * so there is no second disk format. TEST identity and TEST keys only.
  *
- *   ck_store_image build IMG BLOCK_SIZE ENTRY...   IMG must hold a GPT whose AIENOS partition is blank
+ *   ck_store_image build IMG BLOCK_SIZE ENTRY...   IMG must hold a GPT whose Aienux partition is blank
  *        ENTRY = path to a file (Store name = its basename, 1..32 bytes)
  *              | missing:NAME:LEN (index entry, no chunks: hostile case)
  *   ck_store_image list IMG BLOCK_SIZE             read back with the kernel reader
@@ -68,8 +68,8 @@ static int img_open(image *im, const char *path, const char *bs_s)
         fprintf(stderr, "cannot open %s\n", path);
         return -1;
     }
-    /* Same rule as the kernel: the Store lives only inside the AIENOS GPT
-     * partition; no valid GPT or no AIENOS partition is refused. Images come
+    /* Same rule as the kernel: the Store lives only inside the Aienux GPT
+     * partition; no valid GPT or no Aienux partition is refused. Images come
      * from tools/ck_gpt_image.c. */
     ck_gpt_info gi;
     int grc = ck_gpt_find_aienos(&im->raw, &im->part, &gi);

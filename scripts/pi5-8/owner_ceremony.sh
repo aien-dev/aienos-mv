@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# owner_ceremony.sh -- PI5-8 Q2: the AIENOS owner-key ceremony on Drake's YubiKey (PIV, Ed25519, slot 9c).
+# owner_ceremony.sh -- PI5-8 Q2: the Aienux owner-key ceremony on Drake's YubiKey (PIV, Ed25519, slot 9c).
 #
 #   owner_ceremony.sh --dry-run [--out DIR]        rehearsal with a SOFTWARE key (openssl). Labelled TEST. Never touches a YubiKey.
 #   owner_ceremony.sh --real [--out DIR]           the ceremony. Writes to the YubiKey. Run it only when the Spark is offline.

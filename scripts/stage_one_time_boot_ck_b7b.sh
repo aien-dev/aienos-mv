@@ -44,7 +44,7 @@
 #      the platform xHCI discovery and the recovery hook, and no TEST marker;
 #   2. sudo scripts/verify_native_rollback.sh --capture-pre (before BootNext,
 #      which the capture requires absent);
-#   3. copies the image to \EFI\AIENOS on the ESP (the only scratch
+#   3. copies the image to \EFI\Aienux on the ESP (the only scratch
 #      directory, docs/NATIVE_BOOT_ONE_TIME.md invariant 4) with a
 #      STAGED-CK-B7B.TXT record;
 #   4. creates a boot entry WITHOUT adding it to BootOrder (BootOrder is
@@ -204,7 +204,7 @@ fi
 run mkdir -p "${evidence_dir}"
 run sudo scripts/verify_native_rollback.sh --capture-pre "${evidence_dir}/pre_boot_capture.json"
 
-# ---- 3. ESP scratch directory \EFI\AIENOS ----
+# ---- 3. ESP scratch directory \EFI\Aienux ----
 record="${evidence_dir}/STAGED-CK-B7B.TXT"
 if [[ "${mode}" == apply ]]; then
     cat >"${record}" <<EOF

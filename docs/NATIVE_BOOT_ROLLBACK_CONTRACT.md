@@ -1,8 +1,8 @@
-# AIENOS Native-Boot Rollback Contract
+# Aienux Native-Boot Rollback Contract
 
 ## 1. Scope & Purpose
 
-This contract specifies the deterministic lifecycle, state machine, and safety invariants for one-time native boots of AIENOS candidates on UEFI platforms (including physical NVIDIA DGX Spark / Machine 1 and QEMU AArch64 reference emulators).
+This contract specifies the deterministic lifecycle, state machine, and safety invariants for one-time native boots of Aienux candidates on UEFI platforms (including physical NVIDIA DGX Spark / Machine 1 and QEMU AArch64 reference emulators).
 
 ---
 

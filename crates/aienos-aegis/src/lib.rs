@@ -1,4 +1,4 @@
-//! AIENOS AEGIS: Capability Graph, Effect Intent Pipeline, and J-Space Worlds (§13, §5, §12).
+//! Aienux AEGIS: Capability Graph, Effect Intent Pipeline, and J-Space Worlds (§13, §5, §12).
 //!
 //! Enforces unforgeable capability tokens, copy-on-write transactional worlds,
 //! and strict boundary policies: intelligence proposes; deterministic authority disposes.

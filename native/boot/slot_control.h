@@ -1,4 +1,4 @@
-/* slot_control.h -- commit one AIENOS slot control record (slot_format.h)
+/* slot_control.h -- commit one Aienux slot control record (slot_format.h)
  * through the torn-slot protocol (native/store/torn_slot.c) and prove it
  * landed: ts_commit (body, flush, commit header, flush), then ts_recover and
  * a byte compare of what came back. The one control-commit routine shared by

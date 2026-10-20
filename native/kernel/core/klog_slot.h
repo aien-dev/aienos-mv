@@ -3,7 +3,7 @@
  *
  * The host side (the run tool) creates a contiguous file on the card's FAT
  * volume, writes a slot header into its first sector with a fresh random
- * nonce, and writes \EFI\AIENOS\KLOG.MAP naming the file's first absolute
+ * nonce, and writes \EFI\Aienux\KLOG.MAP naming the file's first absolute
  * sector on the whole card, its length and the same nonce. The UEFI stub
  * reads the map before ExitBootServices (native/boot/efi_klog.c). The
  * kernel writes only after it has read the slot's first sector through its

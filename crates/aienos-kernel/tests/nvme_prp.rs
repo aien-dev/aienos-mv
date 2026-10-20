@@ -1,4 +1,4 @@
-//! D3 adversarial PRP tests for the AIENOS P3 native NVMe read substrate.
+//! D3 adversarial PRP tests for the Aienux P3 native NVMe read substrate.
 //!
 //! External integration test crate. Baseline: aien-spark/aienos @ ff5de9c.
 //! Exercises `aienos_kernel::nvme::build_prps` against the documented PRP

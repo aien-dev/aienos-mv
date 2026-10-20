@@ -52,7 +52,7 @@ time, any `BootNext` write, any change to the stub's frozen PE layout.
 What it does **not** solve on its own (stated so nobody reads more into it):
 if both slots are invalid, or both are below the security floor, the loader
 can only report `recovery_required` and return to the firmware. Covering that
-case without a Linux USB is the known-good AIENOS recovery image of P11
+case without a Linux USB is the known-good Aienux recovery image of P11
 (a third, read-only copy of the loader plus a slot image on recovery media
 built by our own tools), which is a later cut. Dual-invalid cannot happen by
 update alone under the rules below (the active slot is never written while
@@ -109,7 +109,7 @@ N7 needs another path, which this note does not have.
 ## 4. On-disk format (native/boot/slot_format.h is normative)
 
 Partition: its own GPT partition, type GUID
-`8B1096CD-7928-4E08-B5E4-C19B6B532760` (new; the existing AIENOS store
+`8B1096CD-7928-4E08-B5E4-C19B6B532760` (new; the existing Aienux store
 partition `38DAAC89-...` is not touched and keeps its one-partition rule).
 Layout in 4096-byte units, U = partition size in units:
 
@@ -331,7 +331,7 @@ Abandon is not gated on health: the loader already decided.
 loader and `ck_slot_tool`): body, flush, commit header, flush, then read back
 and compare. It goes over the kernel's own NVMe path, through a second
 bounded partition view of the slots partition (`ck_dev_slots_disk`, found
-with the same strict GPT validation as the AIENOS partition, primary and
+with the same strict GPT validation as the Aienux partition, primary and
 backup), never a whole-disk handle. A failed commit leaves the previous record
 authoritative and is reported.
 

@@ -265,7 +265,7 @@ int ck_nvme_bind(ck_nvme *n, const pci_found *found, uint32_t nfound, const pci_
     ck_printf("nvme: read lba=0 blocks=1 %s (rc=%d)\n", rc ? "FAIL" : "ok", rc);
     if (rc) return rc;
     /* Partition-aware footprint (dev/disk_part.h, audit R2): the GPT is
-     * parsed read-only; without exactly one valid AIENOS partition nothing is
+     * parsed read-only; without exactly one valid Aienux partition nothing is
      * ever written to this disk and there is no whole-disk fallback. */
     ck_gpt_info gi;
     rc = ck_gpt_find_aienos(&n->disk, &n->part, &gi);

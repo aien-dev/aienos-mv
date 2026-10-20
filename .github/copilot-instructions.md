@@ -1,6 +1,6 @@
-# Instructions for coding agents working on AIENOS
+# Instructions for coding agents working on Aienux
 
-Read `docs/PLAN_AUTHORITY.md`, `ROADMAP.md`, `CONTRIBUTING.md`, `CONTEXT.md` (domain language), and the relevant accepted ADRs before starting. `ROADMAP.md` owns the current AIENOS gate order. Historical/reference planning documents do not override it. Whole-system sequencing is owned by `aien-spark/aien-architecture/CURRENT_EXECUTION_PLAN.md`. This file adds what agents most often get wrong here.
+Read `docs/PLAN_AUTHORITY.md`, `ROADMAP.md`, `CONTRIBUTING.md`, `CONTEXT.md` (domain language), and the relevant accepted ADRs before starting. `ROADMAP.md` owns the current Aienux gate order. Historical/reference planning documents do not override it. Whole-system sequencing is owned by `aien-spark/aien-architecture/CURRENT_EXECUTION_PLAN.md`. This file adds what agents most often get wrong here.
 
 ## Finish line for every pull request
 
@@ -20,7 +20,7 @@ Read `docs/PLAN_AUTHORITY.md`, `ROADMAP.md`, `CONTRIBUTING.md`, `CONTEXT.md` (do
 - Rust only (small AArch64 assembly where hardware demands it). No Python, no
   shell scripts that fetch from the network, no CUDA or CUDA-shaped APIs.
 - No systemd anywhere: no units, no systemd-creds, no journald, no emulation
-  of them. AIENOS has its own init and supervision.
+  of them. Aienux has its own init and supervision.
 - No new crates in the kernel, boot or trusted-base crates unless the issue
   asks for one. Elsewhere, justify each new dependency in the PR.
 - The kernel must work with no AI model loaded. Models never run in the

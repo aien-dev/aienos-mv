@@ -37,12 +37,12 @@ pub struct RegisterSpec {
     /// Where the offset is recorded. A repository or public source, never a
     /// guess from the register name.
     pub evidence: &'static str,
-    /// A value observed by any AIENOS path, if one exists.
+    /// A value observed by any Aienux path, if one exists.
     pub observed_value: Option<u32>,
     /// The path that observed `observed_value`, if any.
     pub observed_by: Option<&'static str>,
     pub safe_to_read: RegisterSafety,
-    /// Native AIENOS has decoded this register on hardware.
+    /// Native Aienux has decoded this register on hardware.
     pub native_observed: bool,
     /// The register's meaning is established.
     pub semantics_known: bool,

@@ -1,4 +1,4 @@
-/* usb_kbd.h -- operator keyboard for the AIENOS C kernel: a polled xHCI
+/* usb_kbd.h -- operator keyboard for the Aienux C kernel: a polled xHCI
  * driver for one USB HID boot keyboard, the operator line input, the console
  * shell of the Rust SEED-0A keyboard gate, and the recovery-access hook.
  * Port of crates/aienos-kernel/src/usb/xhci (controller.rs, ring.rs,

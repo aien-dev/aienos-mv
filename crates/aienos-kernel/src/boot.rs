@@ -1,4 +1,4 @@
-//! AIENOS Bare-Metal Boot Spine (§Step 2 of Systems Integration Sequence).
+//! Aienux Bare-Metal Boot Spine (§Step 2 of Systems Integration Sequence).
 //!
 //! Provides the bare-metal entry path, early serial banner, and BootReceipt.
 

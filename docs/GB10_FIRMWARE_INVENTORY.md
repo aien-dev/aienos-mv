@@ -26,7 +26,7 @@ the driver on the box; fetched read-only into a scratch directory, not vendored)
   (open source, MIT licence, in the public driver repository). The GB10B has no
   separate "FSP" security processor on the GSP boot path and runs no VBIOS
   FWSEC step; SEC2 does the work. [SOURCE, section 4]
-- Everything AIENOS would need to *hand* to the chip is public and
+- Everything Aienux would need to *hand* to the chip is public and
   redistributable unmodified under NVIDIA's firmware licence and the driver's
   MIT licence. What is not public is what the chip's boot ROM, SEC2 firmware,
   ACR and GSP-RM *do* internally, and the signing keys. [DOCUMENTED, section 6]
@@ -53,7 +53,7 @@ the driver on the box; fetched read-only into a scratch directory, not vendored)
 - The largest remaining unknowns for a native bring-up (section 8) are the
   SEC2 command protocol details beyond what the driver source shows, the
   message-queue (RPC) protocol after the FMC starts GSP-RM, and
-  the state the SoC firmware (UEFI) leaves SEC2 and the GPU in at AIENOS entry.
+  the state the SoC firmware (UEFI) leaves SEC2 and the GPU in at Aienux entry.
   Do not attach a calendar to cut C/D until those are measured on the machine.
 
 ## 2. Identity of the device and the driver on the box [OBSERVED]
@@ -275,7 +275,7 @@ Firmware package: `/usr/share/doc/nvidia-firmware-580-580.173.02/copyright`,
 - 1.1(d): may "Distribute the SOFTWARE ... for use with operating system
   kernels distributed under the terms of an OSI-approved open source license
   ... provided that (i) the binary files thereof are not modified in any way
-  ... and (ii) this Agreement is provided to each SOFTWARE recipient". AIENOS is
+  ... and (ii) this Agreement is provided to each SOFTWARE recipient". Aienux is
   AGPL-3.0, an OSI-approved licence, so shipping the unmodified file plus the
   agreement text is within this clause [INFERRED (high): plain reading, not
   legal advice].
@@ -294,7 +294,7 @@ files within this package are licensed as MIT"; every file read here carries
 `SPDX-License-Identifier: MIT` (including the bindata arrays and
 `kernel_sec2_gb10b.c`). The kernel module reports `Dual MIT/GPL`. Reading and
 reimplementing the host-side protocol from MIT source is permitted; copying
-code into AIENOS would require carrying the MIT notice (none was copied here).
+code into Aienux would require carrying the MIT notice (none was copied here).
 
 ## 7. What this means for cut C and cut D
 
@@ -337,7 +337,7 @@ code into AIENOS would require carrying the MIT notice (none was copied here).
    can confirm that.
 3. [UNKNOWN] What SEC2 requires to be already true when the first command
    arrives (its own firmware loaded by the SoC boot chain? clocks? power
-   state?), and whether UEFI leaves the GPU in that state at AIENOS entry.
+   state?), and whether UEFI leaves the GPU in that state at Aienux entry.
    On Linux the driver finds "GFW_BOOT" complete before it starts
    (`kgspWaitForGfwBootOk_HAL`); who completes it without Linux is not shown.
 4. RESOLVED on the host side 2026-10-12 [SOURCE] for the transport: the queue

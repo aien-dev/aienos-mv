@@ -1,4 +1,4 @@
-/* image.ld -- AIENOS C kernel image layout. Linked position independent at
+/* image.ld -- Aienux C kernel image layout. Linked position independent at
  * address 0 (ImageBase 0); the PE32+ header for UEFI is emitted here as data,
  * so file offset == RVA (FileAlignment == SectionAlignment == 4 KiB). The
  * entry stub applies the R_AARCH64_RELATIVE relocations itself (efi_entry.S),

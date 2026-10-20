@@ -1,20 +1,20 @@
-# AIENOS Governing Architecture
+# Aienux Governing Architecture
 
 Status: confirmed by the operator on 2026-09-23. Changes to anything in this document that the operator listed as fundamental (see "Authority and escalation") require the operator's approval.
 
-> **Document precedence (2026-09-27):** this file governs AIENOS component architecture. `../ROADMAP.md` governs current AIENOS execution order. Whole-system sequencing is owned by `aien-spark/aien-architecture/CURRENT_EXECUTION_PLAN.md`. See [PLAN_AUTHORITY.md](PLAN_AUTHORITY.md).
+> **Document precedence (2026-09-27):** this file governs Aienux component architecture. `../ROADMAP.md` governs current Aienux execution order. Whole-system sequencing is owned by `aien-spark/aien-architecture/CURRENT_EXECUTION_PLAN.md`. See [PLAN_AUTHORITY.md](PLAN_AUTHORITY.md).
 
 For supporting architectural references and decision records, see:
-- [AIENOS Architectural Blueprint](BLUEPRINT.md) (reference design snapshot; not current execution order)
-- [AIENOS Architectural Milestones Matrix](MILESTONES.md) (reference milestone/specification history; current order is `../ROADMAP.md`)
-- [AIENOS Technical Specification & Contracts (Phases 3–5)](PHASE_3_TO_5_SPECIFICATION.md) (Agent State ABI, Cortex, AEGIS & Worlds, and C1 CoW Prefix Tree)
-- [AIENOS Systems Integration Sequence & Epistemic Calibration](SYSTEMS_INTEGRATION_SEQUENCE.md) (historical integration sequence; current order is `../ROADMAP.md`)
-- [AIENOS Continuous-Existence Amendment](CONTINUOUS_EXISTENCE_AMENDMENT.md) (Governing lifecycle amendment: provisioning-once, power states, state classes, gate acceptance criteria)
+- [Aienux Architectural Blueprint](BLUEPRINT.md) (reference design snapshot; not current execution order)
+- [Aienux Architectural Milestones Matrix](MILESTONES.md) (reference milestone/specification history; current order is `../ROADMAP.md`)
+- [Aienux Technical Specification & Contracts (Phases 3–5)](PHASE_3_TO_5_SPECIFICATION.md) (Agent State ABI, Cortex, AEGIS & Worlds, and C1 CoW Prefix Tree)
+- [Aienux Systems Integration Sequence & Epistemic Calibration](SYSTEMS_INTEGRATION_SEQUENCE.md) (historical integration sequence; current order is `../ROADMAP.md`)
+- [Aienux Continuous-Existence Amendment](CONTINUOUS_EXISTENCE_AMENDMENT.md) (Governing lifecycle amendment: provisioning-once, power states, state classes, gate acceptance criteria)
 - [Architectural Decision Records](adr/README.md) (Accepted architectural decisions: [ADR 0001](adr/0001-native-boot-milestone-and-linux-island.md), [ADR 0002](adr/0002-incumbent-os-as-migration-environment.md), [ADR 0003](adr/0003-bootstrap-firmware-handoff-and-minimal-object-store.md), [ADR 0004](adr/0004-reversibility-definition-and-network-effect-boundary.md), [ADR 0005](adr/0005-unified-memory-c1-cow-and-reservation-accounting.md), [ADR 0006](adr/0006-deterministic-recovery-core-and-offline-operator-authority.md), [ADR 0007](adr/0007-continuous-existence-provisioning-once.md))
 
-## 1. What AIENOS is
+## 1. What Aienux is
 
-**AIENOS is an agent-native operating system designed around continuous logical agent existence: the agent persists while models, kernels, inference state, power states, and physical machines change beneath it.**
+**AienOS is an agent-native operating system designed around continuous logical agent existence: the agent persists while models, kernels, inference state, power states, and physical machines change beneath it.**
 
 The resident AIEN agent is its primary user interface, coordinator, and policy-aware control plane. Graphical interfaces are projections of agent state that the agent can construct and change on request; there is no fixed desktop.
 
@@ -60,19 +60,19 @@ Sovereignty does not mean inventing every component. It means no outside organiz
 
 The trusted base (boot, kernel, memory management, scheduler, storage core, cryptography, identity, AEGIS, capability enforcement, update verification, recovery, provenance verification) builds from inspectable source with a toolchain that can be independently obtained, preserved, and reproduced. It has no mandatory dependency on a proprietary compiler, runtime, cloud service, licensing server, or opaque build step.
 
-Opaque technology (for example a closed compiler) is allowed only in experiments, accelerator research, benchmark kernels, optional performance modules, and compatibility layers, and only with a fully open fallback. **Opaque software may accelerate AIENOS. It may not become necessary to trust, build, boot, recover, or control AIENOS.**
+Opaque technology (for example a closed compiler) is allowed only in experiments, accelerator research, benchmark kernels, optional performance modules, and compatibility layers, and only with a fully open fallback. **Opaque software may accelerate Aienux. It may not become necessary to trust, build, boot, recover, or control Aienux.**
 
 Accepted exception: silicon that physically requires vendor-signed firmware (for example the GPU's GSP firmware) keeps that firmware.
 
-**Fastest wins, scoped:** for a capability AIENOS natively owns, the fastest correct implementation wins. A compatibility island may outperform the native path for a while, but it does not define the trusted base or the destination ([ADR 0001](adr/0001-native-boot-milestone-and-linux-island.md)).
+**Fastest wins, scoped:** for a capability Aienux natively owns, the fastest correct implementation wins. A compatibility island may outperform the native path for a while, but it does not define the trusted base or the destination ([ADR 0001](adr/0001-native-boot-milestone-and-linux-island.md)).
 
-**Host operating systems:** Windows, macOS, and Linux are bootstrap and migration environments, not the target runtime. **AIENOS may learn from the host, but it must not require the host to survive** ([ADR 0002](adr/0002-incumbent-os-as-migration-environment.md)).
+**Host operating systems:** Windows, macOS, and Linux are bootstrap and migration environments, not the target runtime. **Aienux may learn from the host, but it must not require the host to survive** ([ADR 0002](adr/0002-incumbent-os-as-migration-environment.md)).
 
 **Persistent storage:** Persistent storage avoids POSIX filesystem complexity in favor of the native AIEN System Store with content-addressed model extents and append-only journals ([ADR 0003](adr/0003-bootstrap-firmware-handoff-and-minimal-object-store.md)).
 
 ## 4. Security
 
-- **Boot trust:** Secure Boot off during early development (confirmed OFF as of 2026-10-01, owner decision). Before daily use: firmware verifies the operator's key, the operator's key verifies AIENOS boot artifacts, AIENOS verifies kernel and runtime components. An offline recovery key and recovery media are designed before enforcement.
+- **Boot trust:** Secure Boot off during early development (confirmed OFF as of 2026-10-01, owner decision). Before daily use: firmware verifies the operator's key, the operator's key verifies Aienux boot artifacts, Aienux verifies kernel and runtime components. An offline recovery key and recovery media are designed before enforcement.
 - **Encryption at rest:** conversations, Cortex, projects, World state, credentials, agent memories, model-private data, configuration, caches, and swap-equivalents. Unlock at startup; later hardware sealing plus an operator secret. Credentials receive extra protection after unlock.
 - **Identities from day one:** operator, agent identities, system services, remote Machines, future household users; each with separate capabilities, memory visibility, authority, and provenance. No login screens or profiles in version one.
 
@@ -88,30 +88,30 @@ Self-improvement may tune scheduler, allocator, KV, caching, UI, routing, networ
 
 ## 6. First milestone
 
-Power on, AIENOS boots directly (Linux is not the host), the AIEN agent starts on a local screen and keyboard (plain console), a local model loads, the operator talks to it, and Cortex and state persist across reboot. CPU inference is acceptable. Networking follows immediately after.
+Power on, Aienux boots directly (Linux is not the host), the AIEN agent starts on a local screen and keyboard (plain console), a local model loads, the operator talks to it, and Cortex and state persist across reboot. CPU inference is acceptable. Networking follows immediately after.
 
-The first agent's job is running, understanding, diagnosing, repairing, and improving AIENOS itself. Coding help comes second; general conversation later.
+The first agent's job is running, understanding, diagnosing, repairing, and improving Aienux itself. Coding help comes second; general conversation later.
 
 ## 7. Roadmap
 
 1. **Linux reference baseline:** freeze the existing Linux/NVIDIA inference stack as a reproducible, tagged reference (merged work, verified inference, correctness and performance evidence, identity manifest, verified recovery). No new Linux-side architecture after this.
-2. **Weeks:** AIENOS boots on real Spark hardware with CPU, memory, interrupts, storage, console, and recovery.
+2. **Weeks:** Aienux boots on real Spark hardware with CPU, memory, interrupts, storage, console, and recovery.
 3. **Then:** agent, local CPU inference, persistent Cortex.
-4. **Months:** AIENOS replaces Linux for normal AIEN operation.
+4. **Months:** Aienux replaces Linux for normal AIEN operation.
 5. **As long as necessary:** full hardware sovereignty, including an independent accelerator path.
 
 Every stage boots and does something real.
 
-Steps 2 and 3 are the primary milestone (native AIENOS boot with CPU inference). A minimal-Linux image booting straight into `aien-init` exists only as Benchmark Config B and the temporary GPU compatibility island, and it is never a prerequisite for the native path.
+Steps 2 and 3 are the primary milestone (native Aienux boot with CPU inference). A minimal-Linux image booting straight into `aien-init` exists only as Benchmark Config B and the temporary GPU compatibility island, and it is never a prerequisite for the native path.
 
-Configs A (Ubuntu reference), B (minimal-Linux island), and C (native AIENOS) run the same frozen workload and report boot-to-ready, ready-to-model, TTFT, throughput, idle and available memory, jitter, power, and branch cost separately, plus continuous-existence lifecycle metrics (wake-to-continuation and reconstruction latencies) per the [Continuous-Existence Amendment](CONTINUOUS_EXISTENCE_AMENDMENT.md) ([ADR 0001](adr/0001-native-boot-milestone-and-linux-island.md), [ADR 0007](adr/0007-continuous-existence-provisioning-once.md)).
+Configs A (Ubuntu reference), B (minimal-Linux island), and C (native Aienux) run the same frozen workload and report boot-to-ready, ready-to-model, TTFT, throughput, idle and available memory, jitter, power, and branch cost separately, plus continuous-existence lifecycle metrics (wake-to-continuation and reconstruction latencies) per the [Continuous-Existence Amendment](CONTINUOUS_EXISTENCE_AMENDMENT.md) ([ADR 0001](adr/0001-native-boot-milestone-and-linux-island.md), [ADR 0007](adr/0007-continuous-existence-provisioning-once.md)).
 
 Native capability migration order: Runtime, Cortex, AEGIS, World/J-Space, Capability Graph, local inference, storage, networking, operator interface, developer tools, mail, cockpit, others. Nothing is rebuilt merely because it exists today.
 
 ## 8. Development discipline
 
 - Kernel work happens first under emulation and automated hardware tests. Bare-metal Spark tests run in scheduled windows.
-- Always keep: a known-good AIENOS boot entry, the existing Linux installation, independent recovery media, low-level diagnostics where possible, and rollbackable boot configuration. Crashes are acceptable; destroying the working environment is not.
+- Always keep: a known-good Aienux boot entry, the existing Linux installation, independent recovery media, low-level diagnostics where possible, and rollbackable boot configuration. Crashes are acceptable; destroying the working environment is not.
 - Developed in public, labelled experimental. No support or compatibility obligations yet.
 
 ## 9. Authority and escalation
@@ -124,6 +124,6 @@ Milestone reports show what was built, what passed, what failed, what changed, t
 
 ## 10. The persistent thing
 
-The persistent thing is the AIEN organism, and inside it the durable subject the organism sustains, named ALLEN ([ARCH-0035](https://github.com/aien-spark/aien-architecture/blob/main/docs/adr/0035-persistent-cognitive-entity-boundary-allen.md), PROPOSED; [ADR 0018](adr/0018-allen-subject-state-object.md)). AIEN is continuous: its organism keeps running and its cognitive faculty keeps proposing. ALLEN is durable: the same agent identity, standing intents and memory lineage are resolved from the Store after any restart. Hardware is replaceable beneath both. Models, interfaces, tools, and Machines are replaceable around them. If a company disappears tomorrow, the long-term target is that AIENOS continues to boot and remains the operator's.
+The persistent thing is the AIEN organism, and inside it the durable subject the organism sustains, named ALLEN ([ARCH-0035](https://github.com/aien-spark/aien-architecture/blob/main/docs/adr/0035-persistent-cognitive-entity-boundary-allen.md), PROPOSED; [ADR 0018](adr/0018-allen-subject-state-object.md)). AIEN is continuous: its organism keeps running and its cognitive faculty keeps proposing. ALLEN is durable: the same agent identity, standing intents and memory lineage are resolved from the Store after any restart. Hardware is replaceable beneath both. Models, interfaces, tools, and Machines are replaceable around them. If a company disappears tomorrow, the long-term target is that Aienux continues to boot and remains the operator's.
 
 **Strengthened ([Continuous-Existence Amendment §21](CONTINUOUS_EXISTENCE_AMENDMENT.md), [ADR 0007](adr/0007-continuous-existence-provisioning-once.md)):** AIEN is the persistent logical entity. Hardware, kernels, models, runtime processes, inference caches, interfaces, and Machines are replaceable execution substrates. Sleep changes residency. Reboot changes execution substrate. Failure triggers reconstruction. None of these events inherently terminates logical identity.

@@ -1,4 +1,4 @@
-# AIENOS Continuous-Existence Amendment
+# Aienux Continuous-Existence Amendment
 
 **Status:** Operator-approved governing amendment (2026-09-23)
 **Authority:** Operator Directive
@@ -17,7 +17,7 @@ The key architectural change is:
 
 ## 1. Governing invariant: AIEN exists continuously
 
-AIENOS is designed around **continuous logical agent existence**.
+Aienux is designed around **continuous logical agent existence**.
 
 The resident AIEN agent is not defined by:
 
@@ -57,7 +57,7 @@ into the system-wide rule:
 
 ## 2. Provisioning is different from boot
 
-AIENOS must distinguish **initial provisioning** from all later starts.
+Aienux must distinguish **initial provisioning** from all later starts.
 
 ### Initial provisioning
 
@@ -109,7 +109,7 @@ The operator then chooses whether to restore, import, recover, or explicitly pro
 
 ---
 
-## 3. AIENOS lifecycle model
+## 3. Aienux lifecycle model
 
 The normal lifecycle is not:
 
@@ -218,7 +218,7 @@ Used when useful volatile state does not survive, including:
 - severe corruption;
 - machine replacement.
 
-AIENOS initializes the execution substrate, locates the latest valid durable AIEN state, verifies it, and reconstructs execution.
+Aienux initializes the execution substrate, locates the latest valid durable AIEN state, verifies it, and reconstructs execution.
 
 Cold recovery is not agent creation.
 
@@ -300,7 +300,7 @@ Class C may disappear at any time consistent with transaction semantics.
 
 ## 6. Commit-before-observation rule
 
-AIENOS must not rely on periodic "memory saves" as the primary continuity mechanism.
+Aienux must not rely on periodic "memory saves" as the primary continuity mechanism.
 
 Durable semantic state should be committed transactionally as the system operates.
 
@@ -359,7 +359,7 @@ what physical state survived?
 
 The operator-facing result should be the same logical AIEN regardless of which path occurred.
 
-The user should not need to know whether AIENOS:
+The user should not need to know whether Aienux:
 
 - resumed RAM;
 - rebuilt KV;
@@ -494,7 +494,7 @@ It may not become necessary to recover from its own absence.
 
 ## 12. Power management objective
 
-AIENOS should optimize for **continuous existence with minimum necessary resource residency**, not repeated full startup.
+Aienux should optimize for **continuous existence with minimum necessary resource residency**, not repeated full startup.
 
 The scheduler/power manager may determine that a given period requires only:
 
@@ -557,7 +557,7 @@ It is an exceptional physical-state transition, not logical agent deletion.
 
 ## 14. Planned power-off
 
-Before an intentional complete power-off, AIENOS should attempt to establish a clean continuity point:
+Before an intentional complete power-off, Aienux should attempt to establish a clean continuity point:
 
 ```text
 stop accepting new semantic work
@@ -591,7 +591,7 @@ reconstruct execution
 
 ## 15. Unexpected power loss
 
-AIENOS must assume power can disappear without warning.
+Aienux must assume power can disappear without warning.
 
 Therefore continuity cannot depend exclusively on orderly shutdown.
 
@@ -900,7 +900,7 @@ The requirement is that continuity claims become auditable rather than inferred.
 
 ## 19. Failure semantics
 
-AIENOS must fail toward preservation.
+Aienux must fail toward preservation.
 
 If the system cannot prove that a recovered logical state belongs to the existing AIEN:
 
@@ -1002,4 +1002,4 @@ not:
 
 The one-line definition of the project is amended to:
 
-> **AIENOS is an agent-native operating system designed around continuous logical agent existence: the agent persists while models, kernels, inference state, power states, and physical machines change beneath it.**
+> **AienOS is an agent-native operating system designed around continuous logical agent existence: the agent persists while models, kernels, inference state, power states, and physical machines change beneath it.**

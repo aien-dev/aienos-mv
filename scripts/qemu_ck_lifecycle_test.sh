@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# LIFECYCLE gate for the AIENOS C kernel (native v1 plan P03 + P04 cut 1 + P05
+# LIFECYCLE gate for the Aienux C kernel (native v1 plan P03 + P04 cut 1 + P05
 # cut 1 + P06 cut 2): rows 160-176 of native/kernel/GATES.md "LIFECYCLE resident
 # production lifecycle". C-only.
 # QEMU is not hardware: a PASS here qualifies nothing physical.
@@ -195,7 +195,7 @@ boot() { # name efi driver [nvme.img to reuse]
     cp "$2" "${work}/esp/EFI/BOOT/BOOTAA64.EFI"
     cp "${vars_fd}" "${work}/vars.fd"
     # GPT boot disk (tools/ck_gpt_image.c, as the Store gate): protective MBR,
-    # primary + backup GPT, sentinels, AIENOS partition all zero (Store at genesis).
+    # primary + backup GPT, sentinels, Aienux partition all zero (Store at genesis).
     if [[ -n "${4:-}" ]]; then cp "$4" "${work}/nvme.img"; else "${gpt_tool}" create "${work}/nvme.img" 512 64 aienos-middle >/dev/null; fi
     mkfifo "${work}/ser.in" "${work}/ser.out"
     : >"${work}/serial.log"

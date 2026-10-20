@@ -1,12 +1,12 @@
 //! Rust capability authority, 32-bit generations.
 //!
-//! A separate implementation of the AIENOS capability rules. The production
+//! A separate implementation of the Aienux capability rules. The production
 //! ABI is the C authority in `native/capability` (64-bit generations,
 //! symbols `aienos_cap_*`); this crate and its C binding
 //! `aienos-capability-ffi` (symbols `aienos_cap32_*`) are not interchangeable
 //! with it. See `docs/CAPABILITY_ABI.md`.
 //!
-//! This is the AIENOS side of the host reference root. The slot rules match
+//! This is the Aienux side of the host reference root. The slot rules match
 //! that root: a reference is an index plus a generation, a reused slot does
 //! not honor the old reference, generation never wraps, delegation can only
 //! narrow rights, and revoking an ancestor revokes the descendants.
