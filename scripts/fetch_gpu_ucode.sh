@@ -7,12 +7,16 @@
 
 set -e
 
+# Work from the repo root whatever the caller's directory (the .inc lands in $REPO/target).
+ROOT=$(cd "$(dirname "$0")/.." && pwd)
+cd "$ROOT"
+
 OUT=target/native-kernel
 mkdir -p "$OUT"
 
 LINUX_FW_BASE="https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/amdgpu"
 
-# Pinned SHA-256 hashes (from linux-firmware tag 20231211 / polaris11)
+# Pinned SHA-256 hashes and the upstream commit they were taken from.
 # Source: scripts/gpu_ucode_sha256.txt
 . scripts/gpu_ucode_sha256.txt
 
@@ -22,8 +26,8 @@ fetch_blob() {
     if [ -f "$path" ]; then
         echo "  $name: already present, checking SHA256..."
     else
-        echo "  $name: fetching..."
-        curl -fsSL "$LINUX_FW_BASE/$name" -o "$path"
+        echo "  $name: fetching at $LINUX_FW_COMMIT..."
+        curl -fsSL "$LINUX_FW_BASE/$name?id=$LINUX_FW_COMMIT" -o "$path"
     fi
     local actual
     actual=$(sha256sum "$path" | awk '{print $1}')
@@ -44,6 +48,7 @@ fetch_blob polaris11_mec2.bin "$SHA_MEC2"
 fetch_blob polaris11_rlc.bin  "$SHA_RLC"
 fetch_blob polaris11_sdma.bin "$SHA_SDMA"
 fetch_blob polaris11_sdma1.bin "$SHA_SDMA1"
+fetch_blob polaris11_smc.bin "$SHA_SMC"
 
 echo "Generating $OUT/gpu_ucode.inc..."
 cat > "$OUT/gpu_ucode.inc" << 'HEADER'

@@ -5,7 +5,12 @@
  * No floats. All waits are TSC-bounded. */
 #pragma once
 #include "../core/ck_internal.h"
+#include "../mm/frames.h"
+#ifdef AMD_GPU_TEST_HOST
+#include "amd_host_shim.h" /* host test: rdtsc and pause without x86 asm */
+#else
 #include "../x86/x86.h"
+#endif
 #include "amd_ring.h"
 #include "amd_gpu_regs.h"
 
@@ -126,6 +131,29 @@ static inline int amd_dma_alloc(uint32_t bytes, uint64_t *pa_out, void **va_out)
     *pa_out = g_amd_gpu.dma_pa + g_amd_gpu.dma_off;
     *va_out = g_amd_gpu.dma_va + g_amd_gpu.dma_off;
     g_amd_gpu.dma_off += aligned;
+    return 0;
+}
+
+/* Takes npages of contiguous frames from fr, all ending at or below limit, and
+ * records them as the DMA pool (dma_pa, dma_total, dma_off). The caller maps
+ * dma_va and zeroes the pool. Returns 0, or -1 if fr is NULL or nothing fits.
+ * Limit: every ring address the CP and SDMA take is a 40-bit field (gfx_v8_0.c
+ * gfx_v8_0_cp_gfx_resume: CP_RB0_BASE = gpu_addr >> 8, CP_RB0_BASE_HI = the rest;
+ * sdma_v3_0.c sdma_v3_0_gfx_resume: SDMA0_GFX_RB_BASE_HI = gpu_addr >> 40). The
+ * pool sits below 4 GiB, which is stricter than that field. This driver does not
+ * program the GART, so the GPU reaches a physical address only if the firmware
+ * left the mapping in place: unverified on the iMac. */
+#define AMD_DMA_LIMIT 0x100000000ull
+
+static inline int amd_dma_pool_take(struct amd_gpu_state *g, struct ck_frames *fr,
+                                    uint64_t npages, uint64_t limit)
+{
+    uint64_t pa;
+    if (!fr || ck_frames_alloc_below(fr, npages, CK_PAGE, limit, &pa))
+        return -1;
+    g->dma_pa    = pa;
+    g->dma_total = (uint32_t)(npages * CK_PAGE);
+    g->dma_off   = 0;
     return 0;
 }
 /* Read BAR5 register with fence */

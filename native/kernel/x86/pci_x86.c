@@ -336,8 +336,9 @@ void ck_x86_sound(struct ck_frames *fr, uint64_t tsc_hz, uint64_t night_t0)
  * The first display controller (class 0x03) whose VRAM aperture (BAR0) holds
  * the framebuffer goes to panel_x86.c, which decides whether it knows the
  * chip well enough to switch the panel; the others are only listed. */
-void ck_x86_display(uint64_t fb_pa, uint64_t fb_bytes, uint64_t tsc_hz)
+void ck_x86_display(uint64_t fb_pa, uint64_t fb_bytes, struct ck_frames *fr, uint64_t tsc_hz)
 {
+    (void)fr; /* used only by the GPU driver (CK_X86_GPU=1) */
     const struct pfn *own = 0;
     for (unsigned i = 0; i < nfound; i++) {
         const struct pfn *f = &found[i];
@@ -371,7 +372,7 @@ void ck_x86_display(uint64_t fb_pa, uint64_t fb_bytes, uint64_t tsc_hz)
             fw = 3840; fh = 2160; fp = 3840; /* defaults for 2017 iMac 5K GOP */
         }
         ck_x86_gpu_start(own->cfg, own->bus, own->dev, own->fn, own->vendor, own->device,
-                         bar0, bar5, fb_pa, fw, fh, fp, (struct ck_frames *)0, g_tsc_hz);
+                         bar0, bar5, fb_pa, fw, fh, fp, fr, g_tsc_hz);
     }
 #endif /* CK_X86_GPU */
 }

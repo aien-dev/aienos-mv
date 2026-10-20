@@ -1817,9 +1817,9 @@ static __attribute__((noreturn)) void kernel_main(void *arg)
         volatile uint32_t *px;
         uint32_t w, h, pitch, format;
         if (ck_x86_console_fb_get(&px, &w, &h, &pitch, &format) == 0)
-            ck_x86_display((uint64_t)(uintptr_t)px, (uint64_t)pitch * 4u * h, tsc_hz);
+            ck_x86_display((uint64_t)(uintptr_t)px, (uint64_t)pitch * 4u * h, &frames, tsc_hz);
         else
-            ck_x86_display(0, 0, tsc_hz);
+            ck_x86_display(0, 0, &frames, tsc_hz);
     }
     allen_facts.cores = sr.started + 1;
     allen_facts.sata_disks = st->ahci_disks;

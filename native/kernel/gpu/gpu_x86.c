@@ -91,20 +91,16 @@ void ck_x86_gpu_start(volatile uint8_t *cfg, unsigned bus, unsigned dev, unsigne
         g->vram_sz   = 4ull * 1024u * 1024u * 1024u; /* Polaris 560 = 4 GiB; confirmed by MC step */
     }
 
-    /* Allocate DMA pool for ring buffers (below 4 GiB: pass CK_PAGE align). */
-    uint64_t dma_pa = 0;
-    if (ck_frames_alloc(fr, GPU_DMA_PAGES, CK_PAGE, &dma_pa)) {
-        ck_puts("gpu: start: no DMA frames, ring steps skipped\n");
+    /* DMA pool for the ring buffers, all below AMD_DMA_LIMIT (amd_gpu.h). fr is
+     * NULL when the caller passes no frame allocator; the ring steps then skip. */
+    if (amd_dma_pool_take(g, fr, GPU_DMA_PAGES, AMD_DMA_LIMIT)) {
+        ck_puts("gpu: start: no DMA frames below 4 GiB, ring steps skipped\n");
     } else {
-        /* Zero the pool. */
-        __builtin_memset((void *)(uintptr_t)dma_pa, 0, GPU_DMA_PAGES * (uint32_t)CK_PAGE);
-        g->dma_pa    = dma_pa;
-        g->dma_va    = (uint8_t *)(uintptr_t)dma_pa;
-        g->dma_total = GPU_DMA_PAGES * (uint32_t)CK_PAGE;
-        g->dma_off   = 0;
+        g->dma_va = (uint8_t *)(uintptr_t)g->dma_pa;
+        __builtin_memset(g->dma_va, 0, g->dma_total);
         ck_printf("gpu: dma_pool: 0x%llx..0x%llx (%u pages)\n",
-                  (unsigned long long)dma_pa,
-                  (unsigned long long)(dma_pa + g->dma_total),
+                  (unsigned long long)g->dma_pa,
+                  (unsigned long long)(g->dma_pa + g->dma_total),
                   GPU_DMA_PAGES);
     }
 

@@ -1,32 +1,36 @@
-# STEP6_compute.bench -- MEC HQD compute queue setup.
-# Sources: gca/gfx_8_0_d.h MIT (C) 2016 AMD; gfx_v8_0.c.
+# STEP6_compute.bench -- MEC HQD compute queue setup (BAR5 DWORD indices, byte offset / 4).
+# Source: amd_gpu_regs.h (gfx_8_0_d.h, gfx_v8_0.c).
+#
+# Not runnable as a whole yet: the write allowlist does not cover these registers (needs
+# 0x0803 and 0x2120-0x213b). PQ base, rptr/wptr report and EOP base are physical
+# addresses from the driver's boot log, so they stay commented.
 
-# --- Select SE=0 SH=0 INSTANCE=0 for HQD programming ---
-w32 BAR5+0x200C 0x00000000   # mmGRBM_GFX_INDEX (0x0803*4=0x200C) = SE=0,SH=0,INST=0
+# Select SE 0 SH 0 for HQD programming
+# mmGRBM_GFX_INDEX, byte 0x200C
+bar5_write 0x803 0x0
 
-# --- Deactivate HQD ---
-r32 BAR5+0x8480   # mmCP_HQD_ACTIVE (0x2120*4=0x8480)
-w32 BAR5+0x8480 0x00000000   # CP_HQD_ACTIVE = 0
+# Deactivate the HQD
+# mmCP_HQD_ACTIVE, byte 0x8480
+bar5_read 0x2120
+# CP_HQD_ACTIVE = 0
+bar5_write 0x2120 0x0
 
-# --- Programme HQD ---
-# (mec_ring_pa = physical address of 1KiB ring buffer)
-# w32 BAR5+0x8484 <mec_ring_pa >> 8>    # mmCP_HQD_PQ_BASE (0x2121*4=0x8484)
-# w32 BAR5+0x8488 <mec_ring_pa >> 40>   # mmCP_HQD_PQ_BASE_HI
-w32 BAR5+0x848C 0x00000000   # mmCP_HQD_PQ_RPTR (0x2123*4=0x848C) = 0
-# w32 BAR5+0x8490 <rptr_report_pa lo>   # mmCP_HQD_PQ_RPTR_REPORT_ADDR
-# w32 BAR5+0x8494 <rptr_report_pa hi>
-# w32 BAR5+0x8498 <wptr_poll_pa lo>     # mmCP_HQD_PQ_WPTR_POLL_ADDR
-# w32 BAR5+0x849C <wptr_poll_pa hi>
-w32 BAR5+0x84A0 0x00000007   # mmCP_HQD_PQ_CNTL (0x2128*4=0x84A0) = size log2-1=7 (256dw)
-# w32 BAR5+0x84E4 <eop_pa >> 8>         # mmCP_HQD_EOP_BASE_ADDR
-# w32 BAR5+0x84E8 <eop_pa >> 40>
-w32 BAR5+0x84EC 0x00000017   # mmCP_HQD_EOP_CONTROL = EOP_SIZE=5, MTYPE=3
+# PQ base 0x2121 (byte 0x8484) = pq_pa >> 8, PQ_BASE_HI 0x2122 = pq_pa >> 40
+# PQ_RPTR_REPORT_ADDR 0x2124 / _HI 0x2125; PQ_WPTR_POLL_ADDR 0x2126 / _HI 0x2127: from the boot log
+# mmCP_HQD_PQ_RPTR, byte 0x848C = 0
+bar5_write 0x2123 0x0
+# mmCP_HQD_PQ_CNTL, byte 0x84A0: size log2 minus 1 = 7 (256 dwords)
+bar5_write 0x2128 0x7
+# EOP_BASE_ADDR 0x2139 (byte 0x84E4) = eop_pa >> 8; EOP_BASE_ADDR_HI 0x213a (byte 0x84E8) = eop_pa >> 40
+# mmCP_HQD_EOP_CONTROL, byte 0x84EC: EOP_SIZE 5, MTYPE 3
+bar5_write 0x213b 0x17
 
-# --- Activate HQD ---
-w32 BAR5+0x8480 0x00000001   # CP_HQD_ACTIVE = 1
-r32 BAR5+0x8480   # read back: should be 1
+# Activate, then read back
+# CP_HQD_ACTIVE = 1
+bar5_write 0x2120 0x1
+# should read 1
+bar5_read 0x2120
 
-# --- Restore GRBM_GFX_INDEX to broadcast ---
-w32 BAR5+0x200C 0xA0000000   # GRBM_GFX_INDEX = SE_BROADCAST | SH_BROADCAST
-
-# --- HQD is ready for DISPATCH_DIRECT from feat/imac-gpu-shader ---
+# Restore GRBM_GFX_INDEX to broadcast
+# SE_BROADCAST | SH_BROADCAST
+bar5_write 0x803 0xa0000000

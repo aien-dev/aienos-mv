@@ -1,18 +1,30 @@
-# STEP3_smu_check.bench -- Check SMU state as Apple's firmware left it.
-# Format: r32 BAR5+offset, w32 BAR5+offset value, poll ...
-# Sources: smu/smu_7_1_3_d.h MIT (C) 2016 AMD.
+# STEP3_smu_check.bench -- SMU state as the firmware left it.
+# BAR5 DWORD indices (byte offset / 4). Source: amd_gpu_regs.h (smu_7_1_3_d.h).
+#
+# WRITE ALLOWLIST: the writes below (0x178, 0x179, 0x180) are NOT inside the console's
+# current allowlist. Run needs this entry added first: 0x0170-0x0180 (SMC message
+# registers, smu_7_1_3_d.h).
+#
+# Unverified: message 0x201 (GetSMFWVersion) is not in the smu7_ppsmc.h of Linux v6.6
+# (drivers/gpu/drm/amd/pm/powerplay/inc). The code must be checked against the real SMU
+# before the write runs. PPSMC_Result_OK = 0x01 (smu7_ppsmc.h:83) is verified.
 
-# Check if SMC registers are accessible (all-ones = not accessible)
-r32 BAR5+0x5E0   # mmSMC_MSG (0x0178*4=0x5E0)
-r32 BAR5+0x600   # mmSMC_MSG_RESP_0 (0x0180*4=0x600)
+# All-ones on either read means the SMC is not reachable
+# mmSMC_MSG, byte 0x5E0
+bar5_read 0x178
+# mmSMC_MSG_RESP_0, byte 0x600
+bar5_read 0x180
 
-# Try MSG_GetSMFWVersion (0x0201): clear response, write arg, write msg, poll
-w32 BAR5+0x600 0x00000000         # clear response
-w32 BAR5+0x5E4 0x00000000         # mmSMC_MSG_ARG_0 (0x0179*4=0x5E4) = 0
-w32 BAR5+0x5E0 0x00000201         # MSG_GetSMFWVersion = 0x0201
-poll BAR5+0x600 0xFFFFFFFF 0x00000000 50   # wait up to 50ms for non-zero response
-r32 BAR5+0x600   # read firmware version
+# Send the message: clear the response, clear the argument, write the message
+# SMC_MSG_RESP_0 = 0
+bar5_write 0x180 0x0
+# SMC_MSG_ARG_0 = 0 (byte 0x5E4)
+bar5_write 0x179 0x0
+# SMC_MSG = 0x0201 (unverified, see above)
+bar5_write 0x178 0x201
 
-# Read SMC firmware header from VRAM (if VRAM mapped):
-# VRAM + 0x20000 + 0x4 = firmware version uint32 (polaris10_smumgr.c)
-# r32 BAR0+0x20004  # SMU7 firmware header version field
+# Wait for the SMU to answer with PPSMC_Result_OK (0x01), up to 50 ms
+bar5_poll 0x180 0xffffffff 0x1 50
+
+# the response (1 = OK)
+bar5_read 0x180

@@ -27,13 +27,24 @@
  * No floats.  All waits TSC-bounded.  QEMU qualifies nothing physical. */
 #include "amd_gpu.h"
 
+/* PM4 packet words (gfx_v8_0.c:891-892 and 4165; PACKET3/PACKET2 layout as
+ * amdgpu_ring.h: type in bits 31:30, opcode 15:8, body count-1 in 29:16). */
+#define PM4_PACKET3(op, n)            (0xc0000000u | (((uint32_t)(op) & 0xffu) << 8) | (((uint32_t)(n) & 0x3fffu) << 16))
+#define PM4_FILLER2                   0x80000000u   /* type-2 filler: one dword, no body */
+#define PM4_IT_WRITE_DATA             0x37u
+#define PM4_DST_SEL_MEM               5u            /* WRITE_DATA_DST_SEL(5): memory */
+#define PM4_WRITE_DATA_DST_SEL(v)     ((uint32_t)(v) << 8)
+#define PM4_WR_CONFIRM                (1u << 20)
+
 #ifndef CK_X86_GPU_UCODE
 #define CK_X86_GPU_UCODE 0
 #endif
 
 #if CK_X86_GPU_UCODE
-/* Embedded firmware arrays.  The build generates this file from the blobs. */
-#include "../../../../target/native-kernel/gpu_ucode.inc"
+/* Embedded firmware arrays.  The build generates this file from the blobs.
+ * Found through the -I target/native-kernel that the Makefile adds for
+ * CK_X86_GPU_UCODE=1 (a relative ../ path here would land outside the repo). */
+#include "gpu_ucode.inc"
 #else
 /* Stubs: the step will log its absence and skip */
 static const uint32_t g_rlc_ucode[]  __attribute__((unused)) = {0};
@@ -248,7 +259,12 @@ int ck_gpu_ring_submit(amd_ring_id_t id, const uint32_t *dw, unsigned count)
         r->ring[r->wptr & (r->ring_dw - 1u)] = dw[i];
         r->wptr++;
     }
-    __asm__ volatile("sfence" ::: "memory");  /* WC/UC write ordering */
+    __asm__ volatile("" ::: "memory");
+#if defined(__x86_64__)
+    __asm__ volatile("sfence" ::: "memory");  /* WC/UC write ordering (kernel build, x86-64) */
+#else
+    __atomic_thread_fence(__ATOMIC_RELEASE);  /* host test on other hosts */
+#endif
 
     /* Advance write pointer (hardware polls WPTR). */
     if (id == AMD_RING_GFX)
@@ -285,13 +301,14 @@ int amd_gfx_ring_test(void)
     uint32_t seq = ++r->fence_seq;
     *r->fence_va = 0; /* clear */
 
-    /* PM4 packet: IT_NOP (1 dword) then IT_WRITE_DATA writing seq to fence_va. */
-    /* NOP: PM4 header only. */
-    /* WRITE_DATA: header(1) + engine/addr_info(1) + addr_lo(1) + addr_hi(1) + data(1) = 5 dwords */
+    /* Packet stream, as gfx_v8_0_ring_test_ib emits it (gfx_v8_0.c:891-892):
+     * a one-dword PACKET2 filler (0x80000000, the padding gfx_v8_0.c:4165
+     * writes), then PACKET3(WRITE_DATA, 3): header, info (DST_SEL=5 memory,
+     * WR_CONFIRM), address low, address high, data. Six dwords in all. */
     uint32_t pkt[6];
-    pkt[0] = 0xffff1000u;                        /* IT_NOP */
-    pkt[1] = 0xc0041300u;                         /* IT_WRITE_DATA header: count=4, opcode=0x37, type=3 */
-    pkt[2] = (2u << 8u) | (1u << 20u);           /* ENGINE=MEM, WR_CONFIRM=1, DST_SEL=MEM */
+    pkt[0] = PM4_FILLER2;
+    pkt[1] = PM4_PACKET3(PM4_IT_WRITE_DATA, 3);
+    pkt[2] = PM4_WRITE_DATA_DST_SEL(PM4_DST_SEL_MEM) | PM4_WR_CONFIRM;
     pkt[3] = (uint32_t)(r->fence_pa & 0xffffffffu);
     pkt[4] = (uint32_t)(r->fence_pa >> 32);
     pkt[5] = seq;

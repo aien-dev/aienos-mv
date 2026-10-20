@@ -2305,7 +2305,10 @@ ifeq ($(CK_X86_GPU),1)
 IMACKERN_CFLAGS += -DCK_X86_GPU=1
 CK_X86_GPU_UCODE ?= 0
 ifeq ($(CK_X86_GPU_UCODE),1)
-IMACKERN_CFLAGS += -DCK_X86_GPU_UCODE=1
+ifeq ($(wildcard $(REPO)/target/native-kernel/gpu_ucode.inc),)
+$(error CK_X86_GPU_UCODE=1 needs $(REPO)/target/native-kernel/gpu_ucode.inc: run sh scripts/fetch_gpu_ucode.sh first)
+endif
+IMACKERN_CFLAGS += -DCK_X86_GPU_UCODE=1 -I$(REPO)/target/native-kernel
 endif
 else ifeq ($(CK_X86_GPU),0)
 IMACKERN_CFLAGS += -DCK_X86_GPU=0
@@ -2334,7 +2337,7 @@ $(IMACKERN_DIR)/gpu_x86.o: $(GPU_DIR)/gpu_x86.c $(IMACKERN_HDRS) $(GPU_DIR)/amd_
 $(IMACKERN_DIR)/amd_display.o: $(GPU_DIR)/amd_display.c $(IMACKERN_HDRS) $(GPU_DIR)/amd_gpu.h $(GPU_DIR)/amd_gpu_regs.h
 $(IMACKERN_DIR)/amd_mc.o:      $(GPU_DIR)/amd_mc.c      $(IMACKERN_HDRS) $(GPU_DIR)/amd_gpu.h $(GPU_DIR)/amd_gpu_regs.h
 $(IMACKERN_DIR)/amd_smu.o:     $(GPU_DIR)/amd_smu.c     $(IMACKERN_HDRS) $(GPU_DIR)/amd_gpu.h $(GPU_DIR)/amd_gpu_regs.h
-$(IMACKERN_DIR)/amd_ucode.o:   $(GPU_DIR)/amd_ucode.c   $(IMACKERN_HDRS) $(GPU_DIR)/amd_gpu.h $(GPU_DIR)/amd_gpu_regs.h
+$(IMACKERN_DIR)/amd_ucode.o:   $(GPU_DIR)/amd_ucode.c   $(IMACKERN_HDRS) $(GPU_DIR)/amd_gpu.h $(GPU_DIR)/amd_gpu_regs.h $(if $(filter 1,$(CK_X86_GPU_UCODE)),$(REPO)/target/native-kernel/gpu_ucode.inc)
 $(IMACKERN_DIR)/amd_sdma.o:    $(GPU_DIR)/amd_sdma.c    $(IMACKERN_HDRS) $(GPU_DIR)/amd_gpu.h $(GPU_DIR)/amd_gpu_regs.h
 $(IMACKERN_DIR)/amd_compute.o: $(GPU_DIR)/amd_compute.c $(IMACKERN_HDRS) $(GPU_DIR)/amd_gpu.h $(GPU_DIR)/amd_gpu_regs.h
 $(IMACKERN_DIR)/smp_x86.o: $(X86K)/smp_x86.S
@@ -2411,7 +2414,13 @@ $(OUT)/host/test_amd_gpu: $(GPU_TEST_SRC) $(GPU_DIR)/amd_gpu_regs.h $(GPU_DIR)/a
 	@mkdir -p $(OUT)/host
 	$(CC) -std=c11 -Wall -DAMD_GPU_TEST_HOST=1 -I$(KDIR) -I$(GPU_DIR) -I$(X86K) -o $@ $<
 	@echo "host test: running test_amd_gpu"; $@
-imac-gpu-test: $(OUT)/host/test_amd_gpu
+imac-gpu-test: $(OUT)/host/test_amd_gpu $(OUT)/host/test_amd_gpu_ring
+# Ring code under test: the driver's own amd_ucode.c and frames.c; the GPU is a model thread (tests/test_amd_gpu_ring.c).
+GPU_RING_TEST_SRC := $(KDIR)/tests/test_amd_gpu_ring.c
+$(OUT)/host/test_amd_gpu_ring: $(GPU_RING_TEST_SRC) $(GPU_DIR)/amd_ucode.c $(KDIR)/mm/frames.c $(GPU_DIR)/amd_gpu.h $(GPU_DIR)/amd_host_shim.h $(GPU_DIR)/amd_gpu_regs.h $(GPU_DIR)/amd_ring.h $(KDIR)/mm/frames.h
+	@mkdir -p $(OUT)/host
+	$(CC) -std=c11 -Wall -pthread -DAMD_GPU_TEST_HOST=1 -I$(KDIR) -I$(KDIR)/include -I$(KDIR)/mm -I$(BOOT) -I$(GPU_DIR) -I$(X86K) -o $@ $(GPU_RING_TEST_SRC) $(GPU_DIR)/amd_ucode.c $(KDIR)/mm/frames.c
+	@echo "host test: running test_amd_gpu_ring"; $@
 # Negative test builds for W^X (#409), QEMU only and never deployed: CK_X86_WX_MUTATE=1 leaves RAM
 # executable, =2 leaves the kernel's code writable, and the kernel's W^X probes must then panic
 # (scripts/qemu_ck_imac_kernel_test.sh). Build them into their own OUT directory.

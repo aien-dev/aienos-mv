@@ -172,7 +172,7 @@ void ck_x86_hda_step(void);
 /* pci_x86.c: hands the display chip the walk found (the one whose VRAM holds
  * the framebuffer at fb_pa, fb_bytes long) to panel_x86.c; with none, says so.
  * Call after ck_x86_storage. */
-void ck_x86_display(uint64_t fb_pa, uint64_t fb_bytes, uint64_t tsc_hz);
+void ck_x86_display(uint64_t fb_pa, uint64_t fb_bytes, struct ck_frames *fr, uint64_t tsc_hz);
 
 /* gpu/gpu_x86.c: AMD Polaris GPU driver entry point (CK_X86_GPU=1).
  * Called from pci_x86.c when a Polaris display chip is found.
