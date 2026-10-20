@@ -60,18 +60,6 @@ impl Paths {
     }
 }
 
-/// A sparse blank disk of `mib` MiB, created only if `p` does not exist.
-pub fn ensure_blank_disk(p: &Path, mib: u64) -> Result<(), String> {
-    if p.exists() {
-        return Ok(());
-    }
-    if let Some(d) = p.parent() {
-        std::fs::create_dir_all(d).map_err(|e| format!("{}: {e}", d.display()))?;
-    }
-    let f = std::fs::File::create(p).map_err(|e| format!("{}: {e}", p.display()))?;
-    f.set_len(mib << 20).map_err(|e| format!("{}: {e}", p.display()))
-}
-
 /// Locally administered unicast MAC, stable per user home (FNV-1a of the path).
 pub fn stable_mac(home: &Path) -> String {
     let mut h: u64 = 0xcbf2_9ce4_8422_2325;
@@ -103,11 +91,11 @@ mod tests {
     }
 
     #[test]
-    fn blank_disk_and_reset() {
+    fn store_disk_and_reset() {
         let d = std::env::temp_dir().join(format!("aienos-run-test-{}", std::process::id()));
         let p = Paths::at(d.clone());
         p.ensure().unwrap();
-        ensure_blank_disk(&p.store_disk, 16).unwrap();
+        crate::esp::ensure_store_disk(&p.store_disk, 16).unwrap();
         assert_eq!(std::fs::metadata(&p.store_disk).unwrap().len(), 16 << 20);
         p.reset_store().unwrap();
         assert!(!p.store_disk.exists());

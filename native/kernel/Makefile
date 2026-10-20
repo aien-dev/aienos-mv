@@ -488,6 +488,23 @@ $(error CK_TEST_SLOT_KEY and CK_SLOT_KEYS are exclusive: one trusted key source 
 endif
 endif
 
+# VM edition (aienos-run on macOS / Linux / Windows, core/vguest.h):
+# CK_VM_GUEST=1 lets the hypervisor's own virtio and VZ NVMe devices DMA
+# without an SMMU window and draws entropy from its virtio entropy device,
+# both only while firmware hands over at EL1. Never a hardware image. Its
+# default OUT is separate so it never replaces a default image.
+CK_VM_GUEST ?=
+ifneq ($(strip $(CK_VM_GUEST)),)
+ifneq ($(strip $(CK_VM_GUEST)),1)
+$(error CK_VM_GUEST must be empty or 1)
+endif
+ifneq ($(strip $(CK_HARDWARE_STAGING)$(CK_QEMU_UNSAFE_DMA)$(CK_PI5)),)
+$(error CK_VM_GUEST (VM edition: hypervisor devices DMA without an SMMU) cannot be combined with CK_HARDWARE_STAGING, CK_QEMU_UNSAFE_DMA or a Pi image)
+endif
+OUT ?= $(REPO)/target/native-kernel-vm
+CK_EXTRA_CFLAGS += -DCK_VM_GUEST=1
+endif
+
 OUT ?= $(REPO)/target/native-kernel
 # Pi builds only (CK_PI5=1: "make pi5" and anything built on it): when a tracked
 # file differs from HEAD the stamp ends in "-dirty", so the kernel's report
@@ -875,7 +892,7 @@ KLDFLAGS := -nostdlib -pie --no-dynamic-linker -z norelro -z noexecstack -z max-
 
 CORE_C := $(BOOT)/efi_main.c $(BOOT)/efi_model.c $(BOOT)/efi_gop.c \
 	$(KDIR)/arch/exception.c $(KDIR)/arch/gic.c $(KDIR)/arch/timer.c \
-	$(KDIR)/core/acpi.c $(KDIR)/core/acpi_dev.c $(KDIR)/core/acpi_platform.c $(KDIR)/core/console.c $(KDIR)/core/vcon.c $(KDIR)/core/fbcon.c $(KDIR)/core/fmt.c \
+	$(KDIR)/core/acpi.c $(KDIR)/core/acpi_dev.c $(KDIR)/core/acpi_platform.c $(KDIR)/core/console.c $(KDIR)/core/vcon.c $(KDIR)/core/vpci.c $(KDIR)/core/vrng.c $(KDIR)/core/vguest.c $(KDIR)/core/fbcon.c $(KDIR)/core/fmt.c \
 	$(KDIR)/core/kmain.c $(KDIR)/core/handoff_check.c $(KDIR)/core/libc_min.c $(KDIR)/core/report.c \
 	$(KDIR)/core/smmu.c $(KDIR)/core/smmu_svc.c $(KDIR)/core/sched.c $(KDIR)/core/ipc.c \
 	$(KDIR)/core/fpu.c $(KDIR)/core/cpufeat.c $(KDIR)/core/infer.c $(KDIR)/core/m3.c $(KDIR)/core/entropy.c $(KDIR)/arch/rndr.c $(KDIR)/core/smp.c \

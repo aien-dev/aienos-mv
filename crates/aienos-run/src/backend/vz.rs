@@ -120,6 +120,10 @@ unsafe fn build_and_start(spec: &VmSpec, q: &Queue, out_w: &File, in_r: &File) -
     msg!(serial, "setAttachment:", fa => Id; ());
     msg!(cfg, "setSerialPorts:", nsarray(&[serial]) => Id; ());
 
+    // Entropy: the guest has no RNDR under Hypervisor.framework on M1/M2; a VM
+    // edition kernel draws from this virtio entropy device (core/vrng.c).
+    msg!(cfg, "setEntropyDevices:", nsarray(&[new_obj("VZVirtioEntropyDeviceConfiguration")]) => Id; ());
+
     // Network: NAT (vmnet shared, guest gets DHCP on the host-only subnet).
     if let NetMode::Nat = spec.net {
         let n = new_obj("VZVirtioNetworkDeviceConfiguration");

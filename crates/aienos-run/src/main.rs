@@ -74,7 +74,7 @@ fn spec_for(c: &cli::Cmd, p: &paths::Paths, be: &str) -> Result<VmSpec, String> 
         None
     } else {
         let s = c.store_disk.clone().unwrap_or_else(|| p.store_disk.clone());
-        paths::ensure_blank_disk(&s, c.store_mib)?;
+        aienos_run::esp::ensure_store_disk(&s, c.store_mib)?;
         Some(s)
     };
     let mut forwards = backend::default_forwards();

@@ -3,6 +3,7 @@
 #include "nvme_shutdown.h"
 #include "ck.h"
 #include "disk_layout.h"
+#include "vguest.h"
 
 /* NVMe DMA rule: no SMMU confinement means no DMA. The default build asks
  * the core for SMMU confinement (ck_dma_confine) and refuses NVMe DMA when
@@ -218,6 +219,9 @@ int ck_nvme_bind(ck_nvme *n, const pci_found *found, uint32_t nfound, const pci_
         ck_printf("smmu_dma_window: nvme only, translation active iova=0x%llx len=0x%llx rid=0x%x\n",
                   (unsigned long long)cf.iova, (unsigned long long)cf.len, rid);
         ck_printf("dma_gate: nvme granted (Confined), bus master on\n");
+    } else if (src == CK_SMMU_ABSENT && ck_vguest_dma_device(f->vendor, f->device)) {
+        ck_printf("dma_gate: nvme granted (HypervisorDevice: VM edition, %04x:%04x is the hypervisor's emulation, "
+                  "no SMMU), bus master on\n", f->vendor, f->device);
     } else if (src == CK_SMMU_ABSENT) {
 #if CK_NVME_UNSAFE_BYPASS
         ck_printf("WARNING: UNSAFE NVME DMA BYPASS ACTIVE (no SMMU on this machine; device can DMA anywhere; TEST-ONLY build)\n");

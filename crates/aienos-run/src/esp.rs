@@ -233,16 +233,14 @@ pub fn fat16_image(sectors: u32, hidden: u32, files: &[EspFile]) -> Result<Vec<u
     Ok(img)
 }
 
-/// Raw GPT disk of `mib` MiB with one ESP (FAT16) holding `files`.
-pub fn gpt_disk(mib: u64, files: &[EspFile]) -> Result<Vec<u8>, String> {
-    let total = mib * 1024 * 1024 / SECTOR as u64;
+/// GPT metadata for a disk of `total` sectors with one partition spanning
+/// [PART_START, last usable]: protective MBR, primary and backup headers and
+/// entry arrays, as (byte offset, bytes) pieces. Returns the pieces and the
+/// partition's last LBA.
+fn gpt_single(total: u64, ptype: &[u8; 16], disk_guid: &[u8; 16], part_guid: &[u8; 16], name: &str) -> (Vec<(u64, Vec<u8>)>, u64) {
     let last_usable = total - 34;
     let part_end = last_usable; // inclusive
-    let part_secs = (part_end - PART_START + 1) as u32;
-    let fat = fat16_image(part_secs, PART_START as u32, files)?;
-    let mut d = vec![0u8; (total as usize) * SECTOR];
-    // Protective MBR.
-    let m = &mut d[..SECTOR];
+    let mut m = vec![0u8; SECTOR];
     m[446 + 1..446 + 4].copy_from_slice(&[0x00, 0x02, 0x00]);
     m[446 + 4] = 0xEE;
     m[446 + 5..446 + 8].copy_from_slice(&[0xFF, 0xFF, 0xFF]);
@@ -252,11 +250,11 @@ pub fn gpt_disk(mib: u64, files: &[EspFile]) -> Result<Vec<u8>, String> {
     m[511] = 0xAA;
     // Partition entry array (128 x 128 bytes).
     let mut ents = vec![0u8; 128 * 128];
-    ents[0..16].copy_from_slice(&ESP_TYPE);
-    ents[16..32].copy_from_slice(&PART_GUID);
+    ents[0..16].copy_from_slice(ptype);
+    ents[16..32].copy_from_slice(part_guid);
     ents[32..40].copy_from_slice(&PART_START.to_le_bytes());
     ents[40..48].copy_from_slice(&part_end.to_le_bytes());
-    for (i, ch) in "EFI System Partition".encode_utf16().enumerate() {
+    for (i, ch) in name.encode_utf16().take(36).enumerate() {
         ents[56 + 2 * i..58 + 2 * i].copy_from_slice(&ch.to_le_bytes());
     }
     let ents_crc = crc32(&ents);
@@ -269,7 +267,7 @@ pub fn gpt_disk(mib: u64, files: &[EspFile]) -> Result<Vec<u8>, String> {
         h[32..40].copy_from_slice(&alt.to_le_bytes());
         h[40..48].copy_from_slice(&34u64.to_le_bytes());
         h[48..56].copy_from_slice(&last_usable.to_le_bytes());
-        h[56..72].copy_from_slice(&DISK_GUID);
+        h[56..72].copy_from_slice(disk_guid);
         h[72..80].copy_from_slice(&ents_lba.to_le_bytes());
         h[80..84].copy_from_slice(&128u32.to_le_bytes());
         h[84..88].copy_from_slice(&128u32.to_le_bytes());
@@ -278,15 +276,64 @@ pub fn gpt_disk(mib: u64, files: &[EspFile]) -> Result<Vec<u8>, String> {
         h[16..20].copy_from_slice(&c.to_le_bytes());
         h
     };
-    let s = |lba: u64| lba as usize * SECTOR;
-    let h1 = header(1, total - 1, 2);
-    d[s(1)..s(1) + 92].copy_from_slice(&h1);
-    d[s(2)..s(2) + ents.len()].copy_from_slice(&ents);
-    let h2 = header(total - 1, 1, total - 33);
-    d[s(total - 33)..s(total - 33) + ents.len()].copy_from_slice(&ents);
-    d[s(total - 1)..s(total - 1) + 92].copy_from_slice(&h2);
-    d[s(PART_START)..s(PART_START) + fat.len()].copy_from_slice(&fat);
+    let s = |lba: u64| lba * SECTOR as u64;
+    let pieces = vec![
+        (0, m),
+        (s(1), header(1, total - 1, 2)),
+        (s(2), ents.clone()),
+        (s(total - 33), ents),
+        (s(total - 1), header(total - 1, 1, total - 33)),
+    ];
+    (pieces, part_end)
+}
+
+/// Raw GPT disk of `mib` MiB with one ESP (FAT16) holding `files`.
+pub fn gpt_disk(mib: u64, files: &[EspFile]) -> Result<Vec<u8>, String> {
+    let total = mib * 1024 * 1024 / SECTOR as u64;
+    let (pieces, part_end) = gpt_single(total, &ESP_TYPE, &DISK_GUID, &PART_GUID, "EFI System Partition");
+    let part_secs = (part_end - PART_START + 1) as u32;
+    let fat = fat16_image(part_secs, PART_START as u32, files)?;
+    let mut d = vec![0u8; (total as usize) * SECTOR];
+    for (off, b) in pieces {
+        d[off as usize..off as usize + b.len()].copy_from_slice(&b);
+    }
+    let s = PART_START as usize * SECTOR;
+    d[s..s + fat.len()].copy_from_slice(&fat);
     Ok(d)
+}
+
+/// AIENOS partition type GUID (native/kernel/dev/disk_part.h): the one
+/// partition the kernel's Store stages write.
+pub const AIENOS_TYPE: [u8; 16] = guid(0x38DA_AC89, 0x5EAD, 0x4B40, [0x8B, 0x1E, 0x36, 0x87, 0xA7, 0x41, 0x80, 0x61]);
+const STORE_DISK_GUID: [u8; 16] = guid(0xA1E0_0505, 0x2026, 0x1020, [0x41, 0x49, 0x45, 0x4E, 0x53, 0x54, 0x52, 0x44]);
+const STORE_PART_GUID: [u8; 16] = guid(0xA1E0_0505, 0x2026, 0x1020, [0x41, 0x49, 0x45, 0x4E, 0x53, 0x54, 0x52, 0x31]);
+
+/// The per-user Store disk: a sparse raw disk of `mib` MiB, GPT with one
+/// all-zero AIENOS partition (the kernel formats the Store inside it on
+/// first boot). Created only when `p` does not exist; never rewritten.
+pub fn ensure_store_disk(p: &Path, mib: u64) -> Result<(), String> {
+    use std::io::{Seek, SeekFrom, Write};
+    if p.exists() {
+        return Ok(());
+    }
+    if mib < 16 {
+        return Err(format!("store disk of {mib} MiB is too small (16 MiB minimum)"));
+    }
+    if let Some(d) = p.parent() {
+        std::fs::create_dir_all(d).map_err(|e| format!("{}: {e}", d.display()))?;
+    }
+    let tmp = p.with_extension("tmp");
+    let total = mib * 1024 * 1024 / SECTOR as u64;
+    let (pieces, _) = gpt_single(total, &AIENOS_TYPE, &STORE_DISK_GUID, &STORE_PART_GUID, "AIENOS Store");
+    let io = |e: std::io::Error| format!("{}: {e}", tmp.display());
+    let mut f = std::fs::File::create(&tmp).map_err(io)?;
+    f.set_len(mib << 20).map_err(io)?;
+    for (off, b) in pieces {
+        f.seek(SeekFrom::Start(off)).map_err(io)?;
+        f.write_all(&b).map_err(io)?;
+    }
+    f.sync_all().map_err(io)?;
+    std::fs::rename(&tmp, p).map_err(|e| format!("{}: {e}", p.display()))
 }
 
 /// Writes a boot disk for one UEFI image at `disk` (atomically via a temp file).
@@ -346,5 +393,25 @@ mod tests {
         let a = gpt_disk(32, &[EspFile { path: "EFI/BOOT/BOOTAA64.EFI", data: b"MZxx" }]).unwrap();
         let b = gpt_disk(32, &[EspFile { path: "EFI/BOOT/BOOTAA64.EFI", data: b"MZxx" }]).unwrap();
         assert!(a == b);
+    }
+
+    #[test]
+    fn store_disk_has_one_aienos_partition() {
+        let p = std::env::temp_dir().join(format!("aienos-run-store-{}.img", std::process::id()));
+        let _ = std::fs::remove_file(&p);
+        ensure_store_disk(&p, 16).unwrap();
+        let d = std::fs::read(&p).unwrap();
+        assert_eq!(d.len(), 16 << 20);
+        assert_eq!(&d[510..512], &[0x55, 0xAA]);
+        assert_eq!(&d[512..520], b"EFI PART");
+        assert_eq!(&d[1024..1040], &AIENOS_TYPE);
+        let total = (16u64 << 20) / 512;
+        let b = ((total - 1) * 512) as usize;
+        assert_eq!(&d[b..b + 8], b"EFI PART");
+        // Never rewritten once it exists (the Store lives in it).
+        std::fs::write(&p, b"kept").unwrap();
+        ensure_store_disk(&p, 16).unwrap();
+        assert_eq!(std::fs::read(&p).unwrap(), b"kept");
+        std::fs::remove_file(&p).unwrap();
     }
 }

@@ -10,6 +10,7 @@
  * qualify nothing physical. */
 #include "arch.h"
 #include "vcon.h"
+#include "vguest.h"
 #include "ck_internal.h"
 #include "entropy.h"
 #include "cpufeat.h"
@@ -133,6 +134,7 @@ static __attribute__((noreturn)) void ck_el1_main(void *arg)
     /* No UART in the ACPI tables and firmware at EL1 (a hypervisor below us,
      * e.g. Apple Virtualization.framework): the virtio console is the
      * console (core/vcon.c); it replays what was printed so far. */
+    ck_vguest_set_firmware_el(h->firmware_el);
     if (!ck_console_uart_base() && h->firmware_el == 1) {
         int vrc = ck_console_attach_vcon();
         if (vrc == 0) {
@@ -143,6 +145,14 @@ static __attribute__((noreturn)) void ck_el1_main(void *arg)
             ck_printf("console: no UART and no virtio console (rc=%d)\n", vrc);
         }
     }
+#if defined(CK_VM_GUEST) && CK_VM_GUEST == 1
+    if (ck_vguest())
+        ck_printf("vm_edition: CK_VM_GUEST=1 under a hypervisor (firmware EL1): its virtio and VZ NVMe devices DMA "
+                  "without SMMU windows, entropy may come from its virtio entropy device (core/vguest.h)\n");
+    else
+        ck_printf("vm_edition: CK_VM_GUEST=1 but firmware at EL%u: no hypervisor grants, hardware rules apply\n",
+                  (unsigned)h->firmware_el);
+#endif
     if (ck_pi5_start)
         ck_pi5_start();
 
@@ -247,8 +257,15 @@ static __attribute__((noreturn)) void ck_el1_main(void *arg)
         ck_printf("entropy: source=%s probe_words=2 retries=%llu stuck_test=ok\n", ck_entropy_source(),
                   (unsigned long long)ck_entropy_retries());
 #else
-        ck_printf("entropy: rndr feat_rng=yes probe_words=2 retries=%llu stuck_test=ok\n",
-                  (unsigned long long)ck_entropy_retries());
+    {
+        if (ck_entropy_source()[0] == 'r')
+            ck_printf("entropy: rndr feat_rng=yes probe_words=2 retries=%llu stuck_test=ok\n",
+                      (unsigned long long)ck_entropy_retries());
+        else /* VM edition without FEAT_RNG (core/vguest.h) */
+            ck_printf("entropy: source=%s (hypervisor entropy device, VM edition) probe_words=2 retries=%llu "
+                      "stuck_test=ok\n",
+                      ck_entropy_source(), (unsigned long long)ck_entropy_retries());
+    }
 #endif
     else
         ck_printf("entropy: unavailable reason=%s (%s); security consumers refuse, fail closed\n",

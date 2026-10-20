@@ -3,6 +3,7 @@
 #include "net_bind.h"
 #include "ck.h"
 #include "net_udp.h"
+#include "vguest.h"
 #include <string.h>
 
 #define WIN_N 4
@@ -361,16 +362,20 @@ int ck_net_bind_selftest(const pci_func *f, const virtio_pci_caps *caps)
     uint32_t rid = ((uint32_t)f->bus << 8) | ((uint32_t)f->dev << 3) | (uint32_t)f->fn;
     struct ck_dma_confinement cf;
     int src = ck_dma_confine(f->segment, rid, phys, win, &cf);
-    if (src != 0) {
+    /* VM edition (core/vguest.h): the hypervisor's own virtio-net, no SMMU. */
+    int hyp = src == CK_SMMU_ABSENT && ck_vguest_dma_device(f->vendor, f->device);
+    if (src != 0 && !hyp) {
         ck_printf("dma_gate: virtio_net denied (%s rc=%d), bus master stays off\n",
                   src == CK_SMMU_ABSENT ? "NoSmmu" : "SmmuNotReady", src);
         ck_printf("virtio_net: not bound (SMMU DMA isolation not active)\n");
         return CK_NET_E_DENIED;
     }
-    n->confined = 1;
-    n->stream_id = cf.stream_id;
-    ck_printf("smmu_dma_window: virtio_net only iova=0x%llx len=0x%llx rid=0x%x stream_id=0x%x\n",
-              (unsigned long long)cf.iova, (unsigned long long)cf.len, rid, cf.stream_id);
+    if (!hyp) {
+        n->confined = 1;
+        n->stream_id = cf.stream_id;
+        ck_printf("smmu_dma_window: virtio_net only iova=0x%llx len=0x%llx rid=0x%x stream_id=0x%x\n",
+                  (unsigned long long)cf.iova, (unsigned long long)cf.len, rid, cf.stream_id);
+    }
     const virtio_pci_region *r[WIN_N] = {&caps->common_cfg, &caps->notify_cfg, &caps->isr_cfg, &caps->device_cfg};
     for (int i = 0; i < WIN_N; i++) {
         n->win[i] = map_window(n, r[i]);
@@ -382,12 +387,17 @@ int ck_net_bind_selftest(const pci_func *f, const virtio_pci_caps *caps)
     }
     pci_enable(f, 1);
     n->bm_on = 1;
-    ck_printf("dma_gate: virtio_net granted (Confined), bus master on\n");
+    if (hyp)
+        ck_printf("dma_gate: virtio_net granted (HypervisorDevice: VM edition, %04x:%04x is the hypervisor's "
+                  "emulation, no SMMU), bus master on\n", f->vendor, f->device);
+    else
+        ck_printf("dma_gate: virtio_net granted (Confined), bus master on\n");
     vnet_ops ops = {n, o_read, o_write, o_notify};
     /* Fail closed: without VIRTIO_F_ACCESS_PLATFORM QEMU (and a real device
-     * behind a bypassing transport) would DMA around the SMMU window. */
-    vnet_err e =
-        vnet_init_flags(&n->dev, &ops, caps, mem, phys, need, CK_NET_QSIZE, VNET_INIT_REQUIRE_ACCESS_PLATFORM);
+     * behind a bypassing transport) would DMA around the SMMU window. With
+     * no window at all (VM edition) there is nothing to route through. */
+    vnet_err e = vnet_init_flags(&n->dev, &ops, caps, mem, phys, need, CK_NET_QSIZE,
+                                 hyp ? 0 : VNET_INIT_REQUIRE_ACCESS_PLATFORM);
     if (e != VNET_OK) {
         ck_printf("virtio_net: init FAIL (%s)\n", vnet_err_name(e));
         ck_net_release();
@@ -404,8 +414,10 @@ int ck_net_bind_selftest(const pci_func *f, const virtio_pci_caps *caps)
     int rc = n->dev.has_mac ? roundtrip(n, &peer) : CK_NET_E_INIT;
     /* Prove the fence: device DMA outside the window is refused by the SMMU,
      * then the device recovers inside it (net_bind.h). */
-    if (rc == CK_NET_OK &&
-        (smmu_negative_test(n, &peer, phys, win) != 0 || recovery(n, &ops, caps, mem, phys, need) != 0))
+    if (rc == CK_NET_OK && hyp)
+        ck_printf("net_smmu_fence: not applicable (HypervisorDevice, VM edition: no SMMU)\n");
+    else if (rc == CK_NET_OK &&
+             (smmu_negative_test(n, &peer, phys, win) != 0 || recovery(n, &ops, caps, mem, phys, need) != 0))
         rc = CK_NET_E_SMMU;
     if (!n->dev.has_mac) ck_printf("net: no MAC offered by the device; round trip not attempted\n");
     ck_printf("net: selftest %s (rc=%d)\n", rc == CK_NET_OK ? "PASS" : "FAIL", rc);

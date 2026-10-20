@@ -2,7 +2,9 @@
  * (ID_AA64ISAR0_EL1.RNDR, bits [63:60]) and the RNDR read (NZCV.Z set means
  * no random number was returned). Implements the ck.h entropy services.
  * There is no other source: without RNDR every request is refused and the
- * consumer fails closed. Not covered here: firmware that traps RNDR to EL3
+ * consumer fails closed. Exception: a VM edition image (CK_VM_GUEST=1,
+ * core/vguest.h) under a hypervisor without FEAT_RNG draws from the
+ * hypervisor's virtio entropy device (core/vrng.c) instead. Not covered here: firmware that traps RNDR to EL3
  * (FEAT_RNG_TRAP) and answers with an UNDEFINED exception would fault the
  * read; that shows as a kernel fault, never as weak bytes.
  * QEMU is not hardware: GB10 RNDR availability is UNVERIFIED. */
@@ -12,6 +14,7 @@
 #ifdef CK_PI5
 #include "pi5_rng.h"
 #endif
+#include "vrng.h"
 
 #ifndef CK_PI5
 static int hw_present(void *ctx)
@@ -33,6 +36,7 @@ static int hw_read(void *ctx, uint64_t *out)
 static const struct ck_rng_ops hw_ops = { hw_present, hw_read, 0 };
 #endif /* !CK_PI5 */
 static struct ck_rng rng = { 0, CK_RNG_UNPROBED, 0, 0, 0 };
+static const char *source = "rndr";
 
 int ck_entropy_init(void)
 {
@@ -40,6 +44,10 @@ int ck_entropy_init(void)
     /* Pi 5: no FEAT_RNG; the only source is the BCM2712 RNG200 block (dev/pi5_rng.c). */
     return ck_rng_probe(&rng, ck_pi5_rng_ops());
 #else
+    if (!hw_present(0) && ck_vrng_ops()->present(0)) {
+        source = "virtio-rng";
+        return ck_rng_probe(&rng, ck_vrng_ops());
+    }
     return ck_rng_probe(&rng, &hw_ops);
 #endif
 }
@@ -49,7 +57,7 @@ const char *ck_entropy_source(void)
 #ifdef CK_PI5
     return "rng200";
 #else
-    return "rndr";
+    return source;
 #endif
 }
 
