@@ -212,6 +212,12 @@ fn check_spec(spec: &VmSpec) -> Result<(), String> {
     GuestMem::check_size(u64::from(spec.mem_mib) << 20)
 }
 
+/// Ok when this PC's Windows hypervisor is on (QEMU's `-accel whpx` checks this first).
+#[cfg(windows)]
+pub fn hypervisor_present() -> Result<(), String> {
+    sys::hypervisor_present()
+}
+
 #[derive(Default)]
 pub struct WhpxBackend;
 

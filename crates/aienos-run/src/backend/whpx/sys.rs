@@ -182,10 +182,20 @@ pub fn probe() -> Result<(), String> {
     probe_api(&Api::load()?)
 }
 
-fn probe_api(api: &Api) -> Result<(), String> {
+/// Ok when the Windows hypervisor runs and its API is installed (what QEMU's WHPX needs).
+pub fn hypervisor_present() -> Result<(), String> {
+    present(&Api::load()?)
+}
+
+fn present(api: &Api) -> Result<(), String> {
     if capability(api, CapHypervisorPresent)? & 1 == 0 {
         return Err("the Windows hypervisor is not running: turn on \"Windows Hypervisor Platform\", restart, and check virtualization is on in the firmware setup".into());
     }
+    Ok(())
+}
+
+fn probe_api(api: &Api) -> Result<(), String> {
+    present(api)?;
     if capability(api, CapFeatures)? & FEATURE_LOCAL_APIC_EMULATION == 0 {
         return Err("this Windows hypervisor does not emulate the local APIC".into());
     }

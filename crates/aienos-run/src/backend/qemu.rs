@@ -482,6 +482,11 @@ impl Backend for QemuBackend {
                 spec.arch.as_str()
             )));
         }
+        // Without the Windows feature QEMU stops with its own error; say what to turn on.
+        #[cfg(windows)]
+        if self.accel.unwrap_or_else(|| best_accel(spec.arch)) == Accel::Whpx {
+            super::whpx::hypervisor_present().map_err(BackendError::Unavailable)?;
+        }
         Ok(())
     }
 
