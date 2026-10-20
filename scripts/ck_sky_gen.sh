@@ -16,7 +16,7 @@
 #   SKY_MAG          faintest star, V magnitude (6.5, the naked-eye limit)
 #   SKY_GRID         Milky Way samples across the screen's width (240)
 #   SKY_EXPOSURE     linear light at the middle of a magnitude 6.5 star (see the tool)
-#   SKY_GAIN         the Milky Way's light times this (1.2: calibrated so the on-screen band-to-sky ratio is the physical 3.3; see the report)
+#   SKY_GAIN         a test multiplier on the Milky Way and Clouds light (1.0: the physical scale; no anchor, see the report)
 #   SKY_SKYGLOW      the dark sky's own glow, V magnitudes per square arcsecond (22.0)
 #   SKY_HPX_LEVEL    Gaia HEALPix level of the Milky Way aggregates: 7 (196608 cells, the default) or 6
 #                    (49152 cells; the level-7 chunks are fetched if missing)

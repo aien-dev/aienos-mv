@@ -65,9 +65,11 @@ static int grid_at_eq(const ck_sky_view *v, int32_t x2, int32_t y2, int32_t w, i
 {
     const ck_sky_map *m = &ck_sky_milkyway;
 
-    /* Tangent-plane offset from the view centre, Q30 (half-screen-widths * tan_half) */
-    int64_t u  = (int64_t)(x2 - 2 * cx) * (int64_t)v->tan_half_q30 / (2 * (int64_t)w);
-    int64_t vv = (int64_t)(2 * cy - y2) * (int64_t)v->tan_half_q30 / (2 * (int64_t)w);
+    /* Tangent-plane offset from the view centre, Q30. The forward projection (ck_sky_project) puts a
+     * tangent-plane offset u at (u / tan_half) half-widths, i.e. (u / tan_half) * w / 2 pixels, so the
+     * inverse is u = px * 2 * tan_half / w with px = half-pixels / 2: u = half_px * tan_half / w. */
+    int64_t u  = (int64_t)(x2 - 2 * cx) * (int64_t)v->tan_half_q30 / (int64_t)w;
+    int64_t vv = (int64_t)(2 * cy - y2) * (int64_t)v->tan_half_q30 / (int64_t)w;
 
     /* Unnormalised sky direction in J2000 frame, ~Q30 */
     int64_t dx = (int64_t)v->rot_q30[2][0] + ((int64_t)v->rot_q30[0][0] * u >> 30) + ((int64_t)v->rot_q30[1][0] * vv >> 30);

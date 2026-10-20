@@ -34,7 +34,7 @@
  * Usage: ck_sky_gen --cache DIR --out sky_data.c [--report FILE]
  *        [--inputs FILE] [--ra DEG --dec DEG] [--fov DEG] [--roll DEG]
  *        [--mag LIMIT] [--grid N] [--gain X] [--skyglow MAG]
- *        [--mw-top-s10 X] [--exposure X]
+ *        [--exposure X]
  * Host tool only; plain C11 and libm.
  */
 #include <ctype.h>
@@ -53,6 +53,8 @@
 #endif
 #define NSIDE (1 << HPX_LEVEL)
 #define NCELLS (12 * NSIDE * NSIDE)
+/* Gaia DR3 G-band zero point: G = 25.6874 - 2.5 log10(flux in e-/s) (Riello et al. 2021, A&A 649, A3, Table 5). */
+#define GAIA_ZP_G 25.6874
 
 /* The screen shape the grid is made for: centre of the view at half the width
  * and 40% of the height (where allen_ui.c puts the merger); rows cover a 16:10
@@ -653,11 +655,7 @@ static void openngc_load(const char *path, galaxy_t **out, size_t *n, size_t *ca
     }
     free(txt);
 }
-static int cmpd(const void *a, const void *b)
-{
-    double x = *(const double *)a, y = *(const double *)b;
-    return x < y ? -1 : x > y;
-}
+
 
 
 /* ---- the Milky Way from Gaia DR3: source counts and integrated G-band
@@ -822,7 +820,7 @@ static double *gaia_to_grid(const gaia_cell_t *cells, double flux_gain)
 
 typedef struct {
     const char *cache, *out, *report, *inputs;
-    double ra, dec, fov, roll, mag, gain, skyglow, mw_top_s10, exposure;
+    double ra, dec, fov, roll, mag, gain, skyglow, exposure;
     int have_ra, have_dec, grid;
     double glow_lin, g_phys;
 } opts_t;
@@ -876,7 +874,7 @@ static void emit(const opts_t *a, const view_t *view, const sel_t *sel, size_t n
 int main(int argc, char **argv)
 {
     opts_t a = {0};
-    a.fov = 80.0, a.mag = 6.5, a.grid = 240, a.gain = 1.2, a.skyglow = 22.0, a.mw_top_s10 = 678.0, a.exposure = 0.06;
+    a.fov = 80.0, a.mag = 6.5, a.grid = 240, a.gain = 1.0, a.skyglow = 22.0, a.exposure = 0.06;
     for (int i = 1; i < argc; i++) {
         const char *k = argv[i];
         const char *v = i + 1 < argc ? argv[i + 1] : NULL;
@@ -895,7 +893,6 @@ int main(int argc, char **argv)
         else if (!strcmp(k, "--grid")) a.grid = atoi(v);
         else if (!strcmp(k, "--gain")) a.gain = atof(v);
         else if (!strcmp(k, "--skyglow")) a.skyglow = atof(v);
-        else if (!strcmp(k, "--mw-top-s10")) a.mw_top_s10 = atof(v);
         else if (!strcmp(k, "--exposure")) a.exposure = atof(v);
         else die("unknown option %s", k);
     }
@@ -1013,17 +1010,12 @@ int main(int argc, char **argv)
     /* Compute direction (ra, dec) of each HEALPix nested cell (nside=64) */
     for (int k = 0; k < NCELLS; k++)
         healpix_nest_ang(NSIDE, k, &cells[k].ra, &cells[k].dec);
-    /* Calibrate flux: scale so that the 95th-percentile cell g_flux reaches a.mw_top_s10.
-     * a.mw_top_s10 default 900 S10; Galactic centre exceeds this and is clipped by gaia_to_grid. */
-    double *flux_vals = xmalloc(NCELLS * sizeof *flux_vals);
-    int nfv = 0;
-    for (int k = 0; k < NCELLS; k++)
-        if (cells[k].nsrc > 0) flux_vals[nfv++] = cells[k].g_flux;
-    qsort(flux_vals, (size_t)nfv, sizeof *flux_vals, cmpd);
-    double peak_flux = nfv ? flux_vals[(int)(nfv * 0.95)] : 1.0;
-    free(flux_vals);
-    double s10_lin __attribute__((unused)) = a.mw_top_s10 * s10;
-    double flux_gain = peak_flux > 0 ? 1.0 / peak_flux : 1.0; /* normalise to [0,1]; emit() scales by g_phys */
+    /* Calibrate flux on the physical scale, with no anchor. A cell's G-band flux F (electrons/s) over its
+     * area A (arcsec^2) is a surface brightness, G = ZP - 2.5 log10(F/A), ZP the Gaia DR3 zero point for
+     * 1 e-/s. In S10 (1 S10 = V 27.78 mag/arcsec^2) that is S10 = (F/A) 10^(0.4 (27.78 - ZP)). G is taken
+     * as V (the colour term is under 0.2 mag for these populations). The grid then holds S10 directly. */
+    double cell_arcsec2 = (4 * PI / (12.0 * NSIDE * NSIDE)) * (180.0 * 3600.0 / PI) * (180.0 * 3600.0 / PI);
+    double flux_gain = pow(10, 0.4 * (27.78 - GAIA_ZP_G)) / cell_arcsec2;
     long nnonempty = 0;
     for (int k = 0; k < NCELLS; k++) if (cells[k].nsrc > 0) nnonempty++;
     report("Gaia DR3 Milky Way: %d HEALPix level-%d cells (nside %d), %ld non-empty; "
@@ -1040,17 +1032,14 @@ int main(int argc, char **argv)
             double v = grid[((size_t)j * (size_t)(gw_cols + 1) + (size_t)i) * 3];
             if (v > top) top = v;
         }
-    /* The brightest band of the Milky Way is set to the published value, a.mw_top_s10 S10 (V 20.7
-     * mag/arcsec2, Leinert et al. 1998, Bochum). Every grid value is divided by the brightest one, so
-     * the brightest band is 1.0 and g_phys is the light of that band; the gain (--gain) multiplies it. */
+    /* The grid is in S10 already (gaia_to_grid), so the light is physical: g_phys is one S10 of linear light
+     * per design pixel. The gain (--gain, 1.0) is only for a deliberate test; the physical value is 1.0. */
     if (top <= 0)
         die("the Gaia Milky Way grid is empty");
-    for (size_t i = 0; i < (size_t)gw_rows * (size_t)(gw_cols + 1) * 3; i++)
-        grid[i] /= top;
-    a.g_phys = a.mw_top_s10 * s10;
-    report("Milky Way: brightest band set to %.0f S10 (V %.2f mag/arcsec2) = grid 1.0 (was %.4g before the scale); "
-           "gain %.2f on the Milky Way only",
-           a.mw_top_s10, 27.78 - 2.5 * log10(a.mw_top_s10), top, a.gain);
+    a.g_phys = s10;
+    report("Milky Way: brightest band %.1f S10 = V %.2f mag/arcsec2 (Gaia G flux, physical scale, no anchor); "
+           "%.2f times the dark sky; gain %.2f",
+           top, 27.78 - 2.5 * log10(top), top / (pow(10, 0.4 * (27.78 - a.skyglow))), a.gain);
 
     /* galaxies in the view, bright enough for the eye */
     size_t gcap = 4096, ngx = 0;
@@ -1115,7 +1104,7 @@ static void emit(const opts_t *a, const view_t *view, const sel_t *sel, size_t n
     fprintf(o, " *   LIGO/Virgo (LIGO-P1800381-v7).\n");
     fprintf(o, " * Settings: centre RA %.3f Dec %.3f deg, %.1f deg across, roll %.1f deg, faintest V %.1f,\n", ra, dec, a->fov,
             a->roll, a->mag);
-    fprintf(o, " *   grid %d, exposure %.4f, sky glow %.1f mag/arcsec2, Milky Way gain %.2f (on the Milky Way only). */\n", gw_cols, a->exposure,
+    fprintf(o, " *   grid %d, exposure %.4f, sky glow %.1f mag/arcsec2, Milky Way and Clouds gain %.2f (1.00 = physical). */\n", gw_cols, a->exposure,
             a->skyglow, a->gain);
     fprintf(o, "#include \"sky_data.h\"\n\n");
     fprintf(o, "const ck_sky_view ck_sky_the_view = {\n");
