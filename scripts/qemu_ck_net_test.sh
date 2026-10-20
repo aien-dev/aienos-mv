@@ -78,9 +78,19 @@ cross=""
 if [ "$(uname -m)" != "aarch64" ]; then cross="aarch64-linux-gnu-"; fi
 commit="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
 out="${repo_root}/target/native-kernel"
-make -s -C native/kernel CROSS="${cross}" OUT="${out}" AIENOS_COMMIT="${commit}" full >/dev/null
+# AIENOS_CK_NET_IMPL=contract boots the virtio-net driver generated from
+# native/net/contract/virtio_net.devc (ADR 0021) instead of the hand-written one;
+# every check below is the same.
+impl="${AIENOS_CK_NET_IMPL:-}"
+case "${impl}" in
+    "") full_dir=full ;;
+    contract) full_dir=full-vnet-contract ;;
+    *) echo "AIENOS_CK_NET_IMPL must be empty or contract"; echo "AIENOS_CK_NET: NOT_RUN"; exit 2 ;;
+esac
+make -s -C native/kernel CROSS="${cross}" OUT="${out}" AIENOS_COMMIT="${commit}" CK_VNET_IMPL="${impl}" full >/dev/null
 make -s -C native/kernel OUT="${out}" udp-echo gpt-image >/dev/null
-efi="${out}/full/BOOTAA64.EFI"
+efi="${out}/${full_dir}/BOOTAA64.EFI"
+echo "driver: virtio-net ${impl:-hand-written} (${full_dir})"
 echo_bin="${out}/host/ck_udp_echo"
 port="$(sed -nE 's/^#define CK_NET_ECHO_PORT ([0-9]+)u.*/\1/p' native/kernel/dev/net_udp.h)"
 lport="$(sed -nE 's/^#define CK_NET_LOCAL_PORT ([0-9]+)u.*/\1/p' native/kernel/dev/net_udp.h)"
@@ -172,6 +182,10 @@ line_of() { grep -n -- "$1" "${work}/serial.txt" | head -1 | cut -d: -f1; }
 # ---- boot 1: SMMU present, full round trip ----
 boot net-smmu smmu "${nic_confined}"
 echo "-- (a) attach"
+if [[ "${impl}" == contract ]]; then
+    check "driver generated from the virtio-net contract, digest printed, UNPROVEN (no hardware receipt)" \
+        "^virtio_net: driver from contract virtio-net digest=[0-9a-f]\{64\} hardware_receipts=0$"
+fi
 check "virtio-net capabilities parsed" "^virtio_net: [0-9a-f:.]* caps ok common=bar"
 check "SMMU window programmed for the virtio-net DMA region only" \
     "^smmu_dma_window: virtio_net only iova=0x[0-9a-f]* len=0x[0-9a-f]* rid=0x[0-9a-f]* stream_id=0x[0-9a-f]*$"
@@ -208,6 +222,9 @@ else
     echo "FAIL  guest UDP RX line with this run's token and its own nonce"; failed=1
 fi
 check "round trip reported" "^net: udp round trip ok tx_reclaimed=[1-9][0-9]* rx_frames=[1-9][0-9]*$"
+check "timing line for this driver (ADR 0021 timing twin, reported not judged)" \
+    "^net: timing driver=${impl:-hand} init_us=[0-9][0-9]* roundtrip_us=[0-9][0-9]*$"
+grep -E "^net: timing driver=" "${work}/serial.txt" | head -1 | sed "s/^/INFO  /" || true
 echo "-- (d) fence: device DMA outside the window"
 win_re='^smmu_dma_window: virtio_net only iova=0x([0-9a-f]+) len=0x([0-9a-f]+) rid=0x[0-9a-f]+ stream_id=0x([0-9a-f]+)$'
 win_line="$(grep -E "${win_re}" "${work}/serial.txt" | head -1 || true)"

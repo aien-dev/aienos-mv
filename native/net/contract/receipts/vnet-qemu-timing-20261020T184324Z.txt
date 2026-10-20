@@ -1,0 +1,20 @@
+receipt vnet-qemu-timing 20261020T184324Z
+host spark-b87b aarch64 qemu QEMU emulator version 8.2.2 (Debian 1:8.2.2+ds-0ubuntu1.18)
+commit 8aa25827c678ed880c53d57491c36b17a0261080 dirty=2
+method scripts/qemu_ck_net_test.sh 5 rounds, hand then contract each round, under quiet-measure; in-guest ck_time_us
+round=1 impl=hand gate_exit=0 gate=PASS wall_ms=19292 driver=hand init_us=1430 roundtrip_us=5565
+round=1 impl=contract gate_exit=0 gate=PASS wall_ms=19230 driver=contract init_us=1479 roundtrip_us=4295
+round=2 impl=hand gate_exit=0 gate=PASS wall_ms=18978 driver=hand init_us=1302 roundtrip_us=5472
+round=2 impl=contract gate_exit=0 gate=PASS wall_ms=19520 driver=contract init_us=3309 roundtrip_us=4425
+round=3 impl=hand gate_exit=0 gate=PASS wall_ms=19398 driver=hand init_us=1257 roundtrip_us=3930
+round=3 impl=contract gate_exit=0 gate=PASS wall_ms=20107 driver=contract init_us=1364 roundtrip_us=6166
+round=4 impl=hand gate_exit=0 gate=PASS wall_ms=19859 driver=hand init_us=1198 roundtrip_us=6574
+round=4 impl=contract gate_exit=0 gate=PASS wall_ms=21034 driver=contract init_us=1363 roundtrip_us=2559
+round=5 impl=hand gate_exit=0 gate=PASS wall_ms=22222 driver=hand init_us=1324 roundtrip_us=4572
+round=5 impl=contract gate_exit=0 gate=PASS wall_ms=20171 driver=contract init_us=1518 roundtrip_us=7452
+median hand init_us=1302
+median hand roundtrip_us=5472
+median hand wall_ms=19398
+median contract init_us=1479
+median contract roundtrip_us=4425
+median contract wall_ms=20107

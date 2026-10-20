@@ -24,6 +24,18 @@ STAGE_OWN_SRCS := $(STAGE_DIR)/dev/pci.c $(STAGE_DIR)/dev/mmio_window.c $(STAGE_
                   $(STAGE_DIR)/dev/usb_hid.c $(STAGE_DIR)/dev/usb_kbd.c \
                   $(STAGE_DIR)/dev/devices.c $(STAGE_DIR)/svc/security.c $(STAGE_DIR)/svc/store_boot.c \
                   $(STAGE_DIR)/svc/artifact_store.c $(STAGE_DIR)/svc/store_crash.c
+# virtio-net driver: the hand-written reference, or (CK_VNET_IMPL=contract) the
+# twin generated from native/net/contract/virtio_net.devc (ADR 0021). Same API
+# and header names; the generated header shadows the hand one by include order.
+ifeq ($(strip $(CK_VNET_IMPL)),contract)
+STAGE_VNET_SRC := $(STAGE_NATIVE)/net/contract/gen/driver/vnet_contract.c
+STAGE_VNET_INC := -I$(STAGE_NATIVE)/net/contract/gen/driver
+else ifeq ($(strip $(CK_VNET_IMPL)),)
+STAGE_VNET_SRC := $(STAGE_NATIVE)/net/aienos_virtio_net.c
+STAGE_VNET_INC :=
+else
+$(error CK_VNET_IMPL must be empty (hand-written driver) or contract)
+endif
 # Native modules, compiled unmodified.
 STAGE_NATIVE_SRCS := \
   $(STAGE_NATIVE)/disk/disk.c $(STAGE_NATIVE)/disk/disk_nvme.c \
@@ -36,7 +48,7 @@ STAGE_NATIVE_SRCS := \
   $(STAGE_NATIVE)/argus/argus_detect.c $(STAGE_NATIVE)/argus/argus_contain.c \
   $(STAGE_NATIVE)/argus/bridge/argus_aegis_bridge.c \
   $(STAGE_NATIVE)/capability/aienos_capability.c $(STAGE_NATIVE)/capability/aienos_contain.c \
-  $(STAGE_NATIVE)/net/aienos_virtio_pci.c $(STAGE_NATIVE)/net/aienos_virtio_net.c $(STAGE_NATIVE)/net/aienos_net.c
+  $(STAGE_NATIVE)/net/aienos_virtio_pci.c $(STAGE_VNET_SRC) $(STAGE_NATIVE)/net/aienos_net.c
 # Kernel-only glue: hosted-header stand-ins for capability/ARGUS + weak mem*.
 STAGE_KERNEL_SRCS := $(STAGE_DIR)/svc/ck_compat.c
 
@@ -47,7 +59,7 @@ STAGE_SRCS := $(STAGE_OWN_SRCS) $(STAGE_NATIVE_SRCS) $(STAGE_KERNEL_SRCS)
 STAGE_CORTEX_SRCS := $(STAGE_DIR)/svc/cortex_store.c $(STAGE_DIR)/svc/cortex_journal.c
 STAGE_FREE_SRCS := $(STAGE_SRCS) $(STAGE_CORTEX_SRCS)
 
-STAGE_INC := -I$(STAGE_DIR)/include -I$(STAGE_DIR)/dev -I$(STAGE_DIR)/svc \
+STAGE_INC := $(STAGE_VNET_INC) -I$(STAGE_DIR)/include -I$(STAGE_DIR)/dev -I$(STAGE_DIR)/svc \
              -I$(STAGE_NATIVE)/disk -I$(STAGE_NATIVE)/store -I$(STAGE_NATIVE)/m5 -I$(STAGE_NATIVE)/crypto \
              -I$(STAGE_NATIVE)/argus -I$(STAGE_NATIVE)/capability -I$(STAGE_NATIVE)/net
 # compat first: <pthread.h> <stdlib.h> <stdio.h> <time.h> resolve to the stand-ins.

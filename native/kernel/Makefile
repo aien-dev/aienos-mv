@@ -1050,9 +1050,12 @@ ifneq ($(strip $(CK_PI5_LIFECYCLE)),)
 STAGE_SRCS += $(filter-out $(KDIR)/svc/slot_service.c $(BOOT)/slot_select.c $(BOOT)/slot_control.c $(BOOT)/slot_update.c,$(SVC_STAGE_ADDED)) $(KDIR)/svc/slot_service_pi5.c
 endif
 endif
+ifeq ($(strip $(CK_VNET_IMPL)),contract)
+FULL_NAME := $(FULL_NAME)-vnet-contract
+endif
 FULL_OUT := $(OUT)/$(FULL_NAME)
 STAGE_KOBJ := $(OUT)/obj/stage-$(FULL_NAME)
-STAGE_HDRS := $(HDRS) $(wildcard $(NATIVE)/*/*.h $(NATIVE)/argus/bridge/*.h $(KDIR)/svc/compat/*.h)
+STAGE_HDRS := $(HDRS) $(wildcard $(NATIVE)/*/*.h $(NATIVE)/net/contract/gen/driver/*.h $(NATIVE)/argus/bridge/*.h $(KDIR)/svc/compat/*.h)
 STAGE_BUILT := $(foreach s,$(STAGE_SRCS),$(STAGE_KOBJ)/$(subst /,_,$(patsubst $(REPO)/%,%,$(abspath $(s)))).o)
 # STAGE_CFLAGS first: svc/compat must shadow the hosted headers. No fortify.
 STAGE_KCFLAGS := $(STAGE_CFLAGS) $(KCFLAGS) $(MODULE_INC) -U_FORTIFY_SOURCE $(STAGE_DMA_FLAGS)
