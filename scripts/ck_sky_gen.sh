@@ -39,13 +39,39 @@ fetch() { # key file url sha256
     echo "input $1: $3 sha256 $4" >> "$W/inputs"
 }
 fetch bsc5 catalog.gz https://cdsarc.cds.unistra.fr/ftp/V/50/catalog.gz 3dc44b1e90be8fbe5bcc7656032560f51275f985c7e3f783c9028e1838ec7bed
-fetch milkyway eso0932a.tif https://cdn.eso.org/images/original/eso0932a.tif 10f209ab83e1fd89e7fa1ed70277ffc6ed19c43549f04ec637c6806d98aff035
+# Gaia DR3 Milky Way: full-sky HEALPix level-6 aggregate (49152 cells)
+# Query: source counts + summed G/BP/RP flux (stars V>7), grouped by HPX6
+# ESA/Gaia/DPAC, CC BY-NC 3.0 IGO.  Credit: ESA/Gaia/DPAC.
+GAIA_TAP=https://gea.esac.esa.int/tap-server/tap/async
+GAIA_Q1="SELECT GAIA_HEALPIX_INDEX(6, source_id) AS hpx6, COUNT(*) AS nsrc, SUM(phot_g_mean_flux) AS g_flux, SUM(phot_bp_mean_flux) AS bp_flux, SUM(phot_rp_mean_flux) AS rp_flux FROM gaiadr3.gaia_source WHERE phot_g_mean_flux IS NOT NULL AND phot_g_mean_mag > 7.0 GROUP BY hpx6 ORDER BY hpx6"
+GAIA_Q2="SELECT GAIA_HEALPIX_INDEX(6, source_id) AS hpx6, AVG(ag_gspphot) AS mean_ag, COUNT(*) AS n FROM gaiadr3.astrophysical_parameters WHERE ag_gspphot IS NOT NULL GROUP BY hpx6 ORDER BY hpx6"
+gaia_fetch() { # filename query
+    if [ ! -f "$C/$1" ]; then
+        echo "ck_sky_gen: querying Gaia DR3 ($1)..."
+        JOB=$(curl -fsS --max-time 30 -X POST "$GAIA_TAP" \
+            --data-urlencode "REQUEST=doQuery" --data-urlencode "LANG=ADQL" \
+            --data-urlencode "FORMAT=csv" --data-urlencode "PHASE=RUN" \
+            --data-urlencode "QUERY=$2" -w "%{redirect_url}" 2>/dev/null | tail -1)
+        [ -n "$JOB" ] || { echo "ck_sky_gen: Gaia TAP job submission failed"; exit 1; }
+        for i in $(seq 1 120); do
+            PHASE=$(curl -fsS --max-time 10 "$JOB/phase" 2>/dev/null)
+            case "$PHASE" in COMPLETED) break ;; ERROR|ABORTED) echo "ck_sky_gen: Gaia job $PHASE"; exit 1 ;; esac
+            sleep 3
+        done
+        curl -fsSL --max-time 300 -L "$JOB/results/result" -o "$C/$1.part"
+        mv "$C/$1.part" "$C/$1"
+        echo "ck_sky_gen: downloaded $C/$1 ($(wc -l < "$C/$1") rows)"
+    fi
+    echo "input $1: $GAIA_TAP ADQL (query in docs/ALLEN_SKY_SCIENCE.md)" >> "$W/inputs"
+}
+gaia_fetch gaia_hpx6.csv "$GAIA_Q1"
+gaia_fetch gaia_dust.csv "$GAIA_Q2"
 fetch ngc NGC.csv https://raw.githubusercontent.com/mattiaverga/OpenNGC/$OPEN/database_files/NGC.csv 54abea0b57b0a103831bfc7a8e3a99a23acfbf4bb581fcf3d8af539cbb826c84
 fetch ngc_addendum addendum.csv https://raw.githubusercontent.com/mattiaverga/OpenNGC/$OPEN/database_files/addendum.csv c93f983dda6780b76b7b2e9271a856a892627710148a982ee98101a54c642fdd
 fetch gw150914 GW150914_skymap.fits.gz https://dcc.ligo.org/public/0157/P1800381/007/GW150914_skymap.fits.gz a8a4bdeb46aade1389e594e466ee6372a401157188df636eae2bbb3eab2805f2
 gzip -dc "$C/catalog.gz" > "$W/bsc5.dat"
 gzip -dc "$C/GW150914_skymap.fits.gz" > "$W/GW150914_skymap.fits"
-ln -s "$C/eso0932a.tif" "$C/NGC.csv" "$C/addendum.csv" "$W/"
+ln -s "$C/NGC.csv" "$C/addendum.csv" "$W/" && cp "$C/gaia_hpx6.csv" "$W/gaia_hpx6.csv" && cp "$C/gaia_dust.csv" "$W/gaia_dust.csv"
 ${CC:-cc} -std=gnu11 -O2 -Wall -Wextra -Werror -o "$W/ck_sky_gen" native/kernel/tools/ck_sky_gen.c -lm
 set -- --cache "$W" --out "$OUT" --report "$REPORT" --inputs "$W/inputs"
 [ -n "${SKY_RA:-}" ] && set -- "$@" --ra "$SKY_RA"

@@ -18,6 +18,42 @@
  * a 1920 x 1080 grid and scaled to the screen (k, 1/256). */
 #include "allen_ui.h"
 #include "allen_font.h"
+#include "sky_real.h"
+
+/* Sky regions for "somewhere new" mode (real celestial objects, J2000 coordinates).
+ * Each start opens on the next region in this list, cycling. */
+#define SKY_NREGIONS 12
+static const int32_t sky_region_ra_udeg[SKY_NREGIONS] = {
+    266417000,  /* galactic centre */
+     83822000,  /* Orion / M42 */
+    161265000,  /* Carina Nebula */
+     56750000,  /* Pleiades */
+     10684000,  /* Andromeda (M31) */
+     80894000,  /* Large Magellanic Cloud */
+    113697000,  /* GW150914 region */
+    305557000,  /* Cygnus / Northern Cross */
+    274754000,  /* Sagittarius star cloud */
+    247352000,  /* Scorpius / Antares */
+     13190000,  /* Small Magellanic Cloud */
+         0,     /* north celestial pole */
+};
+static const int32_t sky_region_dec_udeg[SKY_NREGIONS] = {
+    -28936000,  /* galactic centre */
+     -5391000,  /* Orion / M42 */
+    -59688000,  /* Carina Nebula */
+     24117000,  /* Pleiades */
+     41269000,  /* Andromeda (M31) */
+    -69756000,  /* Large Magellanic Cloud */
+    -72757000,  /* GW150914 region */
+     40734000,  /* Cygnus */
+    -18565000,  /* Sagittarius */
+    -26432000,  /* Scorpius */
+    -72830000,  /* Small Magellanic Cloud */
+     90000000,  /* north celestial pole */
+};
+#define SKY_DRIFT_URA_PER_S 720000  /* 0.72 deg/min drift in RA (slow pan) */
+#define SKY_REBUILD_MS 10000        /* rebuild the sky every 10 seconds */
+#define SKY_FOV_MDEG 80000          /* 80 degrees field of view */
 #include "flow.h"
 #include "mind.h"
 #include "night.h"
@@ -83,6 +119,15 @@ static struct {
     uint64_t (*clock)(void);
     uint32_t t, last; /* this frame's time and the last frame's, ms */
     int32_t cx, cy;
+    /* sky mode and real-time tracking */
+    uint8_t sky_mode;           /* 0=default/GW150914, 1=above_me, 2=somewhere_new */
+    uint8_t sky_region;         /* current region for somewhere_new */
+    int32_t sky_lat_udeg;       /* latitude for above_me mode */
+    int32_t sky_lon_udeg;       /* east longitude for above_me mode */
+    int64_t sky_unix_s;         /* RTC unix time at sky_tsc */
+    uint64_t sky_tsc;           /* TSC when sky_unix_s was read */
+    uint64_t sky_view_tsc;      /* TSC when the sky was last rebuilt */
+    uint64_t tsc_now;           /* TSC at this tick (from ck_allen_ui_tick argument) */
     /* the bar */
     const char *footer;
     ck_rect bar, bar_box;
@@ -745,7 +790,33 @@ static void advance(uint32_t t)
                  : ui.mind.mode == CK_MIND_LISTEN     ? CK_FLOW_LISTEN
                                                       : CK_FLOW_IDLE,
                  t);
-    /* the sky */
+    /* Sky view update: for above_me recompute sidereal time and zenith;
+     * for somewhere_new use the region centre + slow drift. Rebuild every
+     * SKY_REBUILD_MS or when sky_mode changes (sky_view_tsc=0). */
+    if (ui.sky_mode && (ui.tsc_now - ui.sky_view_tsc > SKY_REBUILD_MS * (ui.hz / 1000) || ui.sky_view_tsc == 0)) {
+        ck_sky_view new_view;
+        int32_t ra_udeg, dec_udeg;
+        if (ui.sky_mode == 1 && ui.sky_tsc && ui.hz) {
+            /* above me: compute zenith from current unix time */
+            uint64_t elapsed = ui.tsc_now - ui.sky_tsc;
+            int64_t unix_now = ui.sky_unix_s + (int64_t)(elapsed / ui.hz);
+            int16_t zenith[3];
+            ck_sky_zenith(unix_now, ui.sky_lat_udeg, ui.sky_lon_udeg, zenith, &ra_udeg, &dec_udeg);
+            ck_sky_view_at(&new_view, ra_udeg, dec_udeg, SKY_FOV_MDEG, 0);
+            ck_night_view(&ui.night, &new_view, ui.back);
+        } else if (ui.sky_mode == 2) {
+            /* somewhere new: region centre + slow drift in RA */
+            int r = ui.sky_region % SKY_NREGIONS;
+            uint64_t secs = ui.sky_tsc ? (ui.tsc_now - ui.sky_tsc) / (ui.hz ? ui.hz : 1) : 0;
+            ra_udeg  = sky_region_ra_udeg[r]  + (int32_t)(((int64_t)SKY_DRIFT_URA_PER_S * (int64_t)secs) % 360000000);
+            dec_udeg = sky_region_dec_udeg[r];
+            ck_sky_view_at(&new_view, ra_udeg, dec_udeg, SKY_FOV_MDEG, 0);
+            ck_night_view(&ui.night, &new_view, ui.back);
+        }
+        ui.sky_view_tsc = ui.tsc_now;
+        mark_all();
+    }
+        /* the sky */
     ck_night_at(&ui.night, t);
     if (t < CK_NIGHT_FADE_END_MS + FRAME_MS * 2)
         mark_all();
@@ -855,6 +926,7 @@ int ck_allen_ui_tick(uint64_t now)
         return 0;
     uint64_t c0 = ui.clock ? ui.clock() : 0;
     ui.t = t;
+    ui.tsc_now = now; /* save TSC for sky update in advance() */
     advance(t);
     unsigned n = strips();
     ui.done = 0;
@@ -1051,4 +1123,21 @@ void ck_allen_ui_named(const char *name)
     ui.hint_len = n;
     if (ui.started)
         mark(ui.bar);
+}
+
+/* ---- sky time and mode ---- */
+
+void ck_allen_ui_set_unix_time(int64_t unix_s, uint64_t tsc_at_read)
+{
+    ui.sky_unix_s = unix_s;
+    ui.sky_tsc = tsc_at_read;
+}
+
+void ck_allen_ui_sky_mode(uint8_t mode, uint8_t region, int32_t lat_udeg, int32_t lon_udeg)
+{
+    ui.sky_mode = mode;
+    ui.sky_region = region;
+    ui.sky_lat_udeg = lat_udeg;
+    ui.sky_lon_udeg = lon_udeg;
+    ui.sky_view_tsc = 0; /* force rebuild on the next tick */
 }

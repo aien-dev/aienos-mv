@@ -8,9 +8,9 @@
  *                       (Hoffleit and Warren 1991; CDS V/50): every star to
  *                       about magnitude 6.5, the naked-eye limit, with J2000
  *                       position, proper motion, V magnitude and B-V colour;
- *   eso0932a.tif        "The Milky Way panorama", ESO/S. Brunier (CC BY 4.0):
- *                       a photograph of the whole sky, 6000 x 3000, in
- *                       galactic longitude and latitude;
+ *   gaia_hpx6.csv      Gaia DR3 source counts and integrated G-band flux per HEALPix
+
+
  *   NGC.csv, addendum.csv
  *                       OpenNGC (Mattia Verga, CC BY-SA 4.0): galaxy
  *                       positions, sizes and orientations;
@@ -26,8 +26,8 @@
  *     a brightness code (flux = 10^(-0.4 m)) and a colour from B-V through a
  *     real temperature (Ballesteros 2012) to the colour of a black body of
  *     that temperature (CIE 1931 observer, sRGB);
- *   - the photograph re-projected into the same view, its stars taken out
- *     (the catalogue draws those, sharp), as a coarse grid of light;
+
+
  *   - the galaxies that are in the view and bright enough to see with the eye,
  *     at their true size and angle.
  *
@@ -646,400 +646,164 @@ static void openngc_load(const char *path, galaxy_t **out, size_t *n, size_t *ca
     }
     free(txt);
 }
-
-/* ---- the photograph: a little-endian or big-endian TIFF, 8-bit RGB, LZW,
- * with or without horizontal differencing, in strips ---- */
-
-typedef struct {
-    int w, h;
-    uint8_t *rgb; /* w * h * 3 */
-} image_t;
-
-static int be; /* the TIFF's byte order */
-static uint32_t rd16(const uint8_t *p) { return be ? (uint32_t)p[0] << 8 | p[1] : (uint32_t)p[1] << 8 | p[0]; }
-static uint32_t rd32(const uint8_t *p)
-{
-    return be ? (uint32_t)p[0] << 24 | (uint32_t)p[1] << 16 | (uint32_t)p[2] << 8 | p[3]
-              : (uint32_t)p[3] << 24 | (uint32_t)p[2] << 16 | (uint32_t)p[1] << 8 | p[0];
-}
-
-/* TIFF's LZW (MSB first, early change, 9 to 12 bit codes, 256 clear, 257 end). Returns bytes written. */
-static size_t lzw_decode(const uint8_t *in, size_t inlen, uint8_t *out, size_t outcap)
-{
-    static uint16_t prefix[4096];
-    static uint8_t suffix[4096];
-    static uint16_t length[4096];
-    uint32_t bitbuf = 0;
-    int bits = 0, width = 9, next = 258;
-    size_t ip = 0, op = 0;
-    int prev = -1;
-    for (;;) {
-        while (bits < width) {
-            if (ip >= inlen)
-                return op;
-            bitbuf = bitbuf << 8 | in[ip++];
-            bits += 8;
-        }
-        int code = (int)((bitbuf >> (bits - width)) & ((1u << width) - 1));
-        bits -= width;
-        bitbuf &= (1u << bits) - 1;
-        if (code == 257)
-            return op;
-        if (code == 256) {
-            width = 9, next = 258, prev = -1;
-            continue;
-        }
-        int emit_code;
-        uint8_t first;
-        if (prev < 0) {
-            if (code > 255)
-                die("TIFF LZW: bad first code");
-            if (op >= outcap)
-                return op;
-            out[op++] = (uint8_t)code;
-            prev = code;
-            continue;
-        }
-        if (code < next) {
-            emit_code = code;
-        } else if (code == next) {
-            emit_code = prev; /* the string of prev plus its own first byte */
-        } else {
-            die("TIFF LZW: code %d beyond the table (%d)", code, next);
-        }
-        /* write the string of emit_code */
-        size_t slen = emit_code < 256 ? 1 : length[emit_code];
-        size_t extra = code == next ? 1 : 0;
-        if (op + slen + extra > outcap)
-            return op;
-        size_t at = op + slen;
-        int c = emit_code;
-        while (c >= 256) {
-            out[--at] = suffix[c];
-            c = prefix[c];
-        }
-        out[--at] = (uint8_t)c;
-        first = (uint8_t)c;
-        op += slen;
-        if (extra)
-            out[op++] = first;
-        if (next < 4096) {
-            prefix[next] = (uint16_t)prev;
-            suffix[next] = first;
-            length[next] = (uint16_t)((prev < 256 ? 1 : length[prev]) + 1);
-            next++;
-        }
-        if (next == (1 << width) - 1 && width < 12) /* early change: one code sooner */
-            width++;
-        prev = code;
-    }
-}
-
-static image_t tiff_load(const char *path)
-{
-    size_t len;
-    uint8_t *d = slurp(path, &len);
-    if (len < 8 || !((d[0] == 'I' && d[1] == 'I') || (d[0] == 'M' && d[1] == 'M')))
-        die("%s: not a TIFF", path);
-    be = d[0] == 'M';
-    if (rd16(d + 2) != 42)
-        die("%s: not a classic TIFF", path);
-    uint32_t ifd = rd32(d + 4);
-    uint32_t n = rd16(d + ifd);
-    uint32_t width = 0, height = 0, comp = 1, rps = 0, spp = 1, planar = 1, pred = 1, photo = 0;
-    uint32_t nstrips = 0, offs_at = 0, cnts_at = 0, offs_type = 0, cnts_type = 0;
-    uint32_t bps0 = 0;
-    for (uint32_t i = 0; i < n; i++) {
-        const uint8_t *e = d + ifd + 2 + 12 * i;
-        uint32_t tag = rd16(e), type = rd16(e + 2), cnt = rd32(e + 4);
-        uint32_t val = type == 3 && cnt == 1 ? rd16(e + 8) : rd32(e + 8);
-        switch (tag) {
-        case 256: width = val; break;
-        case 257: height = val; break;
-        case 258: bps0 = type == 3 && cnt > 2 ? rd16(d + rd32(e + 8)) : val; break;
-        case 259: comp = val; break;
-        case 262: photo = val; break;
-        case 273: nstrips = cnt, offs_at = (cnt == 1) ? (uint32_t)(e + 8 - d) : val, offs_type = type; break;
-        case 277: spp = val; break;
-        case 278: rps = val; break;
-        case 279: cnts_at = (cnt == 1) ? (uint32_t)(e + 8 - d) : val, cnts_type = type; break;
-        case 284: planar = val; break;
-        case 317: pred = val; break;
-        default: break;
-        }
-    }
-    if (bps0 != 8 || spp != 3 || planar != 1 || photo != 2 || (comp != 5 && comp != 1) || (pred != 1 && pred != 2))
-        die("%s: unsupported TIFF (bps %u spp %u planar %u photo %u comp %u pred %u)", path, bps0, spp, planar, photo, comp, pred);
-    if (!rps || rps > height)
-        rps = height;
-    image_t im;
-    im.w = (int)width, im.h = (int)height;
-    im.rgb = xmalloc((size_t)width * height * 3);
-    size_t rowbytes = (size_t)width * 3;
-    for (uint32_t s = 0; s < nstrips; s++) {
-        uint32_t off = offs_type == 3 ? rd16(d + offs_at + 2 * s) : rd32(d + offs_at + 4 * s);
-        uint32_t cnt = cnts_type == 3 ? rd16(d + cnts_at + 2 * s) : rd32(d + cnts_at + 4 * s);
-        uint32_t row0 = s * rps, rows = row0 + rps > height ? height - row0 : rps;
-        uint8_t *dst = im.rgb + (size_t)row0 * rowbytes;
-        size_t want = (size_t)rows * rowbytes;
-        if ((size_t)off + cnt > len)
-            die("%s: strip %u runs off the end", path, s);
-        if (comp == 5) {
-            size_t got = lzw_decode(d + off, cnt, dst, want);
-            if (got != want)
-                die("%s: strip %u decoded %zu bytes, wanted %zu", path, s, got, want);
-        } else {
-            memcpy(dst, d + off, want);
-        }
-        if (pred == 2)
-            for (uint32_t r = 0; r < rows; r++) {
-                uint8_t *row = dst + (size_t)r * rowbytes;
-                for (size_t x = 3; x < rowbytes; x++)
-                    row[x] = (uint8_t)(row[x] + row[x - 3]);
-            }
-    }
-    free(d);
-    return im;
-}
-
-/* the photograph's colour planes taken one at a time */
-static void filt_minmax(uint8_t *plane, int w, int h, int r, int is_max)
-{
-    uint8_t *tmp = xmalloc((size_t)w * h);
-    for (int y = 0; y < h; y++)
-        for (int x = 0; x < w; x++) {
-            int m = plane[(size_t)y * w + x];
-            for (int k = -r; k <= r; k++) {
-                int xx = ((x + k) % w + w) % w; /* longitude wraps */
-                int v = plane[(size_t)y * w + xx];
-                m = is_max ? (v > m ? v : m) : (v < m ? v : m);
-            }
-            tmp[(size_t)y * w + x] = (uint8_t)m;
-        }
-    for (int y = 0; y < h; y++)
-        for (int x = 0; x < w; x++) {
-            int m = tmp[(size_t)y * w + x];
-            for (int k = -r; k <= r; k++) {
-                int yy = y + k < 0 ? 0 : y + k >= h ? h - 1 : y + k; /* latitude clamps at the poles */
-                int v = tmp[(size_t)yy * w + x];
-                m = is_max ? (v > m ? v : m) : (v < m ? v : m);
-            }
-            plane[(size_t)y * w + x] = (uint8_t)m;
-        }
-    free(tmp);
-}
-
-static void filt_gauss(uint8_t *plane, int w, int h, double sigma)
-{
-    int r = (int)ceil(3.0 * sigma);
-    double *k = xmalloc((size_t)(2 * r + 1) * sizeof *k);
-    double sum = 0;
-    for (int i = -r; i <= r; i++)
-        sum += k[i + r] = exp(-0.5 * i * i / (sigma * sigma));
-    for (int i = 0; i <= 2 * r; i++)
-        k[i] /= sum;
-    uint8_t *tmp = xmalloc((size_t)w * h);
-    for (int y = 0; y < h; y++)
-        for (int x = 0; x < w; x++) {
-            double a = 0;
-            for (int i = -r; i <= r; i++)
-                a += k[i + r] * plane[(size_t)y * w + ((x + i) % w + w) % w];
-            tmp[(size_t)y * w + x] = (uint8_t)clampd(floor(a + 0.5), 0, 255);
-        }
-    for (int y = 0; y < h; y++)
-        for (int x = 0; x < w; x++) {
-            double a = 0;
-            for (int i = -r; i <= r; i++) {
-                int yy = y + i < 0 ? 0 : y + i >= h ? h - 1 : y + i;
-                a += k[i + r] * tmp[(size_t)yy * w + x];
-            }
-            plane[(size_t)y * w + x] = (uint8_t)clampd(floor(a + 0.5), 0, 255);
-        }
-    free(tmp);
-    free(k);
-}
-
-typedef struct {
-    image_t im, clean;
-    double dx, dy;
-    double lin[256];
-} pano_t;
-
-static void pano_xy(const pano_t *p, double l, double b, double *x, double *y)
-{
-    *x = (180.0 - (pmod(l + 180.0, 360.0) - 180.0)) / 360.0 * p->im.w - 0.5 + p->dx;
-    *y = (90.0 - b) / 180.0 * p->im.h - 0.5 + p->dy;
-}
-
-static int pano_luma(const image_t *im, int x, int y)
-{
-    const uint8_t *q = im->rgb + ((size_t)y * im->w + x) * 3;
-    return (int)(((uint32_t)q[0] * 19595 + (uint32_t)q[1] * 38470 + (uint32_t)q[2] * 7471 + 0x8000) >> 16);
-}
-
-typedef struct {
-    double dx, dy;
-} off2;
 static int cmpd(const void *a, const void *b)
 {
     double x = *(const double *)a, y = *(const double *)b;
     return x < y ? -1 : x > y;
 }
 
-/* where the photograph's bright stars are against where the catalogue says:
- * the median offset is applied, the scatter reported */
-static void pano_measure(pano_t *p, const star_t *st, size_t ns)
+
+/* ---- the Milky Way from Gaia DR3: source counts and integrated G-band
+ * flux per HEALPix level-6 cell (nside=64, 49152 cells), reddened by
+ * G-band extinction from gaiadr3.astrophysical_parameters.
+ * ESA/Gaia/DPAC, CC BY-NC 3.0 IGO.  Credit: ESA/Gaia/DPAC. */
+
+typedef struct {
+    long nsrc;
+    double g_flux, bp_flux, rp_flux;
+    double mean_ag; /* mean G-band extinction from GSP-Phot */
+    double ra, dec; /* cell centre, degrees */
+} gaia_cell_t;
+
+/* Parse a CSV with header line; column order: hpx6, nsrc, g_flux, bp_flux, rp_flux (or hpx6, mean_ag, n).
+ * Returns array of NCELLS (49152) cells indexed by hpx6; unvisited cells are zero. */
+static gaia_cell_t *parse_gaia_csv(const char *flux_path, const char *dust_path)
 {
-    size_t cap = 256, n = 0;
-    off2 *o = xmalloc(cap * sizeof *o);
-    for (size_t i = 0; i < ns; i++) {
-        if (st[i].v > 2.5)
-            continue;
-        double l, b, x, y;
-        galactic(vec(st[i].ra, st[i].dec), &l, &b);
-        pano_xy(p, l, b, &x, &y);
-        if (fabs(b) > 80 || !(8 < x && x < p->im.w - 8 && 8 < y && y < p->im.h - 8))
-            continue;
-        double sw = 0, sx = 0, sy = 0;
-        int ix = (int)rnd(x), iy = (int)rnd(y);
-        int base = 255;
-        for (int a = -7; a <= 7; a += 14)
-            for (int c = -7; c <= 7; c += 14) {
-                int v = pano_luma(&p->im, ix + a, iy + c);
-                if (v < base)
-                    base = v;
-            }
-        for (int j = -5; j <= 5; j++)
-            for (int k = -5; k <= 5; k++) {
-                int d = pano_luma(&p->im, ix + k, iy + j) - base;
-                double v = d > 0 ? (double)d * d : 0.0;
-                sw += v, sx += v * (ix + k), sy += v * (iy + j);
-            }
-        if (sw > 0) {
-            if (n == cap)
-                o = xrealloc(o, (cap *= 2) * sizeof *o);
-            o[n++] = (off2){sx / sw - x, sy / sw - y};
+#define NCELLS 49152
+    gaia_cell_t *cells = xmalloc(NCELLS * sizeof *cells);
+    for (int i = 0; i < NCELLS; i++) cells[i] = (gaia_cell_t){0};
+
+    /* Flux CSV: hpx6, nsrc, g_flux, bp_flux, rp_flux */
+    size_t len; uint8_t *raw = slurp(flux_path, &len);
+    char *p = (char *)raw, *e = p + len;
+    /* skip header */
+    while (p < e && *p != '\n') p++;
+        if (p < e) p++;
+    while (p < e) {
+        long hpx = -1; long nsrc = 0; double gf = 0, bpf = 0, rpf = 0;
+        int r = sscanf(p, "%lf,%ld,%lf,%lf,%lf", (double*)&hpx, &nsrc, &gf, &bpf, &rpf);
+        (void)r;
+        hpx = (long)strtod(p, NULL); /* hpx6 may have .0 decimal */
+        if (hpx >= 0 && hpx < NCELLS) {
+            cells[hpx].nsrc = nsrc; cells[hpx].g_flux = gf;
+            cells[hpx].bp_flux = bpf; cells[hpx].rp_flux = rpf;
         }
+        while (p < e && *p != '\n') p++;
+        if (p < e) p++;
     }
-    double *tx = xmalloc(n * sizeof(double)), *ty = xmalloc(n * sizeof(double));
-    for (size_t i = 0; i < n; i++)
-        tx[i] = o[i].dx, ty[i] = o[i].dy;
-    qsort(tx, n, sizeof(double), cmpd);
-    qsort(ty, n, sizeof(double), cmpd);
-    double mx = tx[n / 2], my = ty[n / 2];
-    size_t good = 0;
-    double ss = 0;
-    for (size_t i = 0; i < n; i++)
-        if (fabs(o[i].dx - mx) < 2.5 && fabs(o[i].dy - my) < 2.5) {
-            good++;
-            ss += (o[i].dx - mx) * (o[i].dx - mx) + (o[i].dy - my) * (o[i].dy - my);
+    free(raw);
+
+    /* Dust CSV: hpx6, mean_ag, n */
+    raw = slurp(dust_path, &len);
+    p = (char *)raw; e = p + len;
+    while (p < e && *p != '\n') p++;
+        if (p < e) p++; /* skip header */
+    while (p < e) {
+        long hpx = (long)strtod(p, NULL);
+        if (hpx >= 0 && hpx < NCELLS) {
+            char *q = p; while (q < e && *q != ',') q++; if (q < e) q++;
+            cells[hpx].mean_ag = strtod(q, NULL);
         }
-    double rms = sqrt(ss / (good ? (double)good : 1.0));
-    report("photograph registration: %zu stars brighter than V 2.5 found; median offset (%.2f, %.2f) px "
-           "(1 px = %.3f deg); %zu within 2.5 px, rms %.2f px",
-           n, mx, my, 360.0 / p->im.w, good, rms);
-    p->dx = mx, p->dy = my;
-    free(tx), free(ty), free(o);
+        while (p < e && *p != '\n') p++;
+        if (p < e) p++;
+    }
+    free(raw);
+    return cells;
 }
 
-/* the photograph with its stars taken out: a grey opening (minimum then
- * maximum over 7 px, about 0.4 deg), then a light blur. What is left is the
- * light of the stars too faint and too many to see one by one, the glowing
- * gas and the dark dust. */
-static void pano_starless(pano_t *p)
+/* Build 360 x 180 equirectangular grid (1 deg/cell) from Gaia cells.
+ * Each cell is splatted within 1.5 deg of its centre (HEALPix cells are
+ * ~0.9 deg). Returns a flattened (rows*cols)*3 double array: [luma, co, cg]
+ * in the same YCbCr-like space as the old photograph, in 16ths-of-level units.
+ * flux_gain: linear display light per (g_flux / nsrc) unit. */
+static double *gaia_to_grid(const gaia_cell_t *cells, double flux_gain)
 {
-    clock_t t0 = clock();
-    int w = p->im.w, h = p->im.h;
-    p->clean.w = w, p->clean.h = h;
-    p->clean.rgb = xmalloc((size_t)w * h * 3);
-    uint8_t *plane = xmalloc((size_t)w * h);
-    for (int c = 0; c < 3; c++) {
-        for (size_t i = 0; i < (size_t)w * h; i++)
-            plane[i] = p->im.rgb[i * 3 + (size_t)c];
-        filt_minmax(plane, w, h, 3, 0);
-        filt_minmax(plane, w, h, 3, 1);
-        filt_gauss(plane, w, h, 2.5);
-        for (size_t i = 0; i < (size_t)w * h; i++)
-            p->clean.rgb[i * 3 + (size_t)c] = plane[i];
-    }
-    free(plane);
-    report("photograph without its stars: grey opening 7 px then blur 2.5 px (%.1f s)",
-           (double)(clock() - t0) / CLOCKS_PER_SEC);
-}
+#define GCOLS 360
+#define GROWS 180
+    double *grid  = xmalloc((size_t)GROWS * (size_t)(GCOLS + 1) * 3 * sizeof *grid);
+    double *count = xmalloc((size_t)GROWS * (size_t)(GCOLS + 1) * sizeof *count);
+    for (size_t i = 0; i < (size_t)GROWS * (size_t)(GCOLS + 1) * 3; i++) grid[i]  = 0;
+    for (size_t i = 0; i < (size_t)GROWS * (size_t)(GCOLS + 1);     i++) count[i] = 0;
 
-/* the photograph's own light of catalogue stars V 3.5 to 6.0 away from the
- * Milky Way's crowded middle (|b| > 15 deg): the sum, in linear light, of what
- * the star adds over the starless photograph within 4 px. Fits
- * log F = gamma x log(10^(-0.4 V)) + c: gamma 1 is a photograph whose light is
- * proportional to the sky's. A diagnostic only. */
-static void pano_photometry(pano_t *p, const star_t *st, size_t ns)
-{
-    size_t cap = 512, n = 0;
-    double *px = xmalloc(cap * sizeof(double)), *py = xmalloc(cap * sizeof(double));
-    for (size_t i = 0; i < ns; i++) {
-        if (!(3.5 <= st[i].v && st[i].v <= 6.0))
-            continue;
-        double l, b, x, y;
-        galactic(vec(st[i].ra, st[i].dec), &l, &b);
-        if (fabs(b) < 15 || fabs(b) > 75)
-            continue;
-        pano_xy(p, l, b, &x, &y);
-        int ix = (int)rnd(x), iy = (int)rnd(y);
-        if (!(6 < ix && ix < p->im.w - 6 && 6 < iy && iy < p->im.h - 6))
-            continue;
-        double f = 0;
-        for (int j = -4; j <= 4; j++)
-            for (int k = -4; k <= 4; k++) {
-                if (k * k + j * j > 16)
-                    continue;
-                size_t at = ((size_t)(iy + j) * p->im.w + (size_t)(ix + k)) * 3;
-                f += 0.2126 * (p->lin[p->im.rgb[at]] - p->lin[p->clean.rgb[at]]) +
-                     0.7152 * (p->lin[p->im.rgb[at + 1]] - p->lin[p->clean.rgb[at + 1]]) +
-                     0.0722 * (p->lin[p->im.rgb[at + 2]] - p->lin[p->clean.rgb[at + 2]]);
+    for (int k = 0; k < NCELLS; k++) {
+        const gaia_cell_t *c = &cells[k];
+        if (c->nsrc == 0) continue;
+        double ra = c->ra, dec = c->dec;
+        /* E(B-V) ~ A_G / 2.285 (Cardelli 1989); applied as reddening of the colour */
+        double ebv = c->mean_ag / 2.285;
+        /* Flux calibration: g_flux is electrons/s summed over nsrc sources.
+         * The display light is proportional to the total G-band flux per cell,
+         * boosted by the display gain factor. */
+        /* Normalise to linear light: peak_norm=1.0 at the calibration flux.
+         * The emit() function scales by a->g_phys to get display linear light. */
+        double luma_lin = (flux_gain > 0) ? c->g_flux * flux_gain : 0;
+        /* Color from BP/RP ratio (log scale). Higher = redder (dust or cool stars).
+         * Map to the chrominance offsets used by the photograph approach (linear, 0..1 range). */
+        double bprp = (c->bp_flux > 1.0) ? log(c->rp_flux / c->bp_flux) : 0.5;
+        bprp += ebv * 0.3;  /* add dust reddening */
+        /* Milky Way colour: warm orange-yellow in the galactic plane, cooler at the poles.
+         * co: orange-red offset; cg: green offset (in the same linear units as luma_lin). */
+        double co = luma_lin * (bprp - 0.3) * 0.20;   /* ~20% orange tint relative to luma */
+        double cg = luma_lin * 0.08 * (1.0 - fabs(bprp - 0.8));  /* small green tint at mid-colors */
+
+        /* Splat onto surrounding grid points (within 1.5 deg) */
+        int j0 = (int)((90.0 - dec - 1.5) + 0.5);
+        int j1 = (int)((90.0 - dec + 1.5) + 0.5);
+        j0 = j0 < 0 ? 0 : j0 >= GROWS ? GROWS - 1 : j0;
+        j1 = j1 < 0 ? 0 : j1 >= GROWS ? GROWS - 1 : j1;
+        for (int j = j0; j <= j1; j++) {
+            double dec_j = 90.0 - j - 0.5;
+            double ddec = dec_j - dec;
+            if (ddec * ddec > 2.25) continue;
+            double cos_dec = cos(rad(dec_j));
+            double dra_max = cos_dec > 0.01 ? 1.5 / cos_dec : 360.0;
+            int i0 = (int)((ra - dra_max) / 1.0 + 0.5);
+            int i1 = (int)((ra + dra_max) / 1.0 + 0.5);
+            for (int ii = i0; ii <= i1; ii++) {
+                int i = ((ii % GCOLS) + GCOLS) % GCOLS;
+                double ra_i = i + 0.5;
+                double dra = ra_i - ra;
+                if (dra > 180) dra -= 360;
+                if (dra < -180) dra += 360;
+                double dra_deg = dra * cos_dec;
+                if (dra_deg * dra_deg + ddec * ddec > 2.25) continue;
+                size_t off = (size_t)j * (size_t)(GCOLS + 1) + (size_t)i;
+                grid[off * 3]     += luma_lin;
+                grid[off * 3 + 1] += co;
+                grid[off * 3 + 2] += cg;
+                count[off]++;
             }
-        if (f > 0) {
-            if (n == cap)
-                px = xrealloc(px, (cap *= 2) * sizeof(double)), py = xrealloc(py, cap * sizeof(double));
-            px[n] = -0.4 * st[i].v, py[n] = log10(f), n++;
         }
     }
-    if (n < 2)
-        die("photometry: only %zu stars", n);
-    double mx = 0, my = 0;
-    for (size_t i = 0; i < n; i++)
-        mx += px[i], my += py[i];
-    mx /= (double)n, my /= (double)n;
-    double sxx = 0, sxy = 0;
-    for (size_t i = 0; i < n; i++)
-        sxx += (px[i] - mx) * (px[i] - mx), sxy += (px[i] - mx) * (py[i] - my);
-    double gamma = sxy / sxx, c = my - gamma * mx, ss = 0;
-    for (size_t i = 0; i < n; i++) {
-        double r = py[i] - (gamma * px[i] + c);
-        ss += r * r;
-    }
-    report("photograph photometry: %zu stars V 3.5..6.0, |b| > 15: light ~ (10^(-0.4 V))^%.3f, "
-           "a magnitude 0 star = %.4g linear x photo pixels; scatter %.2f mag",
-           n, gamma, pow(10, c), sqrt(ss / (double)n) / 0.4);
-    free(px), free(py);
-}
 
-/* bilinear, in linear light, of the starless photograph at galactic (l, b) */
-static void pano_sample(const pano_t *p, double l, double b, double acc[3])
-{
-    double x, y;
-    pano_xy(p, l, b, &x, &y);
-    double x0 = floor(x), y0 = floor(y), fx = x - x0, fy = y - y0;
-    acc[0] = acc[1] = acc[2] = 0;
-    static const int dij[4][2] = {{0, 0}, {1, 0}, {0, 1}, {1, 1}};
-    for (int q = 0; q < 4; q++) {
-        int i = dij[q][0], j = dij[q][1];
-        double wgt = (i ? fx : 1 - fx) * (j ? fy : 1 - fy);
-        long xx = (long)pmod(x0 + i, p->im.w);
-        long yy = (long)clampd(y0 + j, 0, p->im.h - 1);
-        const uint8_t *c = p->clean.rgb + ((size_t)yy * p->im.w + (size_t)xx) * 3;
-        for (int k = 0; k < 3; k++)
-            acc[k] += wgt * p->lin[c[k]];
+    /* Average and add glow floor */
+    /* The glow floor (dark sky brightness) is handled by the emit() function
+     * which adds glow[k] from the blackbody colour. Our grid stores SIGNAL only.
+     * Average the accumulated values. */
+    for (int j = 0; j < GROWS; j++) {
+        for (int i = 0; i <= GCOLS; i++) {
+            size_t off = (size_t)j * (size_t)(GCOLS + 1) + (size_t)i;
+            if (count[off] > 0) {
+                grid[off * 3]     /= count[off];
+                grid[off * 3 + 1] /= count[off];
+                grid[off * 3 + 2] /= count[off];
+            }
+            /* no separate glow: emit() adds the dark-sky blackbody glow */
+
+        }
     }
+
+    /* Copy col 0 to col GCOLS for wraparound bilinear */
+    for (int j = 0; j < GROWS; j++) {
+        size_t src = (size_t)j * (size_t)(GCOLS + 1);
+        size_t dst = src + GCOLS;
+        grid[dst * 3]     = grid[src * 3];
+        grid[dst * 3 + 1] = grid[src * 3 + 1];
+        grid[dst * 3 + 2] = grid[src * 3 + 2];
+    }
+
+    free(count);
+    return grid;
 }
 
 /* ---- the run ---- */
@@ -1061,7 +825,7 @@ static int by_v(const void *a, const void *b)
     const sel_t *x = a, *y = b;
     if (x->s->v != y->s->v)
         return x->s->v < y->s->v ? -1 : 1;
-    return x->s < y->s ? -1 : x->s > y->s; /* ties keep the catalogue's order */
+    return x->s < y->s ? -1 : x->s > y->s;
 }
 
 typedef struct {
@@ -1221,66 +985,54 @@ int main(int argc, char **argv)
                srgb_encode(rgb[2]));
     }
 
-    /* ---- the Milky Way ---- */
-    pano_t pano;
-    memset(&pano, 0, sizeof pano);
-    for (int i = 0; i < 256; i++)
-        pano.lin[i] = srgb_decode(i);
-    pano.im = tiff_load(path_join(a.cache, "eso0932a.tif"));
-    report("photograph: %d x %d, %.3f deg per pixel", pano.im.w, pano.im.h, 360.0 / pano.im.w);
-    pano_measure(&pano, stars, nstars);
-    pano_starless(&pano);
-    pano_photometry(&pano, stars, nstars); /* a diagnostic only: the photograph is not photometric (see the report) */
-    /* The photograph's light is set from a measured value instead: the mean surface brightness of the
-     * Milky Way over the whole sky, the stars fainter than 6.5 included, from Pioneer 10/11 photometry:
-     * 101 S10(V) in B and 136 in R (Mattila et al. 2018, A&A 617, A42, table 5; from Toller 1981 and
-     * Leinert et al. 1998); taken here as their mean, 118 S10(V). One S10 is one 10th-magnitude star per
-     * square degree. */
+    /* ---- the Milky Way from Gaia DR3 ---- */
+    /* CSVs downloaded by scripts/ck_sky_gen.sh and passed via --cache */
     double r0 = 1.2; /* design px: the core of a star */
-    double star0 = a.exposure * (PI * r0 * r0 / 4) / 0.8 * pow(10, 0.4 * 6.5); /* a magnitude 0 star's light, linear x design px */
-    double px_deg2 = (a.fov / 1920.0) * (a.fov / 1920.0); /* a design px at the centre, square degrees */
-    double s10 = 1e-4 * star0 * px_deg2;                    /* linear light per design px of 1 S10 */
+    double star0 = a.exposure * (PI * r0 * r0 / 4) / 0.8 * pow(10, 0.4 * 6.5);
+    double px_deg2 = (a.fov / 1920.0) * (a.fov / 1920.0);
+    double s10 = 1e-4 * star0 * px_deg2; /* linear light per design px of 1 S10 */
     a.glow_lin = pow(10, 0.4 * (27.78 - a.skyglow)) * s10 * a.boost;
-    report("display: a magnitude 6.5 star peaks at %.3f linear (sRGB level %.0f); a magnitude 0 star holds "
-           "%.1f linear x design px; 1 S10 is %.3g linear per design px",
+    report("display: a magnitude 6.5 star peaks at %.3f linear (sRGB level %.0f); "
+           "a magnitude 0 star holds %.1f linear x design px; 1 S10 is %.3g linear per design px",
            a.exposure, srgb_encode(a.exposure), star0, s10);
-    report("the dark sky's own glow, V %.1f mag per square arcsec (%.0f S10; airglow and zodiacal light at a dark "
-           "site): %.5f linear per design px (sRGB level %.1f)",
-           a.skyglow, pow(10, 0.4 * (27.78 - a.skyglow)), a.glow_lin, srgb_encode(a.glow_lin));
-    int gw_cols = a.grid;
-    int gw_rows = (int)ceil(gw_cols * H_OVER_W_MAX) + 2;
-    double gy0 = -CY_FRAC * H_OVER_W_MAX; /* widths */
-    double step = 1.0 / gw_cols;
-    double *grid = xmalloc((size_t)gw_rows * (size_t)(gw_cols + 1) * 3 * sizeof(double));
+    gaia_cell_t *cells = parse_gaia_csv(path_join(a.cache, "gaia_hpx6.csv"),
+                                        path_join(a.cache, "gaia_dust.csv"));
+    /* Compute direction (ra, dec) of each HEALPix nested cell (nside=64) */
+    for (int k = 0; k < NCELLS; k++)
+        healpix_nest_ang(64, k, &cells[k].ra, &cells[k].dec);
+    /* Calibrate flux: scale so that the 95th-percentile cell g_flux reaches a.mw_top_s10.
+     * a.mw_top_s10 default 900 S10; Galactic centre exceeds this and is clipped by gaia_to_grid. */
+    double *flux_vals = xmalloc(NCELLS * sizeof *flux_vals);
+    int nfv = 0;
+    for (int k = 0; k < NCELLS; k++)
+        if (cells[k].nsrc > 0) flux_vals[nfv++] = cells[k].g_flux;
+    qsort(flux_vals, (size_t)nfv, sizeof *flux_vals, cmpd);
+    double peak_flux = nfv ? flux_vals[(int)(nfv * 0.95)] : 1.0;
+    free(flux_vals);
+    double s10_lin __attribute__((unused)) = a.mw_top_s10 * s10;
+    double flux_gain = peak_flux > 0 ? 1.0 / peak_flux : 1.0; /* normalise to [0,1]; emit() scales by g_phys */
+    long nnonempty = 0;
+    for (int k = 0; k < NCELLS; k++) if (cells[k].nsrc > 0) nnonempty++;
+    report("Gaia DR3 Milky Way: %d HEALPix level-6 cells (nside=64), %ld non-empty; "
+           "95th-percentile G flux %.3g; flux_gain=%.4g; sky glow %.5f linear/design-px (boost x%.2f)",
+           NCELLS, nnonempty, peak_flux, flux_gain, a.glow_lin, a.boost);
+    double *grid = gaia_to_grid(cells, flux_gain);
+    free(cells);
+    int gw_cols = GCOLS, gw_rows = GROWS;
+    double gy0 = 0.0, step = 1.0 / GCOLS;
+    double floor_ = 0.0; /* the glow is handled in emit() */
+    double top = 0;
     for (int j = 0; j < gw_rows; j++)
         for (int i = 0; i <= gw_cols; i++) {
-            vec3 d = from_frac(&view, -0.5 + i * step, gy0 + j * step);
-            double l, b;
-            galactic(d, &l, &b);
-            pano_sample(&pano, l, b, grid + ((size_t)j * (gw_cols + 1) + (size_t)i) * 3);
+            double v = grid[((size_t)j * (size_t)(gw_cols + 1) + (size_t)i) * 3];
+            if (v > top) top = v;
         }
-    /* the photograph's darkest sky (its 2nd percentile of light) is taken as its black: what is under that is the
-     * photographer's floor, not the sky. */
-    size_t ng = (size_t)gw_rows * (size_t)(gw_cols + 1);
-    double *lums = xmalloc(ng * sizeof(double));
-    for (size_t i = 0; i < ng; i++)
-        lums[i] = 0.2126 * grid[i * 3] + 0.7152 * grid[i * 3 + 1] + 0.0722 * grid[i * 3 + 2];
-    qsort(lums, ng, sizeof(double), cmpd);
-    double floor_ = lums[ng / 50], top = lums[ng * 999 / 1000];
-    free(lums);
-    /* The photograph is not photometric (the report's photometry line: its stars' light hardly follows their
-     * magnitudes), so its light is tied to a measurement: the Bochum V photometry of the southern Milky Way
-     * (Leinert et al. 1998, A&AS 127, 1, section 10, fig. 65: its scale tops out at 900 S10(V); the
-     * Carina-Coalsack isophotes in V are 250, 500 and 800 S10). The view's brightest Milky Way (the 99.9th
-     * percentile of the grid) is set to --mw-top-s10, the photograph's black to nothing. */
-    a.g_phys = a.mw_top_s10 * s10 / (top - floor_);
-    report("the photograph tied to Leinert et al. 1998: the brightest Milky Way in the view = %.0f S10(V), "
-           "linear x %.4f per design px; the dark sky's glow %.0f S10; all of that shown x %.2f against the "
-           "stars (--boost; 1 is the true contrast at one design pixel, 2.5 arcmin)",
-           a.mw_top_s10, a.g_phys, pow(10, 0.4 * (27.78 - a.skyglow)), a.boost);
-    report("Milky Way grid: %d x %d samples, %.3f deg apart at the centre; photograph light (linear): "
-           "2nd percentile %.4f (taken as black), 99.9th %.4f",
-           gw_cols + 1, gw_rows, deg(2 * view.t * step), floor_, top);
+    /* a.g_phys: converts grid units to linear display light (for the emit() scale comment) */
+    /* g_phys maps normalised grid (0..1) to linear display light;
+     * at the 95th-percentile cell: g_phys * boost = mw_top_s10 * s10 */
+    a.g_phys = a.mw_top_s10 * s10 / a.boost;
+    report("Gaia Milky Way grid: %d x %d equirectangular (full sphere, 1 deg/cell, north up); "
+           "peak luma %.1f / 4080 (16ths-of-level)", gw_cols, gw_rows, top);
 
     /* galaxies in the view, bright enough for the eye */
     size_t gcap = 4096, ngx = 0;
@@ -1337,8 +1089,9 @@ static void emit(const opts_t *a, const view_t *view, const sel_t *sel, size_t n
     fprintf(o, " * Regenerate: scripts/ck_sky_gen.sh (downloads the inputs, checks their sha256).\n *\n");
     fprintf(o, " * Stars: Yale Bright Star Catalogue, 5th revised ed. (Hoffleit & Warren 1991),\n");
     fprintf(o, " *   CDS catalogue V/50, positions moved by proper motion to %.1f.\n", EPOCH);
-    fprintf(o, " * Milky Way: \"The Milky Way panorama\", ESO/S. Brunier (eso0932a), CC BY 4.0,\n");
-    fprintf(o, " *   re-projected, its stars taken out.\n");
+    fprintf(o, " * Milky Way: Gaia DR3 source counts and integrated G-band flux per HEALPix level-6 cell\n");
+    fprintf(o, " *   (nside=64); G-band extinction from gaiadr3.astrophysical_parameters.\n");
+    fprintf(o, " *   ESA/Gaia/DPAC, CC BY-NC 3.0 IGO. Credit: ESA/Gaia/DPAC.\n");
     fprintf(o, " * Galaxies: OpenNGC (Mattia Verga), CC BY-SA 4.0.\n");
     fprintf(o, " * View centre: the most probable point of the GW150914 sky map, GWTC-1,\n");
     fprintf(o, " *   LIGO/Virgo (LIGO-P1800381-v7).\n");
@@ -1465,7 +1218,7 @@ static void emit(const opts_t *a, const view_t *view, const sel_t *sel, size_t n
     fprintf(o, " * above the view centre and the first column half a width left of it; luma (R + 2G + B) / 4 in sRGB\n");
     fprintf(o, " * levels; colour (Co, Cg) at half the spacing, in half levels */\n");
     fprintf(o, "const ck_sky_map ck_sky_milkyway = {\n");
-    fprintf(o, "    .cols = %d, .rows = %d, .per_width = %d, .row0_q16 = %ld,\n};\n", cols, gw_rows, gw_cols, rnd(gy0 * 65536));
+    fprintf(o, "    .cols = %d, .rows = %d, .per_width = %d, .row0_q16 = 0,\n};\n", cols, gw_rows, gw_cols);
     fprintf(o, "const uint8_t ck_sky_luma[%zu] = {\n", ng);
     for (size_t i = 0; i < ng; i += 24) {
         fprintf(o, "    ");

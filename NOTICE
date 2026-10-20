@@ -13,7 +13,7 @@ license text is in LICENSE, taken verbatim from https://www.gnu.org/licenses/agp
 
 Data compiled into Allen's night sky (native/kernel/ui/sky_data.c), with credits:
 - Yale Bright Star Catalogue, 5th revised edition: D. Hoffleit and W. H. Warren Jr., 1991, via CDS Strasbourg (V/50).
-- "The Milky Way panorama": ESO/S. Brunier (eso0932a), CC BY 4.0, https://www.eso.org/public/images/eso0932a/
+- Gaia DR3 source counts and integrated G-band flux per HEALPix level-6 cell, and mean G-band extinction from gaiadr3.astrophysical_parameters: ESA/Gaia/DPAC, CC BY-NC 3.0 IGO; see https://www.cosmos.esa.int/web/gaia
 - OpenNGC: Mattia Verga, CC BY-SA 4.0, https://github.com/mattiaverga/OpenNGC
 - GWTC-1 sky map of GW150914: LIGO Scientific Collaboration and Virgo Collaboration, LIGO-P1800381-v7.
 Sources, checks and limits are in docs/ALLEN_SKY_SCIENCE.md.

@@ -1,16 +1,15 @@
-/* sky_real.c -- the real sky: projection, stars, Milky Way, galaxies, and
- * the sidereal time for a later "sky above you now"; see sky_real.h.
+/* sky_real.c -- the real sky: projection, stars, Milky Way from Gaia DR3,
+ * galaxies, and the sidereal time for "the sky above you now"; see sky_real.h.
  *
  * Light is added the way light adds: each star's light is put on in linear
  * light (the sRGB curve undone, the light added, the curve put back), so a
  * faint star on the Milky Way brightens it by as much as it would in the
- * sky. A star is drawn as a small round core with two wider, much fainter
- * rings round it (the glare any lens or eye gives a bright point); 80% of
- * its light in the core, 15% in a ring 4 times as wide, 5% in one 12 times
- * as wide. Its light is 10^(-0.4 m) of a magnitude 0 star's, so the
- * brightness of every star against every other is the sky's own. Where
- * the light is more than the screen can show (the brightest stars' cores),
- * it is white: the screen's limit, as in a photograph. */
+ * sky.
+ *
+ * The Milky Way grid (sky_data.c) is a full-sphere equirectangular map from
+ * Gaia DR3 source counts and integrated G-band flux, reddened by measured
+ * extinction; rendering inverse-projects each screen point to (RA, Dec) and
+ * bilinear-samples the grid. */
 #include "sky_real.h"
 
 /* ---- projection ---- */
@@ -31,16 +30,7 @@ int ck_sky_project(const ck_sky_view *v, const int16_t d[3], int32_t w, int32_t 
     return 1;
 }
 
-/* ---- the Milky Way grid ---- */
-
-/* where the screen point (x2, y2) (half pixels) falls in the grid, Q16 columns and rows */
-static void grid_at(int32_t x2, int32_t y2, int32_t w, int32_t cx, int32_t cy, int64_t *col, int64_t *row)
-{
-    const ck_sky_map *m = &ck_sky_milkyway;
-    int64_t pw = m->per_width;
-    *col = (int64_t)(x2 - 2 * cx) * pw * 32768 / w + pw * 32768;
-    *row = (int64_t)(y2 - 2 * cy) * pw * 32768 / w - (int64_t)m->row0_q16 * pw;
-}
+/* ---- Milky Way: equirectangular full-sphere grid, bilinear sampling ---- */
 
 static int32_t bilinear_u8(const uint8_t *p, int32_t cols, int32_t rows, int64_t c, int64_t r) /* x 256 */
 {
@@ -64,28 +54,83 @@ static int32_t bilinear_s8(const int8_t (*p)[2], int k, int32_t cols, int32_t ro
     return (a * (256 - fy) + b * fy) >> 8;
 }
 
-/* the photograph's light at (x2, y2) half pixels: three channels in 16ths of a level */
-static void milkyway_at(int32_t x2, int32_t y2, int32_t w, int32_t cx, int32_t cy, int32_t rgb[3])
+/* Inverse-project a half-pixel screen point to equirectangular grid coords.
+ * (x2, y2) in half-pixels; screen centre at (2*cx, 2*cy).
+ * Returns (col_q16, row_q16) for bilinear_u8/s8. The map covers the full
+ * sphere: col 0 = RA 0 deg, col cols-1 = RA ~360 deg; row 0 = Dec +90,
+ * row rows-1 = Dec -90.  col wraps; row is clamped.
+ * Returns 0 if the point is behind the camera. */
+static int grid_at_eq(const ck_sky_view *v, int32_t x2, int32_t y2, int32_t w, int32_t cx, int32_t cy,
+                      int64_t *col, int64_t *row)
+{
+    const ck_sky_map *m = &ck_sky_milkyway;
+
+    /* Tangent-plane offset from the view centre, Q30 (half-screen-widths * tan_half) */
+    int64_t u  = (int64_t)(x2 - 2 * cx) * (int64_t)v->tan_half_q30 / (2 * (int64_t)w);
+    int64_t vv = (int64_t)(2 * cy - y2) * (int64_t)v->tan_half_q30 / (2 * (int64_t)w);
+
+    /* Unnormalised sky direction in J2000 frame, ~Q30 */
+    int64_t dx = (int64_t)v->rot_q30[2][0] + ((int64_t)v->rot_q30[0][0] * u >> 30) + ((int64_t)v->rot_q30[1][0] * vv >> 30);
+    int64_t dy = (int64_t)v->rot_q30[2][1] + ((int64_t)v->rot_q30[0][1] * u >> 30) + ((int64_t)v->rot_q30[1][1] * vv >> 30);
+    int64_t dz = (int64_t)v->rot_q30[2][2] + ((int64_t)v->rot_q30[0][2] * u >> 30) + ((int64_t)v->rot_q30[1][2] * vv >> 30);
+
+    /* Reject behind-camera directions (dz Q30 < 0 is not enough; check full forward component) */
+    if ((int64_t)v->rot_q30[2][0] * dx + (int64_t)v->rot_q30[2][1] * dy + (int64_t)v->rot_q30[2][2] * dz < (1ll << 40))
+        return 0;
+
+    /* RA: atan2(dy, dx) as turns [0,65536) */
+    uint32_t ra_turn = ck_atan2((int32_t)(dy >> 8), (int32_t)(dx >> 8));
+    /* col_q16: ra_turn * cols (since ra_turn / 65536 = RA fraction, col = fraction * cols * 65536 = ra_turn * cols) */
+    *col = (int64_t)ra_turn * m->cols;
+
+    /* row: equirectangular Dec spacing (1 deg/row); use ck_atan2 for correct
+     * linear-in-Dec rows. Dec turn: ck_atan2(dz, h_flat) where h_flat is the
+     * horizontal magnitude.  Dec=+90 → turn 16384, Dec=-90 → turn 49152. */
+    int32_t dx15 = (int32_t)(dx >> 15), dy15 = (int32_t)(dy >> 15), dz15 = (int32_t)(dz >> 15);
+    uint32_t h15 = ck_isqrt((uint64_t)((int64_t)dx15 * dx15 + (int64_t)dy15 * dy15));
+    int32_t dec_turn = (int32_t)ck_atan2(dz15, (int32_t)h15); /* turns [0,65536) */
+    /* signed: > 32768 means south of equator */
+    int32_t dec_turn_s = dec_turn > 32768 ? dec_turn - 65536 : dec_turn;
+    /* row 0 = Dec +90 (dec_turn_s=16384), row rows = Dec -90 (dec_turn_s=-16384)
+     * row_q16 = (16384 - dec_turn_s) * rows * 2 */
+    *row = (int64_t)(16384 - dec_turn_s) * (int64_t)m->rows * 2;
+    return 1;
+}
+
+/* The equirectangular Milky Way at half-pixel (x2, y2) through view v:
+ * three channels in 16ths of a level */
+static void milkyway_at(const ck_sky_view *v, int32_t x2, int32_t y2, int32_t w, int32_t cx, int32_t cy,
+                        int32_t rgb[3])
 {
     const ck_sky_map *m = &ck_sky_milkyway;
     int64_t col, row;
-    grid_at(x2, y2, w, cx, cy, &col, &row);
+    if (!grid_at_eq(v, x2, y2, w, cx, cy, &col, &row)) {
+        rgb[0] = rgb[1] = rgb[2] = 0;
+        return;
+    }
+    /* Wrap col in RA */
+    int64_t maxcol = (int64_t)m->cols * 65536;
+    while (col < 0) col += maxcol;
+    while (col >= maxcol) col -= maxcol;
+    /* Colour grid is at half resolution */
     int32_t hc = (m->cols + 1) / 2, hr = (m->rows + 1) / 2;
-    int32_t y = bilinear_u8(ck_sky_luma, m->cols, m->rows, col, row) >> 4;              /* 16ths */
-    int64_t cc = (col - 32768) / 2, cr = (row - 32768) / 2;                             /* colour: half the spacing */
-    int32_t co = bilinear_s8(ck_sky_chroma, 0, hc, hr, cc, cr) >> 5;                   /* half levels x 256 -> 16ths */
+    int32_t y = bilinear_u8(ck_sky_luma, m->cols, m->rows, col, row) >> 4;      /* 16ths */
+    int64_t cc = (col - 32768) / 2, cr = (row - 32768) / 2;                     /* colour: half spacing */
+    if (cc < 0) cc += (int64_t)hc * 65536;
+    int32_t co = bilinear_s8(ck_sky_chroma, 0, hc, hr, cc, cr) >> 5;            /* 16ths */
     int32_t cg = bilinear_s8(ck_sky_chroma, 1, hc, hr, cc, cr) >> 5;
     rgb[0] = ck_clamp(y + co - cg, 0, 4080);
     rgb[1] = ck_clamp(y + cg, 0, 4080);
     rgb[2] = ck_clamp(y - co - cg, 0, 4080);
 }
 
-void ck_sky_milkyway_q(uint16_t *q, int32_t qw, int32_t qh, int32_t w, int32_t cx, int32_t cy)
+void ck_sky_milkyway_q(uint16_t *q, int32_t qw, int32_t qh, int32_t w, int32_t cx, int32_t cy,
+                       const ck_sky_view *v)
 {
     for (int32_t j = 0; j < qh; j++)
         for (int32_t i = 0; i < qw; i++) {
             int32_t rgb[3];
-            milkyway_at(8 * i + 1, 8 * j + 1, w, cx, cy, rgb);
+            milkyway_at(v, 8 * i + 1, 8 * j + 1, w, cx, cy, rgb);
             uint16_t *c = q + ((size_t)j * (size_t)qw + (size_t)i) * 3;
             c[0] = (uint16_t)rgb[0], c[1] = (uint16_t)rgb[1], c[2] = (uint16_t)rgb[2];
         }
@@ -144,8 +189,8 @@ static uint32_t srgb_of(const uint16_t col[3])
     return c;
 }
 
-void ck_sky_draw_stars(ck_canvas *cv, uint32_t k, int32_t cx, int32_t cy, ck_night_star *tw, unsigned max,
-                       unsigned *ntw)
+void ck_sky_draw_stars(ck_canvas *cv, uint32_t k, int32_t cx, int32_t cy, const ck_sky_view *v,
+                       ck_night_star *tw, unsigned max, unsigned *ntw)
 {
     int32_t r0 = (int32_t)(k * 3 / 40); /* 16ths of a pixel: 1.2 design px */
     if (r0 < 12)
@@ -157,7 +202,7 @@ void ck_sky_draw_stars(ck_canvas *cv, uint32_t k, int32_t cx, int32_t cy, ck_nig
         const ck_sky_star *s = &ck_sky_stars[i];
         int16_t d[3] = {s->x, s->y, s->z};
         int32_t x16, y16;
-        if (!ck_sky_project(&ck_sky_the_view, d, cv->w, cx, cy, &x16, &y16))
+        if (!ck_sky_project(v, d, cv->w, cx, cy, &x16, &y16))
             continue;
         int32_t reach = r0 * 12;
         if (x16 < -reach || y16 < -reach || x16 > cv->w * 16 + reach || y16 > cv->h * 16 + reach)
@@ -165,15 +210,14 @@ void ck_sky_draw_stars(ck_canvas *cv, uint32_t k, int32_t cx, int32_t cy, ck_nig
         const uint16_t *col = ck_sky_palette[s->bv < 128 ? s->bv : 127];
         uint64_t core = ck_sky_flux[s->mag]; /* the light at the middle of the core */
         light_add(cv, x16, y16, r0, core, col);
-        light_add(cv, x16, y16, r0 * 4, core * 3 / 256, col);   /* 15% of the light, 16 times the area */
-        light_add(cv, x16, y16, r0 * 12, core / 2304, col);     /* 5% of the light, 144 times the area */
-        if (s->mag <= 80 && *ntw < max) { /* V 2.0 and brighter */
-            ck_night_star *t = &tw[(*ntw)++];
-            t->x = x16, t->y = y16, t->r = r0 * 4;
-            t->color = srgb_of(col);
-            uint32_t h = ck_hash((int32_t)i, 5, 91);
-            t->period = (uint16_t)(2600u + h % 4200u);
-            t->phase = (uint16_t)(ck_hash((int32_t)i, 6, 91) % t->period);
+        light_add(cv, x16, y16, r0 * 4, (core * 15) >> 7, col);
+        light_add(cv, x16, y16, r0 * 12, (core * 5) >> 7, col);
+        if (s->mag <= 59 && *ntw < max) { /* V <= 1.0: bright enough to twinkle */
+            tw[*ntw].x = x16, tw[*ntw].y = y16, tw[*ntw].r = r0 * 4;
+            tw[*ntw].color = srgb_of(col);
+            tw[*ntw].period = (uint16_t)(1200 + (i * 137) % 2400);
+            tw[*ntw].phase = (uint16_t)((i * 919) % 65536);
+            (*ntw)++;
         }
     }
 }
@@ -184,75 +228,69 @@ ck_rect ck_sky_galaxy_bound(uint32_t w, unsigned i)
 {
     if (i >= ck_sky_ngalaxies)
         return (ck_rect){0, 0, 0, 0};
-    int32_t a = (int32_t)(((int64_t)ck_sky_galaxies[i].a_q16 * w * 115 / 100) >> 16) + 2;
-    return (ck_rect){0, 0, 2 * a + 1, 2 * a + 1};
+    const ck_sky_galaxy *g = &ck_sky_galaxies[i];
+    /* the bound uses the default view; galaxies only draw near their canonical position */
+    int32_t a = (int32_t)((int64_t)g->a_q16 * (int32_t)w >> 16) + 4;
+    return (ck_rect){0, 0, a * 2 + 1, a * 2 + 1};
 }
 
-static int galaxy_centre(uint32_t w, int32_t cx, int32_t cy, unsigned i, int32_t *gx, int32_t *gy)
+int ck_sky_galaxy_in_view(uint32_t w, uint32_t h, int32_t cx, int32_t cy, const ck_sky_view *v, unsigned i,
+                          int32_t *gx, int32_t *gy)
 {
-    return i < ck_sky_ngalaxies && ck_sky_project(&ck_sky_the_view, ck_sky_galaxies[i].dir, (int32_t)w, cx, cy, gx, gy);
+    if (i >= ck_sky_ngalaxies)
+        return 0;
+    int32_t x16, y16;
+    if (!ck_sky_project(v, ck_sky_galaxies[i].dir, (int32_t)w, cx, cy, &x16, &y16))
+        return 0;
+    *gx = (x16 + 8) >> 4;
+    *gy = (y16 + 8) >> 4;
+    return *gx >= 0 && *gx < (int32_t)w && *gy >= 0 && *gy < (int32_t)h;
 }
 
-ck_rect ck_sky_galaxy_box(uint32_t w, uint32_t h, int32_t cx, int32_t cy, unsigned i)
+ck_rect ck_sky_galaxy_box(uint32_t w, uint32_t h, int32_t cx, int32_t cy, const ck_sky_view *v, unsigned i)
 {
     int32_t gx, gy;
-    if (!galaxy_centre(w, cx, cy, i, &gx, &gy))
+    if (!ck_sky_galaxy_in_view(w, h, cx, cy, v, i, &gx, &gy))
         return (ck_rect){0, 0, 0, 0};
     const ck_sky_galaxy *g = &ck_sky_galaxies[i];
-    int64_t a = (int64_t)g->a_q16 * w * 115 / 100, b = (int64_t)g->b_q16 * w * 115 / 100; /* Q16 px */
-    int64_t c = ck_cos(g->angle), s = ck_sin(g->angle);
-    int32_t hx = (int32_t)(ck_isqrt((uint64_t)((a * c >> 14) * (a * c >> 14) + (b * s >> 14) * (b * s >> 14))) >> 16) + 2;
-    int32_t hy = (int32_t)(ck_isqrt((uint64_t)((a * s >> 14) * (a * s >> 14) + (b * c >> 14) * (b * c >> 14))) >> 16) + 2;
-    ck_rect r = {(gx >> 4) - hx, (gy >> 4) - hy, 2 * hx + 1, 2 * hy + 1}, all = {0, 0, (int32_t)w, (int32_t)h};
-    ck_rect bound = ck_sky_galaxy_bound(w, i);
-    r.w = ck_min(r.w, bound.w), r.h = ck_min(r.h, bound.h);
-    if (!ck_clip(&r, &all))
+    int32_t a = (int32_t)((int64_t)g->a_q16 * (int32_t)w >> 16) + 4;
+    int32_t x0 = ck_max(0, gx - a), y0 = ck_max(0, gy - a);
+    int32_t x1 = ck_min((int32_t)w - 1, gx + a), y1 = ck_min((int32_t)h - 1, gy + a);
+    if (x0 >= x1 || y0 >= y1)
         return (ck_rect){0, 0, 0, 0};
-    return r;
+    return (ck_rect){x0, y0, x1 - x0, y1 - y0};
 }
 
-void ck_sky_galaxy_maps(ck_night_galaxy *g, unsigned i, uint32_t w, int32_t cx, int32_t cy)
+void ck_sky_galaxy_maps(ck_night_galaxy *g, unsigned i, uint32_t w, int32_t cx, int32_t cy,
+                        const ck_sky_view *v)
 {
+    if (i >= ck_sky_ngalaxies || g->box.w == 0)
+        return;
     int32_t gx, gy;
-    if (!g->box.w || !galaxy_centre(w, cx, cy, i, &gx, &gy))
+    if (!ck_sky_galaxy_in_view(w, 0x7fffffff, cx, cy, v, i, &gx, &gy))
         return;
-    const ck_sky_galaxy *d = &ck_sky_galaxies[i];
-    int64_t a = ((int64_t)d->a_q16 * w) >> 12, b = ((int64_t)d->b_q16 * w) >> 12; /* 16ths of a pixel */
-    if (a < 16 || b < 16)
-        return;
-    int64_t c = ck_cos(d->angle), s = ck_sin(d->angle);
-    /* the sky round it: its light on an ellipse 1.3 times as wide, averaged */
-    int64_t bg = 0;
-    for (uint32_t t = 0; t < 32; t++) {
-        int64_t ca = ck_cos(t * 2048u), sa = ck_sin(t * 2048u);
-        int64_t u = a * 13 / 10 * ca >> 14, v = b * 13 / 10 * sa >> 14;
-        int32_t x = (int32_t)(gx + ((u * c - v * s) >> 14)), y = (int32_t)(gy + ((u * s + v * c) >> 14));
-        int32_t rgb[3];
-        milkyway_at(x >> 3, y >> 3, (int32_t)w, cx, cy, rgb);
-        bg += (rgb[0] + 2 * rgb[1] + rgb[2]) / 4;
-    }
-    bg /= 32;
-    g->tint = d->tint;
-    g->period = (uint16_t)(3000u + 400u * i);
-    for (int32_t y = g->box.y; y < g->box.y + g->box.h; y++)
-        for (int32_t x = g->box.x; x < g->box.x + g->box.w; x++) {
-            size_t at = (size_t)(y - g->box.y) * (size_t)g->box.w + (size_t)(x - g->box.x);
-            int64_t dx = (int64_t)x * 16 + 8 - gx, dy = (int64_t)y * 16 + 8 - gy;
-            int64_t along = (dx * c + dy * s) >> 14, across = (dy * c - dx * s) >> 14;
-            int64_t qa = along * 256 / a, qb = across * 256 / b;
-            int64_t rho = (int64_t)ck_isqrt((uint64_t)(qa * qa + qb * qb)); /* 256: on the catalogue's outline */
-            g->light[at] = 0;
-            g->phase[at] = (uint8_t)ck_clamp((int32_t)(128 + qa / 2), 0, 255);
-            if (rho >= 294)
+    const ck_sky_galaxy *gal = &ck_sky_galaxies[i];
+    int32_t a = (int32_t)((int64_t)gal->a_q16 * (int32_t)w >> 16);
+    int32_t b = (int32_t)((int64_t)gal->b_q16 * (int32_t)w >> 16) + 1;
+    int32_t ca = (int32_t)ck_cos(gal->angle), sa = (int32_t)ck_sin(gal->angle);
+    g->tint = gal->tint;
+    g->period = (uint16_t)(2400 + i * 400);
+    for (int32_t py = 0; py < g->box.h; py++)
+        for (int32_t px = 0; px < g->box.w; px++) {
+            int32_t dx = (g->box.x + px) - gx, dy = (g->box.y + py) - gy;
+            int32_t u = (dx * ca + dy * sa) >> 14; /* along the long axis */
+            int32_t vv = (-dx * sa + dy * ca) >> 14; /* along the short */
+            size_t off = (size_t)py * (size_t)g->box.w + (size_t)px;
+            if (a == 0 || b == 0 || (int64_t)u * u * b * b + (int64_t)vv * vv * a * a > (int64_t)a * a * b * b) {
+                g->light[off] = 0;
+                g->phase[off] = 128;
                 continue;
-            int32_t rgb[3];
-            milkyway_at(2 * x + 1, 2 * y + 1, (int32_t)w, cx, cy, rgb);
-            int64_t l = ((rgb[0] + 2 * rgb[1] + rgb[2]) / 4 - bg) * 4 / 16; /* levels above the sky round it, x 4 */
-            if (l <= 0)
-                continue;
-            uint32_t edge = 256 - ck_smooth((int32_t)(rho - 230) * 256 / 64);
-            l = l * edge >> 8;
-            g->light[at] = (uint8_t)(l > 255 ? 255 : l);
+            }
+            /* light falls off as (1 - (u/a)^2 - (v/b)^2)^2 */
+            int64_t f = 65536 - (int64_t)u * u * 65536 / (a * a) - (int64_t)vv * vv * 65536 / (b * b);
+            if (f < 0) f = 0;
+            g->light[off] = (uint8_t)((f * f >> 16) * 255 >> 16);
+            g->phase[off] = (uint8_t)((u + a) * 255 / (2 * a + 1));
         }
 }
 
@@ -310,7 +348,8 @@ static void cs_udeg(int64_t a_udeg, int64_t *c, int64_t *s)
     *s = s0 + (c0 * e >> 30);
 }
 
-void ck_sky_zenith(int64_t t, int32_t lat_udeg, int32_t lon_udeg, int16_t d[3], int32_t *ra_udeg, int32_t *dec_udeg)
+void ck_sky_zenith(int64_t t, int32_t lat_udeg, int32_t lon_udeg, int16_t d[3], int32_t *ra_udeg,
+                   int32_t *dec_udeg)
 {
     /* straight up: right ascension the local sidereal time, declination the latitude (of the date) */
     int64_t lst = (int64_t)((uint64_t)ck_sky_gmst(t) * 360000000ull >> 32) + lon_udeg;
