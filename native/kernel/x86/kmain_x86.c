@@ -747,6 +747,12 @@ static void allen_window(void)
                       : "courier: no second serial port; Allen answers from this computer alone\n");
     ck_allen_ui_named(ck_allen_self(&allen_mind)); /* the bar says who to speak to */
     ck_x86_kbd_sink(0, allen_line);
+#ifdef CK_X86_SWAP_TEST_DISK
+    /* QEMU swap test only (never in a lab image that reaches the iMac): teach Allen
+     * one fact through the real line path so kernel A writes Allen's memory to disk
+     * before the swap, and the swapped-in kernel must load it back. */
+    allen_line("my name is Ada");
+#endif
     if (ck_x86_console_fb_get(&px, &w, &h, &pitch, &format)) {
         ck_puts("screen: text only (no framebuffer for Allen's window)\n");
         return;

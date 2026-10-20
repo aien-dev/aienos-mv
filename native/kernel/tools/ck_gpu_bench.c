@@ -1,23 +1,35 @@
-/* ck_gpu_bench.c -- Spark-side GPU bench console tool.
+/* ck_gpu_bench.c -- Spark-side GPU bench console tool (LAB BUILD: CK_X86_REPORT=1 kernel).
  *
- * Usage: ck_gpu_bench [--key <file>] [--target <ip>] [--log <dir>] <script.bench>
- *        ck_gpu_bench ping [--key <file>] [--target <ip>]
+ * Usage: ck_gpu_bench [--key FILE] [--target IP] [--serial PATH] [--transcript FILE] <script.bench>
+ *        ck_gpu_bench ping [same options]
  *
- * Sends authenticated GPU bench commands to the running AIENOS iMac kernel
- * and logs every transaction to the evidence directory.
+ * Transports:
+ *   default (UDP): datagrams to the iMac, port 47035. This is the hardware path. The kernel side
+ *     uses tg3 RX/TX, which is compiled in the lab build but is NOT tested in this repo.
+ *   --serial PATH: a unix socket to the kernel's COM1 (QEMU: -serial unix:PATH,server=on,wait=on).
+ *     The test build (CK_X86_BENCH_TEST=1) answers the same packets as text lines:
+ *       request  "ABCHREQ " + 128 hex digits
+ *       reply    "ABCHRESP " + 128 hex digits
+ *     The tool waits for "bench: GPU bench console ready" before it sends.
  *
- * Script syntax (one command per line, # comments):
+ * Script lines (one command per line, # comments, numbers decimal or 0x hex):
  *   ping
- *   pci_cfg <offset>
- *   bar5_read <reg_index>
- *   bar5_write <reg_index> <value>
- *   bar0_read <word_off>
- *   bar0_write <word_off> <value>
- *   bar5_poll <reg_index> <mask> <expected> <timeout_ms>
- *   bar5_rmw <reg_index> <clear_mask> <set_bits>
+ *   pci_cfg <offset>            bar5_read <reg>            bar5_write <reg> <value>
+ *   bar0_read <word>            bar0_write <word> <value>
+ *   bar5_poll <reg> <mask> <expected> <timeout_ms>
+ *   bar5_rmw <reg> <clear_mask> <set_bits>
+ *   badauth <command ...>   the same command with one HMAC byte flipped (kernel must answer ERR_AUTH)
+ *   stale <command ...>     the same command with counter 1 (not above the kernel's last: ERR_AUTH)
+ *   replay                  the previous request again, byte for byte (same counter: ERR_AUTH)
  *
- * Build: cc -O2 -std=c11 -o ck_gpu_bench ck_gpu_bench.c
- */
+ * Counter: starts from the clock (seconds * 1000) so a second run is still above the kernel's
+ * last counter. A status of ERR_ALLONES stops the script (device gone); the tool sends nothing after it.
+ *
+ * Output: one line per transaction, "<label> <STATUS>: result=0x.. before=0x..". Every byte the
+ * serial link carries is copied to --transcript FILE if given.
+ * Exit: 0 all OK; 1 an error status or an ALLONES stop; 2 transport failure.
+ *
+ * Build: cc -O2 -std=c11 -o ck_gpu_bench ck_gpu_bench.c   (make -C native/kernel ck-gpu-bench) */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -25,6 +37,7 @@
 #include <errno.h>
 #include <time.h>
 #include <sys/socket.h>
+#include <sys/un.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
@@ -79,50 +92,166 @@ static void hmac_sha256(const uint8_t key[32], const uint8_t *msg, size_t mlen, 
 
 static const uint8_t test_key[32] = { BENCH_TEST_KEY_INIT };
 static uint8_t bench_key[32];
-static uint64_t counter = 1;
-static int sock = -1;
+static uint64_t counter;
+static int sock = -1;                 /* UDP socket */
 static struct sockaddr_in target;
+static int serial_fd = -1;            /* COM1 socket (QEMU test) */
+static int use_serial;
+static FILE *transcript;
+static uint8_t last_req[BENCH_REQ_BYTES];
+static int have_last;
 
+enum mode { M_NORMAL, M_BADAUTH, M_STALE, M_REPLAY };
+
+/* ---- transports ---- */
 static void init_net(const char *ip)
 {
     sock = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sock < 0) { perror("socket"); exit(1); }
+    if (sock < 0) { perror("socket"); exit(2); }
     int bcast = 1;
     setsockopt(sock, SOL_SOCKET, SO_BROADCAST, &bcast, sizeof bcast);
     memset(&target, 0, sizeof target);
     target.sin_family = AF_INET;
     target.sin_port = htons(CK_X86_BENCH_PORT);
     target.sin_addr.s_addr = inet_addr(ip);
-    /* Bind to bench port for replies */
-    struct sockaddr_in local; memset(&local,0,sizeof local);
+    struct sockaddr_in local; memset(&local, 0, sizeof local);
     local.sin_family = AF_INET;
     local.sin_port = htons(CK_X86_BENCH_PORT);
     local.sin_addr.s_addr = INADDR_ANY;
     bind(sock, (struct sockaddr *)&local, sizeof local);
 }
 
-static int send_cmd(uint8_t cmd, uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3,
-                     uint32_t *result, uint32_t *before, char *status_name)
+static void nap_ms(int ms)
+{
+    struct timeval tv = { ms / 1000, (ms % 1000) * 1000 };
+    select(0, NULL, NULL, NULL, &tv);
+}
+
+static int serial_connect(const char *path)
+{
+    for (int i = 0; i < 300; i++) {          /* QEMU may still be starting: retry for 60 s */
+        int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+        if (fd < 0) return -1;
+        struct sockaddr_un a; memset(&a, 0, sizeof a);
+        a.sun_family = AF_UNIX;
+        strncpy(a.sun_path, path, sizeof a.sun_path - 1);
+        if (connect(fd, (struct sockaddr *)&a, sizeof a) == 0) return fd;
+        close(fd);
+        nap_ms(200);
+    }
+    return -1;
+}
+
+/* Serial receive buffer: text from the kernel (console lines and replies). */
+static char rx[1 << 16];
+static size_t rxn, rxpos;
+
+/* Reads whatever arrives within timeout_ms into rx. Returns bytes read, or -1. */
+static int serial_fill(int timeout_ms)
+{
+    fd_set fds; FD_ZERO(&fds); FD_SET(serial_fd, &fds);
+    struct timeval tv = { timeout_ms / 1000, (timeout_ms % 1000) * 1000 };
+    if (select(serial_fd + 1, &fds, NULL, NULL, &tv) <= 0) return -1;
+    if (rxpos) { memmove(rx, rx + rxpos, rxn - rxpos); rxn -= rxpos; rxpos = 0; }
+    if (rxn >= sizeof rx - 1) rxn = 0;      /* nothing useful can be this long: drop it */
+    ssize_t n = read(serial_fd, rx + rxn, sizeof rx - 1 - rxn);
+    if (n <= 0) return -1;
+    if (transcript) fwrite(rx + rxn, 1, (size_t)n, transcript);
+    rxn += (size_t)n;
+    rx[rxn] = 0;
+    return (int)n;
+}
+
+static int wait_for_text(const char *needle, int seconds)
+{
+    for (int i = 0; i < seconds * 5; i++) {
+        if (strstr(rx + rxpos, needle)) return 1;
+        serial_fill(200);
+    }
+    return strstr(rx + rxpos, needle) != NULL;
+}
+
+static void hex_encode(const uint8_t *b, size_t n, char *out)
+{
+    static const char hx[] = "0123456789abcdef";
+    for (size_t i = 0; i < n; i++) { out[2 * i] = hx[b[i] >> 4]; out[2 * i + 1] = hx[b[i] & 15]; }
+    out[2 * n] = 0;
+}
+
+static int hexnib(char c)
+{
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
+/* Finds "ABCHRESP " + 128 hex digits in the buffer and decodes it into resp. */
+static int serial_recv_resp(uint8_t resp[BENCH_RESP_BYTES])
+{
+    static const char tag[] = "ABCHRESP ";
+    for (int tries = 0; tries < 30; tries++) {
+        char *p = strstr(rx + rxpos, tag);
+        if (p) {
+            size_t need = strlen(tag) + 2 * BENCH_RESP_BYTES;
+            if ((size_t)(p - rx) + need <= rxn) {
+                char *h = p + strlen(tag);
+                for (unsigned i = 0; i < BENCH_RESP_BYTES; i++) {
+                    int hi = hexnib(h[2 * i]), lo = hexnib(h[2 * i + 1]);
+                    if (hi < 0 || lo < 0) { rxpos = (size_t)(p - rx) + 1; goto next; }
+                    resp[i] = (uint8_t)(hi << 4 | lo);
+                }
+                rxpos = (size_t)(p - rx) + need;
+                return 0;
+            }
+        }
+    next:
+        if (serial_fill(1000) < 0 && tries >= 10) break;
+    }
+    return -1;
+}
+
+/* ---- one transaction ---- */
+static int transact(uint8_t cmd, uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, enum mode m,
+                    uint32_t *result, uint32_t *before, char *status_name)
 {
     uint8_t req[BENCH_REQ_BYTES];
-    memset(req, 0, sizeof req);
-    memcpy(req, BENCH_MAGIC_REQ, 4);
-    req[4] = BENCH_VERSION; req[5] = cmd;
-    bench_w64(req + 8, counter++);
-    bench_w32(req + 16, a0); bench_w32(req + 20, a1);
-    bench_w32(req + 24, a2); bench_w32(req + 28, a3);
-    hmac_sha256(bench_key, req, BENCH_HMAC_OFF, req + BENCH_HMAC_OFF);
-    if (sendto(sock, req, BENCH_REQ_BYTES, 0, (struct sockaddr *)&target, sizeof target) < 0)
-        { perror("sendto"); return -1; }
+    if (m == M_REPLAY) {
+        if (!have_last) { fprintf(stderr, "replay: nothing was sent yet\n"); return -1; }
+        memcpy(req, last_req, sizeof req);
+    } else {
+        memset(req, 0, sizeof req);
+        memcpy(req, BENCH_MAGIC_REQ, 4);
+        req[4] = BENCH_VERSION; req[5] = cmd;
+        bench_w64(req + 8, m == M_STALE ? 1u : counter++);
+        bench_w32(req + 16, a0); bench_w32(req + 20, a1);
+        bench_w32(req + 24, a2); bench_w32(req + 28, a3);
+        hmac_sha256(bench_key, req, BENCH_HMAC_OFF, req + BENCH_HMAC_OFF);
+        if (m == M_BADAUTH) req[BENCH_HMAC_OFF] ^= 0x01;
+    }
+    memcpy(last_req, req, sizeof req);
+    have_last = 1;
 
-    fd_set fds; FD_ZERO(&fds); FD_SET(sock, &fds);
-    struct timeval tv = {2, 0};
-    if (select(sock+1, &fds, NULL, NULL, &tv) <= 0) { fprintf(stderr, "timeout\n"); return -1; }
     uint8_t resp[BENCH_RESP_BYTES];
-    ssize_t n = recv(sock, resp, sizeof resp, 0);
-    if (n != BENCH_RESP_BYTES) { fprintf(stderr, "bad resp len %zd\n", n); return -1; }
+    if (use_serial) {
+        char line[8 + 2 * BENCH_REQ_BYTES + 2];
+        char hx[2 * BENCH_REQ_BYTES + 1];
+        hex_encode(req, sizeof req, hx);
+        snprintf(line, sizeof line, "ABCHREQ %s\n", hx);
+        if (write(serial_fd, line, strlen(line)) < 0) { perror("serial write"); return -1; }
+        if (transcript) fputs(line, transcript);
+        if (serial_recv_resp(resp) != 0) { fprintf(stderr, "no reply on the serial link\n"); return -1; }
+    } else {
+        if (sendto(sock, req, BENCH_REQ_BYTES, 0, (struct sockaddr *)&target, sizeof target) < 0)
+            { perror("sendto"); return -1; }
+        fd_set fds; FD_ZERO(&fds); FD_SET(sock, &fds);
+        struct timeval tv = {2, 0};
+        if (select(sock + 1, &fds, NULL, NULL, &tv) <= 0) { fprintf(stderr, "timeout\n"); return -1; }
+        ssize_t n = recv(sock, resp, sizeof resp, 0);
+        if (n != BENCH_RESP_BYTES) { fprintf(stderr, "bad resp len %zd\n", n); return -1; }
+    }
     if (memcmp(resp, BENCH_MAGIC_RESP, 4)) { fprintf(stderr, "bad magic\n"); return -1; }
-    /* Verify HMAC */
+    /* Every response is HMAC'd by the kernel, auth errors included. */
     uint8_t expected[32];
     hmac_sha256(bench_key, resp, BENCH_HMAC_OFF, expected);
     if (memcmp(expected, resp + BENCH_HMAC_OFF, 32)) { fprintf(stderr, "HMAC mismatch\n"); return -1; }
@@ -134,84 +263,142 @@ static int send_cmd(uint8_t cmd, uint32_t a0, uint32_t a1, uint32_t a2, uint32_t
     return (int)st;
 }
 
-static int run_script(FILE *f)
+/* ---- script ---- */
+struct cmdspec { const char *name; uint8_t cmd; int nargs; };
+static const struct cmdspec specs[] = {
+    {"ping", BENCH_CMD_PING, 0},
+    {"pci_cfg", BENCH_CMD_PCI_CFG, 1},
+    {"bar5_read", BENCH_CMD_BAR5_READ, 1},
+    {"bar5_write", BENCH_CMD_BAR5_WRITE, 2},
+    {"bar0_read", BENCH_CMD_BAR0_READ, 1},
+    {"bar0_write", BENCH_CMD_BAR0_WRITE, 2},
+    {"bar5_poll", BENCH_CMD_BAR5_POLL, 4},
+    {"bar5_rmw", BENCH_CMD_BAR5_RMW, 3},
+};
+
+/* Returns 0 to go on, 1 when the script must stop (device gone), 2 on transport failure. */
+static int run_script(FILE *f, int *any_error)
 {
-    char line[256]; int lineno = 0; int err = 0;
+    char line[256]; int lineno = 0;
     while (fgets(line, sizeof line, f)) {
         lineno++;
-        /* strip comments and whitespace */
-        char *p = strchr(line, '#'); if (p) *p = 0;
-        while (*line && (line[0] == ' ' || line[0] == '\t')) memmove(line, line+1, strlen(line));
-        size_t l = strlen(line);
-        while (l && (line[l-1] == '\n' || line[l-1] == '\r' || line[l-1] == ' ')) line[--l] = 0;
-        if (!*line) continue;
+        char *hash = strchr(line, '#');
+        if (hash) *hash = 0;
+        char *tok[10]; int nt = 0;
+        for (char *p = strtok(line, " \t\r\n"); p && nt < 10; p = strtok(NULL, " \t\r\n"))
+            tok[nt++] = p;
+        if (!nt) continue;
 
-        char cmd[32]; uint32_t a[4] = {0,0,0,0}; int n;
-        n = sscanf(line, "%31s %u %u %u %u", cmd, &a[0], &a[1], &a[2], &a[3]);
-        if (n < 1) continue;
+        enum mode m = M_NORMAL;
+        int i = 0;
+        if (!strcmp(tok[0], "badauth")) { m = M_BADAUTH; i = 1; }
+        else if (!strcmp(tok[0], "stale")) { m = M_STALE; i = 1; }
+        else if (!strcmp(tok[0], "replay")) m = M_REPLAY;
 
-        uint8_t bench_cmd;
-        if      (!strcmp(cmd, "ping"))        bench_cmd = BENCH_CMD_PING;
-        else if (!strcmp(cmd, "pci_cfg"))     bench_cmd = BENCH_CMD_PCI_CFG;
-        else if (!strcmp(cmd, "bar5_read"))   bench_cmd = BENCH_CMD_BAR5_READ;
-        else if (!strcmp(cmd, "bar5_write"))  bench_cmd = BENCH_CMD_BAR5_WRITE;
-        else if (!strcmp(cmd, "bar0_read"))   bench_cmd = BENCH_CMD_BAR0_READ;
-        else if (!strcmp(cmd, "bar0_write"))  bench_cmd = BENCH_CMD_BAR0_WRITE;
-        else if (!strcmp(cmd, "bar5_poll"))   bench_cmd = BENCH_CMD_BAR5_POLL;
-        else if (!strcmp(cmd, "bar5_rmw"))    bench_cmd = BENCH_CMD_BAR5_RMW;
-        else { fprintf(stderr, "line %d: unknown command %s\n", lineno, cmd); err=1; continue; }
+        const char *label = tok[0];
+        uint32_t a[4] = {0, 0, 0, 0};
+        const struct cmdspec *spec = NULL;
+        if (m == M_REPLAY) {
+            if (nt != 1) { fprintf(stderr, "line %d: replay takes no arguments\n", lineno); *any_error = 1; continue; }
+            spec = &specs[0];   /* placeholder: replay sends the stored bytes */
+        } else {
+            if (i >= nt) { fprintf(stderr, "line %d: missing command\n", lineno); *any_error = 1; continue; }
+            for (size_t k = 0; k < sizeof specs / sizeof specs[0]; k++)
+                if (!strcmp(tok[i], specs[k].name)) spec = &specs[k];
+            if (!spec) { fprintf(stderr, "line %d: unknown command %s\n", lineno, tok[i]); *any_error = 1; continue; }
+            if (nt - (i + 1) != spec->nargs) {
+                fprintf(stderr, "line %d: %s takes %d argument(s)\n", lineno, spec->name, spec->nargs);
+                *any_error = 1; continue;
+            }
+            int bad = 0;
+            for (int k = 0; k < spec->nargs; k++) {
+                char *end = NULL;
+                unsigned long v = strtoul(tok[i + 1 + k], &end, 0);
+                if (!end || *end || tok[i + 1 + k][0] == '-') bad = 1;
+                a[k] = (uint32_t)v;
+            }
+            if (bad) { fprintf(stderr, "line %d: bad number in %s\n", lineno, spec->name); *any_error = 1; continue; }
+            label = (m == M_BADAUTH) ? "badauth" : (m == M_STALE) ? "stale" : "";
+        }
 
-        uint32_t result = 0, before = 0; char sname[32];
-        int st = send_cmd(bench_cmd, a[0], a[1], a[2], a[3], &result, &before, sname);
-        if (st < 0) { fprintf(stderr, "line %d: %s: no response\n", lineno, cmd); err=1; continue; }
-        printf("%s %s: result=0x%08x before=0x%08x\n", cmd, sname, result, before);
+        uint32_t result = 0, before = 0; char sname[32] = "";
+        int st = transact(spec->cmd, a[0], a[1], a[2], a[3], m, &result, &before, sname);
+        if (st < 0) { fprintf(stderr, "line %d: %s: no response\n", lineno, tok[0]); return 2; }
+        char what[96];
+        if (m == M_REPLAY) snprintf(what, sizeof what, "replay");
+        else if (m == M_NORMAL) snprintf(what, sizeof what, "%s", spec->name);
+        else snprintf(what, sizeof what, "%s %s", label, spec->name);
+        printf("%s %s: result=0x%08x before=0x%08x\n", what, sname, result, before);
+        fflush(stdout);
+        if (transcript) fprintf(transcript, "tool: %s %s result=0x%08x before=0x%08x\n", what, sname, result, before);
         if (st == BENCH_ERR_ALLONES) {
             fprintf(stderr, "line %d: device gone (all-ones); stopping\n", lineno);
             return 1;
         }
-        if (st != BENCH_OK) err = 1;
+        if (st != BENCH_OK) *any_error = 1;
     }
-    return err;
+    return 0;
 }
 
 int main(int argc, char **argv)
 {
     const char *key_path = NULL, *target_ip = "255.255.255.255", *script_path = NULL;
+    const char *serial_path = NULL, *transcript_path = NULL;
     int ping_only = 0;
     for (int i = 1; i < argc; i++) {
-        if (!strcmp(argv[i], "--key") && i+1 < argc) key_path = argv[++i];
-        else if (!strcmp(argv[i], "--target") && i+1 < argc) target_ip = argv[++i];
-        else if (!strcmp(argv[i], "--log") && i+1 < argc) i++; /* TODO: log dir */
+        if (!strcmp(argv[i], "--key") && i + 1 < argc) key_path = argv[++i];
+        else if (!strcmp(argv[i], "--target") && i + 1 < argc) target_ip = argv[++i];
+        else if (!strcmp(argv[i], "--serial") && i + 1 < argc) serial_path = argv[++i];
+        else if (!strcmp(argv[i], "--transcript") && i + 1 < argc) transcript_path = argv[++i];
         else if (!strcmp(argv[i], "ping")) ping_only = 1;
         else script_path = argv[i];
     }
 
-    /* Load or use test key */
     if (key_path) {
         FILE *kf = fopen(key_path, "rb");
-        if (!kf) { perror(key_path); return 1; }
-        if (fread(bench_key, 1, 32, kf) != 32) { fprintf(stderr, "key too short\n"); return 1; }
+        if (!kf) { perror(key_path); return 2; }
+        if (fread(bench_key, 1, 32, kf) != 32) { fprintf(stderr, "key too short\n"); return 2; }
         fclose(kf);
     } else {
         memcpy(bench_key, test_key, 32);
         fprintf(stderr, "bench: using built-in test key\n");
     }
+    if (transcript_path) {
+        transcript = fopen(transcript_path, "w");
+        if (!transcript) { perror(transcript_path); return 2; }
+    }
+    counter = (uint64_t)time(NULL) * 1000u;
 
-    init_net(target_ip);
+    if (serial_path) {
+        serial_fd = serial_connect(serial_path);
+        if (serial_fd < 0) { fprintf(stderr, "cannot connect to %s\n", serial_path); return 2; }
+        use_serial = 1;
+        if (!wait_for_text("bench: GPU bench console ready", 120)) {
+            fprintf(stderr, "the kernel never said the bench console is ready\n");
+            return 2;
+        }
+    } else {
+        init_net(target_ip);
+    }
 
+    int rc = 0;
     if (ping_only) {
-        uint32_t result = 0; char sname[32];
-        int st = send_cmd(BENCH_CMD_PING, 0, 0, 0, 0, &result, NULL, sname);
-        printf("ping: %s\n", st == 0 ? "PONG" : sname);
-        return st;
+        uint32_t result = 0; char sname[32] = "";
+        int st = transact(BENCH_CMD_PING, 0, 0, 0, 0, M_NORMAL, &result, NULL, sname);
+        if (st < 0) { printf("ping: no response\n"); rc = 2; }
+        else { printf("ping: %s\n", st == 0 ? "PONG" : sname); rc = st == 0 ? 0 : 1; }
+    } else {
+        if (!script_path) {
+            fprintf(stderr, "usage: ck_gpu_bench [--key F] [--target IP | --serial PATH] [--transcript F] <script.bench> | ping\n");
+            return 2;
+        }
+        FILE *f = strcmp(script_path, "-") ? fopen(script_path, "r") : stdin;
+        if (!f) { perror(script_path); return 2; }
+        int any_error = 0;
+        int r = run_script(f, &any_error);
+        if (f != stdin) fclose(f);
+        rc = r == 2 ? 2 : (r == 1 || any_error) ? 1 : 0;
     }
-    if (!script_path) {
-        fprintf(stderr, "usage: ck_gpu_bench [opts] <script.bench> | ping [opts]\n");
-        return 1;
-    }
-    FILE *f = strcmp(script_path, "-") ? fopen(script_path, "r") : stdin;
-    if (!f) { perror(script_path); return 1; }
-    int rc = run_script(f);
-    if (f != stdin) fclose(f);
+    if (transcript) fclose(transcript);
     return rc;
 }

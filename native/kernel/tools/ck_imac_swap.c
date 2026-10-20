@@ -1,24 +1,22 @@
-/* ck_imac_swap.c -- Spark-side tool: push a signed kernel to the running iMac
- * over UDP without a firmware boot (no Apple logo).
+/* ck_imac_swap.c -- Spark-side sender: ship a SIGNED slot object to a running iMac
+ * over UDP port 47034 (the live-swap design in docs/IMAC_GPU_BENCH.md).
  *
- * Usage: ck_imac_swap push <IMACKERN.EFI> [--key <key-file>] [--target <ip>]
- *        ck_imac_swap keygen <key-file> <pub-file>
+ * Usage: ck_imac_swap push <SLOT_OBJECT> [--target <ip>]
  *
- * push: reads the EFI file, wraps it in a signed slot manifest using the
- * given Ed25519 key (or the internal test key when --key is absent), sends
- * the signed object to the iMac in 1024-byte chunks over UDP port 47034,
- * waits for ACKs, and reports the new kernel's first boot line.
+ * SLOT_OBJECT is a signed slot object: one 4096-byte manifest unit followed by the
+ * raw kernel PE. Make one with the signing tool, never with this file:
+ *   ck_slot_tool make-manifest --image IMACKERN-LAB.EFI --generation N --out M.bin
+ *   ck_slot_tool sign-test M.bin --out MS.bin          (TEST key: QEMU only)
+ *   cat MS.bin IMACKERN-LAB.EFI > SLOT_OBJECT
+ * (Owner keys: ck_slot_tool tbs / offline signer / attach-sig.) This tool does not
+ * sign and does not check signatures; the kernel verifies with ck_slot_verify and
+ * refuses anything that does not verify.
  *
- * keygen: generates a fresh Ed25519 keypair and writes the secret key to
- * <key-file> and the public key (32 hex bytes) to <pub-file>.
+ * STATUS: the kernel side of this protocol is NOT BUILT in this branch. swap_x86.c's
+ * UDP receiver is a stub, so no ACK comes back and this tool times out against a real
+ * iMac. The QEMU swap test stages the same slot object on a disk instead.
  *
- * The signed object format is the same as the netboot loader expects:
- * CK_SLOT_UNIT bytes of manifest (slot_format.h) followed by the raw EFI
- * image bytes. The slot_tool (native/kernel/tools/ck_slot_tool.c) signs it.
- *
- * C standard library only (no system dependencies beyond libc + libm).
- * Build: cc -O2 -std=c11 -o ck_imac_swap ck_imac_swap.c
- */
+ * C standard library only. Build: make -C native/kernel ck-imac-swap */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -33,11 +31,11 @@
 #include <fcntl.h>
 #include <sys/select.h>
 
-/* Pull in the swap protocol constants. */
 #include "../x86/swap_proto.h"
 
-/* Size of slot manifest unit (from slot_format.h, 4096 bytes). */
+/* Size of the slot manifest unit (slot_format.h: CK_SLOT_UNIT). */
 #define SLOT_UNIT 4096
+#define SLOT_MAGIC "AIENSLT1"
 
 static void die(const char *msg)
 {
@@ -45,7 +43,7 @@ static void die(const char *msg)
     exit(1);
 }
 
-/* Read entire file into a malloc'd buffer. Returns length. */
+/* Read the whole file into a malloc'd buffer. Returns the length. */
 static size_t read_file(const char *path, uint8_t **out)
 {
     FILE *f = fopen(path, "rb");
@@ -62,62 +60,23 @@ static size_t read_file(const char *path, uint8_t **out)
     return (size_t)sz;
 }
 
-/* Build a minimal signed slot manifest around the image.
- * For QEMU tests, uses the all-zero test key (no real signature).
- * For production: call the ck_slot_tool instead. */
-static void build_test_manifest(uint8_t *manifest, const uint8_t *image, uint32_t imglen)
-{
-    memset(manifest, 0, SLOT_UNIT);
-    /* magic "AIENSLT1" */
-    memcpy(manifest, "AIENSLT1", 8);
-    /* version: 1 */
-    manifest[8] = 1;
-    /* image_len at offset 16 (little-endian u32) */
-    manifest[16] = (uint8_t)imglen;
-    manifest[17] = (uint8_t)(imglen >> 8);
-    manifest[18] = (uint8_t)(imglen >> 16);
-    manifest[19] = (uint8_t)(imglen >> 24);
-    /* payload_kind = 1 (kernel PE) at offset 20 */
-    manifest[20] = 1;
-    /* SHA-512 of image at offset 32 (64 bytes) - simplified: zero for test */
-    (void)image;
-    /* signer_id at offset 96 (32 bytes) - zero = test key */
-    /* signature at offset 128 (64 bytes) - zero = test key (no verify) */
-    /* policy_generation at offset 192 (u32) = 1 */
-    manifest[192] = 1;
-    /* generation at offset 196 (u32) = 1 */
-    manifest[196] = 1;
-}
-
 static void cmd_push(int argc, char **argv)
 {
-    const char *efi_path = NULL, *key_path = NULL, *target_ip = "255.255.255.255";
+    const char *obj_path = NULL, *target_ip = "255.255.255.255";
     for (int i = 0; i < argc; i++) {
-        if (!strcmp(argv[i], "--key") && i+1 < argc)   key_path = argv[++i];
-        else if (!strcmp(argv[i], "--target") && i+1 < argc) target_ip = argv[++i];
-        else if (!efi_path) efi_path = argv[i];
+        if (!strcmp(argv[i], "--target") && i + 1 < argc) target_ip = argv[++i];
+        else if (!obj_path) obj_path = argv[i];
     }
-    if (!efi_path) { fprintf(stderr, "usage: ck_imac_swap push <EFI> [--key K] [--target IP]\n"); exit(1); }
+    if (!obj_path) { fprintf(stderr, "usage: ck_imac_swap push <SLOT_OBJECT> [--target IP]\n"); exit(1); }
 
-    uint8_t *efi_data; size_t efi_len;
-    efi_data = NULL; efi_len = read_file(efi_path, &efi_data);
-    printf("swap: read %s (%zu bytes)\n", efi_path, efi_len);
-
-    /* Build signed object: manifest + image */
-    size_t obj_len = SLOT_UNIT + efi_len;
-    uint8_t *obj = malloc(obj_len);
-    if (!obj) die("malloc obj");
-    if (key_path) {
-        /* TODO: real signing via ck_slot_tool invocation */
-        fprintf(stderr, "swap: real signing via --key not yet implemented; using test manifest\n");
+    uint8_t *obj; size_t obj_len = read_file(obj_path, &obj);
+    if (obj_len < SLOT_UNIT || memcmp(obj, SLOT_MAGIC, 8) != 0) {
+        fprintf(stderr, "%s is not a signed slot object (no %s manifest unit)\n", obj_path, SLOT_MAGIC);
+        exit(1);
     }
-    build_test_manifest(obj, efi_data, (uint32_t)efi_len);
-    memcpy(obj + SLOT_UNIT, efi_data, efi_len);
-    free(efi_data);
-
+    printf("swap: read %s (%zu bytes, manifest + image)\n", obj_path, obj_len);
     printf("swap: sending %zu bytes to %s:%u\n", obj_len, target_ip, CK_X86_SWAP_PORT);
 
-    /* Open UDP socket */
     int sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (sock < 0) die("socket");
     int bcast = 1;
@@ -129,12 +88,12 @@ static void cmd_push(int argc, char **argv)
     dst.sin_port = htons(CK_X86_SWAP_PORT);
     dst.sin_addr.s_addr = inet_addr(target_ip);
 
-    /* Generate session nonce */
+    /* Session nonce, echoed by the kernel's ACKs. */
     uint8_t nonce[8];
     srand((unsigned)time(NULL));
     for (int i = 0; i < 8; i++) nonce[i] = (uint8_t)rand();
 
-    /* Send chunks with simple stop-and-wait, window=1 for now */
+    /* Stop-and-wait: one DATA packet, wait up to 500 ms for an ACK, resend on timeout. */
     uint32_t offset = 0;
     uint32_t total = (uint32_t)obj_len;
     uint8_t pkt[SWAP_PUSH_MIN + SWAP_CHUNK];
@@ -146,7 +105,6 @@ static void cmd_push(int argc, char **argv)
         uint32_t len = total - offset;
         if (len > SWAP_CHUNK) len = SWAP_CHUNK;
 
-        /* Build DATA packet */
         memset(pkt, 0, SWAP_PUSH_MIN);
         memcpy(pkt, SWAP_MAGIC, 4);
         pkt[4] = SWAP_VERSION;
@@ -161,7 +119,6 @@ static void cmd_push(int argc, char **argv)
         if (sendto(sock, pkt, pkt_len, 0, (struct sockaddr *)&dst, sizeof dst) < 0)
             die("sendto");
 
-        /* Wait for ACK with 500ms timeout */
         fd_set fds; FD_ZERO(&fds); FD_SET(sock, &fds);
         struct timeval tv = {0, 500000};
         int r = select(sock + 1, &fds, NULL, NULL, &tv);
@@ -184,19 +141,17 @@ static void cmd_push(int argc, char **argv)
                     fprintf(stderr, "swap: REJECTED by iMac: %s\n", text);
                     free(obj); close(sock); exit(1);
                 } else {
-                    offset = want; /* ACK advances offset */
+                    offset = want;   /* the ACK advances the offset */
                 }
             }
-        } else {
-            /* timeout: resend same chunk */
         }
+        /* no ACK in time: the same chunk goes out again on the next pass */
         chunk_no++;
         if (chunk_no % 16 == 0)
             printf("swap: sent chunk %u/%u (%.0f%%)\n", chunk_no, chunks,
                    100.0 * chunk_no / chunks);
     }
 
-    /* Send END packet */
     memset(pkt, 0, SWAP_PUSH_MIN);
     memcpy(pkt, SWAP_MAGIC, 4);
     pkt[4] = SWAP_VERSION;
@@ -206,7 +161,6 @@ static void cmd_push(int argc, char **argv)
     sendto(sock, pkt, SWAP_PUSH_MIN, 0, (struct sockaddr *)&dst, sizeof dst);
     printf("swap: all %u chunks sent\n", chunks);
 
-    /* Wait for final ACK (DONE) */
     for (int i = 0; i < 30; i++) {
         fd_set fds; FD_ZERO(&fds); FD_SET(sock, &fds);
         struct timeval tv = {1, 0};
@@ -225,26 +179,18 @@ static void cmd_push(int argc, char **argv)
             }
         }
     }
-    printf("swap: no final ACK (kernel may have jumped or unreachable)\n");
+    printf("swap: no final ACK (the iMac has no swap receiver in this build, or it is unreachable)\n");
     free(obj); close(sock);
-}
-
-static void cmd_keygen(int argc, char **argv)
-{
-    if (argc < 2) { fprintf(stderr, "usage: ck_imac_swap keygen <key> <pub>\n"); exit(1); }
-    /* Stub: for QEMU tests the test key is built in; real keygen uses ck_slot_tool */
-    fprintf(stderr, "keygen: use 'make -C native/kernel slot-tool' then slot_tool keygen\n");
     exit(1);
 }
 
 int main(int argc, char **argv)
 {
     if (argc < 2) {
-        fprintf(stderr, "usage: ck_imac_swap push <EFI> [opts] | keygen <key> <pub>\n");
+        fprintf(stderr, "usage: ck_imac_swap push <SLOT_OBJECT> [--target IP]\n");
         return 1;
     }
-    if (!strcmp(argv[1], "push"))   { cmd_push(argc-2, argv+2); return 0; }
-    if (!strcmp(argv[1], "keygen")) { cmd_keygen(argc-2, argv+2); return 0; }
+    if (!strcmp(argv[1], "push")) { cmd_push(argc - 2, argv + 2); return 0; }
     fprintf(stderr, "unknown command: %s\n", argv[1]);
     return 1;
 }

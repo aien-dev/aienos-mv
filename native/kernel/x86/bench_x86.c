@@ -1,21 +1,34 @@
-/* bench_x86.c -- AIENOS GPU bench console (LAB BUILD ONLY, CK_X86_BENCH=1).
+/* bench_x86.c -- AIENOS GPU bench console (LAB BUILD ONLY: CK_X86_REPORT=1 with
+ * CK_X86_BENCH=1; the default image gets the stubs at the bottom).
  *
- * Authenticated GPU register RPC over UDP port 47035. The Spark sends bench
- * commands (ck_gpu_bench tool); the kernel executes them against the AMD
- * Radeon Pro 555/560 (PCI 01:00.0, BAR5 = 256 KiB register aperture, BAR0 =
- * VRAM aperture). HMAC-SHA256 with a 32-byte key bound into the signed image
- * at build time; monotone 64-bit counter replay protection.
+ * Authenticated GPU register RPC. The Spark sends bench commands (tools/
+ * ck_gpu_bench.c) and the kernel executes them against the GPU's BAR5 (256 KiB
+ * register aperture) and BAR0 (VRAM aperture), found by pci_x86.c. HMAC-SHA256
+ * with a 32-byte key bound into the signed image at build time; a monotone 64-bit
+ * counter gives replay protection. Every response is HMAC'd, auth errors included.
  *
  * Safety invariants enforced here:
  *   - BAR5 writes restricted to the panel/DCE allowlist (bench_proto.h).
- *   - Any read returning 0xFFFFFFFF is "device gone": batch stops.
+ *   - Any read returning 0xFFFFFFFF is "device gone" (status BENCH_ERR_ALLONES).
+ *     The kernel answers that request and carries on with the next packet; the
+ *     Spark tool is what stops the batch (ck_gpu_bench stops at ALLONES).
  *   - Every write logs the value before the write.
  *   - All waits are TSC-bounded.
  *
- * QEMU note: in QEMU there is no AMD GPU (BAR0/BAR5 never map). The bench
- * console detects this (ck_x86_bench_init returns with no device) and the
- * QEMU bench test exercises the protocol layer against QEMU's bochs VGA BAR
- * (PCI 1234:1111, class 0x030000) at a compile-time override address.
+ * TRANSPORT:
+ *   - Hardware: UDP port 47035 through tg3 (ck_x86_tg3_recv_bench, ck_x86_udp_send,
+ *     tg3_x86.c). Compiled in the lab build; NOT tested here (QEMU has no BCM57766).
+ *   - CK_X86_BENCH_TEST (QEMU test build only): the same 64-byte packets travel as
+ *     text lines over COM1, which QEMU exposes as a socket. Request line:
+ *       "ABCHREQ " + 128 hex digits
+ *     reply line:
+ *       "ABCHRESP " + 128 hex digits
+ *     handle_bench_packet is the same code on both paths.
+ *
+ * DEVICE in the test build: an EMULATED BAR, not PCI emulation. The BARs are RAM
+ * stand-ins (test_bar5, test_bar0, test_cfg) with a known word at register 0x10
+ * and a word at 0x0FFF preset to 0xFFFFFFFF (a device that has gone). Reads and
+ * writes go through the same volatile accesses and allowlist as the real BARs.
  *
  * This file qualifies nothing physical. */
 #include "../core/ck_internal.h"
@@ -44,6 +57,20 @@ static int bench_dev_ready;
 
 /* Monotone counter: reject any request with counter <= last_counter. */
 static uint64_t last_counter;
+
+#ifdef CK_X86_BENCH_TEST
+/* RAM stand-in for the BARs (QEMU test build only; see the header). */
+#define TEST_BAR5_WORDS  0x10000u
+#define TEST_BAR0_WORDS  0x10000u
+#define TEST_ALLONES_REG 0x0FFFu   /* read as 0xFFFFFFFF: the device is gone */
+#define TEST_KNOWN_REG   0x0010u   /* read as 0xC0FFEE00 */
+static volatile uint32_t test_bar5[TEST_BAR5_WORDS];
+static volatile uint32_t test_bar0[TEST_BAR0_WORDS];
+static volatile uint8_t  test_cfg[256];
+static int test_inited;
+static uint64_t test_tsc_hz;
+#define COM1_BASE 0x3f8u
+#endif
 
 /* ---- Inline HMAC-SHA256 (uses argus/sha256.h, already in the build) ---- */
 static void bench_hmac(const uint8_t key[32], const uint8_t *msg, size_t len, uint8_t out[32])
@@ -83,7 +110,6 @@ static int bar5_write_allowed(uint32_t reg_idx)
            (reg_idx >= BENCH_BAR5_WRITE_LO1 && reg_idx <= BENCH_BAR5_WRITE_HI1);
 }
 
-
 /* ---- Command execution ---- */
 static uint8_t exec_cmd(const uint8_t *req, uint32_t *result_out, uint32_t *before_out,
                          uint64_t tsc_hz)
@@ -104,7 +130,8 @@ static uint8_t exec_cmd(const uint8_t *req, uint32_t *result_out, uint32_t *befo
         return BENCH_OK;
 
     case BENCH_CMD_PCI_CFG: {
-        if (arg0 + 4 > 256) return BENCH_ERR_RANGE;
+        /* dword-aligned offsets inside the 256-byte config space (no wraparound) */
+        if (arg0 > 252u || (arg0 & 3u)) return BENCH_ERR_RANGE;
         uint32_t v = *(volatile uint32_t *)(pci_cfg + arg0);
         if (v == BENCH_ALLONES) return BENCH_ERR_ALLONES;
         *result_out = v;
@@ -176,8 +203,8 @@ static uint8_t exec_cmd(const uint8_t *req, uint32_t *result_out, uint32_t *befo
     }
 }
 
-/* ---- Protocol: receive a request and send a response ---- */
-/* Builds one response datagram into out[BENCH_RESP_BYTES]. Returns byte count. */
+/* ---- Protocol: build a response, HMAC'd, and send it ---- */
+/* Builds one response into out[BENCH_RESP_BYTES]. Returns byte count. */
 static size_t build_resp(uint8_t status, uint64_t counter, uint64_t tsc,
                           uint32_t result, uint32_t before, uint8_t out[BENCH_RESP_BYTES])
 {
@@ -193,48 +220,134 @@ static size_t build_resp(uint8_t status, uint64_t counter, uint64_t tsc,
     return BENCH_RESP_BYTES;
 }
 
+#ifdef CK_X86_BENCH_TEST
+static void test_reply(const uint8_t body[BENCH_RESP_BYTES])
+{
+    static const char hex[] = "0123456789abcdef";
+    char line[9 + 2 * BENCH_RESP_BYTES + 2];
+    memcpy(line, "ABCHRESP ", 9);
+    for (unsigned i = 0; i < BENCH_RESP_BYTES; i++) {
+        line[9 + 2 * i]     = hex[body[i] >> 4];
+        line[9 + 2 * i + 1] = hex[body[i] & 15];
+    }
+    line[9 + 2 * BENCH_RESP_BYTES]     = '\n';
+    line[9 + 2 * BENCH_RESP_BYTES + 1] = 0;
+    ck_puts(line);
+}
+#endif
+
+static void reply(const uint8_t src_mac[6], const uint8_t body[BENCH_RESP_BYTES])
+{
+#ifdef CK_X86_BENCH_TEST
+    (void)src_mac;
+    test_reply(body);
+#else
+    ck_x86_udp_send(src_mac, body, BENCH_RESP_BYTES, CK_X86_BENCH_PORT, CK_X86_BENCH_PORT);
+#endif
+}
+
 static void handle_bench_packet(const uint8_t *pkt, size_t pkt_len,
                                   const uint8_t src_mac[6], uint64_t tsc_hz)
 {
-    static uint8_t resp[2048]; /* Ethernet + IP + UDP + bench */
     if (pkt_len < BENCH_REQ_BYTES) return;
     if (memcmp(pkt, BENCH_MAGIC_REQ, 4) != 0) return;
     if (pkt[4] != BENCH_VERSION) return;
 
-    /* Verify HMAC (covers bytes 0..31, hmac is at 32..63). */
+    /* Verify HMAC (covers bytes 0..31, hmac is at 32..63). An auth failure is
+     * answered with BENCH_ERR_AUTH and the counter field echoed as 0. */
     uint8_t expected[32];
     bench_hmac(bench_key, pkt, BENCH_HMAC_OFF, expected);
+    uint8_t body[BENCH_RESP_BYTES];
     if (!ct_eq32(expected, pkt + BENCH_HMAC_OFF)) {
-        /* Send auth error (no HMAC on error for auth failures). */
-        uint8_t body[BENCH_RESP_BYTES];
-        size_t blen = build_resp(BENCH_ERR_AUTH, 0, ck_rdtsc(), 0, 0, body);
-        ck_x86_udp_send(src_mac, body, blen, CK_X86_BENCH_PORT, CK_X86_BENCH_PORT);
+        build_resp(BENCH_ERR_AUTH, 0, ck_rdtsc(), 0, 0, body);
+        reply(src_mac, body);
         return;
     }
 
     uint64_t counter = bench_r64(pkt + 8);
-    if (counter <= last_counter) {
-        uint8_t body[BENCH_RESP_BYTES];
-        size_t blen = build_resp(BENCH_ERR_AUTH, counter, ck_rdtsc(), 0, 0, body);
-        ck_x86_udp_send(src_mac, body, blen, CK_X86_BENCH_PORT, CK_X86_BENCH_PORT);
+    if (counter <= last_counter) {          /* replay or stale counter */
+        build_resp(BENCH_ERR_AUTH, counter, ck_rdtsc(), 0, 0, body);
+        reply(src_mac, body);
         return;
     }
     last_counter = counter;
 
     uint32_t result = 0, before = 0;
     uint8_t status = exec_cmd(pkt, &result, &before, tsc_hz);
-
-    uint8_t body[BENCH_RESP_BYTES];
-    size_t blen = build_resp(status, counter, ck_rdtsc(), result, before, body);
-    ck_x86_udp_send(src_mac, body, blen, CK_X86_BENCH_PORT, CK_X86_BENCH_PORT);
-    (void)resp;
+    build_resp(status, counter, ck_rdtsc(), result, before, body);
+    reply(src_mac, body);
 }
+
+#ifdef CK_X86_BENCH_TEST
+/* ---- Test transport: request lines on COM1 input ---- */
+static int hexnib(char c)
+{
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
+static char rxline[8 + 2 * BENCH_REQ_BYTES + 8];
+static unsigned rxn;
+
+static void test_line(void)
+{
+    if (rxn != 8 + 2 * BENCH_REQ_BYTES || memcmp(rxline, "ABCHREQ ", 8) != 0)
+        return;
+    uint8_t pkt[BENCH_REQ_BYTES];
+    for (unsigned i = 0; i < BENCH_REQ_BYTES; i++) {
+        int hi = hexnib(rxline[8 + 2 * i]), lo = hexnib(rxline[9 + 2 * i]);
+        if (hi < 0 || lo < 0) return;
+        pkt[i] = (uint8_t)(hi << 4 | lo);
+    }
+    static const uint8_t no_mac[6];
+    handle_bench_packet(pkt, sizeof pkt, no_mac, test_tsc_hz);
+}
+
+static void test_serial_poll(void)
+{
+    if (ck_inb(COM1_BASE + 5) == 0xff) return;        /* no 16550 here */
+    while (ck_inb(COM1_BASE + 5) & 0x01) {
+        char c = (char)ck_inb(COM1_BASE);
+        if (c == '\r') continue;
+        if (c == '\n') {
+            if (rxn) { rxline[rxn] = 0; test_line(); }
+            rxn = 0;
+            continue;
+        }
+        if (rxn < sizeof rxline - 1) rxline[rxn++] = c;
+        else rxn = 0;                                 /* over-long line: drop it */
+    }
+}
+
+/* The emulated BARs (see the header). */
+static void test_bar_init(void)
+{
+    if (test_inited) return;
+    test_inited = 1;
+    *(volatile uint32_t *)(volatile void *)test_cfg = 0x67ef1002u;   /* 1002:67ef */
+    test_bar5[TEST_KNOWN_REG]   = 0xC0FFEE00u;
+    test_bar5[TEST_ALLONES_REG] = BENCH_ALLONES;
+    pci_cfg = test_cfg;
+    bar5    = test_bar5;
+    bar0    = test_bar0;
+    bench_dev_ready = 1;
+    ck_puts("bench: TEST BUILD: BARs are RAM stand-ins (emulated), not PCI hardware\n");
+    ck_printf("bench: GPU bench console ready port=%u (HMAC-SHA256, key bound in image)\n",
+              (unsigned)CK_X86_BENCH_PORT);
+}
+#endif
 
 /* ---- Public API ---- */
 
 void ck_x86_bench_init(volatile uint8_t *gpu_cfg, volatile uint32_t *gpu_bar5,
                         volatile uint32_t *gpu_bar0)
 {
+#ifdef CK_X86_BENCH_TEST
+    (void)gpu_cfg; (void)gpu_bar5; (void)gpu_bar0;
+    test_bar_init();
+#else
     if (!gpu_cfg || !gpu_bar5 || !gpu_bar0) {
         ck_puts("bench: GPU not found (no BAR5/BAR0); bench console disabled\n");
         return;
@@ -245,18 +358,25 @@ void ck_x86_bench_init(volatile uint8_t *gpu_cfg, volatile uint32_t *gpu_bar5,
     bench_dev_ready = 1;
     ck_printf("bench: GPU bench console ready port=%u (HMAC-SHA256, key bound in image)\n",
               (unsigned)CK_X86_BENCH_PORT);
+#endif
 }
 
 void ck_x86_bench_step(uint64_t tsc_hz)
 {
-    /* Poll for a received bench packet from tg3 (LAB BUILD). */
+#ifdef CK_X86_BENCH_TEST
+    test_tsc_hz = tsc_hz;
+    if (test_inited)
+        test_serial_poll();
+#else
+    /* Poll for a received bench packet from tg3 (LAB BUILD, untested on hardware). */
     static uint8_t pkt[2048];
     size_t pkt_len = 0;
     uint8_t src_mac[6];
-    /* ck_x86_tg3_recv_udp: fills pkt, pkt_len with the UDP payload (no IP/UDP
+    /* ck_x86_tg3_recv_bench: fills pkt, pkt_len with the UDP payload (no IP/UDP
      * headers) and src_mac when a bench packet arrives on port 47035. */
     if (ck_x86_tg3_recv_bench(pkt, sizeof pkt, &pkt_len, src_mac) == 0 && pkt_len)
         handle_bench_packet(pkt, pkt_len, src_mac, tsc_hz);
+#endif
 }
 
 #else  /* !CK_X86_BENCH */

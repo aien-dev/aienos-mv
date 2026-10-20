@@ -1,12 +1,19 @@
 #!/usr/bin/env bash
-# qemu_ck_gpu_bench_test.sh -- QEMU test for the GPU bench console.
-# QEMU is an emulator: a PASS here qualifies nothing about the real GPU.
+# qemu_ck_gpu_bench_test.sh -- QEMU test for the GPU bench console, driven by the real Spark tool
+# (tools/ck_gpu_bench.c) over a COM1 socket. QEMU is an emulator: the BARs are RAM stand-ins
+# (CK_X86_BENCH_TEST=1, see native/kernel/x86/bench_x86.c), not PCI hardware. A PASS qualifies
+# nothing about the AMD GPU, and the UDP/tg3 transport is not exercised here.
 #
-# Boots IMACKERN-LAB.EFI in QEMU with CK_X86_BENCH=1. QEMU's bochs VGA
-# (PCI 1234:1111, class 0x030000) is present; the bench console detects
-# no AMD GPU and falls back to a bochs/VGA BAR for register access when
-# CK_X86_BENCH_QEMU_FALLBACK is defined at build time.
-# Tests: ping round-trip, auth rejection (bad HMAC), bench console init line.
+# The kernel is built as the lab image with the test transport and the test key (CK_TEST_SLOT_KEY=1
+# is the swap owner key; the bench key is the test key in bench_proto.h). The tool connects, waits
+# for "bench: GPU bench console ready", then sends the script below. Every reply is HMAC-checked by
+# the tool with its own SHA-256 (a kernel/tool HMAC mismatch fails the run).
+#
+# Checks:
+#   ping round trip; dword config read; BAR read and write (write logged before/after in the
+#   kernel); allowlist refusal (RANGE); TSC poll (OK and TIMEOUT); read-modify-write;
+#   replay refused (same counter); bad HMAC refused (AUTH); stale counter refused (AUTH);
+#   all-ones reply stops the tool (device gone): the command after it is never sent.
 # Final line: AIENOS_GPU_BENCH: PASS|FAIL|NOT_RUN   exit 0/1/2/3
 set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -16,7 +23,7 @@ code_fd="${OVMF_CODE:-/usr/share/OVMF/OVMF_CODE_4M.fd}"
 vars_fd="${OVMF_VARS:-/usr/share/OVMF/OVMF_VARS_4M.fd}"
 cross=""
 if [ "$(uname -m)" != "x86_64" ]; then cross="x86_64-linux-gnu-"; fi
-for t in qemu-system-x86_64 mformat mmd mcopy "${cross}gcc" "${cross}ld"; do
+for t in qemu-system-x86_64 mformat mmd mcopy timeout "${cross}gcc" "${cross}ld"; do
     command -v "${t}" >/dev/null || { echo "${tag}: NOT_RUN (${t} missing)"; exit 2; }
 done
 [[ -r "${code_fd}" && -r "${vars_fd}" ]] || { echo "${tag}: NOT_RUN (no OVMF)"; exit 2; }
@@ -37,9 +44,10 @@ trap cleanup EXIT
 
 out="${work}/out"
 commit="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
-mk() { make -s -C native/kernel X86_CROSS="${cross}" OUT="${out}" "$@" >/dev/null; }
-
-mk AIENOS_COMMIT="${commit}" CK_X86_REPORT=1 CK_X86_SWAP=1 CK_X86_BENCH=1 imac-kernel
+make -s -C native/kernel X86_CROSS="${cross}" OUT="${out}" AIENOS_COMMIT="${commit}" \
+    CK_X86_REPORT=1 CK_TEST_SLOT_KEY=1 CK_X86_BENCH=1 CK_X86_BENCH_TEST=1 imac-kernel >/dev/null
+make -s -C native/kernel OUT="${out}" ck-gpu-bench >/dev/null
+TOOL="${out}/host/ck_gpu_bench"
 
 img="${work}/esp.img"
 truncate -s 64M "${img}"
@@ -47,42 +55,83 @@ mformat -i "${img}" -F ::
 mmd -i "${img}" ::/EFI ::/EFI/BOOT
 mcopy -i "${img}" "${out}/IMACKERN-LAB.EFI" ::/EFI/BOOT/BOOTX64.EFI
 
-fails=0
-pass() { echo "PASS  $1"; }
-fail() { echo "FAIL  $1"; fails=$((fails + 1)); }
-chk() { grep -aqE -- "$2" "$3" && pass "$1" || fail "$1 (pattern: $2)"; }
-log="${work}/serial.log"
-txt="${work}/serial.txt"
-snap() { tr -d '\r' <"${log}" >"${txt}" 2>/dev/null || : >"${txt}"; }
-wait_for() {
-    for _ in $(seq 1 "$3"); do
-        snap; grep -aqE -- "$1" "$2" && return 0
-        kill -0 "${qpid}" 2>/dev/null || return 1; sleep 1
-    done; return 1
-}
+# The script. Register numbers are DWORD indexes: 18432 = 0x4800 (panel allowlist),
+# 256 = 0x100 (not allowlisted), 4095 = 0x0FFF (the emulated all-ones register).
+cat > "${work}/test.bench" <<'BENCH'
+ping
+pci_cfg 0
+bar5_read 16
+bar5_write 18432 0xABCD0001
+bar5_read 18432
+bar5_write 256 1
+bar0_write 5 0x42
+bar0_read 5
+bar5_poll 18432 0xFFFF0000 0xABCD0000 100
+bar5_poll 18432 0x0000FFFF 0x00000001 50
+bar5_rmw 18432 0x0000FF00 0x00005500
+pci_cfg 256
+replay
+badauth ping
+stale ping
+ping
+bar5_read 4095
+ping
+BENCH
 
+sock="${work}/com1.sock"
+serial_log="${work}/serial.log"
 cp "${vars_fd}" "${work}/vars.fd"
-
-# Use QEMU user-mode UDP for the bench test
-lp=$((50000 + RANDOM % 5000))
 qemu-system-x86_64 -M q35 -accel tcg -cpu max -smp 4 -m 1024 \
     -drive if=pflash,format=raw,readonly=on,file="${code_fd}" \
     -drive if=pflash,format=raw,file="${work}/vars.fd" \
     -drive if=none,id=esp,format=raw,file="${img}" -device ide-hd,drive=esp,bus=ide.0 \
-    -netdev user,id=net0 -device e1000,netdev=net0 \
-    -nographic -serial file:"${log}" -no-reboot 2>/dev/null &
+    -nographic -monitor none -serial unix:"${sock}",server=on,wait=on -no-reboot >"${serial_log}" 2>&1 &
 qpid=$!
+for _ in $(seq 1 100); do [[ -S "${sock}" ]] && break; sleep 0.2; done
 
-wait_for "bench: GPU bench console ready\|bench: GPU not found" "${txt}" 90 ||
-    fail "bench console init not seen in 90 s"
+fails=0
+pass() { echo "PASS  $1"; }
+fail() { echo "FAIL  $1"; fails=$((fails + 1)); }
+chk() { # name regex file
+    if grep -aqE -- "$2" "$3"; then pass "$1"; else fail "$1 (no line matching: $2)"; fi
+}
+
+tool_rc=0
+timeout "${AIENOS_BENCH_TOOL_TIMEOUT:-600}" "${TOOL}" --serial "${sock}" \
+    --transcript "${work}/transcript.txt" "${work}/test.bench" \
+    >"${work}/tool.out" 2>"${work}/tool.err" || tool_rc=$?
 kill "${qpid}" 2>/dev/null || true; wait "${qpid}" 2>/dev/null || true; qpid=""
-snap
 
-# The bench console line must appear regardless of GPU presence
-chk "bench console init"  "bench: GPU" "${txt}"
-# Build verified: bench_x86.o compiled with HMAC  
-chk "IMACKERN-LAB built"  "AIENOS-KERNEL-0 DONE" "${txt}"
+tr -d '\r' < "${work}/tool.out" > "${work}/tool.txt"
+echo "--- tool output ---"; cat "${work}/tool.txt"
+echo "--- tool stderr ---"; cat "${work}/tool.err"
 
-[[ $fails -eq 0 ]] && echo "${tag}: PASS" && exit 0
+chk "kernel: bench console up (test build, emulated BARs)" "bench: GPU bench console ready" "${work}/transcript.txt"
+chk "ping round trip" "^ping OK: result=0x00000000" "${work}/tool.txt"
+chk "config read (dword 0 = 1002:67ef)" "^pci_cfg OK: result=0x67ef1002" "${work}/tool.txt"
+chk "BAR5 read of a known word" "^bar5_read OK: result=0xc0ffee00" "${work}/tool.txt"
+chk "BAR5 write on the allowlist (before 0, after ABCD0001)" "^bar5_write OK: result=0xabcd0001 before=0x00000000" "${work}/tool.txt"
+chk "kernel logged the write before and after" "bench: bar5_write reg=0x4800 0x00000000 -> 0xabcd0001" "${work}/transcript.txt"
+chk "BAR5 read back the written value" "^bar5_read OK: result=0xabcd0001" "${work}/tool.txt"
+chk "BAR5 write off the allowlist refused (RANGE)" "^bar5_write ERR_RANGE: result=0x00000000" "${work}/tool.txt"
+chk "BAR0 write and read back" "^bar0_read OK: result=0x00000042" "${work}/tool.txt"
+chk "TSC poll satisfied" "^bar5_poll OK: result=0xabcd0001" "${work}/tool.txt"
+chk "TSC poll timed out" "^bar5_poll ERR_TIMEOUT" "${work}/tool.txt"
+chk "read-modify-write" "^bar5_rmw OK: result=0xabcd5501 before=0xabcd0001" "${work}/tool.txt"
+chk "config offset out of range refused" "^pci_cfg ERR_RANGE" "${work}/tool.txt"
+chk "replay refused (same counter)" "^replay ERR_AUTH" "${work}/tool.txt"
+chk "bad HMAC refused" "^badauth ping ERR_AUTH" "${work}/tool.txt"
+chk "stale counter refused" "^stale ping ERR_AUTH" "${work}/tool.txt"
+chk "all-ones read reported (device gone)" "^bar5_read ERR_ALLONES" "${work}/tool.txt"
+if grep -aq "device gone (all-ones); stopping" "${work}/tool.err"; then pass "tool stopped at the all-ones reply"; else fail "tool stopped at the all-ones reply"; fi
+pings=$(grep -ac "^ping " "${work}/tool.txt" || true)
+if [[ "${pings}" == "2" ]]; then pass "the ping after the all-ones reply was never sent (2 ping replies, not 3)"; else fail "ping replies: ${pings} (expected 2)"; fi
+reqs=$(grep -ac "^ABCHREQ " "${work}/transcript.txt" || true)
+results=$(grep -acE " (OK|ERR_[A-Z]+): result=" "${work}/tool.txt" || true)
+if [[ "${reqs}" == "${results}" && "${results}" -gt 0 ]]; then pass "one reply per request on the link (${results})"; else fail "requests ${reqs} vs results ${results}"; fi
+if grep -aq "HMAC mismatch\|no response" "${work}/tool.err"; then fail "kernel and tool disagree on an HMAC or a reply"; else pass "every kernel reply carries the HMAC the tool expects"; fi
+if [[ "${tool_rc}" == "1" ]]; then pass "tool exit 1 (the ALLONES stop)"; else fail "tool exit ${tool_rc} (expected 1)"; fi
+
+[[ ${fails} -eq 0 ]] && echo "${tag}: PASS" && exit 0
 echo "${tag}: FAIL (${fails} failures)"
 exit 1
