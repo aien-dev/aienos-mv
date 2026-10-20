@@ -43,6 +43,13 @@
 #define VNET_FRAME_MAX 1514u        /* Ethernet II without FCS, no VLAN tag */
 #define VNET_BUF_LEN (VNET_HDR_LEN + VNET_FRAME_MAX)
 #define VNET_BUF_STRIDE 1536u
+/* RX descriptors offer the whole stride, not just VNET_BUF_LEN (1526, the
+ * virtio 1.x 5.1.6.3.1 minimum): Apple Virtualization.framework logs "Guest
+ * buffer on the receive queue is smaller than expected: 1526 bytes" and its
+ * network device stops (OBSERVED, macOS 26.6.2); 1536 works. A completion
+ * longer than header + VNET_FRAME_MAX is dropped and counted (rx_oversize),
+ * never copied out. */
+#define VNET_RX_LEN VNET_BUF_STRIDE
 
 #define VNET_F_MTU 3u                /* device advises an MTU (device config offset 10) */
 #define VNET_F_MAC 5u
@@ -132,6 +139,7 @@ typedef struct {
     uint64_t offered;       /* device feature bits (diagnostics) */
     uint64_t features;      /* accepted feature bits */
     uint16_t mtu;           /* negotiated VIRTIO_NET_F_MTU value, else 0 (1500 implied) */
+    uint32_t rx_oversize;   /* RX frames longer than VNET_FRAME_MAX, dropped */
     uint8_t has_mac;
     uint8_t mac[6];
     uint8_t broken;

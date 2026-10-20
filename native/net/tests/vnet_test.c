@@ -266,7 +266,7 @@ static void check_descs(const vnet_dev *d)
             uint64_t a = g64(e); uint32_t l = g32(e + 8);
             if (l == 0) continue;
             CHECK(a >= d->dma && a - d->dma <= d->mem_len && l <= d->mem_len - (a - d->dma));
-            CHECK(l <= VNET_BUF_LEN);
+            CHECK(l <= (qi == VNET_RX_QUEUE ? VNET_RX_LEN : VNET_BUF_LEN));
         }
     }
 }
@@ -497,6 +497,21 @@ static void test_mtu(void)
         s.require_mtu = 1;
         EQ(bring_up(&d, &s, 16), VNET_E_FEATURES);
     }
+
+    /* RX descriptors offer VNET_RX_LEN (VZ wants more than 1526). A frame
+     * longer than VNET_FRAME_MAX but inside the buffer is dropped, counted
+     * and its buffer reposted; the device stays usable. */
+    uint8_t out[VNET_FRAME_MAX]; size_t n; int got;
+    sim_reset(&s, region, DMA, sizeof region);
+    EQ(bring_up(&d, &s, 8), VNET_OK);
+    { uint16_t id, fl; uint8_t *b; uint32_t len;
+      CHECK(pop_avail(&s, 0, &id, &b, &len, &fl)); EQ(len, VNET_RX_LEN);
+      push_used(&s, 0, id, VNET_HDR_LEN + VNET_FRAME_MAX + 4); }
+    EQ(vnet_rx(&d, out, sizeof out, &n, &got), VNET_OK);
+    EQ(got, 0); EQ(d.rx_oversize, 1); EQ(d.broken, 0);
+    CHECK(sim_rx(&s, f, 60));
+    EQ(vnet_rx(&d, out, sizeof out, &n, &got), VNET_OK);
+    EQ(got, 1); EQ(n, 60);
 }
 
 static void test_hostile(void)
@@ -511,7 +526,7 @@ static void test_hostile(void)
         switch (k) {
         case 0: push_used(&s, 0, 8, 60); e = vnet_rx(&d, out, sizeof out, &n, &got); break;      /* id == size */
         case 1: push_used(&s, 0, 0xffffffffu, 60); e = vnet_rx(&d, out, sizeof out, &n, &got); break;
-        case 2: push_used(&s, 0, 3, VNET_BUF_LEN + 1); e = vnet_rx(&d, out, sizeof out, &n, &got); break; /* oversized */
+        case 2: push_used(&s, 0, 3, VNET_RX_LEN + 1); e = vnet_rx(&d, out, sizeof out, &n, &got); break; /* past the buffer */
         case 3: push_used(&s, 0, 3, VNET_HDR_LEN - 1); e = vnet_rx(&d, out, sizeof out, &n, &got); break; /* short */
         case 4: { /* used idx runs ahead of everything posted */
             uint8_t *u = region + d.q[0].used_off; s16(u + 2, 9);

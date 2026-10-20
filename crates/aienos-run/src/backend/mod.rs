@@ -58,9 +58,9 @@ impl PortForward {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NetMode {
     None,
-    /// Host NAT. QEMU: user-mode net (guest 10.0.2.15) with hostfwd rules.
-    /// VZ: vmnet shared NAT (guest DHCP on the host-only subnet); the runner
-    /// relays forwarded ports to the guest address.
+    /// User-mode NAT, guest 10.0.2.15, gateway 10.0.2.2 = host loopback.
+    /// QEMU: slirp with hostfwd rules. VZ: the runner's own UDP network
+    /// (crate::usernet) on a VZFileHandleNetworkDeviceAttachment.
     Nat,
 }
 
@@ -125,11 +125,11 @@ pub fn for_host(name: Option<&str>) -> Result<Box<dyn Backend>, String> {
 }
 
 pub fn names() -> Vec<&'static str> {
-    let mut v = Vec::new();
-    #[cfg(target_os = "macos")]
-    v.push("vz");
-    v.push("qemu");
-    v
+    vec![
+        #[cfg(target_os = "macos")]
+        "vz",
+        "qemu",
+    ]
 }
 
 #[cfg(test)]

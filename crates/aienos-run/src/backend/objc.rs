@@ -112,6 +112,11 @@ pub fn describe(obj: Id) -> String {
 }
 
 pub struct Pool(*mut c_void);
+impl Default for Pool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 impl Pool {
     pub fn new() -> Self {
         // SAFETY: push/pop are balanced by Drop.
@@ -179,6 +184,11 @@ static ERR_DESC: BlockDesc = BlockDesc { reserved: 0, size: std::mem::size_of::<
 pub struct Completion {
     state: std::sync::atomic::AtomicU8,
     msg: std::sync::Mutex<String>,
+}
+impl Default for Completion {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 impl Completion {
     pub const fn new() -> Self {

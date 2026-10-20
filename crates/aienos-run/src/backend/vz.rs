@@ -5,12 +5,15 @@
 //! EFI variable store; the boot disk is a raw GPT disk whose ESP holds
 //! \EFI\BOOT\BOOTAA64.EFI (the same UEFI image QEMU virt boots). Devices:
 //! virtio console (the runner's console pipe), virtio-blk boot disk, NVMe or
-//! virtio-blk Store disk, virtio-net. Every VM call runs on one serial
+//! virtio-blk Store disk, virtio-net on the runner's user-mode network
+//! (crate::usernet), virtio entropy. Every VM call runs on one serial
 //! dispatch queue (the queue the VM was created with).
 
 use super::objc::{self, alloc, file_handle, file_url, msg, new_obj, nsarray, nsstring, Id, Queue};
 use super::{Backend, Console, NetMode, RunningVm, StoreBus, VmSpec};
+use crate::usernet::UserNet;
 use std::fs::File;
+use std::os::unix::net::UnixDatagram;
 use std::os::fd::FromRawFd;
 use std::time::Duration;
 
@@ -62,19 +65,27 @@ impl Backend for Vz {
         let q = Queue::new("com.aienos.run.vz");
         let (out_r, out_w) = os_pipe()?; // guest -> host
         let (in_r, in_w) = os_pipe()?; // host -> guest
+        // Network: the runner's own user-mode network (crate::usernet) on a
+        // datagram socket pair, so the guest sees the 10.0.2.x addresses its
+        // kernel expects; vmnet NAT would hand it a DHCP subnet instead.
+        let net = match spec.net {
+            NetMode::Nat => Some(UserNet::start(&spec.forwards).map_err(|e| format!("network: {e}"))?),
+            NetMode::None => None,
+        };
+        let net_fd = net.as_ref().map(|(_, vm_end)| std::os::fd::AsRawFd::as_raw_fd(vm_end));
         let vm = q.sync(|| -> Result<Id, String> {
             // SAFETY: plain Objective-C calls with the documented signatures;
             // every object is checked before use.
-            unsafe { build_and_start(spec, &q, &out_w, &in_r) }
+            unsafe { build_and_start(spec, &q, &out_w, &in_r, net_fd) }
         })?;
         // The VM holds its own duplicates through the NSFileHandles.
         drop(out_w);
         drop(in_r);
-        Ok((Box::new(VzVm { q, vm, _keep: () }), Console { from_guest: Box::new(out_r), to_guest: Box::new(in_w) }))
+        Ok((Box::new(VzVm { q, vm, _net: net }), Console { from_guest: Box::new(out_r), to_guest: Box::new(in_w) }))
     }
 }
 
-unsafe fn build_and_start(spec: &VmSpec, q: &Queue, out_w: &File, in_r: &File) -> Result<Id, String> {
+unsafe fn build_and_start(spec: &VmSpec, q: &Queue, out_w: &File, in_r: &File, net_fd: Option<i32>) -> Result<Id, String> {
     use std::os::fd::AsRawFd;
     let mut err: Id = std::ptr::null_mut();
     let cfg = new_obj("VZVirtualMachineConfiguration");
@@ -124,10 +135,15 @@ unsafe fn build_and_start(spec: &VmSpec, q: &Queue, out_w: &File, in_r: &File) -
     // edition kernel draws from this virtio entropy device (core/vrng.c).
     msg!(cfg, "setEntropyDevices:", nsarray(&[new_obj("VZVirtioEntropyDeviceConfiguration")]) => Id; ());
 
-    // Network: NAT (vmnet shared, guest gets DHCP on the host-only subnet).
-    if let NetMode::Nat = spec.net {
+    // Network: raw Ethernet frames on the runner's socket (one datagram per
+    // frame, MTU 1500); the user-mode network on the other end routes them.
+    if let Some(fd) = net_fd {
         let n = new_obj("VZVirtioNetworkDeviceConfiguration");
-        msg!(n, "setAttachment:", new_obj("VZNATNetworkDeviceAttachment") => Id; ());
+        let a = msg!(alloc("VZFileHandleNetworkDeviceAttachment"), "initWithFileHandle:", file_handle(fd) => Id; Id);
+        if a.is_null() {
+            return Err("network: VZFileHandleNetworkDeviceAttachment init returned nil".into());
+        }
+        msg!(n, "setAttachment:", a => Id; ());
         if let Some(mac) = &spec.mac {
             let m = msg!(alloc("VZMACAddress"), "initWithString:", nsstring(mac) => Id; Id);
             if !m.is_null() {
@@ -176,7 +192,8 @@ fn dup(fd: i32) -> Result<i32, String> {
 struct VzVm {
     q: Queue,
     vm: Id,
-    _keep: (),
+    /// The user network and the socket end the VM reads; both outlive the VM.
+    _net: Option<(UserNet, UnixDatagram)>,
 }
 unsafe impl Send for VzVm {}
 

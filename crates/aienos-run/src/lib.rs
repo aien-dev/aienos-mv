@@ -6,3 +6,5 @@ pub mod cli;
 pub mod console;
 pub mod esp;
 pub mod paths;
+#[cfg(unix)]
+pub mod usernet;

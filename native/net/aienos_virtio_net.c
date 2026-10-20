@@ -103,7 +103,7 @@ static void put64(uint8_t *p, uint64_t v) { memcpy(p, &v, 8); }
 static int set_desc(vnet_dev *d, vnet_queue *q, uint16_t id, uint32_t len, uint16_t flags)
 {
     size_t boff = q->buf_off + (size_t)id * VNET_BUF_STRIDE;
-    if (id >= q->size || len > VNET_BUF_LEN || !in_region(d, boff, len)) return 0;
+    if (id >= q->size || len > VNET_RX_LEN || !in_region(d, boff, len)) return 0;
     uint8_t *e = d->mem + q->desc_off + 16u * id;
     put64(e, d->dma + boff);
     put32(e + 8, len);
@@ -291,7 +291,7 @@ vnet_err vnet_init_flags(vnet_dev *d, const vnet_ops *ops, const virtio_pci_caps
     /* post every RX buffer, then DRIVER_OK, then the first notify */
     vnet_queue *rx = &d->q[VNET_RX_QUEUE];
     for (uint16_t id = 0; id < rx->size; id++) {
-        if (!set_desc(d, rx, id, VNET_BUF_LEN, VNET_DESC_F_WRITE)) return fail(d, VNET_E_MEM);
+        if (!set_desc(d, rx, id, VNET_RX_LEN, VNET_DESC_F_WRITE)) return fail(d, VNET_E_MEM);
         avail_push(d, rx, id);
     }
     wr(d, VNET_WIN_COMMON, VNET_CC_STATUS, 1,
@@ -345,14 +345,19 @@ vnet_err vnet_rx(vnet_dev *d, uint8_t *out, size_t cap, size_t *len, int *got)
     if (d->broken) return VNET_E_BROKEN;
     vnet_queue *q = &d->q[VNET_RX_QUEUE];
     uint16_t id; uint32_t n; int have;
-    vnet_err e = used_next(d, q, VNET_BUF_LEN, &id, &n, &have);
+    vnet_err e = used_next(d, q, VNET_RX_LEN, &id, &n, &have);
     if (e || !have) return e;
     if (n < VNET_HDR_LEN) return mark_broken(d); /* every RX completion carries the header */
-    size_t flen = n - VNET_HDR_LEN;              /* <= VNET_FRAME_MAX by the limit above */
-    memcpy(out, d->mem + q->buf_off + (size_t)id * VNET_BUF_STRIDE + VNET_HDR_LEN, flen);
-    if (!set_desc(d, q, id, VNET_BUF_LEN, VNET_DESC_F_WRITE)) return mark_broken(d);
+    size_t flen = n - VNET_HDR_LEN; /* <= VNET_RX_LEN - VNET_HDR_LEN by the limit above */
+    int keep = flen <= VNET_FRAME_MAX;
+    if (keep)
+        memcpy(out, d->mem + q->buf_off + (size_t)id * VNET_BUF_STRIDE + VNET_HDR_LEN, flen);
+    else
+        d->rx_oversize++; /* longer than any frame we accept: dropped, buffer reposted */
+    if (!set_desc(d, q, id, VNET_RX_LEN, VNET_DESC_F_WRITE)) return mark_broken(d);
     avail_push(d, q, id);
     kick(d, q, VNET_RX_QUEUE);
+    if (!keep) return VNET_OK;
     *len = flen;
     *got = 1;
     return VNET_OK;

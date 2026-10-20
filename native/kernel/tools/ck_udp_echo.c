@@ -12,6 +12,7 @@
  * by the script per run, so a guest line carrying it proves the reply came
  * from this process. Exit 0 at the deadline, 2 usage, 3 socket/bind error. */
 #define _POSIX_C_SOURCE 200809L
+#define _DARWIN_C_SOURCE /* macOS hides INADDR_LOOPBACK under strict POSIX */
 #include <arpa/inet.h>
 #include <errno.h>
 #include <netinet/in.h>
