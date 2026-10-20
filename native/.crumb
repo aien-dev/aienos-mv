@@ -50,74 +50,74 @@
       "children": [
         {
           "digest": "50aa2fbd6ca356b7703517bc7ecf439f7b6e0a6b935d0ca6ca4c6f7caf23ce34",
-          "last_commit": "09e59a8",
+          "last_commit": "09e59a82",
           "name": "argus",
           "purpose": "Directory native/argus. Purpose not yet described by a human."
         },
         {
           "digest": "e98806cbea0fcd38d29760c3e6ddf8ddfcedcd29bcf68a4675cb74dce68963a8",
-          "last_commit": "2eef482",
+          "last_commit": "2eef482f",
           "name": "boot",
           "purpose": "Directory native/boot. Purpose not yet described by a human."
         },
         {
           "digest": "750c519c466783ed6330a6a2c8fcb2153efdaadb9d65b38a6a85e8463d78b68d",
-          "last_commit": "7db773a",
+          "last_commit": "7db773a8",
           "name": "capability",
           "purpose": "Directory native/capability. Purpose not yet described by a human."
         },
         {
           "digest": "0a3e98a5f36f528eb7ae6e1611d466343068780b9029621286b292ec1c796950",
-          "last_commit": "7db773a",
+          "last_commit": "7db773a8",
           "name": "crypto",
           "purpose": "Directory native/crypto. Purpose not yet described by a human."
         },
         {
           "digest": "99bc55e79695290b65ae08a38e5731e3ed976d79cdb3b6c9bc21c706b1ddab22",
-          "last_commit": "7db773a",
+          "last_commit": "7db773a8",
           "name": "disk",
           "purpose": "Directory native/disk. Purpose not yet described by a human."
         },
         {
-          "digest": "b10f7dae96935cfe83172cba73fcf7c35818323da7e8551bffcbbf811c2e73b9",
-          "last_commit": "f913a63",
+          "digest": "fd29e25288576a2276ff8cb9b675c3eff239dd4f2b1a7b995c33cf95fa1a8452",
+          "last_commit": "edc647b5",
           "name": "kernel",
           "purpose": "Directory native/kernel. Purpose not yet described by a human."
         },
         {
           "digest": "a805df7e3af4b8a2ef345223523b54e7e47565204ec8f8e598f6dcaf53b07419",
-          "last_commit": "7db773a",
+          "last_commit": "7db773a8",
           "name": "m5",
           "purpose": "Directory native/m5. Purpose not yet described by a human."
         },
         {
           "digest": "ff5c88f5e9bf86e7ff836d24c048dd2d4efc94f6f19a21a0caf72ae9c402deaf",
-          "last_commit": "7db773a",
+          "last_commit": "7db773a8",
           "name": "net",
           "purpose": "Directory native/net. Purpose not yet described by a human."
         },
         {
           "digest": "135fd1edbe2388764de7dc755611b483b0c61adab858718c390b7745d141635c",
-          "last_commit": "7db773a",
+          "last_commit": "7db773a8",
           "name": "sig",
           "purpose": "Directory native/sig. Purpose not yet described by a human."
         },
         {
           "digest": "f75197d76b7daaeee8223cf25353251824cd4497400a439724a3a424e014a229",
-          "last_commit": "e5e8f08",
+          "last_commit": "e5e8f080",
           "name": "store",
           "purpose": "Directory native/store. Purpose not yet described by a human."
         }
       ],
-      "children_root": "sha256:2fa6aa5ad4f53a17e9f765a16038ca7b519f49dd6533c0fe5e71862cad40ea3a",
-      "compiled_at": "2026-10-18T18:24:02Z",
+      "children_root": "sha256:4cd2eb8adf5233bb14c297832f09ae33d0600afc3caf075115d6480726e1c70b",
+      "compiled_at": "2026-10-20T20:58:50Z",
       "compiler": "crumb-compile/1",
-      "digest": "sha256:295a7231c437f016e071c5f29e1274ba007e62109ff62bed3834525a2007ec96",
+      "digest": "sha256:92f474b829087626fdb371d82bbd2440b7efcb95bc54a7aa553e81b55b4baef7",
       "evidence_files": 4,
       "evidence_root": "sha256:e410b845507e00568e15b51a5797af32a97e0e4b8ab4e8487bb7c98e7e0cf335",
-      "files": 646,
-      "generated_at_commit": "f913a63a78c6fe298c99761337b75cfd261748a5",
-      "source_tree": "sha256:d7ed9a847c69c571d0545bf87a43dfaa1c075d17f0e63ba89ee241dd641122c5"
+      "files": 659,
+      "generated_at_commit": "edc647b5faa0577856cc7d56d7ecc1f7814d74df",
+      "source_tree": "sha256:91f2496eea926926fef83f0615189973969c1ea68537d80a99ef6eac0640f642"
     },
     "owner_lane": "",
     "provenance": {
