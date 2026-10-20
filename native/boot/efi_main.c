@@ -10,6 +10,7 @@
  * unchanged (docs/BOOT_HANDOFF_CONTRACT.md section 7). Signature checks are
  * parked for the C path; see README.md. */
 #include "efi.h"
+#include "direct_boot.h"
 #include "../kernel/arch/arch.h"
 #include "../kernel/core/ck_internal.h"
 
@@ -90,9 +91,77 @@ static void vendor_print(const CHAR16 *v)
     ck_printf("firmware_vendor: %s\n", b);
 }
 
+#ifndef CK_HARDWARE_STAGING
+/* Direct boot (direct_boot.h): the aienos-run VMM is the firmware. No boot
+ * services exist, so this builds the same CHANDOF3 handoff from the VMM's
+ * record and enters the kernel. Never in a hardware staging image. */
+static __attribute__((noreturn)) void direct_boot(const struct ck_direct_boot *d)
+{
+    struct ck_handoff *h = &handoff;
+    unsigned el = ck_current_el();
+    h->magic = CK_HANDOFF_MAGIC;
+    h->firmware_el = el;
+    h->uefi_entry_ticks = ck_rd(cntpct_el0);
+    h->counter_freq_hz = ck_rd(cntfrq_el0);
+    if (el == 2) {
+        h->firmware_ttbr0 = ck_rd(ttbr0_el2);
+        h->firmware_sctlr = ck_rd(sctlr_el2);
+    } else {
+        h->firmware_ttbr0 = ck_rd(ttbr0_el1);
+        h->firmware_sctlr = ck_rd(sctlr_el1);
+    }
+    h->image_base = (uint64_t)(uintptr_t)__image_base;
+    h->image_end = (uint64_t)(uintptr_t)__image_end;
+    h->commit = ck_commit();
+    h->rsdp = d->rsdp;
+    h->exit_attempts = 0;
+    ck_set_stage("direct_boot");
+
+    struct ck_spcr spcr = {0};
+    int uart_ok = -1;
+    const void *t = h->rsdp ? ck_acpi_lookup(h->rsdp, "SPCR") : 0;
+    if (t && ck_spcr_parse(t, &spcr) == 0)
+        uart_ok = ck_console_set_uart(&spcr);
+
+    ck_puts("\n");
+    ck_report_header("pre_exit");
+    int bad = d->version != CK_DIRECT_BOOT_VERSION || d->desc_size < sizeof(EFI_MEMORY_DESCRIPTOR) ||
+              d->map_size == 0 || d->map_size > sizeof map_buf || d->map_size % d->desc_size != 0;
+    if (bad)
+        ck_panic("direct_boot: bad record version=%u map_size=%llu desc_size=%llu", d->version,
+                 (unsigned long long)d->map_size, (unsigned long long)d->desc_size);
+    memcpy(map_buf, (const void *)(uintptr_t)d->memory_map, d->map_size);
+    h->memory_map = (uint64_t)(uintptr_t)map_buf;
+    h->map_size = d->map_size;
+    h->desc_size = d->desc_size;
+    h->desc_version = d->desc_version;
+    ck_puts("kernel_impl: c (native/kernel, Lane 18)\n");
+    ck_printf("firmware_vendor: %s\n", d->vendor ? (const char *)(uintptr_t)d->vendor : "direct boot");
+    ck_puts("boot_path: direct (aienos-run VMM, no UEFI boot services)\n");
+    ck_printf("firmware_el: EL%u\n", el);
+    ck_printf("counter_frequency_hz: %llu\n", (unsigned long long)h->counter_freq_hz);
+    ck_printf("acpi_rsdp: 0x%llx\n", (unsigned long long)h->rsdp);
+    if (uart_ok == 0)
+        ck_printf("uart: %s spcr type=0x%x base=0x%llx\n", ck_console_uart_name(),
+                  spcr.interface_type, (unsigned long long)spcr.base);
+    else
+        ck_puts("uart: unavailable (no usable SPCR)\n");
+    ck_printf("image: 0x%llx-0x%llx\n", (unsigned long long)h->image_base,
+              (unsigned long long)h->image_end);
+    ck_set_stage("kernel_entry");
+    ck_kernel_entry(h);
+    for (;;)
+        __asm__ volatile("wfe");
+}
+#endif
+
 EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE *st)
 {
     struct ck_handoff *h = &handoff;
+#ifndef CK_HARDWARE_STAGING
+    if ((uint64_t)(uintptr_t)image == CK_DIRECT_BOOT_MAGIC)
+        direct_boot((const struct ck_direct_boot *)st);
+#endif
     unsigned el = ck_current_el();
     h->magic = CK_HANDOFF_MAGIC;
     h->firmware_el = el;

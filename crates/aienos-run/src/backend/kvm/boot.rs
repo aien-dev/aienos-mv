@@ -415,7 +415,7 @@ mod tests {
 
     #[test]
     fn identity_map_shape() {
-        let t = identity_l1(RAM_BASE + (1 << 30));
+        let t = identity_l1(RAM_BASE + (2 << 30));
         let d0 = u64::from_le_bytes(t[0..8].try_into().unwrap());
         let d1 = u64::from_le_bytes(t[8..16].try_into().unwrap());
         let d2 = u64::from_le_bytes(t[16..24].try_into().unwrap());

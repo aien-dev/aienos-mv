@@ -395,11 +395,8 @@ mod tests {
     }
 
     // RFC 8032 section 7.1 TEST 1 secret key.
-    const TEST_SECRET: [u8; 32] = [
-        0x9d, 0x61, 0xb1, 0x9d, 0xef, 0xfd, 0x5a, 0x60, 0xba, 0x84, 0x4a, 0xf4, 0x92, 0xec, 0x2c,
-        0xc4, 0x44, 0x49, 0xc5, 0x69, 0x7b, 0x32, 0x69, 0x19, 0x70, 0x3b, 0xac, 0x03, 0x1c, 0xae,
-        0x7f, 0x60,
-    ];
+    const TEST_SECRET_HEX: &str =
+        "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60";
 
     fn signed(key: &SigningKey, body: &str) -> String {
         let sig = key.sign(body.as_bytes());
@@ -460,7 +457,7 @@ mod tests {
 
     #[test]
     fn test_key_needs_opt_in() {
-        let key = SigningKey::from_bytes(&TEST_SECRET);
+        let key = SigningKey::from_bytes(&hex_decode::<32>(TEST_SECRET_HEX).unwrap());
         assert_eq!(
             hex_encode(key.verifying_key().as_bytes()),
             TEST_PUBLIC_KEY_HEX

@@ -8,6 +8,7 @@ pub mod backend;
 pub mod bundle;
 pub mod cli;
 pub mod console;
+pub mod devices;
 pub mod disk;
 pub mod fetch;
 pub mod manifest;
