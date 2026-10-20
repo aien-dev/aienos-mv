@@ -1,6 +1,6 @@
 # AIENOS
 
-> **Status: experimental / pre-alpha. Nothing here is physically qualified.** The first native boot on the NVIDIA DGX Spark passed on 2026-09-24 ([evidence](evidence/m2_first_boot_2026-09-24.md)). Since then most of the work has run in an emulator (QEMU); the C kernel has also run on a Raspberry Pi 5 (see Current state). No support, stability or compatibility promises. Expect breaking changes.
+> **Status: experimental / pre-alpha. Nothing here is physically qualified.** The first native boot on the NVIDIA DGX Spark passed on 2026-09-24 ([evidence](evidence/m2_first_boot_2026-09-24.md)). Since then most of the work has run in an emulator (QEMU); the C kernel has also run on a Raspberry Pi 5 (see Current state). The next attended Spark boot is packaged as one command with a plain-English checklist ([checklist](docs/SPARK_BOOT_CHECKLIST.md), [what was proven without rebooting](docs/SPARK_BOOT_PACKAGE_EVIDENCE.md)); it has not been run yet. No support, stability or compatibility promises. Expect breaking changes.
 
 AIENOS is our own operating system kernel, built to replace Linux on the DGX Spark. It is agent-native: the agent is the control plane, and the model is never the kernel. The kernel stays small, deterministic and non-intelligent, and the agent is never the root of trust.
 
