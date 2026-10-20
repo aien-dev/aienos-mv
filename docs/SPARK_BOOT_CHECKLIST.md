@@ -18,9 +18,10 @@ only AienOS image that has already started on this Spark and come back
 safely (2026-09-24, `evidence/m2_first_boot_2026-09-24.md`). New this time:
 it looks for the GB10 chip and, if it finds it, reads two read-only identity
 numbers from it. It loads no firmware into the GPU, runs nothing on it, and
-writes nothing to the Spark's main disk. The only writes are two files in the
-boot folder `\EFI\AIENOS` (the image and a note of what was staged) and one
-small report the firmware keeps for Linux to read afterwards.
+writes nothing to the Spark's main disk. The only writes are three files in
+the boot folder `\EFI\AIENOS` (the image, a note of what was staged, and the
+report file `BOOTREPORT.TXT` the image saves itself) and one small report the
+firmware keeps for Linux to read afterwards.
 
 What it proves if it works: AienOS still starts on this firmware at the
 current code, and it either finds the GB10 (the 2026-09-24 boot did not) or
@@ -70,13 +71,29 @@ check, saves a "before" snapshot of the boot settings, copies the image into
 tells the firmware "use it once, next restart". It asks for your password
 once. It does **not** restart the machine.
 
-*You should see*, near the end: `NATIVE_PREFLIGHT: READY`, then a few lines
-starting `aienos_commit:` and `image_sha256:`, then
-`Staged: the next boot runs Boot000N once.` and three commands for after the
-boot. Leave that terminal open or take a photo of it.
+*You should see*, in this order:
 
-If it prints `STOP:` anywhere, nothing was written. Send the screen text to
-the chat and stop there.
+1. A pause while it builds, then `AArch64 PE32+ EFI application verified`.
+2. The safety check, one line each. Lines starting `PASS` and `INFO` are
+   fine. Lines starting `ASK` are questions for you (are you at the machine,
+   is this the right boot); they are not errors. The check ends with
+   `NATIVE_PREFLIGHT: READY (read-only checks only; the ASK lines are Drake's)`.
+3. Eight summary lines (`commit:`, `image:`, `recovery:    Boot000N
+   AIENOSRECOV stick listed`, `capture:`, `copy to:`, `boot entry:`,
+   `BootOrder:`, `BootNext:`).
+4. **The password prompt** (this is where it asks), then
+   `Captured state to ...pre_boot_capture.json`.
+5. The record of what was staged (`aienos_commit:`, `image_sha256:`, ...,
+   `aienos_boot_entry:`), four lines from the firmware that include
+   `BootNext: 000N`, then `Staged: the next boot runs Boot000N once.` and the
+   three commands for after the boot. Take a photo of this part.
+
+If any line starts with `STOP`, nothing was written. Send the screen text to
+the chat and stop there. One STOP you might see is `quiet flag held`: another
+job on the Spark is using the hardware; tell the chat and wait.
+
+The chat records the attempt (ledger and evidence file) from your photo and
+the step 5 output, so there is nothing else to log by hand.
 
 ### 3. Restart
 
@@ -103,13 +120,16 @@ Keep your hands off the keyboard from here until Ubuntu is back.
    - `exiting firmware boot services`
    - `report file: \EFI\AIENOS\BOOTREPORT.TXT saved` (or `not saved (...)`)
 3. The screen is redrawn by AienOS itself (no firmware underneath any more):
-   the AienOS report with `kernel: alive` and
-   `nvram_report: saved (write 2 of 3)`.
+   the AienOS report with `boot: native` and `kernel: alive`, then
+   `uart_report: ...` and `nvram_report: saved (write 2 of 3)`.
 4. `restarting in 30 s`, counting down to 1.
 5. The machine restarts: NVIDIA logo, then Ubuntu starts as usual.
 
-QEMU (the emulator on the desk) shows the same sequence; the line-by-line
-emulator capture is in `docs/SPARK_BOOT_PACKAGE_EVIDENCE.md`.
+QEMU (the emulator on the desk) printed items 2 and 3 on its text console;
+that capture is in `docs/SPARK_BOOT_PACKAGE_EVIDENCE.md` section 5. The
+`uart_report`, `nvram_report` and `restarting in 30 s` lines go to the
+screen only, so they come from the code (`crates/aienos-boot/src/handoff.rs`),
+not from a capture.
 
 ### 5. After Ubuntu is back: three commands
 
