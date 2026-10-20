@@ -157,8 +157,15 @@ Run 2026-10-20 (~21:00Z) on the Spark host, on top of 595ed72 with the advisor-2
 | `make -C net mt7925-fw-real` (read-only parse of /lib/firmware/mediatek/mt7925) | 0 | MT7925_FW_REAL PASS; RAM code 5 regions (4 downloaded, region 4 host-only CLC); MT7925_MODEL_REAL_FW PASS: 6 downloads, 1275392 scatter bytes, 11 MCU commands, start addr 0x0090d000 option 0x1 |
 | `make -C kernel full CK_MT7925=1 OUT=../target/l206b-mt7925 -j8` | 0 | BOOTAA64.EFI built; `nm` shows the ck_mt7925_* binding and mt7925_init linked. Not booted |
 
-The QEMU gate run for the default images (scripts/ck_gates.sh on the
-committed tree) is in the handoff ~/handoffs/2026-10-20-spark-wifi-mt7925.md.
+QEMU gates, default images, `scripts/ck_gates.sh` on a clean checkout of be9e2f4 (QEMU only, physical NOT_RUN). The shared gate lock was held by other agents, so the run came in three parts, each exit 0, no gate FAILed:
+
+| Run | Result | Receipt (evidence/ck_gates_<prefix>...json) |
+| --- | --- | --- |
+| all 27 | 11 PASS (M1 M3 SMMU NVME_SHUTDOWN P2_ARTIFACT M4_NVME M4_STORE M4_STORE_CRASH ARGUS1_REVOKE NET SMP), 16 NOT_RUN (lock held) | 4719dfa5 |
+| `--only` the 16 | 15 PASS (M0_ROLLBACK OSC_UNIT OSC_LAUNCH OSC_RECEIPT OSH_CORE OSH_OP M4_CONTINUITY M4_RECOVERY M4_ALLEN KEYBOARD DISK_LAYOUT FPU INFER SCREEN CONSOLE), SLOT_LOADER NOT_RUN | 6cc7cda6 |
+| `--only SLOT_LOADER` | PASS | 06a649aa |
+
+Together: 27 of 27 PASS on be9e2f4; the default images do not contain the MT7925 driver (only `CK_MT7925=1` builds it), so these gates show the driver files do not disturb the default build. The receipts are in the gates worktree, not committed here.
 What these do not show: anything about the real chip (every row in
 section 4 stays UNKNOWN until the attended boot).
 
