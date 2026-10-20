@@ -82,3 +82,43 @@ The runner's own final line is `SELECTED_GATES_NOT_ALL_PASS` per partial run bec
 subset; the table above is the union of the per-gate results, which is how it is stated here. A single
 all-27 receipt for this commit does not exist (INFERRED cause: shared gate lock held by other agents; UNKNOWN
 whether one uninterrupted run would differ).
+
+## 5. Gates in `GATES.md` that `ck_gates.sh` does not run
+
+Each ran as `quiet-build bash scripts/<script>` from the commit under test; retried only on exit 3 (gate lock held by another agent), never after a PASS or FAIL.
+
+| Gate | Script | Exit | Result |
+|---|---|---|---|
+| LIFECYCLE | qemu_ck_lifecycle_test.sh | 0 | `AIENOS_CK_LIFECYCLE: PASS (QEMU only; hardware NOT_RUN)` (OBSERVED, extra-lifecycle.log) |
+| MEMORY | qemu_ck_memory_test.sh | 0 | `AIENOS_CK_MEMORY: PASS (QEMU only; hardware NOT_RUN)` (OBSERVED, extra-memory.log) |
+| SERVICE_DISK | qemu_ck_service_disk_test.sh | 1 | **FAIL**: 99 rows PASS, 1 row FAIL (ROW 206, `M1 checks`), `AIENOS_CK_SERVICE_DISK: FAIL` (OBSERVED, extra-service_disk.log) |
+
+### SERVICE_DISK FAIL: cause
+
+The one failing row is the M1 tick-statistics check inside one boot: `timer_stats: intid=30 freq_hz=62500000
+period_us=10000 min_us=31 avg_us=11382 max_us=35787`. The check needs `2*min >= period`; 31 us is far below 5000 us
+(OBSERVED). Every functional row of that boot passed (recall, facts, unload, stop order, QEMU exit 0).
+The machine was heavily loaded at the time (load average above 30, OBSERVED by `uptime`).
+
+Cause (INFERRED from code, `native/kernel/arch/timer.c` at this commit, and consistent with the numbers): `ck_timer_tick`
+re-arms the compare value from the counter read at IRQ entry, then reads the counter again to timestamp the interval.
+If the host stalls the QEMU vCPU between those two reads, one interval comes out long and the next one short.
+The long one (max 35787 us) and the short one (31 us) are exactly that pair. This is the known flake
+AIENOS-CK-QEMU-GATES, already root-caused by the desk lane (ledger L081/L082): fix is PR aienos#438, branch
+`fix/timer-window-starvation` (head 54fe5b96), which uses the IRQ-entry counter for both ends of an interval
+(18/20 red to 20/20 green in that branch's own evidence). It is not in `origin/main` (18e27659). No new fixer
+line was opened: a fix already exists and is in the desk's queue.
+
+This is a FAIL of this baseline, not a waiver. The baseline is not green for SERVICE_DISK on current main.
+The other 29 QEMU gates (27 + LIFECYCLE + MEMORY) pass at this commit. Section 6 records the re-run on the fix branch.
+
+### Not run, by design (OBSERVED in `GATES.md`)
+
+- TRUST-1 Gate 4 (`qemu_security_suite.sh`, `qemu_secureboot_signing_test.sh`, GATES.md rows 92-95): NOT_RUN,
+  MISSING_IMPLEMENTATION. These boot the retired Rust loader image; no C-kernel version exists.
+- The Rust-reference scripts (`qemu_boot_test.sh` and relatives) boot the Rust loader image, not the Aienux kernel;
+  not part of this baseline.
+- Hardware: every gate here is QEMU only. Nothing physical was touched or qualified.
+
+## 6. Re-run on the timer fix
+PENDING (queued behind another agent's gate lock when this was written).
