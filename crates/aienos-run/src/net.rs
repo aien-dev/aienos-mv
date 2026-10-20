@@ -2,14 +2,14 @@
 //! host's own network stack (no root, no bridge, no TAP), and a port-forward table maps
 //! host ports to guest ports.
 //!
-//! The signed transport's UDP port is forwarded by default. Its number is not fixed
-//! anywhere on aienos main yet (OBSERVED 2026-10-20: no port constant in native/net or
-//! native/sig); 47040 is PROVISIONAL, chosen clear of the iMac lab ports 47029..47035,
-//! and owned by the Interplane lane (ledger L263) to confirm or change.
+//! The signed transport's UDP port is forwarded by default: 47030, the guest port the
+//! kernel binds (CK_NET_LOCAL_PORT, native/kernel/dev/net_udp.h; the same number the PC
+//! edition image, L260, and the macOS runner, L265, use). The Interplane lane (ledger
+//! L263) owns the number; change it here and there together.
 
 use std::fmt;
 
-pub const SIGNED_TRANSPORT_UDP_PORT: u16 = 47040;
+pub const SIGNED_TRANSPORT_UDP_PORT: u16 = 47030;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Proto {
@@ -146,10 +146,10 @@ mod tests {
         assert_eq!(t[0].proto, Proto::Udp);
         assert_eq!(t[0].host_port, SIGNED_TRANSPORT_UDP_PORT);
         assert!(check_table(&t).is_ok());
-        t.push(Forward::parse("udp:47040:9").unwrap());
+        t.push(Forward::parse("udp:47030:9").unwrap());
         assert!(check_table(&t).is_err());
         t.pop();
-        t.push(Forward::parse("tcp:47040:9").unwrap());
+        t.push(Forward::parse("tcp:47030:9").unwrap());
         assert!(check_table(&t).is_ok(), "tcp and udp may share a number");
     }
 }

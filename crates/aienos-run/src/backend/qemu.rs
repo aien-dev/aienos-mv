@@ -712,7 +712,7 @@ mod tests {
             "{j}"
         );
         assert!(j.contains("file=fat:rw:/s/esp"));
-        assert!(j.contains("hostfwd=udp:127.0.0.1:47040-:47040"));
+        assert!(j.contains("hostfwd=udp:127.0.0.1:47030-:47030"));
         assert!(j.contains("nvme,serial=aienos-store,drive=store"));
         assert!(j.contains("-no-reboot"));
         assert!(j.contains("stdio,id=s0,signal=off"));
