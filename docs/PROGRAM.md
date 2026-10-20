@@ -1,6 +1,6 @@
 # AienOS program map: every machine, every rung, the network between them, and what comes after (L211)
 
-Status: DRAFT 1, 2026-10-20. Written from the repo at `18e2765`, the ledger, the Spark map (`docs/SPARK_REPLACE_LINUX.md`, L191) and the hand-off notes. Three of the four machine maps this page depends on have not landed yet, so those rows are marked PROVISIONAL and the page says which map will replace them. Nothing here is a claim that a row works unless the "Where proven" column says so.
+Status: REVISION 2, 2026-10-20. Written from the repo at `18e2765`, the ledger, the hand-off notes and all four machine maps (Spark L191, iMac and Pi L210, MacBook L208, PC L209). Every row names the map row it came from. Nothing here is a claim that a row works unless the "Proven where" column says so.
 
 Names (Drake, 2026-10-20): **Aienux** is the kernel, **AienOS** is the system. Older files still say AIENOS for both.
 
@@ -9,10 +9,10 @@ Tags on every claim: OBSERVED (read from source, a record or a live box), INFERR
 | Map | Machine | Ledger | State on 2026-10-20 |
 | --- | --- | --- | --- |
 | `docs/SPARK_REPLACE_LINUX.md` | DGX Spark (GB10, aarch64) | L191 | LANDED (READY `bb2399f`, branch `feat/spark-replace-linux-map`) |
-| `docs/IMAC_AIENOS_MAP.md` | iMac 2017 (x86_64) | L210 | PENDING |
-| `docs/PI5_AIENOS_MAP.md` | Raspberry Pi 5 (hub) | L210 | PENDING |
-| `docs/MACBOOK_AIENOS_MAP.md` | MacBook Air (Apple Silicon) | L208 | PENDING |
-| `docs/PC_AIENOS_MAP.md` | Ballentine_PC (Ryzen 5 7600X, RTX 5070, Windows 11) | L209 | PENDING |
+| `docs/IMAC_AIENOS_MAP.md` | iMac 2017 (x86_64) | L210 | LANDED (READY `97a0945`, branch `feat/aienos-imac-pi-map`) |
+| `docs/PI5_AIENOS_MAP.md` | Raspberry Pi 5 (hub) | L210 | LANDED (same branch and commit) |
+| `docs/MACBOOK_AIENOS_MAP.md` | MacBook Air M2 (Apple Silicon) | L208 | LANDED (READY `1d77025`, branch `feat/aienos-macbook-map`) |
+| `docs/PC_AIENOS_MAP.md` | Ballentine_PC (Ryzen 5 7600X, RTX 5070, Windows 11) | L209 | LANDED (READY `eb552cb`, branch `feat/aienos-pc-map`) |
 
 ## 1. The whole shape in plain English
 
@@ -20,15 +20,15 @@ AienOS is one operating system meant to run on five different computers. Each co
 
 Where each machine stands today, from the records:
 
-- **iMac 2017**: furthest on real hardware. Our kernel has booted on it, started its cores, turned on memory protection, read both disks, shown the 4K screen and sent reports over Ethernet. The graphics chip driver exists but has not run on the chip.
-- **Raspberry Pi 5**: our kernel has booted on it, read and written its SD card, and run a small language model on its own processor at 1.20 tokens per second. Network send works, receive has not been seen.
+- **iMac 2017**: furthest on real hardware. Our kernel has booted on it from a stick and fetched a signed kernel over the network, started its cores, turned on memory protection, read both disks, drawn ALLEN on the 4K screen, taken a USB keyboard and played sound. Most of that sits in open pull requests, not in `main`. The graphics chip (a Polaris 10 Radeon) driver exists but has never run on the chip. No model runs on it natively.
+- **Raspberry Pi 5**: our kernel has booted on it, read and written its SD card, kept a sealed store across boots, and run a small language model on its own processor at 1.20 tokens per second. Network send works, receive has not been seen, and nobody can type on it yet (no USB or serial input). It is also the always-on Linux hub that runs the private network coordinator, so native runs are short windows.
 - **DGX Spark**: our kernel booted once, for 75 seconds, in September, and only printed a report. Everything since is emulator work plus drivers in flight. The Spark is the machine that has to run the 27B model, so it carries the longest ladder (the GPU path).
-- **MacBook Air and the PC**: no AienOS code has run on either. Their maps are being written.
+- **MacBook Air (M2) and the PC (Ryzen 5 7600X, RTX 5070)**: no AienOS code has run on either. The Mac is a different kind of computer (Apple boot chain, interrupt controller and GPU), reachable only by a tethered boot over a cable from the Spark first. The PC keeps Windows and is an ordinary x86 machine whose chips are not yet inventoried.
 
 Three things hold for the whole program:
 
-1. **Some Linux programs will never run on AienOS.** Claude and Codex agents, git, compilers, Docker, Tailscale and the test judge are Linux programs with no native counterpart and no plan for one (Spark map, rows U1 to U6). "Linux off" on a machine means that machine runs only AienOS code. The work that needs those programs lives on a machine that keeps Linux. This is a physical boundary, not a gap to close.
-2. **The network between machines has one real piece today**: a signed, encrypted transport (section 4). It is proven in the emulator with test keys only, and it knows exactly one peer. Both limits matter for "many machines".
+1. **Some Linux programs will never run on AienOS.** Claude and Codex agents, git, compilers, Docker, the Tailscale and Headscale services and the test judge are Linux programs with no native counterpart and no plan for one (Spark map, rows U1 to U6). "Linux off" on a machine means that machine runs only AienOS code. The work that needs those programs lives on a machine that keeps Linux. This is a physical boundary, not a gap to close.
+2. **The network between machines has one real piece today**: a signed, encrypted transport (section 4). It is proven in the emulator with test keys only, and it knows exactly one peer. Both limits matter for "many machines". There is no TCP or TLS at all, which is why a gateway machine is needed.
 3. **Omega is the destination language** (ADR 0024). Rust is scaffolding, C and assembly only where hardware forces them. The future section (section 6) says how the kernel itself moves to Omega.
 
 ## 2. The ladder and the tables
@@ -70,117 +70,155 @@ Pin: repo `18e2765`, live box `spark-b87b` read 2026-10-20. Row ids (D, G, U) po
 | 11 model run | 27B weights from NVMe, KV on the GPU, token stream (G7) | a token stream from the Spark | NONE | unowned |
 | 12 service API | Request path from another machine (G8) | a request answered by the Spark | QEMU for the transport; no TCP or TLS exists | unowned (section 4) |
 
-### 2.2 iMac 2017 (iMac18,3, Core i5-7500, x86_64): PROVISIONAL until `docs/IMAC_AIENOS_MAP.md` lands (L210)
+### 2.2 iMac 2017 (iMac18,3, Core i5-7500, x86_64): source `docs/IMAC_AIENOS_MAP.md` (L210, landed `97a0945`)
 
-Built from `evidence/imac_*`, `native/kernel/README.md` (iMac section), the ledger and `~/handoffs/2026-10-17-imac-allen-milestone.md`. Hardware results below are transcriptions from photos of the screen, recorded in the evidence folders.
-
-| Rung | What | Gate | Proven where | Ledger |
-| --- | --- | --- | --- | --- |
-| 1 boot | UEFI stub, GOP, ExitBootServices, `kernel: alive`, power off through ACPI S5 | `AIENOS_IMAC_KERNEL` | HARDWARE (2026-10-16 and 10-17, SanDisk stick through the Option-key picker) | L040 (bundle 1, desk) |
-| 1 boot | Boot from the iMac's own disk, no stick (#418) | `AIENOS_FAT_BOOT` (61 checks PASS on host); `qemu_ck_imac_bootdisk_test` NOT_RUN by the last note | HARDWARE partial: Apple's firmware started the internal boot section by itself, then the FAT check failed on rewritten timestamps (fix `1c91bb2` pending a physical run) | unowned after the handoff of 2026-10-18 |
-| 2 CPU | GDT, IDT, APIC timer 100 Hz, all cores started | kernel gate, `SMP` | HARDWARE: 4 cpus, 3 started, timer 10000 us, no stray IRQs (`imac_kernel1_2026-10-17`) | none needed |
-| 3 memory protection | W^X page tables, NX, CR0.WP (#409, #413) | QEMU mutation probes | HARDWARE 2026-10-17: `wx ok`, audit 15/15 | done |
-| 3 memory protection | VT-d (#411): DMA confinement before networked sensitive use | no gate yet | NONE | unowned |
-| 4 disk | AHCI read-only (Apple HDD, 953869 MiB) and NVMe read-only (`144d:a806`, 4 KiB blocks), GPT check | `AIENOS_IMAC_KERNEL` disk lines | HARDWARE read-only; writes refused by the build | unowned (write path, Store on the iMac) |
-| 5 network | BCM57766 transmit-only report on UDP 47031, opt-in lab build (#408, #412) | `ck_imac_report_test` | HARDWARE: Ethernet seen; report sent | L142 |
-| 5 network | Receive, live kernel swap over Ethernet, signed GPU register console | QEMU swap and console round-trip | branch `feat/imac-gpu-bench` pushed; QEMU test NOT_RUN (lock held at the time) | L142 |
-| 6 input | USB keyboard through xHCI (#415) | `KEYBOARD`-style gate | branch `feat/imac-keyboard`; hardware result UNKNOWN to this page | desk |
-| 7 display | 3840x2160 GOP framebuffer, ALLEN window: sky, water, orb, black-hole dusk | `SCREEN` | HARDWARE: `gop: ok 3840x2160`; ALLEN frames shown | L076, L186 |
-| 8 trust | TPM or secure element | no gate yet | UNKNOWN: a 2017 iMac probably has no TPM (INFERRED, medium, not checked) | unowned until the map answers |
-| 9 GPU firmware | Polaris 11 / DCE 11.2: VRAM map, microcode load, SMU, interrupts; register numbers fixed to AMD headers (164 checks exit 0) | `check_regs.sh`; host tests 21 PASS | host only; default OFF; NOT tested on the iMac | L143, L187 |
-| 10 GPU compute | Our own GCN 4 encoder, PM4 packets, fill, blit, sky-lens kernels | encoder byte-exact against `llvm-mc` (283 of 283), 4 kernels PASS in the interpreter | host only; chip NONE | L144, L145 |
-| 11 model run | Native small model on the iMac CPU | no gate yet | NONE; ALLEN today answers through the Spark's 27B over UDP | pending L210 map |
-| 12 service API | ALLEN UDP courier and relay to the model server (port 18091) | QEMU end to end with the 27B answering | QEMU PASS (L039) | L039 (done) |
-
-### 2.3 Raspberry Pi 5 (the hub): PROVISIONAL until `docs/PI5_AIENOS_MAP.md` lands (L210)
-
-Built from `evidence/pi5_hardware_runs_2026-10-13`, `docs/native/PI5-*.md` and `native/kernel/README.md`.
+Row ids (IM) point at that map. Most iMac work sits in **open pull requests**, not in `main`: `main` holds only #404 to #408. The desk owns those PRs (L040 is the iMac bundle). Hardware results are transcriptions from photos or reports recorded in the evidence folders and PR bodies; a PR body is its author's claim.
 
 | Rung | What | Gate | Proven where | Ledger |
 | --- | --- | --- | --- | --- |
-| 1 boot | `BOOTAA64.EFI` through the one-shot tryboot runner, then back to Linux | `CK_PI5_BUILD`; runs `pi5-k1`, `pi5-sd1a`, `pi5-sd1b` | HARDWARE (2026-10-13) | done |
-| 2 CPU | Core image plus board glue, BCM2712 watchdog armed 15 s | build checks | HARDWARE | done |
-| 3 memory protection | same kernel core; no Pi-specific record read | no gate yet | UNKNOWN to this page | pending L210 map |
-| 4 disk | microSD host read and write, raw model partition read through UEFI Block I/O | `pi5-sd1a`, `pi5-sd1b`, `pi5-infer` | HARDWARE | done |
-| 5 network | Cadence GEM: loopback and wire transmit | `pi5_gem` loopback PASS (two), wire TX PASS; receive of an incoming frame NOT seen in 400 ms | HARDWARE for send; receive NONE | `pi5/net-398-wire` branch, unowned |
-| 6 input | none planned for a headless hub; UART or none | no gate yet | UNKNOWN | pending L210 map |
-| 7 display | none planned | none | n/a | pending L210 map |
-| 8 trust | No TPM. Unlock through the ADR 0017 recovery-secret path with a throwaway card request (qualification only); owner key ceremony done on the YubiKey (#380, online by owner decision) | `PI5-UNLOCK-QUALIFICATION`, PI5-8 Q2 | HARDWARE for the qualification tier; production tier NONE | unowned |
-| 9 GPU firmware | VideoCore: no path exists | none | NONE | pending L210 map (is a Pi GPU path wanted at all?) |
-| 10 GPU compute | same | none | NONE | pending L210 map |
-| 11 model run | Llama-3.2-1B Q4_K_M, ARM dot-product instructions: 0.22 tok/s scalar, 1.20 tok/s after (7 timed tokens); prefill 11.1 s for 17 tokens | `pi5-infer` run record | HARDWARE | done; ceiling comparison unowned |
-| 12 service API | ALLEN REFLEX decision core and the agent image | `PI5-6-AGENT-RUNS`, PI5-8 qualification | HARDWARE for the agent runs | done |
+| 1 boot | UEFI stub, Apple firmware starts our kernel; own-disk boot with no stick (#418, Apple started it in 14.4 s); signed network loader (#414: fetched, verified and started a signed kernel) (IM1, IM8) | `AIENOS_IMAC_KERNEL`; `AIENOS_FAT_BOOT` (61 checks, host); `AIENOS_IMAC_NETBOOT` (25, QEMU) | HARDWARE for stick boot (2026-10-16, 10-17) and netboot (10-17); own-disk second boot UNKNOWN (Apple's FAT driver rewrote file times, tolerated at `1c91bb2`, next power-on result not in the files) | L040 (desk, PRs #414, #418) |
+| 2 CPU | 4 cores, APIC timer, TSS and IDT (IM2); idle and RAPL watts (#424); wall clock (IM23) | `smp`, kernel gate | HARDWARE: `smp 3/3` PASS 2026-10-17; #424 NOT_RUN on hardware; RTC NONE | L040; RTC unowned |
+| 3 memory protection | W^X, NX, CR0.WP (#426, replaced #413) (IM3) | QEMU mutation probes | HARDWARE 2026-10-17: `wx ok`, audit 15 of 15; PR open | L040 |
+| 3 memory protection | VT-d DMA confinement (IM4): `DMAR` exists, no driver; without it a network chip can write anywhere in RAM | none yet | NONE | unowned |
+| 4 disk | SATA HDD 1 TB and the 26.7 GiB NVMe half of the Fusion Drive, read-only (IM6, IM7); writes always refused by the build | `AIENOS_IMAC_KERNEL` disk lines | HARDWARE read-only (2026-10-16) | write path and Store: unowned |
+| 5 network | BCM57766: transmit and report on UDP 47031 (#408, merged); receive in the lab build only; signed netboot ports 47032 and 47033; live swap 47034 and GPU register console 47035 on `feat/imac-gpu-bench` (IM9) | `AIENOS_IMAC_REPORT`, `AIENOS_IMAC_NETBOOT` | HARDWARE for report send and netboot fetch; receive in the kernel on hardware UNKNOWN; bench QEMU test NOT_RUN at last note | L142 |
+| 5 network | Wi-Fi `14e4:43ba`, Bluetooth, Thunderbolt 3, SD reader, camera (IM16 to IM19) | none | NONE; Bluetooth and camera ids UNKNOWN until one read-only lab boot lists the xHCI ports | unowned |
+| 6 input | USB keyboard through xHCI (#415); replug fix (#421) (IM10) | `AIENOS_IMAC_KEYBOARD` (37 checks in #421, 50 in #424, QEMU) | HARDWARE: a keyboard worked and the unplug bug was found on the real machine; replug fix NOT_RUN on hardware | L040 |
+| 7 display | CPU-drawn 4K framebuffer, ALLEN night-sky window (IM11); panel power (IM12); sound through the Cirrus codec worked on hardware (IM15, #415) | `ck_allen_ui_test` (61, host), `ck_chirp_test` (25) | HARDWARE: the window ran and Drake watched; the panel is 5120x2880 and the firmware gives 4K | L040, L076; panel power unowned |
+| 7 display | Native 5K mode set and a GPU-drawn frame (IM13) | `AMD_GPU_HOST_TEST` (21 to 24 against a mock) | host only | L143; chip naming fix L213 |
+| 8 trust | TPM or any secure element: UNKNOWN (not in the 2026-10-16 report); owner-key ceremony same as the Spark | none | NONE | unowned until a read answers |
+| 9 GPU firmware | Polaris 10 (`1002:67df`, Radeon Pro 570, 575 or 580): memory controller read, SMU answer, microcode and rings are stubs needing AMD blobs (IM13, IM14); the code and docs name Polaris 11, which is wrong (L213 fixing) | `check_regs.sh` (164 checks exit 0 after L187, 87 of 88 numbers had been wrong) | host only; chip NONE; firmware load needs Drake's go | L143, L187, L213 |
+| 10 GPU compute | Our own GCN 4 encoder, PM4 packets, interpreter, fill, blit and sky-lens kernels (IM14) | `GCN_ENC_TEST`: 283 instructions, 0 mismatches against `llvm-mc` | host only | L144, L145 |
+| 11 model run | No x86 inference path exists: the engine has an Arm fast path only; needs an AVX2 loop and an image target (IM26); GPU path capped by VRAM (4 or 8 GB by vendor spec, UNVERIFIED) (IM27) | none yet | NONE; verdict of the map: the iMac is a test bench for the AMD GPU path and Allen's display, not the big-model machine | unowned |
+| 12 service API | ALLEN answers through the Spark's 27B over the UDP courier (L039); native role is a **leaf**: serves nothing | QEMU end to end with the 27B | QEMU PASS | L039 (done) |
 
-### 2.4 MacBook Air (Apple Silicon): PENDING `docs/MACBOOK_AIENOS_MAP.md` (L208)
+Also unplanned and not retried: firmware replacement (IM24). Stopped twice by an automated safeguard, marked do-not-retry in `~/handoffs/2026-10-18-imac-firmware-backup.md`.
 
-No AienOS code has run on this machine, no inventory is in the repo, and the model of the MacBook is not recorded anywhere this page read. All twelve rungs are UNKNOWN until the map lands. What the map must answer, each as a physical or measured reason and not as "undocumented": how a custom kernel is started on Apple Silicon (Apple's boot chain permits it under reduced security, but which of the steps are documented is UNKNOWN to this page), the CPU and interrupt controller, the display path, the storage controller, whether any public GPU register documentation exists (if none, record DOCS SILENT and name the read-only open-source reference with its licence), and whether the machine is a compute node, a gateway or a client.
+### 2.3 Raspberry Pi 5, the "hub": source `docs/PI5_AIENOS_MAP.md` (L210, landed `97a0945`)
 
-| Rung | Gate | Proven where | Ledger |
-| --- | --- | --- | --- |
-| 1 to 12 | per the L208 map | NONE | L208 (the map itself); every rung below it `unowned` until the map names them |
+Row ids (PI) point at that map. The Pi is two things: a board where Aienux has run on real hardware, and the always-on Linux hub that runs the **Headscale** tailnet coordination server, **Pi-hole** DNS, **nginx**, a **Forgejo** git server in Docker, a vault and the Discord bots (OBSERVED, ssh on 2026-10-20). Every native run so far is a one-time window after which the Pi goes back to Linux; while a window is open the tailnet coordination is down.
 
-### 2.5 Ballentine_PC (Ryzen 5 7600X, RTX 5070 12 GB, Windows 11): PENDING `docs/PC_AIENOS_MAP.md` (L209)
+| Rung | What | Gate | Proven where | Ledger |
+| --- | --- | --- | --- | --- |
+| 1 boot | `BOOTAA64.EFI` by one-shot tryboot, eleven image variants build byte-identical twice (PI1) | `CK_PI5_BUILD: PASS`, `ck_pi5_repro_check.sh` | HARDWARE (2026-10-13 and later runs) | done |
+| 2 CPU | Cortex-A76 x4, GICv2, timer, PM watchdog 15 s (PI2, PI11); whether cores 2 to 4 start: UNKNOWN; clock RTC none (PI13); fan and thermal none, firmware left as found (PI14) | build checks | HARDWARE for boot and watchdog | RTC, thermal: unowned |
+| 3 memory protection | No IOMMU: ADR 0020 software confinement with a 2 MiB bounce window (PI8); confinement A BLOCKED (canary 0 changed bytes), B INFERRED only | NET-3 runs | HARDWARE partial | unowned |
+| 4 disk | microSD host, PIO, 25 MHz (PI3); sealed Store v1 survives boots (PI4); mid-commit power cut on the real card is QEMU only | `pi5-sd1a/b`, `pi5-store1..4` | HARDWARE | done; power-cut test needs Drake |
+| 5 network | Gigabit MAC: loopback PASS twice, one ARP frame sent PASS; **receive of an incoming frame not seen in 400 ms** (PI9); Wi-Fi, Bluetooth none (PI17, PI18) | `pi5_gem`, `tests/test_pi5_gem.c` | HARDWARE for send; branch `pi5/net-398-wire` unmerged | unowned |
+| 6 input | No USB (RP1 xHCI) and no UART input, so a person cannot type the unlock secret (PI5, PI6, PI12) | none yet | NONE | unowned |
+| 7 display | HDMI native: none, DOCS to be searched (PI16) | none | NONE | unowned |
+| 8 trust | No TPM. Slot 1 recovery-secret unlock runs on hardware but the secret comes from a labelled card file (qualification only); owner key ceremony performed 2026-10-14 on the YubiKey | `PI5-UNLOCK-QUALIFICATION`, PI5-8 Q2 | HARDWARE for the qualification tier | production tier unowned |
+| 9 to 10 GPU | VideoCore (V3D): no driver, no plan; shares the same memory bus so gain is bounded (PI-M4) | none | NONE | not planned |
+| 11 model run | Llama-3.2-1B Q4_K_M: **1.20 tok/s** (`calc:591b5dec...`), scalar was 0.22; TinyLlama 1.462, danube3-500m 3.227. Vendor-figure ceiling 21.13 tok/s (UNVERIFIED, `calc:166ba5b3...`), measured is about 5.68% of it | `PI5-6-INFER-RUNS.md` | HARDWARE; what bounds it UNKNOWN (one thread as far as logs show) | multi-core and ceiling measurement: unowned |
+| 12 service API | Signed units, agent lifecycle, ALLEN REFLEX, Cortex memory survives cold boot (PI21) | `PI5-5/6/7-*-RUNS.md` | HARDWARE | done |
 
-No AienOS code has run on this machine. The brief for L209 says its GPU path is shared with the GB10 (both Blackwell family, INFERRED from the brief, not checked). If that holds, cut C and cut D work on the Spark (L192, L193) is reusable here, and the PC could be the second machine on which the GPU path is proven. The map must also produce a one-line PowerShell inventory command for Drake (section 7).
+Hub services and what they need if the Pi itself ran Aienux: Headscale, nginx, Forgejo, vault, bots and the tunnels all need TCP and TLS or are Linux programs, so they must move or be rebuilt; Pi-hole DNS is possible over UDP and is the proposed first native service.
 
-| Rung | Gate | Proven where | Ledger |
-| --- | --- | --- | --- |
-| 1 to 12 | per the L209 map | NONE | L209 (the map itself); every rung below it `unowned` until the map names them |
+### 2.4 MacBook Air M2 (Mac14,2, board J413AP, macOS 26.6.2): source `docs/MACBOOK_AIENOS_MAP.md` (L208, landed `1d77025`)
+
+Row ids (D, G, F) point at that map. Nothing from AienOS has run on this machine. It is not a UEFI machine: Apple's own boot chain, interrupt controller (AIC2), device IOMMU (DART), disk controller (ANS2) and GPU (AGX G14G), almost all behind Apple helper processors spoken to through a mailbox protocol (RTKit). Apple allows a third-party kernel under a per-install "Permissive Security" setting; Asahi Linux has reverse engineered nearly every chip, so most rows are "documented by a third party" (licences GPL-2.0-only OR MIT, read and then written ours, never copied). **This Mac is the owner-key ceremony machine, with Activation Lock on** (OBSERVED), so which Mac to use is Drake's decision.
+
+| Rung | What | Gate | Proven where | Ledger |
+| --- | --- | --- | --- | --- |
+| 1 boot | Tethered boot: the Spark sends the kernel over USB-C into RAM through m1n1 each time, nothing stored on the Mac; needs a device-tree parser and a raw `Image` entry (D1) | boot #1 proxy read-only, boot #2 `kernel: alive` on the m1n1 virtual UART | NONE | unowned |
+| 2 CPU | 8 cores in two clusters via spin-table (D2); AIC2 interrupts, FIQ timer, fast IPI (D3); SMC for reset, off and RTC (D9) | `SMP`, chip models | NONE; host models feasible | unowned |
+| 3 memory protection | DART IOMMU and SART (D6): 16 KiB pages, security-critical | chip model tests | NONE | unowned |
+| 4 disk | ANS2 NVMe behind the ANS helper: one admin and one I/O queue, depth 64 (D4); the macOS APFS container is never mounted or written; test region or a separate USB SSD (Drake) | NVMe read-only at boot #4 | NONE | unowned |
+| 5 network | None native; USB Ethernet (AX88179B, DOCS SILENT) first, which needs USB-C PD, the ATC PHY and a DWC3 host (D7, D10); Wi-Fi and Bluetooth need APCIe plus Broadcom firmware extracted from macOS (D11 to D13, F4) | UDP report as on the iMac | NONE | unowned |
+| 6 input | Keyboard and trackpad via the MTP helper and dockchannel (D8); until read in full the tether console is the input | `keyboard: ready` | NONE | unowned |
+| 7 display | iBoot framebuffer first (D14); the real DCP/IOMFB path is firmware-version-specific and not needed early (D15) | framebuffer text at boot #3 | NONE | unowned |
+| 8 trust | No TPM. The SEP stays; anti-rollback candidates: SEP or an owner-held network counter, UNKNOWN (F1 to F3) | none yet | NONE | unowned |
+| 9 GPU firmware | `gfx-asc` helper is booted by iBoot; RTKit client, GPU DART, UAT page tables (same format as ARM64, 16 KiB, 40-bit VA), firmware init structures marked unfinished by Asahi (G1 to G3). First step is record, do not send | m1n1 hypervisor trace | NONE | L214 (reverse engineering on the Mac, branch `feat/macbook-agx-reverse-engineering`) |
+| 10 GPU compute | **DOCS SILENT** on a compute-only path (G4); instruction set known only from Asahi's userspace reverse engineering | integer vector add, teardown and reopen | NONE | L214 |
+| 11 model run | None; the map does not claim the chip can or cannot; speed would be against the chip's published memory bandwidth, not measured | none | NONE | unowned |
+| 12 service API | None; the Mac is not a replacement for any Spark function | none | NONE | unowned |
+
+### 2.5 Ballentine_PC (Ryzen 5 7600X, RTX 5070 12 GB, Windows 11, Windows kept): source `docs/PC_AIENOS_MAP.md` (L209, landed `eb552cb`)
+
+Row ids (PD, PG) point at that map. Nothing from AienOS has run here. The PC is an ordinary x86 UEFI machine, so the iMac work (almost all of it still on unmerged branches) is the base. The motherboard, network chip, storage controller and USB controllers are **not known yet**: one read-only PowerShell command (L212, Drake) fixes that. Nothing is planned around a guess.
+
+| Rung | What | Gate | Proven where | Ledger |
+| --- | --- | --- | --- | --- |
+| 1 boot | UEFI stub from a USB stick chosen once in the firmware boot menu, no boot entry created; Secure Boot off or our key enrolled beside Microsoft's; **save the BitLocker recovery key first** (PD1, PD14) | `kernel: alive`, Windows back unchanged | QEMU only | L212 first |
+| 2 CPU | `AuthenticAMD` paths, x2APIC, 6 cores and 12 threads, no HPET assumption, power meter (PD2) | `cpu` and `smp` lines | QEMU with an AMD CPU model | unowned |
+| 3 memory protection | AMD-Vi, not VT-d (PD3): `IVRS` parser, device table. Real risk: firmware may leave it enabled, so DMA from a driver that never configured it could be blocked or redirected. First boot reads the IOMMU control register and reports it before any DMA | IOMMU state printed; a device granted a range only | NONE | unowned |
+| 4 disk | NVMe read-only first (PD4); write path only on a partition of its own type, or the USB stick or a second drive; Windows `C:` never touched without Drake's approval of a disk model | GPT and Store superblock read, no write | QEMU for the driver | L199 shares the queue-depth work |
+| 5 network | The PC's chip is UNKNOWN (Realtek or Intel guessed, low to medium); one frame out seen on the LAN (PD5); Wi-Fi and Bluetooth follow Drake's Spark decision (PD13) | UDP report | NONE | unowned |
+| 6 input | USB keyboard through xHCI, AMD quirks (PD6); serial likely absent on AM5 (PD9) | `keyboard: ready` | QEMU | unowned |
+| 7 display | GOP console first (PD7); native modesetting for the 5070 only if Drake wants it (PG7) | photo | QEMU | unowned |
+| 8 trust | TPM CRB: the Spark driver (L200) may carry over; AMD firmware TPM behaviour UNKNOWN (PD10) | `TPM2_GetRandom` from the kernel | swtpm only | L200 |
+| 9 GPU firmware | RTX 5070 (`10de:2f04`, GB202 family) boots its GSP through **FSP**, which the GB10 does not have, so L192 covers the image family, reset step and page-table format but the opening handshake is an extra piece (PG1, PG2) | GSP alive and a channel reply | host encoder only | L192 partly; FSP unowned |
+| 10 GPU compute | Page tables and channels (PG4, shares L193), memory in two pools with BAR1 (PG3), interrupts (PG5), DMA confinement (PG6) | vector add, clean teardown and reopen | simulator | L193; the rest unowned |
+| 11 model run | CPU baseline first against a measured DDR5 ceiling (not measured); a 27B model does **not fit in 12 GB**, so it must be streamed, or a smaller model resident (PG8, section 5.3 of that map) | token stream, speed against ceilings | NONE | unowned |
+| 12 service API | Joins the iMac's lab path: signed kernels in, reports out (ports 47034 and 47035); adds a discrete GPU and Windows alongside | request answered | NONE | unowned |
 
 ## 3. What the machines share (so work is built once)
 
 | Shared piece | Used by | Where it lives | State |
 | --- | --- | --- | --- |
-| Kernel core (memory, scheduler, capabilities, IPC, Store, recovery) | all | `native/kernel/core`, `native/store`, `native/m5` | QEMU PASS; hardware on iMac and Pi (partial), Spark once |
-| NVMe driver | Spark, iMac (read-only) | `native/disk/disk_nvme.c` | QEMU PASS; iMac HARDWARE read-only |
-| Model inference on CPU | Pi (proven), others | `crates/aienos-infer`, `core/infer.c` | Pi HARDWARE |
-| Signed transport and UDP stack | all | `native/net/aienos_sec.c`, `aienos_net.c` | QEMU and host, TEST keys |
-| GPU path (firmware boot, MMU, channels) | Spark, PC | `docs/GB10_NATIVE_DEPENDENCY_MAP.md`, L192, L193, L202 | host simulation only |
-| Omega compiler and kernels | Spark first | Omega repo | host; 14 fixture kernels byte-identical (omega#419) |
+| Kernel core (memory, scheduler, capabilities, IPC, Store, recovery, M5 crypto, signed slots) | all | `native/kernel/core`, `native/store`, `native/m5` | QEMU PASS; hardware on iMac and Pi, Spark once |
+| NVMe driver | Spark, iMac, PC | `native/disk/disk_nvme.c`; queue depth work L199 | QEMU PASS; iMac HARDWARE read-only |
+| x86 kernel (cores, PCI, AHCI, xHCI, HDA, report) | iMac, PC | `native/kernel/x86` on `main` is 11 files; 23 on `feat/imac-gpu-bench` | iMac HARDWARE; PC needs vendor-neutral changes |
+| xHCI and keyboard classes | Spark, iMac, Pi (RP1), PC, Mac (DWC3) | `dev/xhci_fence.c`, `usb_kbd.c`, `usb_hid.c` | QEMU; iMac HARDWARE |
+| TPM CRB driver | Spark, PC | L200 | QEMU model only |
+| CPU model inference | Pi (proven), iMac and PC (need AVX2), Mac | `crates/aienos-infer`, `core/infer.c` | Pi HARDWARE only |
+| GPU path abstractions (context, channel, allocator, completion) | Spark, PC, Mac, iMac | L193 simulator, L192, L202, L214 | host simulation only |
+| Signed transport and UDP stack | all | `native/net/aienos_sec.c`, `aienos_net.c` | QEMU and host, TEST keys, roster of one |
+| Omega compiler, kernels, platform services | Spark first | Omega repo, L202 | host; 14 fixture kernels byte-identical (omega#419) |
+
+Not shared, so each machine pays separately: interrupt controller (GICv3, GICv2, APIC, AIC2), IOMMU (SMMUv3, none on Pi, VT-d, AMD-Vi, DART), boot handoff (ACPI, device tree, Apple tables), disk controller path, GPU.
 
 ## 4. The network between machines
 
-### 4.1 What exists (OBSERVED from source at `18e2765`)
+### 4.1 What exists (OBSERVED from source at `18e2765` and the machine maps)
 
-- **UDP stack** (`native/net/aienos_net.c`): Ethernet, ARP, IPv4, ICMP echo, UDP. No TCP, no TLS, no DHCP, no IPv6.
+- **UDP stack** (`native/net/aienos_net.c`): Ethernet, ARP, IPv4, ICMP echo, UDP. No TCP, no TLS, no DNS, no DHCP, no IPv6.
 - **Reliable channel** (`aienos_ctl.c`): ordered, exactly-once delivery with retransmit, TEST identity only.
-- **Signed transport** (`aienos_sec.c`, milestone M6-B): three-message handshake in the SIGMA pattern, Ed25519 identities, fresh X25519 keys per session, HKDF-SHA256, AES-256-GCM-SIV records, replay window, key ratchet. Proven in QEMU and host tests. **Two limits that matter here:** the keys are public TEST labels that protect nothing, and the peer list is "a pinned roster of one", so one machine can accept exactly one other.
-- **Drivers behind it**: virtio-net (QEMU only), Pi 5 GEM (send proven), iMac BCM57766 (send proven), Spark RTL8127 (none, L198).
-- **Lab paths already used on hardware**: the iMac report broadcast on UDP 47031, the iMac netboot spool with live kernel swap (branch `feat/imac-gpu-bench`, L142), and the ALLEN UDP courier that relays a question to the model server on the Spark (L039).
+- **Signed transport** (`aienos_sec.c`, milestone M6-B): three-message SIGMA-style handshake, Ed25519 identities, fresh X25519 keys, HKDF-SHA256, AES-256-GCM-SIV records, replay window, key ratchet. Proven in QEMU and host tests. **Two limits that matter:** the keys are public TEST labels that protect nothing, and the peer list is "a pinned roster of one".
+- **Drivers behind it:** virtio-net (QEMU), Pi 5 Gigabit MAC (send proven), iMac BCM57766 (send and netboot fetch proven), Spark RTL8127 (none, L198), PC (chip unknown), Mac (none; USB Ethernet first).
+- **Lab paths already used on hardware (iMac):** report broadcast UDP 47031 (unauthenticated, lab only), netboot 47032 and 47033 (kernels checked with Ed25519 before start), live kernel swap 47034 and GPU register console 47035 (HMAC plus counter) on `feat/imac-gpu-bench`; ALLEN's UDP courier relays a question to the Spark's model server (L039).
+- The word "gateway" appears nowhere in `native/net`, `docs/adr` or `docs/*.md` (OBSERVED by the iMac and Pi maps). It is a design item, not code.
 
-### 4.2 The gateway machine
+### 4.2 What the hub does today and the gateway
 
-AienOS has no TCP or TLS, so clients (browsers, the agents, `curl`) cannot talk to an AienOS machine directly. One machine that keeps its operating system sits in front and speaks HTTPS to clients and the signed transport to the AienOS machines (Spark map section 6, row G8). Today the model server on the Spark does this itself over Linux (`aien-serve-http`, port 18091).
+The Pi hub runs the tailnet's **Headscale** coordination server, a Tailscale node (100.64.0.3), Pi-hole DNS, the nginx front door, a Forgejo server, a vault and a WireGuard link to another site. The Spark runs its own Tailscale node and its own Forgejo (Spark map section 4). Today the model server on the Spark answers HTTPS over Linux itself.
 
-- **Who is it?** Unresolved: this is ledger item L203, Drake's decision. The Pi 5 hub is already the always-on Linux peer on the tailnet (Spark map section 6, INFERRED; hardware not inspected there). **Conflict to resolve:** the Pi is also a full AienOS target (section 2.3). If the Pi goes "Linux fully off" it cannot be the gateway. Recommendation: keep the Pi as gateway until a second always-on Linux machine exists, and treat "Pi Linux fully off" as the last step in section 5, not an early one.
-- **What the gateway needs that does not exist**: an HTTP-to-signed-transport translator (a small host program: unowned), a signed-transport peer list with more than one entry (section 4.3), and real identity keys (TRUST-1, section 7).
+AienOS has no TCP or TLS, so a browser, an agent or `curl` cannot talk to an AienOS machine. A **gateway** is a Linux machine that speaks HTTPS to clients and the signed transport to the AienOS machines. It does not exist in code.
+
+- **Who is it?** L203 (Drake's decision) is still open, but the Pi map and this page now agree on the recommendation: the Pi stays the always-on Linux hub and gateway until a second always-on Linux machine exists. The reason is physical: a native Pi window takes the tailnet coordination down for its whole length. The MacBook is the other candidate and is not always on.
+- **Effect on the Pi:** native Aienux on the Pi is a short window, not the resident system, until services move one at a time (DNS first) after TCP and TLS exist.
+- **What the gateway needs that does not exist:** an HTTP to signed-transport translator (host program), a peer list with one entry per AienOS machine, and real identity keys.
 
 ### 4.3 How machines reach each other without Linux, and Tailscale's replacement
 
-Tailscale does four jobs: it gives each machine a private address, authenticates each machine, finds a path through firewalls and home routers, and relays when no direct path exists. On AienOS machines the first two are already the signed transport. The last two are not built.
+Tailscale does four jobs: a private address per machine, authentication, a path through firewalls and routers, and relays. For AienOS machines the second is the signed transport; the others are not built. A native tailnet node needs the WireGuard data plane and Tailscale's control protocol, which runs over TCP and TLS (INFERRED, medium; the iMac and Pi maps did not read the protocol). None of TCP, TLS or WireGuard exists natively, and encryption math is never hand-rolled (Drake's exception to "build our own"), so vetted primitives or a vetted implementation are required for those parts.
+
+**Near term, no new code on the AienOS side:** the Linux hub advertises the home LAN as a subnet router, so the Spark, the Macs and the PC reach an AienOS machine at its LAN address, and the AienOS machines speak the signed UDP transport on the LAN (INFERRED, medium; iMac map section 9).
 
 | Piece | Today | Gap | Gate that retires it | Ledger |
 | --- | --- | --- | --- | --- |
 | Machine identity and authentication | Ed25519 plus X25519, TEST keys | Production keys from the owner key chain; machine ids; TRUST-1 BLOCKED_OPERATOR | handshake between two machines with owner-issued keys, TEST keys refused | unowned |
-| Many peers | roster of one | A roster of N signed by the owner: add, revoke, rotate; storage in the Store | a three-machine handshake matrix in QEMU, plus one revoked peer refused | unowned |
-| Addressing | LAN IPv4 and ARP only | A stable name per machine inside the roster so an address change does not break it | peer reachable after its IP changes | unowned |
-| Path across firewalls and routers | none | Same-LAN is enough for the Spark, iMac and Pi (INFERRED, low confidence: only the Spark address, 192.168.1.108, was observed; the iMac and Pi addresses were not read). A relay is only needed if a machine is on another network. UNKNOWN whether the MacBook or PC will ever be off-LAN: experiment is to ask Drake (section 7) | an AienOS machine reached from outside the LAN through a relay, or a written decision that off-LAN access stays with Tailscale on the gateway | unowned |
-| Remote shell and control | operator keyboard and screen only; the iMac swap path has a signed register console | A signed control console on every machine (the iMac console from `feat/imac-gpu-bench` is the pattern) | an operator command round-trip, signed, on hardware | unowned |
-| Time | none (no RTC on the Spark path yet, L200) | Network time over the signed transport, so replay windows and certificates have a date | wall clock set from a peer, drift measured | unowned |
-
-Rule from Drake's own instructions: do not hand-roll crypto. The primitives above already exist in the tree and are reviewed (`native/crypto`, `native/sig`, `x25519.c`); the missing pieces are protocol and roster work around them. A WireGuard-compatible tunnel is not planned: the tailnet stays on the gateway for traffic that must leave the LAN.
+| Many peers | roster of one | A roster of N signed by the owner: add, revoke, rotate; kept in the Store | a three-machine handshake matrix in QEMU plus one revoked peer refused | unowned |
+| TCP | none | TCP in `native/net`, tested against QEMU and a hostile corpus like the UDP stack | a TCP echo and a file-sized transfer in QEMU with loss and reordering | unowned |
+| TLS 1.3 | none | UNKNOWN which mandatory TLS 1.3 pieces `native/crypto` lacks (experiment: list the required suite against the tree). Vetted primitives only | a TLS server and client handshake against a reference implementation in QEMU | unowned |
+| WireGuard data plane and Headscale control protocol | none | Both are needed for a native tailnet node; near-term route above avoids them | an AienOS machine appears as a tailnet node, or a written decision that the hub subnet router is permanent | unowned |
+| DNS | none | A UDP DNS server is possible without TCP; the proposed first native hub service (Pi-hole role) | DNS answers on the Pi from Aienux | unowned |
+| Addressing | LAN IPv4 and ARP | A stable name per machine inside the roster | peer reachable after its address changes | unowned |
+| Path across firewalls and routers | none | Same-LAN is enough if all machines are home machines; UNKNOWN whether the Mac or PC will leave the LAN (Drake) | off-LAN reach through a relay, or a written decision that the hub keeps it | unowned |
+| Remote control | operator keyboard and screen; signed register console (47035) on the iMac bench | A signed control console on every machine (the iMac console is the pattern) | an operator command round-trip, signed, on hardware | unowned |
+| Time | no RTC read yet (Spark L200, Pi PI13, iMac IM23) | RTC read plus network time over the transport | wall clock set from a peer, drift measured | L200 for Spark RTC; rest unowned |
 
 ## 5. Linux (or macOS, Windows) fully off, per machine
 
-"Off" means: the machine boots AienOS from its own disk by default, and the old operating system is gone or is only a recovery option. Each step is an operator step that only Drake can do (section 7) and none is authorised by this page.
+"Off" means: the machine boots AienOS from its own disk by default, and the old operating system is gone or only a recovery option. Every step is an operator step for Drake (section 7); none is authorised by this page. The maps differ on what "off" even means, so it is stated per machine.
 
-| Machine | Today's OS | Blocking rungs | Order to "off" | Operator steps |
-| --- | --- | --- | --- | --- |
-| Spark | Ubuntu on ext4, Secure Boot off, BootOrder `0001` ubuntu | rungs 1 to 8 on hardware, then 9 to 12 for the model; the gateway and moved services (section 4.2) | Spark map section 7, items 1 to 20: attended boots 1 to 3, native CPU run, GPU path, move non-model work off the box, installer, soak with Linux still on the disk, then boot-order change, then wipe last | plug in monitor, keyboard and the recovery stick; attended boots; photograph the console; key ceremony; allow GSP firmware load; look at the unit (L204); decide where build, judge, git and agents live (L203); lift the `BootOrder` invariant in writing for the one cutover change |
-| iMac | macOS or whatever is on the Apple disk: UNKNOWN to this page (pending L210) | disk write and Store on the iMac, boot from its own disk (#418), keyboard (#415), VT-d (#411), model run | pending `docs/IMAC_AIENOS_MAP.md` | boot-picker attended boots (Option key) are already how every run happens; firmware work is on hold (blocked twice by the automated cyber safeguard, see `~/handoffs/2026-10-18-imac-firmware-backup.md`, do not retry) |
-| Pi 5 | Raspberry Pi OS or similar on the hub | the gateway conflict (section 4.2), network receive, a production unlock tier (no TPM) | last, after another gateway exists | pulling the plug for the power-cut test (PI5-8 plan item R); owner-key signing on the Mac with PIN and touch (item Q6) |
-| MacBook | macOS | all rungs UNKNOWN | pending L208 map | pending L208 map |
-| PC | Windows 11 | all rungs UNKNOWN | pending L209 map | one-line device dump for Drake (L209 produces it) |
+| Machine | Today's OS | Target | Blocking rungs | Order | Operator steps |
+| --- | --- | --- | --- | --- | --- |
+| Spark | Ubuntu on ext4, Secure Boot off, BootOrder `0001` ubuntu | Linux fully off, serving the 27B model | rungs 1 to 8 on hardware, then 9 to 12; services moved (section 4.2) | Spark map section 7, items 1 to 20: attended boots 1 to 3, native CPU run, GPU path, move non-model work off, installer, soak with Linux still on the disk, boot-order change, wipe last | monitor, keyboard and recovery stick; attended boots; key ceremony; allow GSP firmware load; look at the unit (L204); decide L203; lift the `BootOrder` invariant in writing for the one cutover change |
+| iMac | macOS on the Fusion Drive (what is on the disk is not recorded in the map: GPT valid, no AIENOS partition at the first read, UNKNOWN beyond that) | resident Aienux booting from its own disk through Apple's firmware | #418 second boot, VT-d, Store write path, GPU, model | land the open PR stack in order, then the read-only lab boot, then the rest (iMac map section 6) | power on once per lab kernel with the stick; tell the orchestrator what the screen shows; listen for the fan (IM20); allow the first GPU firmware load |
+| Pi 5 | Raspberry Pi OS on a USB stick, hub services | native windows now; resident Aienux only after the hub's services have another home | network receive, USB or UART input, production unlock, TCP and TLS | last; after a second always-on Linux machine exists | one-time boot menu setting per window; a USB-serial cable to the header; pulling the plug for the power-cut test; owner-key signing on the Mac |
+| MacBook | macOS 26.6.2 | tethered Aienux; macOS stays; a standalone boot only after a soak | everything on the Mac ladder; the firmware blobs (F4) | Mac map section 9, steps 1 to 15 | choose which Mac (this one is the key-ceremony machine); one-time recovery setup (new boot container, Permissive Security, installs m1n1 stage 1; undoable from recovery); USB-C cable from the Spark; no macOS updates before first boot |
+| PC | Windows 11 | **Windows is kept.** Aienux as a dual boot beside it, never replacing Windows Boot Manager | AMD-Vi, NIC driver, GPU through FSP | PC map phases 0 to 4 | run the inventory (L212); save the BitLocker key first; boot-menu key at power-on; decide the storage home; allow GPU firmware load; decide whether a permanent boot entry is wanted |
 
 ## 6. The future: what is measured, what is planned, and what retires each
 
@@ -188,42 +226,49 @@ Everything here is PLANNED unless the status column says measured. "Retired by" 
 
 | Item | Status | Retired by | Ledger |
 | --- | --- | --- | --- |
-| **Omega as the only language** (ADR 0024): the kernel itself written in Omega, C kept only for the pieces hardware forces | PLANNED; Omega floats (R2) done (L135); C kernel and Rust scaffolding exist today | Omegese rungs K1 to K6 below | L184 (hermes-chat, coordinator builds it personally) |
+| **Omega as the only language** (ADR 0024): the kernel written in Omega, C kept only where hardware forces it | PLANNED; C kernel and Rust scaffolding exist today; R2 floats in Omega done (L135) | Omegese rungs K1 to K6 below | L184 |
 | K1: bytes, text and long arrays in Omegese | PLANNED | merged with tests, local `make` per rung | L184 |
 | K2: peek and poke of machine memory | PLANNED | same | L184 |
 | K3: system words (the calls the kernel needs) | PLANNED | same | L184 |
 | K4: flat placement (fixed layout of code and data) | PLANNED | same | L184 |
 | K5: units (L096) | PLANNED | same | L184, L096 |
-| K6: Aienux stage 0 written in Omega boots the Spark | PLANNED | a receipt from the real Spark, plus the final head judged once on the Spark (Drake's one-PR rule for #601) | L184 |
+| K6: Aienux stage 0 written in Omega boots the Spark | PLANNED | a receipt from the real Spark; the final head judged once on the Spark (Drake's one-PR rule for #601) | L184 |
 | Omega platform services (cut A) so Omega runs without Linux | in flight | omega gates green on hosted and freestanding builds | L202 |
-| AienOS installer: write the kernel and Store onto a blank disk, A/B slots, rollback | PLANNED; slot loader gate `SLOT_LOADER` PASS in QEMU only | an install from a recovery stick on a real machine, with a forced-failure rollback | unowned |
-| AienOS updater: signed update of the kernel and system, on every machine, with rollback and no Linux | PLANNED; nothing exists beyond the slot loader | a signed update applied and rolled back on hardware | unowned |
-| Multi-machine model serving: one model spread across the Spark, the PC and others, or requests routed by load | PLANNED; wormhole and heartbeat work (L190) is a different thing: a draft model on one machine | two machines answering one prompt through the signed transport, output identical to one machine | unowned |
-| Speed against the machine ceiling | MEASURED on Linux: the speed audit (L123) and machine ceiling (L151) hold the numbers and their receipts; native speed NONE | native token rate reported as a fraction of the measured ceiling | L123, L151 and the SPEED lines |
-| Production trust chain: owner keys, Secure Boot on, anti-rollback | PLANNED; BLOCKED_OPERATOR | TRUST-1 qualification receipt | Drake |
+| **Reimagined drivers:** a driver as a checked Omegese device contract (registers, rings, state machine) that the kernel compiles, with the chip model and tests generated from it, measured against the hand-written NVMe and virtio-net drivers. This is the plan for the many drivers in sections 2.1 to 2.5 | PLANNED, ADR and prototype in flight | a generated driver passes the same QEMU gates as the hand-written one | L215 |
+| AienOS installer: write kernel and Store onto a blank disk, A/B slots, rollback | PLANNED; `SLOT_LOADER` PASS in QEMU only; iMac own-disk boot (#418) is the first real slot code | an install from a recovery stick on a real machine with a forced-failure rollback | unowned |
+| AienOS updater: signed update of kernel and system on every machine, rollback, no Linux | PLANNED; nothing beyond the slot loader | a signed update applied and rolled back on hardware | unowned |
+| TCP, TLS 1.3, then HTTP natively (shared by the Spark gateway, git, Pi hub services, Tailscale replacement) | PLANNED; none exists | section 4.3 gates | unowned |
+| Multi-machine model serving: one model spread across the Spark, the PC and others, or requests routed by load | PLANNED; L190 (draft and verifier on one machine) is a different thing; the PC cannot hold the 27B in 12 GB and the iMac GPU is far smaller | two machines answer one prompt through the signed transport, output identical to one machine | unowned |
+| Native model run beyond the Pi | Pi MEASURED at 1.20 tok/s (about 5.68% of an unverified vendor ceiling); Spark, iMac, PC, Mac NONE; Linux Spark numbers and ceilings are in L123 and L151 | native token rate reported as a fraction of the measured ceiling per machine | unowned per machine |
+| Production trust chain: owner keys, Secure Boot on, anti-rollback (no TPM on Pi or Mac; SEP or an owner-held counter UNKNOWN) | PLANNED; BLOCKED_OPERATOR | TRUST-1 qualification receipt | Drake |
 | Public proof (one-command 27B demo) | in flight, runs on Linux today | demo on a clean Spark | L182 |
 
 ## 7. What Drake does, so nothing is asked twice
 
-Only Drake can do these. Each belongs to one ledger id so the coordinator can find it.
+Only Drake can do these. Each belongs to one ledger id so the coordinator can find it. Do not ask again anything marked answered.
 
-| Item | Why only Drake | Where it applies | Ledger |
+| Item | Why only Drake | Where | Ledger |
 | --- | --- | --- | --- |
-| Decide where build, judge, git and agents live after Linux is off; approve moving the Phase 3 judge | it changes how the whole project is tested | all machines | L203 |
-| Look at the Spark unit: ConnectX ports present? serial header present? | the box shows no ConnectX device and nothing in software can see the connector | Spark | L204 |
-| Attended boots: plug in monitor, keyboard and the recovery stick, press the button, send a photo or let the report come over the cable | physical presence | Spark (three boots), iMac (every run), Pi (power-cut test) | L197 (Spark checklist) |
-| Allow the first GPU firmware load and every later GPU use | irreversible on hardware | Spark, then the PC | L192 follow-on, unowned |
-| Owner key ceremony (YubiKey, PIN and touch), machine ids for the hardware image | secret material | all machines | TRUST-1 |
-| Run the one-line device dump on the PC and the equivalent on the MacBook | read-only, but only Drake is at the machines | PC, MacBook | L208, L209 |
-| Tell the program whether the MacBook and PC will ever be outside the home network | decides whether a relay is built (section 4.3) | network | unowned (new) |
-| Lift the `BootOrder` invariant in writing for the one cutover change; change the boot order at cutover | the rule currently forbids it | Spark first | unowned (new) |
-| Reset or power-cycle tests for recovery | physical | Spark, Pi | L197 |
+| Decide where build, judge, git and agents live after Linux is off; approve moving the Phase 3 judge; confirm the Pi hub stays the gateway until a second always-on Linux machine exists | changes how the project is tested and what the tailnet depends on | all | L203 |
+| Look at the Spark unit: ConnectX ports or a serial header? | software cannot see a connector that enumerates nothing | Spark | L204 |
+| Run the PowerShell inventory on the PC and send the file | read-only, but only Drake is at the machine | PC | L212 |
+| Save the BitLocker recovery key before any firmware setting changes | Windows may ask for it once | PC | L209 map |
+| Choose which MacBook (this one holds the owner-key ceremony, Activation Lock on, 752 cycles); the one-time recovery setup; a USB-C cable from the Spark; say whether a separate USB SSD may be used for Store tests; no macOS updates before first boot | changes the Mac's boot setup | MacBook | L208 map |
+| Attended boots: monitor, keyboard, recovery stick or lab stick, press the button, send a photo or let the report come over the cable | physical presence | Spark (three), iMac (each lab kernel), Pi (each window), PC (boot-menu key) | L197 for the Spark |
+| Listen to the iMac fan on a long run (IM20); look at the machine | no sensor record exists | iMac | iMac map |
+| Allow the first GPU firmware load and every later GPU use | irreversible on hardware | Spark, PC, iMac, Mac | per GPU row |
+| Allow firmware blobs extracted from macOS (Wi-Fi, Bluetooth, GPU, display), and any Wi-Fi or Bluetooth firmware on other machines | a firmware load and a licence question | MacBook, iMac, Pi | per row |
+| A USB-serial cable to the Pi UART header; pull the plug for the power-cut test; owner-key signing on the Mac with PIN and touch | physical | Pi | PI5-8 plan |
+| Owner key ceremony and machine ids for hardware images | secret material | all | TRUST-1 |
+| Lift the `BootOrder` invariant in writing for the one cutover change; change the boot order at cutover; decide a permanent PC boot entry | the rule forbids it today | Spark first, PC | unowned |
+| Say whether the MacBook or PC will ever be off the home network | decides whether a relay is built | network | unowned |
+| Decide on the iMac flash chip and an external programmer (IM24) | stopped twice by an automated safeguard, do not retry | iMac | none, on hold |
 
-Already answered, do not ask again: Wi-Fi, Bluetooth and audio drivers for the Spark are wanted (L206, L207), after the earlier drop (L205 dropped). iMac firmware replacement is on hold and must not be retried.
+Already answered: Wi-Fi, Bluetooth and audio drivers for the Spark are wanted (L206, L207, after the earlier drop in L205). iMac firmware replacement is on hold and must not be retried.
 
 ## 8. Unowned rows for the coordinator
 
-Run these lines as written. Each has an owner placeholder, a title and the gate that closes it. Rows already owned by a ledger id are not listed. Rows for the MacBook and the PC wait for their maps and are added by the next revision of this page.
+Run these lines as written. Rows already owned by a ledger id or by an open PR on the desk are not listed.
 
 ```
 ledger add unassigned "Spark: installer + rollback-safe A/B slots on a blank disk (SLOT_LOADER, DISK_LAYOUT NOT_RUN)" "install from a recovery stick on a real machine with a forced-failure rollback; DISK_LAYOUT PASS"
@@ -237,25 +282,44 @@ ledger add unassigned "Spark: Omega cut E, matmul, attention, launchers, session
 ledger add unassigned "Spark: native CPU inference with aienos-infer on the Spark, speed against the memory ceiling (G7 step 10)" "tok/s and fraction of the measured memory ceiling"
 ledger add unassigned "Spark: 27B load from NVMe, KV on GPU, token stream (G7)" "a token stream from the real Spark under AienOS"
 ledger add unassigned "Gateway: HTTP to signed-transport translator, and the request path from another machine (G8)" "a request from another machine answered by the Spark"
+ledger add unassigned "Spark: move Atlas data and Forgejo off the TPM-sealed mounts, retire or relocate every Linux service (P3, U1 to U7, U10)" "service list in the Spark map, each row moved or retired with a receipt"
 ledger add unassigned "Network: signed-transport roster of N peers (add, revoke, rotate), stored in the Store" "three-machine handshake matrix in QEMU plus one revoked peer refused"
 ledger add unassigned "Network: production machine identity (owner-issued keys, TEST refused) for the signed transport" "handshake between two machines with owner-issued keys, TEST keys refused"
+ledger add unassigned "Network: native TCP in native/net" "TCP echo and file-sized transfer in QEMU under loss and reordering, hostile corpus"
+ledger add unassigned "Network: TLS 1.3 with vetted primitives; list what native/crypto lacks first" "TLS handshake against a reference implementation in QEMU"
+ledger add unassigned "Network: native tailnet node or written decision that the Linux hub subnet router is permanent (WireGuard data plane, Headscale control protocol)" "an AienOS machine appears as a tailnet node, or Drake records the decision"
+ledger add unassigned "Network: first native hub service, DNS over UDP on the Pi (Pi-hole role)" "DNS answers served by Aienux on the Pi"
 ledger add unassigned "Network: network time over the signed transport" "wall clock set from a peer with drift measured"
-ledger add unassigned "Network: signed control console on every machine (pattern: iMac swap console)" "signed operator command round-trip on hardware"
-ledger add unassigned "Network: off-LAN reach decision (relay vs gateway-held Tailscale)" "Drake answers; if relay, a path through a relay in QEMU"
-ledger add unassigned "Spark: move Atlas data and Forgejo off the TPM-sealed mounts, retire or relocate every Linux service (P3, U1 to U7, U10)" "service list in the Spark map, each row moved or retired with a receipt"
-ledger add unassigned "iMac: VT-d DMA confinement (#411)" "VT-d QEMU gate PASS then physical report"
-ledger add unassigned "iMac: boot from own disk, finish #418 after the FAT timestamp fix, QEMU bootdisk test and a physical run" "second power-on without stick or network starts the kernel from disk"
+ledger add unassigned "Network: signed control console on every machine (pattern: iMac port 47035 console)" "signed operator command round-trip on hardware"
+ledger add unassigned "Network: off-LAN reach decision (relay vs hub-held Tailscale)" "Drake answers; if relay, a path through a relay in QEMU"
+ledger add unassigned "iMac: VT-d DMA confinement (IM4)" "VT-d QEMU gate PASS (QEMU intel-iommu) then physical report"
 ledger add unassigned "iMac: disk write path and Store v1 on the iMac" "Store write, flush and crash recovery on the real iMac disk"
-ledger add unassigned "Pi 5: network receive (RX not seen in 400 ms, PI5-NET-3)" "an incoming frame received on the real Pi"
-ledger add unassigned "Pi 5: production unlock tier (no TPM), replace the qualification card request" "unlock from an operator secret, no card file"
+ledger add unassigned "iMac: one read-only lab boot listing xHCI ports, GPU VRAM size and memory controller, Thunderbolt state, RAPL watts (IM13, IM17, IM19, IM21)" "report lines resolving each UNKNOWN row"
+ledger add unassigned "iMac: fan and temperature under a long native run (IM20, Drake's question 2026-10-18)" "fan speed and temperature read over a long run, plus a human listening"
+ledger add unassigned "iMac: x86 AVX2 inference path and image target, first CPU token (IM26)" "token output equals the llama.cpp reference; tok/s against a measured memory ceiling"
+ledger add unassigned "iMac: Wi-Fi 14e4:43ba, Thunderbolt, SD reader drivers against chip models (IM16, IM18, IM19)" "model gates; firmware inventory with licences"
+ledger add unassigned "Pi 5: network receive (no frame in 400 ms, PI9) and UDP echo, then first signed datagram Spark to Pi" "an incoming frame received on the real Pi; signed datagram round trip"
+ledger add unassigned "Pi 5: UART input and RP1 xHCI keyboard so a person can type the unlock secret (PI5, PI6, PI12)" "unlock from an operator secret, no card file"
+ledger add unassigned "Pi 5: one lab image printing started cores, a bandwidth loop, temperature and fan state, RTC value (PI2, PI13, PI14, PI-M3)" "report lines from the real Pi"
+ledger add unassigned "Pi 5: multi-core inference, speed against a measured memory ceiling (PI-M3)" "tokens identical to the reference; tok/s as a fraction of the measured ceiling"
+ledger add unassigned "Pi 5: Wi-Fi, Bluetooth, GPIO and I2C and SPI, HDMI driver models (PI15 to PI18)" "documentation quote or DOCS SILENT before chip code; model gates"
+ledger add unassigned "MacBook: platform layer, device-tree parser, raw Image entry, AIC2, RTKit client, DART and SART on chip models (D1 to D6)" "QEMU boot from a synthetic device tree; AIC2 and RTKit model tests"
+ledger add unassigned "MacBook: tethered boots 1 to 4 (proxy read-only, kernel alive, framebuffer, disk read-only)" "pass lines per boot with the Mac returning to macOS unchanged"
+ledger add unassigned "MacBook: ANS2 NVMe, SMC, MTP keyboard, USB-C PD and DWC3 USB, USB Ethernet (D4, D7 to D10)" "model gates, then a UDP report from the Mac"
+ledger add unassigned "PC: make the x86 kernel vendor-neutral on a clean base (Intel-only checks, x2APIC, NVIDIA display match)" "QEMU q35 with an AMD CPU model boots the kernel; iMac gates still pass"
+ledger add unassigned "PC: AMD-Vi driver with IVRS parser against QEMU's emulated device (PD3)" "IOMMU state printed before any DMA; a device granted a range only"
+ledger add unassigned "PC: NIC driver for the chip the inventory names, plus the UDP report (PD5)" "one frame out of the PC seen on the LAN"
+ledger add unassigned "PC: FSP boot-command encoder and GB202-family image extraction (PG2); second memory pool in the GPU simulator (PG3)" "host tests against driver structures; simulator vector add with two pools"
+ledger add unassigned "PC: 12 GB model policy, stream a 27B or run a smaller resident model (PG8)" "token stream on the PC with a stated policy and speed against the ceiling"
 ledger add unassigned "Multi-machine model serving across the Spark and the PC (or others)" "two machines answer one prompt over the signed transport, output identical to one machine"
 ```
 
-## 9. Limits of this draft and what the next revision does
+## 9. Limits of this document and what it did not read
 
-- Rows tagged PROVISIONAL (iMac, Pi) were built from repo files and hand-off notes read on 2026-10-20, not from the L210 map. No test was run for this page. Where a row says `UNKNOWN to this page`, the map may already know.
-- The MacBook and PC sections are placeholders. Revision 2 replaces them from L208 and L209 when their READY lines appear in `~/handoffs/2026-10-18-pr-desk.md`.
-- The `ledger add` block is complete only for the Spark, iMac, Pi and the network. It will grow with the two pending maps.
-- Gate names for the iMac and Pi come from the evidence folders and `GATES.md`; I did not re-run any gate.
-- The Spark row for "NVMe queue depth", "TPM" and the others carry L191's own tags; this page does not upgrade them.
-- Reuse search: origin/main, `git branch -r` (iMac, Pi, Spark branches read by name and last commit), sibling worktrees `~/workspace/aienos-*` (three map worktrees exist and are empty), `~/handoffs` (iMac and Pi hand-offs), the ledger through L212, `docs/SPARK_REPLACE_LINUX.md` on `origin/feat/spark-replace-linux-map`. No existing document covers all five machines or the multi-peer network; `docs/GB10_NATIVE_DEPENDENCY_MAP.md` covers only the Spark GPU path. ADR 0010 (fabric) is named in `ROADMAP.md` and not yet read for this page.
+- Revision 2, 2026-10-20, after all four machine maps landed (`97a0945`, `1d77025`, `eb552cb`; Spark `bb2399f`). No test was run for this page. Gate names, hardware results and speeds are quoted from the maps, PR bodies, evidence folders and receipts and were not re-run. A PR body is its author's claim, and the iMac PRs are still open.
+- Where the maps disagree with each other or with the ledger, the map is right and the ledger row is stale: iMac GPU is Polaris 10 `1002:67df` (the code and L143 say Polaris 11; fixer L213 is correcting it).
+- The Pi map's ceiling of 21.13 tok/s uses a vendor memory figure that is not from this repo (UNVERIFIED). The 5.68% is therefore a bound, not a result.
+- Tailscale protocol details (control protocol, TCP and TLS) are INFERRED from general knowledge by the iMac and Pi maps and were not read here.
+- The Spark map's tags are not upgraded by this page. UNKNOWN rows stay UNKNOWN until their named experiment is run.
+- No time, effort or speed estimate appears here except those tied to a receipt id.
+- Reuse search: origin/main, `git branch -r`, the four map branches read with `git show`, sibling worktrees `~/workspace/aienos-*`, `~/handoffs` (iMac, Pi, Spark inventories and hand-offs), the ledger through L216, the mind map note on the iMac joining Tailscale as quoted by the iMac map. Not read: ADR 0010 (fabric), ADR 0020, ADR 0024 in full, the iMac PR bodies and the Pi runs beyond what the maps quote, and the raw MacBook and Pi inventory folders. No existing document covers all five machines or a multi-peer network.
