@@ -98,6 +98,13 @@ const struct ck_x86_storage_result *ck_x86_storage(uint64_t rsdp, struct ck_fram
                                                    uint64_t map_top);
 /* kmain_x86.c: maps [pa, pa + len) uncached when it lies above the identity map. */
 int ck_x86_map_mmio(uint64_t pa, uint64_t len);
+/* The boot sequence (x86/boot_x86.c, CK_BOOT_SHOW=1): the PCI function with these ids (pci_x86.c), the
+ * console paused while the night plays (console_x86.c), and the night itself on the GOP framebuffer. */
+volatile uint8_t *ck_x86_pci_find(uint16_t vendor, uint16_t device, uint8_t bdf[3]);
+void ck_x86_console_fb_pause(void);
+void ck_x86_console_fb_resume(void);
+void ck_x86_boot_show(volatile uint32_t *fb, uint32_t w, uint32_t h, uint32_t pitch, uint32_t format,
+                      struct ck_frames *fr, uint64_t tsc_hz);
 /* ahci_x86.c: one AHCI controller at abar, polled, read-only. */
 void ck_x86_ahci_start(unsigned ctrl, uint64_t abar, struct ck_frames *fr, uint64_t tsc_hz);
 unsigned ck_x86_ahci_disks(void);

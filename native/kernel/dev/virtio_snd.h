@@ -36,11 +36,19 @@ size_t vsnd_cmd_pcm(uint8_t *out, size_t cap, uint32_t code, uint32_t stream);
 int vsnd_pick_output(const uint8_t *resp, size_t len, uint32_t n);
 
 #ifndef CK_HOSTED
+/* Kernel side. DMA bytes the driver needs after the rings (command, reply,
+ * four 100 ms periods). */
+#define VSND_EXTRA_BYTES (2u * 4096u + 4u * 20480u)
+/* Prepares the stream on a device the caller brought up with 3 queues
+ * (control, event, tx), before DRIVER_OK; mem/bus = VSND_EXTRA_BYTES after the
+ * rings. 0 and a "virtio_snd: ..." line, or < 0 with a line saying why not. */
+int ck_vsnd_attach(vq_dev *dev, uint8_t *mem, uint64_t bus);
+#ifndef CK_X86
 #include "pci.h"
-/* Kernel side. Finds a virtio-sound PCI function, confines its DMA and
- * prepares the stream. 0 and a "sound: virtio ..." line, or < 0 with a line
- * saying why not (no device: the night plays silent). */
+/* aarch64: finds the virtio-sound PCI function, confines its DMA (virtio_bind.h)
+ * and attaches. No device: < 0, and the night plays silent. */
 int ck_vsnd_open(const pci_system *pci);
+#endif
 /* Called every turn of the boot loop with the night's clock: starts the
  * stream just before the chirp, keeps it fed, stops it after. Returns 1
  * while it still has work, 0 when done or off. */

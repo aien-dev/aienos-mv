@@ -849,6 +849,14 @@ static __attribute__((noreturn)) void kernel_main(void *arg)
     }
 
     const struct ck_x86_storage_result *st = ck_x86_storage(h->rsdp, &frames, tsc_hz, mm.top);
+#if CK_BOOT_SHOW
+    /* The boot sequence (x86/boot_x86.c): the night and its chirp, once, after the PCI walk. */
+    if (h->fb_status == CK_HANDOFF_FB_PRESENT && mm.fb_ok)
+        ck_x86_boot_show((volatile uint32_t *)(uintptr_t)h->fb_base, h->fb_width, h->fb_height, h->fb_pitch,
+                         h->fb_format, &frames, tsc_hz);
+    else
+        ck_puts("boot-show: skipped (no linear GOP framebuffer)\n");
+#endif
     ck_puts("kernel: alive\n");
     ck_printf("summary: cores=%u/%u timer=ok sata_disks=%u nvme_disks=%u gpt_valid=%u writes=none net=%s\n",
               sr.started + 1, sr.listed, st->ahci_disks, st->nvme_disks, st->gpt_valid,

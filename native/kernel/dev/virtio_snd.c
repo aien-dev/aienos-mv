@@ -67,7 +67,6 @@ int vsnd_pick_output(const uint8_t *resp, size_t len, uint32_t n)
 #ifndef CK_HOSTED
 #include "../ui/chirp.h"
 #include "ck.h"
-#include "virtio_bind.h"
 
 #define VSND_SPINS 200000000u
 #define VSND_PERIOD_FRAMES 4800u /* 100 ms */
@@ -81,7 +80,7 @@ int vsnd_pick_output(const uint8_t *resp, size_t len, uint32_t n)
 enum { OFF, READY, PLAYING, DONE };
 
 static struct {
-    vq_bind b;
+    vq_dev *dev;
     int state;
     uint32_t stream;
     uint8_t *cmd, *resp, *slot;
@@ -96,21 +95,20 @@ static int control(size_t len, uint32_t resp_len)
     vq_buf b[2] = {{s.cmd_bus, (uint32_t)len, 0}, {s.resp_bus, resp_len, 1}};
     uint32_t wrote = 0;
     memset(s.resp, 0, 8);
-    int e = vq_call(&s.b.dev, VSND_VQ_CONTROL, b, 2, VSND_SPINS, &wrote);
+    int e = vq_call(s.dev, VSND_VQ_CONTROL, b, 2, VSND_SPINS, &wrote);
     return e ? -1000 - e : (wrote >= 4 && get32(s.resp) == VSND_S_OK ? 0 : (int)get32(s.resp));
 }
 
-int ck_vsnd_open(const pci_system *pci)
+int ck_vsnd_attach(vq_dev *dev, uint8_t *mem, uint64_t bus)
 {
-    /* 0x1059 = 0x1040 + device id 25 (virtio 1.x 4.1.2.1). Queues: control, event, tx. */
-    if (vq_bind_open(&s.b, "virtio_snd", pci, 0x1059u, 3, 2u * 4096u + VSND_SLOTS * VSND_SLOT_BYTES))
-        return -1;
-    vq_ready(&s.b.dev);
-    s.cmd = s.b.mem + s.b.rings, s.cmd_bus = s.b.phys + s.b.rings;
+    _Static_assert(VSND_EXTRA_BYTES == 2u * 4096u + VSND_SLOTS * VSND_SLOT_BYTES, "VSND_EXTRA_BYTES");
+    s.dev = dev;
+    vq_ready(s.dev);
+    s.cmd = mem, s.cmd_bus = bus;
     s.resp = s.cmd + 4096u, s.resp_bus = s.cmd_bus + 4096u;
     s.slot = s.resp + 4096u, s.slot_bus = s.resp_bus + 4096u;
     /* struct virtio_snd_config: jacks, streams, chmaps */
-    uint32_t streams = vq_cfg32(&s.b.dev, 4);
+    uint32_t streams = vq_cfg32(s.dev, 4);
     if (streams == 0 || streams > 64) {
         ck_printf("virtio_snd: no PCM streams (%u)\n", streams);
         return -2;
@@ -146,7 +144,7 @@ static int feed(unsigned i)
     ck_chirp_fill((int16_t *)(void *)(p + VSND_SLOT_DATA), s.pos, VSND_PERIOD_FRAMES);
     vq_buf b[3] = {{bus, 4, 0}, {bus + VSND_SLOT_DATA, VSND_PERIOD_BYTES, 0}, {bus + 16, 8, 1}};
     uint16_t head;
-    if (vq_post(&s.b.dev, VSND_VQ_TX, b, 3, &head))
+    if (vq_post(s.dev, VSND_VQ_TX, b, 3, &head))
         return -1;
     s.slot_of_head[head] = (uint8_t)i;
     s.busy[i] = 1;
@@ -181,7 +179,7 @@ int ck_vsnd_step(uint32_t night_ms, uint32_t audio_frame)
     uint16_t head;
     uint32_t wrote;
     int done_any = 0;
-    while (vq_reap(&s.b.dev, VSND_VQ_TX, &head, &wrote) == VQ_OK) {
+    while (vq_reap(s.dev, VSND_VQ_TX, &head, &wrote) == VQ_OK) {
         unsigned i = s.slot_of_head[head];
         uint8_t *p = s.slot + i * VSND_SLOT_BYTES;
         if (wrote < 4 || get32(p + 16) != VSND_S_OK)
@@ -191,7 +189,7 @@ int ck_vsnd_step(uint32_t night_ms, uint32_t audio_frame)
         if (busy-- == 1 && s.pos < VSND_END_FRAME)
             s.starved++; /* the device ran out before this turn came */
     }
-    if (s.b.dev.broken) {
+    if (s.dev->broken) {
         ck_printf("virtio_snd: device broken mid-stream\n");
         s.state = DONE;
         return 0;
@@ -213,5 +211,17 @@ int ck_vsnd_step(uint32_t night_ms, uint32_t audio_frame)
               s.start_ms, s.start_frame, s.periods, s.starved, s.bad, rc ? "refused" : "ok", night_ms);
     s.state = DONE;
     return 0;
+}
+#endif
+
+#if !defined(CK_HOSTED) && !defined(CK_X86)
+#include "virtio_bind.h"
+static vq_bind snd_bind;
+int ck_vsnd_open(const pci_system *pci)
+{
+    /* 0x1059 = 0x1040 + device id 25 (virtio 1.x 4.1.2.1). Queues: control, event, tx. */
+    if (vq_bind_open(&snd_bind, "virtio_snd", pci, 0x1059u, 3, VSND_EXTRA_BYTES))
+        return -1;
+    return ck_vsnd_attach(&snd_bind.dev, snd_bind.mem + snd_bind.rings, snd_bind.phys + snd_bind.rings);
 }
 #endif

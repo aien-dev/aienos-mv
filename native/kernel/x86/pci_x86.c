@@ -305,3 +305,15 @@ const struct ck_x86_storage_result *ck_x86_storage(uint64_t rsdp, struct ck_fram
               res.nvme_disks, res.gpt_valid);
     return &res;
 }
+
+/* A function the walk found, by vendor and device id (the boot sequence's
+ * virtio-sound, x86/boot_x86.c): its configuration space, or NULL. */
+volatile uint8_t *ck_x86_pci_find(uint16_t vendor, uint16_t device, uint8_t bdf[3])
+{
+    for (unsigned i = 0; i < nfound; i++)
+        if (found[i].vendor == vendor && found[i].device == device) {
+            bdf[0] = found[i].bus, bdf[1] = found[i].dev, bdf[2] = found[i].fn;
+            return found[i].cfg;
+        }
+    return 0;
+}

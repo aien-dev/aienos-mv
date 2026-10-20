@@ -1,6 +1,6 @@
 # First run: from power on to "Allen is ready"
 
-Status: DRAFT 1 (L266, 2026-10-20). This is the spec the setup wizard (L267) and the driver builder (L268) build
+Status: DRAFT 2 (L266, 2026-10-20). This is the spec the setup wizard (L267) and the driver builder (L268) build
 against. Change it by ledger note on L266; the owner folds the notes in and bumps the draft number.
 
 What this page fixes: every screen a person sees after AienOS is installed (or after `aienos-run` starts it), in
@@ -198,7 +198,8 @@ Then the model choice (screen 7c).
 
 Allen checks, in this order, without asking: models already on this computer (local disks; in a window, the host's
 Ollama, LM Studio, llama.cpp model folders and any running model server), then models on nearby AienOS machines
-(for example the Spark's model server).
+(for example the Spark's model pair, the 27B and the 30B working together, L190). The default local AI is that
+pair when a machine on the network serves it, else the 30B on this computer when it fits (L267 note).
 
 - **Exactly one found:**
   > I found [Qwen 30B] on this computer. I'll use it.
@@ -236,7 +237,7 @@ One line per device, each with a calm state word:
 
 - **States, and nothing else:** "ready, my driver", "ready, the maker's driver", "building a driver for it",
   "testing the driver I built", "waiting for you", "can't drive this yet".
-- **Building:** Allen uses the AI chosen in screen 7c (the local 30B by default if it is there). The driver is
+- **Building:** Allen uses the AI chosen in screen 7c (by default the local pair or the 30B, as in 7c). The driver is
   written and tested in a sandbox against a model of the chip; the real device is never touched until the tests
   pass and the person agrees.
 - **The second consent** (only when a built driver is ready for a real device):
@@ -310,4 +311,6 @@ meet and measure; they are not measurements. Each build reports its observed tim
 
 ## Change log
 
+- Draft 2 (2026-10-20): default local AI is the 27B + 30B pair when the network has it (L267 note); section 5
+  points to the measured boot sequence.
 - Draft 1 (2026-10-20): first version, from Drake's words in the L266/L267/L268 briefs and the iMac's boot.

@@ -533,7 +533,10 @@ plus `ui/boot_show.c`, which counts every frame against a 60 Hz beat and prints 
   framebuffer. Sound: the VM's virtio-sound (`dev/virtio_snd.c`), else silent. Both drivers sit on
   `dev/virtio_q.c` and `dev/virtio_bind.c`; their DMA is confined through the SMMU like every other device's,
   and refused without it. Default `CK_BOOT_SHOW=0` keeps the QEMU gates' timing.
-- Shown in the emulator only so far: `scripts/qemu_ck_boot_show_test.sh [tcg|kvm]` (screen, receipt,
+- `make imac-kernel CK_BOOT_SHOW=1` (`$(OUT)/IMACKERN-BOOT-SHOW.EFI`): the x86 image plays it after storage on the
+  GOP framebuffer (in a VM, virtio-vga), sound on virtio-sound through the same driver (`x86/boot_x86.c`);
+  that kernel has no IOMMU yet, so the sound device's DMA is not confined and it says so on the console.
+- Shown in the emulator only so far: `scripts/qemu_ck_boot_show_test.sh [aarch64|x86_64] [tcg|kvm]` (screen, receipt,
   screendump, and the captured sound compared sample by sample with the formula). Not yet on the Spark's own
   screen; on real hardware the night uses the GOP framebuffer path, which no gate has exercised yet.
 - Host tests: `scripts/ck_boot_show_test.sh`, `scripts/ck_virtio_av_test.sh` (command layouts checked

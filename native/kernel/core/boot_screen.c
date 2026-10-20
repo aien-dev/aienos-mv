@@ -53,6 +53,7 @@ void ck_boot_screen_run(void)
         ck_free(mem);
         return;
     }
+    ck_printf("boot-show: the night starts on %ux%u (%s)\n", w, h, how);
     int playing = 1, sounding = snd == 0;
     while (playing || sounding) {
         uint64_t now = counter();

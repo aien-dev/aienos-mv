@@ -2263,9 +2263,16 @@ imac-diag: $(IMACDIAG_EFI)
 # header as IMACDIAG. Copy to a FAT stick as EFI/BOOT/BOOTX64.EFI.
 #   make imac-kernel  -> $(OUT)/IMACKERN.EFI     QEMU test: scripts/qemu_ck_imac_kernel_test.sh
 X86K := $(KDIR)/x86
+# CK_BOOT_SHOW=1 (x86/boot_x86.c): the night and its chirp after the PCI walk, on the GOP framebuffer and the
+# VM's virtio-sound; own object dir and image name (IMACKERN-BOOT-SHOW.EFI).
+ifeq ($(strip $(CK_BOOT_SHOW)),1)
+IMACKERN_DIR := $(OUT)/imackern-boot-show
+IMACKERN_EFI := $(OUT)/IMACKERN-BOOT-SHOW.EFI
+else
 IMACKERN_DIR := $(OUT)/imackern
-IMACKERN_ELF := $(IMACKERN_DIR)/imackern.elf
 IMACKERN_EFI := $(OUT)/IMACKERN.EFI
+endif
+IMACKERN_ELF := $(IMACKERN_DIR)/imackern.elf
 IMACKERN_CFLAGS := $(X86CFLAGS) -I$(KDIR)/include -I$(KDIR)/mm -I$(KDIR)/dev -I$(NATIVE)/disk -I$(NATIVE)/net
 IMACKERN_OBJS := $(IMACKERN_DIR)/efi_entry_x86_64.o $(IMACKERN_DIR)/efi_x86.o $(IMACKERN_DIR)/efi_gop.o \
 	$(IMACKERN_DIR)/kmain_x86.o $(IMACKERN_DIR)/console_x86.o $(IMACKERN_DIR)/trap.o \
@@ -2274,6 +2281,12 @@ IMACKERN_OBJS := $(IMACKERN_DIR)/efi_entry_x86_64.o $(IMACKERN_DIR)/efi_x86.o $(
 	$(IMACKERN_DIR)/ahci_x86.o $(IMACKERN_DIR)/disk_part.o $(IMACKERN_DIR)/disk.o \
 	$(IMACKERN_DIR)/pci_x86.o $(IMACKERN_DIR)/smp_x86.o $(IMACKERN_DIR)/disk_nvme.o \
 	$(IMACKERN_DIR)/tg3_x86.o $(IMACKERN_DIR)/report_x86.o $(IMACKERN_DIR)/aienos_net.o
+ifeq ($(strip $(CK_BOOT_SHOW)),1)
+IMACKERN_CFLAGS += -DCK_BOOT_SHOW=1 -DCK_X86
+IMACKERN_OBJS += $(IMACKERN_DIR)/boot_x86.o $(IMACKERN_DIR)/boot_show.o $(IMACKERN_DIR)/allen_ui.o $(IMACKERN_DIR)/paint.o \
+	$(IMACKERN_DIR)/night.o $(IMACKERN_DIR)/mind.o $(IMACKERN_DIR)/allen_font.o $(IMACKERN_DIR)/chirp.o \
+	$(IMACKERN_DIR)/virtio_q.o $(IMACKERN_DIR)/virtio_snd.o $(IMACKERN_DIR)/aienos_virtio_pci.o
+endif
 IMACKERN_HDRS := $(X86K)/x86.h $(BOOT)/handoff.h $(BOOT)/efi.h $(KDIR)/core/ck_internal.h $(KDIR)/include/ck.h
 $(IMACKERN_DIR)/efi_entry_x86_64.o: $(BOOT)/efi_entry_x86_64.S
 $(IMACKERN_DIR)/efi_x86.o: $(X86K)/efi_x86.c $(IMACKERN_HDRS)
@@ -2297,6 +2310,17 @@ $(IMACKERN_DIR)/disk_nvme.o: $(NATIVE)/disk/disk_nvme.c $(NATIVE)/disk/disk_nvme
 $(IMACKERN_DIR)/tg3_x86.o: $(X86K)/tg3_x86.c $(IMACKERN_HDRS) $(KDIR)/mm/frames.h
 $(IMACKERN_DIR)/report_x86.o: $(X86K)/report_x86.c $(X86K)/report_x86.h $(IMACKERN_HDRS) $(NATIVE)/net/aienos_net.h
 $(IMACKERN_DIR)/aienos_net.o: $(NATIVE)/net/aienos_net.c $(NATIVE)/net/aienos_net.h
+$(IMACKERN_DIR)/boot_x86.o: $(X86K)/boot_x86.c $(IMACKERN_HDRS) $(KDIR)/ui/boot_show.h $(KDIR)/dev/virtio_snd.h $(KDIR)/dev/virtio_q.h
+$(IMACKERN_DIR)/boot_show.o: $(KDIR)/ui/boot_show.c $(KDIR)/ui/boot_show.h $(KDIR)/ui/allen_ui.h
+$(IMACKERN_DIR)/allen_ui.o: $(KDIR)/ui/allen_ui.c $(KDIR)/ui/allen_ui.h
+$(IMACKERN_DIR)/paint.o: $(KDIR)/ui/paint.c $(KDIR)/ui/paint.h
+$(IMACKERN_DIR)/night.o: $(KDIR)/ui/night.c $(KDIR)/ui/night.h
+$(IMACKERN_DIR)/mind.o: $(KDIR)/ui/mind.c $(KDIR)/ui/mind.h
+$(IMACKERN_DIR)/allen_font.o: $(KDIR)/ui/allen_font.c $(KDIR)/ui/allen_font.h
+$(IMACKERN_DIR)/chirp.o: $(KDIR)/ui/chirp.c $(KDIR)/ui/chirp.h
+$(IMACKERN_DIR)/virtio_q.o: $(KDIR)/dev/virtio_q.c $(KDIR)/dev/virtio_q.h
+$(IMACKERN_DIR)/virtio_snd.o: $(KDIR)/dev/virtio_snd.c $(KDIR)/dev/virtio_snd.h $(KDIR)/dev/virtio_q.h
+$(IMACKERN_DIR)/aienos_virtio_pci.o: $(NATIVE)/net/aienos_virtio_pci.c $(NATIVE)/net/aienos_virtio_pci.h
 $(IMACKERN_OBJS):
 	@mkdir -p $(dir $@)
 	$(X86CC) $(IMACKERN_CFLAGS) -DAIENOS_COMMIT='"$(AIENOS_COMMIT)"' -c -o $@ $<
