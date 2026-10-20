@@ -32,6 +32,13 @@ extern "C" {
     fn dispatch_sync_f(queue: *mut c_void, ctx: *mut c_void, work: extern "C" fn(*mut c_void));
 }
 
+/// True when the Objective-C runtime knows class `name` (an older macOS may lack it).
+pub fn has_class(name: &str) -> bool {
+    let c = CString::new(name).expect("class name");
+    // SAFETY: objc_getClass takes a NUL-terminated name and returns nil if absent.
+    !unsafe { objc_getClass(c.as_ptr()) }.is_null()
+}
+
 pub fn class(name: &str) -> Id {
     let c = CString::new(name).expect("class name");
     // SAFETY: objc_getClass takes a NUL-terminated name and returns nil if absent.

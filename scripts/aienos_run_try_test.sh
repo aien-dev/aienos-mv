@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# aienos_run_try_test.sh -- end-to-end test of the one-command try path on this Linux
-# host, with local files instead of aienos.com (docs/AIENOS_RUN_LINUX.md):
+# aienos_run_try_test.sh -- end-to-end test of the one-command try path on this host
+# (Linux or macOS), with local files instead of aienos.com (docs/AIENOS_RUN_LINUX.md,
+# docs/AIENOS_RUN_MACOS.md):
 #
 #   row T1  try.sh downloads aienos-run from a file:// manifest, verifies it, installs it,
 #           and aienos-run downloads + verifies the kernel image and boots it to the
@@ -8,19 +9,32 @@
 #   row T2  a tampered aienos-run download is refused (exit 12) and nothing is installed
 #   row T3  a tampered image is refused by aienos-run (exit 4) and never booted
 #   row T4  --where prints the paths; --reset --yes recreates an empty Store disk
+#   row T5  (macOS only) a runner whose manifest line matches but whose signature lacks the
+#           virtualization entitlement is refused (exit 12) and nothing is installed
 #
 # Needs: target/debug/aienos-run (or AIENOS_RUN_BIN) and target/native-kernel/BOOTAA64.EFI
-# (or AIENOS_KERNEL_EFI). Backend: AIENOS_TRY_BACKEND (default kvm).
+# (or AIENOS_KERNEL_EFI). Backend: AIENOS_TRY_BACKEND (default kvm on Linux, vz on macOS;
+# on macOS the binary must carry the virtualization entitlement, try.sh checks it).
 # Final line: "AIENOS_RUN_TRY: PASS|FAIL". Exit 0 PASS, 1 FAIL, 2 missing inputs.
 set -uo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 bin="${AIENOS_RUN_BIN:-${repo_root}/target/debug/aienos-run}"
 efi="${AIENOS_KERNEL_EFI:-${repo_root}/target/native-kernel/BOOTAA64.EFI}"
-backend="${AIENOS_TRY_BACKEND:-kvm}"
+if [[ "$(uname -s)" == Darwin ]]; then
+    backend="${AIENOS_TRY_BACKEND:-vz}"
+    file_size() { stat -f %z "$1" 2>/dev/null || echo 0; }
+else
+    backend="${AIENOS_TRY_BACKEND:-kvm}"
+    file_size() { stat -c %s "$1" 2>/dev/null || echo 0; }
+fi
 [[ -x "$bin" && -f "$efi" ]] || { echo "missing $bin or $efi"; echo "AIENOS_RUN_TRY: FAIL (inputs missing)"; exit 2; }
 
-case "$(uname -m)" in aarch64 | arm64) platform=linux-aarch64 ;; *) platform=linux-x86_64 ;; esac
+case "$(uname -s)-$(uname -m)" in
+    Darwin-*) platform=macos-aarch64 ;;
+    *-aarch64 | *-arm64) platform=linux-aarch64 ;;
+    *) platform=linux-x86_64 ;;
+esac
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/site" "$work/home"
@@ -77,12 +91,30 @@ fi
 w=$?
 "$bin" --reset --yes >/dev/null 2>&1
 r=$?
-size="$(stat -c %s "$work/home/data/store.img" 2>/dev/null || echo 0)"
+size="$(file_size "$work/home/data/store.img")"
 if [[ $w == 0 && $r == 0 && "$size" == 1073741824 ]] && grep -q "store disk:.*$work/home/data/store.img" "$work/t4.out" \
     && grep -q "forward:.*udp 127.0.0.1:47040" "$work/t4.out"; then
     row T4 PASS "where ok, reset gives a 1 GiB empty disk"
 else
     row T4 FAIL "where=$w reset=$r size=$size"
+fi
+
+# T5
+if [[ "$(uname -s)" == Darwin ]]; then
+    mkdir -p "$work/site5"
+    cp "$work/site/aienos-run" "$work/site5/aienos-run"
+    cp "$work/good-runner" "$work/site5/BOOTAA64.EFI" 2>/dev/null # placeholder image, never fetched
+    codesign -s - -f "$work/site5/aienos-run" 2>/dev/null # ad-hoc, no entitlements
+    "${repo_root}/scripts/aienos_run_manifest.sh" "$work/site5/manifest.txt" test \
+        "image:aarch64:uefi-app:$work/site5/BOOTAA64.EFI" "runner:${platform}:$work/site5/aienos-run" >/dev/null
+    rm -rf "$work/bin"
+    AIENOS_TRY_BASE="file://$work/site5" AIENOS_TRY_NO_RUN=1 sh "${repo_root}/scripts/try.sh" >/dev/null 2>"$work/t5.err"
+    t5=$?
+    if [[ $t5 == 12 && ! -e "$work/bin/aienos-run" ]] && grep -q "entitlement" "$work/t5.err"; then
+        row T5 PASS "exit 12, not installed"
+    else
+        row T5 FAIL "exit $t5"
+    fi
 fi
 
 [[ $failed == 0 ]] && { echo "AIENOS_RUN_TRY: PASS"; exit 0; }

@@ -96,6 +96,12 @@ impl Backend for VzBackend {
             )));
         }
         let _p = objc::Pool::new();
+        if !objc::has_class("VZEFIBootLoader") {
+            return Err(BackendError::Unavailable(
+                "Virtualization.framework has no EFI boot loader here (needs macOS 13 or later)"
+                    .into(),
+            ));
+        }
         // SAFETY: class method, no arguments.
         let ok: bool = unsafe { msg!(objc::class("VZVirtualMachine"), "isSupported"; bool) };
         if !ok {

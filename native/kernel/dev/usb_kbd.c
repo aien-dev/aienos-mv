@@ -629,8 +629,11 @@ static void sess_begin(const char *usb)
         }
         if (n == CK_SESSION_DRAIN_MAX)
             ck_printf("console_session: serial drain cap hit (%u bytes read, flood?); going on\n", n);
-        ck_printf("console_session: serial rx pl011 base=0x%llx uartcr=0x%04x ready\n",
-                  (unsigned long long)ck_console_uart_base(), cr);
+        if (ck_console_uart_base())
+            ck_printf("console_session: serial rx pl011 base=0x%llx uartcr=0x%04x ready\n",
+                      (unsigned long long)ck_console_uart_base(), cr);
+        else /* VM edition without a UART: input arrives on the virtio console */
+            ck_printf("console_session: serial rx %s ready\n", ck_console_uart_name());
     } else
         ck_printf("console_session: serial rx unavailable (console uart is %s, uartcr=0x%04x)\n", ck_console_uart_name(), cr);
     ck_printf("console_session: ready (usb %s; no time limit, no idle exit; ends on exit)\n", usb);

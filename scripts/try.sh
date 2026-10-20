@@ -36,6 +36,17 @@ case "$(uname -m)" in
     x86_64 | amd64) arch=x86_64 ;;
     *) die 10 "unsupported processor $(uname -m)" ;;
 esac
+# macOS: a Terminal running under Rosetta reports x86_64 on an Apple Silicon Mac; the
+# Mac runner is Apple Silicon only (Virtualization.framework runs the aarch64 image
+# natively there) and needs macOS 13 or later (its EFI boot loader).
+if [ "$os" = macos ]; then
+    if [ "$arch" = x86_64 ] && [ "$(sysctl -n sysctl.proc_translated 2>/dev/null)" = 1 ]; then
+        arch=aarch64
+    fi
+    [ "$arch" = aarch64 ] || die 10 "AienOS on a Mac needs Apple Silicon (M1 or later); this Mac has an Intel processor"
+    mac_major="$(sw_vers -productVersion 2>/dev/null | cut -d. -f1)"
+    [ "${mac_major:-0}" -ge 13 ] 2>/dev/null || die 10 "AienOS needs macOS 13 Ventura or later (this Mac runs $(sw_vers -productVersion 2>/dev/null))"
+fi
 platform="${os}-${arch}"
 
 command -v curl >/dev/null 2>&1 || die 11 "curl is needed"
@@ -72,8 +83,17 @@ got_sum="$(sha256 "$work/$name")"
 [ "$got_sum" = "$sum" ] || die 12 "sha256 mismatch for ${name}: manifest ${sum}, got ${got_sum}; not installed"
 say "verified sha256 ${got_sum}"
 
-mkdir -p "$bin_dir" || die 13 "cannot create ${bin_dir}"
 chmod 0755 "$work/$name"
+# macOS: Virtualization.framework starts a VM only for a program signed with the
+# com.apple.security.virtualization entitlement. curl sets no quarantine flag, so
+# Gatekeeper does not prompt; the signature still has to be intact (docs/AIENOS_RUN_MACOS.md).
+if [ "$os" = macos ]; then
+    codesign --verify "$work/$name" 2>/dev/null || die 12 "${name} is not validly signed; not installed"
+    codesign -d --entitlements - "$work/$name" 2>/dev/null | grep -q com.apple.security.virtualization ||
+        die 12 "${name} lacks the virtualization entitlement; not installed"
+    say "signature ok (virtualization entitlement present)"
+fi
+mkdir -p "$bin_dir" || die 13 "cannot create ${bin_dir}"
 mv -f "$work/$name" "$bin_dir/aienos-run" || die 13 "cannot install into ${bin_dir}"
 say "installed ${bin_dir}/aienos-run"
 case ":${PATH}:" in *":${bin_dir}:"*) ;; *) say "(add ${bin_dir} to your PATH to run aienos-run later)" ;; esac
