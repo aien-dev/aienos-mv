@@ -125,6 +125,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "aienos-run"
+version = "0.1.0"
+dependencies = [
+ "aienos-crypto",
+ "ed25519-dalek",
+ "libc",
+]
+
+[[package]]
 name = "aienos-store-tool"
 version = "0.1.0"
 dependencies = [
