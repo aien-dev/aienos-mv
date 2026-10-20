@@ -37,7 +37,7 @@ static const char *dir;
 
 static FILE *open_fixture(const char *name)
 {
-	char p[1024];
+	char p[4096];
 	snprintf(p, sizeof(p), "%s/%s", dir, name);
 	FILE *f = fopen(p, "rb");
 	if (!f) {
@@ -73,7 +73,7 @@ static unsigned char seen[512], via_aienos_bits[512];
 static void test_corpus(void)
 {
 	FILE *dis = open_fixture("corpus.dis");
-	char line[512], cur[256] = "";
+	char line[512], cur[sizeof(line) + 8] = "";
 	static uint8_t data[1 << 16];
 	size_t n = 0, off = 0;
 	int files = 0, ins_total = 0, aienos_ins = 0;
