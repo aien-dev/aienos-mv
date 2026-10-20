@@ -1,0 +1,16 @@
+[package]
+name = "aienos-run"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "aienos-run: boots AienOS in a VM on the host's own hypervisor (Virtualization.framework on macOS, QEMU fallback)"
+
+# No dependencies on purpose (CONTRIBUTING: dependencies are rare): the macOS
+# backend talks to the Objective-C runtime directly (src/backend/objc.rs).
+[dependencies]
+
+[[bin]]
+name = "aienos-run"
+path = "src/main.rs"

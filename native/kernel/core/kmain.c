@@ -9,6 +9,7 @@
  * and ends with the final report and a PSCI reset. QEMU runs of this path
  * qualify nothing physical. */
 #include "arch.h"
+#include "vcon.h"
 #include "ck_internal.h"
 #include "entropy.h"
 #include "cpufeat.h"
@@ -129,6 +130,19 @@ static __attribute__((noreturn)) void ck_el1_main(void *arg)
     ck_mm_el1_ready();
     const struct ck_mm_report *mm = ck_mm_report();
     screen_start(h, mm);
+    /* No UART in the ACPI tables and firmware at EL1 (a hypervisor below us,
+     * e.g. Apple Virtualization.framework): the virtio console is the
+     * console (core/vcon.c); it replays what was printed so far. */
+    if (!ck_console_uart_base() && h->firmware_el == 1) {
+        int vrc = ck_console_attach_vcon();
+        if (vrc == 0) {
+            uint8_t b, d, f;
+            ck_vcon_where(&b, &d, &f);
+            ck_printf("console: virtio-console pci %02x:%02x.%u (hypervisor console, polled)\n", b, d, f);
+        } else {
+            ck_printf("console: no UART and no virtio console (rc=%d)\n", vrc);
+        }
+    }
     if (ck_pi5_start)
         ck_pi5_start();
 
@@ -173,6 +187,8 @@ static __attribute__((noreturn)) void ck_el1_main(void *arg)
         ck_printf("guard_page: FAIL %s\n", detail);
 
     /* GICv3 or GICv2 (arch/gic.c) from the MADT, then the EL1 physical timer window. */
+    /* Firmware at EL1 means a hypervisor below us: tick on CNTV (arch.h). */
+    ck_timer_virt = h->firmware_el == 1;
     ck_set_stage("gic");
     const void *madt = ck_acpi_find("APIC");
     struct ck_madt_gic mg;
@@ -198,8 +214,8 @@ static __attribute__((noreturn)) void ck_el1_main(void *arg)
         ck_printf("gic_cpu_interface: mmio gicc=0x%llx\n", (unsigned long long)gr.gicc);
     else
         ck_printf("gic_redistributor: frame=0x%llx\n", (unsigned long long)gr.rd_frame);
-    ck_printf("timer_stats: intid=30 freq_hz=%llu period_us=%llu min_us=%llu avg_us=%llu max_us=%llu\n",
-              (unsigned long long)f, (unsigned long long)ck_counter_to_us(f / 100, f),
+    ck_printf("timer_stats: intid=%u freq_hz=%llu period_us=%llu min_us=%llu avg_us=%llu max_us=%llu\n",
+              CK_TIMER_INTID, (unsigned long long)f, (unsigned long long)ck_counter_to_us(f / 100, f),
               (unsigned long long)ck_counter_to_us(tw.min_interval, f),
               (unsigned long long)(tw.ticks ? ck_counter_to_us(tw.span / tw.ticks, f) : 0),
               (unsigned long long)ck_counter_to_us(tw.max_interval, f));

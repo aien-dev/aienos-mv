@@ -81,7 +81,7 @@ static int gicv2_init(const struct ck_madt_gic *m, struct ck_gic_report *out)
     w32(gicc, GICC_PMR, 0xf0);
     w32(gicc, GICC_BPR, 0);
     w32(gicc, GICC_CTLR, 1);
-    ppi_enable(30, 0x80); /* EL1 physical timer */
+    ppi_enable(CK_TIMER_INTID, 0x80); /* kernel tick timer (arch.h) */
     out->gicd = m->gicd;
     out->gicr = 0;
     out->gicc = m->gicc_base;
@@ -137,7 +137,7 @@ int ck_gic_init(const struct ck_madt_gic *m, struct ck_gic_report *out)
     ck_wr_s(ICC_BPR1_EL1, 0);
     ck_wr_s(ICC_IGRPEN1_EL1, 1);
     ck_isb();
-    ppi_enable(30, 0x80); /* EL1 physical timer */
+    ppi_enable(CK_TIMER_INTID, 0x80); /* kernel tick timer (arch.h) */
     out->gicd = m->gicd;
     out->gicr = region;
     out->gicc = 0;

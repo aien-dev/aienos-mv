@@ -9,6 +9,7 @@
 #include "fbcon.h"
 #include "arch.h"
 #include "uart_rx.h"
+#include "vcon.h"
 #ifdef CK_KLOG
 #include "klog.h"
 #endif
@@ -24,6 +25,39 @@ static unsigned uart_stride;
 static uint64_t uart_phys;
 static struct ck_fbcon fb;
 static int fb_on, fb_busy;
+
+/* No UART (no SPCR): keep what is printed until a virtio console attaches
+ * (core/vcon.c, a hypervisor such as Apple Virtualization.framework), then
+ * replay it there so the host sees the whole boot. Bounded; the oldest bytes
+ * past the bound are dropped and counted. */
+#define EARLY_BYTES 16384u
+static char early[EARLY_BYTES];
+static size_t early_len, early_lost;
+static int early_done;
+
+static void early_keep(const char *s, size_t n)
+{
+    if (early_done)
+        return;
+    for (size_t i = 0; i < n; i++) {
+        if (early_len < EARLY_BYTES)
+            early[early_len++] = s[i];
+        else
+            early_lost++;
+    }
+}
+
+int ck_console_attach_vcon(void)
+{
+    int rc = ck_vcon_attach();
+    if (rc == 0) {
+        ck_vcon_write(early, early_len);
+        if (early_lost)
+            ck_printf("console: %llu early bytes lost (buffer %u)\n", (unsigned long long)early_lost, EARLY_BYTES);
+    }
+    early_done = 1;
+    return rc;
+}
 
 void ck_console_set_efi(void (*write)(const char *s, size_t n))
 {
@@ -47,7 +81,7 @@ int ck_console_set_uart(const struct ck_spcr *s)
 
 const char *ck_console_uart_name(void)
 {
-    return uart_kind == 1 ? "pl011" : uart_kind == 2 ? "16550" : "none";
+    return uart_kind == 1 ? "pl011" : uart_kind == 2 ? "16550" : ck_vcon_on() ? "virtio-console" : "none";
 }
 
 uint64_t ck_console_uart_base(void)
@@ -80,6 +114,8 @@ static void write_n(const char *s, size_t n)
 #ifdef CK_KLOG
     ck_klog_put(s, n); /* RAM copy for the card (Pi 5 build: core/klog_slot.c) */
 #endif
+    if (!uart_kind && !ck_vcon_on())
+        early_keep(s, n);
     if (efi_write) {
         efi_write(s, n);
         return;
@@ -93,8 +129,10 @@ static void write_n(const char *s, size_t n)
             fb_busy = 0;
         }
     }
-    if (!uart_kind)
+    if (!uart_kind) {
+        ck_vcon_write(s, n);
         return;
+    }
     for (size_t i = 0; i < n; i++) {
         if (s[i] == '\n')
             uart_putc('\r');
@@ -186,11 +224,19 @@ static struct ck_uart_rx_count rx_count;
 
 int ck_console_rx_ready(uint32_t *cr)
 {
+    if (!uart_kind && ck_vcon_on()) {
+        *cr = 0;
+        return 1;
+    }
     return ck_uart_rx_ready(uart_kind, uart, uart_stride, cr);
 }
 
 int ck_console_rx_poll(void)
 {
+    if (!uart_kind && ck_vcon_on()) {
+        int b = ck_vcon_rx_poll();
+        return b < 0 ? CK_UART_RX_EMPTY : b;
+    }
     if (uart_kind != CK_UART_PL011 && uart_kind != CK_UART_16550)
         return CK_UART_RX_EMPTY;
     return ck_uart_rx_take(uart_kind, uart, uart_stride, &rx_count);

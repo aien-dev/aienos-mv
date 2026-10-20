@@ -61,7 +61,7 @@ static struct {
 
 int ck_irq_register(uint32_t intid, void (*fn)(void *arg), void *arg)
 {
-    if (intid >= CK_IRQ_MAX || intid == 30 || !fn)
+    if (intid >= CK_IRQ_MAX || intid == CK_TIMER_INTID || !fn)
         return -1;
     if (irq_table[intid].fn)
         return -2;
@@ -79,7 +79,7 @@ struct ck_frame *ck_irq_dispatch(struct ck_frame *f)
         spurious++;
         return f;
     }
-    if (id == 30)
+    if (id == CK_TIMER_INTID)
         ck_timer_tick(); /* re-arms before EOI */
     else if (irq_table[id].fn)
         irq_table[id].fn(irq_table[id].arg);
@@ -87,7 +87,7 @@ struct ck_frame *ck_irq_dispatch(struct ck_frame *f)
         unhandled++;
     ck_gic_eoi(id);
     ck_isb();
-    if (id == 30 && ck_tick_switch)
+    if (id == CK_TIMER_INTID && ck_tick_switch)
         return ck_tick_switch(f);
     return f;
 }

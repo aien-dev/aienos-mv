@@ -301,13 +301,13 @@ void ck_osc_launch(const uint8_t *unit, size_t unit_len, const struct osc_accept
      * EL0VTEN/EL0PTEN (8,9: timer registers); the loader clears only 8 and 9 (artifact_loader.c). */
     ck_wr(cntkctl_el1, cntkctl & ~0x30Full);
     swap_ttbr0((uint64_t)(uintptr_t)s->l0);
-    ck_wr(cntp_cval_el0, ck_rd(cntpct_el0) + (hz ? hz / 100 : 625000));
-    ck_wr(cntp_ctl_el0, 1);
+    ck_timer_set_cval( ck_timer_count() + (hz ? hz / 100 : 625000));
+    ck_timer_set_ctl( 1);
     ck_isb();
     run.active = 1;
     ck_el0_enter(code_va + e->code_offset, stack_top, regs);
     run.active = 0;
-    ck_wr(cntp_ctl_el0, 0);
+    ck_timer_set_ctl( 0);
     ck_isb();
     swap_ttbr0(kttbr);
     ck_wr(cpacr_el1, cpacr);

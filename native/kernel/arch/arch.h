@@ -23,6 +23,35 @@
 #define ck_rd_s(reg) ck_rd(reg)
 #define ck_wr_s(reg, v) ck_wr(reg, v)
 
+/* Kernel tick timer. The EL1 physical timer (CNTP, PPI INTID 30) when the
+ * kernel owns EL2 (QEMU virtualization=on, the Spark, the Pi); the EL1
+ * virtual timer (CNTV, PPI INTID 27) when firmware hands over at EL1 under a
+ * hypervisor that keeps CNTP for itself (Apple Hypervisor.framework, used by
+ * QEMU -accel hvf and Virtualization.framework, traps CNTP_* as UNDEFINED).
+ * kmain picks it once from the firmware EL before the GIC is set up. CVAL
+ * compares against the matching counter, so arm deadlines with
+ * ck_timer_count(), never cntpct_el0 directly. */
+extern int ck_timer_virt;
+#define CK_TIMER_INTID (ck_timer_virt ? 27u : 30u)
+static inline uint64_t ck_timer_count(void)
+{
+    return ck_timer_virt ? ck_rd(cntvct_el0) : ck_rd(cntpct_el0);
+}
+static inline void ck_timer_set_cval(uint64_t v)
+{
+    if (ck_timer_virt)
+        ck_wr(cntv_cval_el0, v);
+    else
+        ck_wr(cntp_cval_el0, v);
+}
+static inline void ck_timer_set_ctl(uint64_t v)
+{
+    if (ck_timer_virt)
+        ck_wr(cntv_ctl_el0, v);
+    else
+        ck_wr(cntp_ctl_el0, v);
+}
+
 static inline unsigned ck_current_el(void)
 {
     return (unsigned)(ck_rd(CurrentEL) >> 2) & 3;

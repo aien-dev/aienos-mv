@@ -199,16 +199,16 @@ static void check_preempt(void)
     if (hz) {
         preempt_active = 1;
         ck_tick_switch = preempt_tick;
-        uint64_t start = ck_rd(cntpct_el0);
-        ck_wr(cntp_cval_el0, start + hz / 100);
-        ck_wr(cntp_ctl_el0, 1);
+        uint64_t start = ck_timer_count();
+        ck_timer_set_cval( start + hz / 100);
+        ck_timer_set_ctl( 1);
         ck_isb();
         ck_irq_on();
         ck_isb();
         /* Main resumes only when the dispatcher hands its frame back. The
          * timeout covers a timer that never fires (main never left). */
         while (!preempt_done) {
-            if (ck_rd(cntpct_el0) - start > hz * 2) {
+            if (ck_timer_count() - start > hz * 2) {
                 timed_out = 1;
                 break;
             }
@@ -217,7 +217,7 @@ static void check_preempt(void)
         ck_isb();
         preempt_active = 0;
         ck_tick_switch = 0;
-        ck_wr(cntp_ctl_el0, 0);
+        ck_timer_set_ctl( 0);
         ck_isb();
         ck_stack_floor = kernel_floor;
     }

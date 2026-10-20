@@ -735,7 +735,7 @@ static int loader_sync(struct ck_frame *f, uint64_t esr)
         terminate(f, ST_OVERRUN, 0);
         return 0;
     }
-    if (expired(ck_rd(cntpct_el0))) {
+    if (expired(ck_timer_count())) {
         terminate(f, ST_TIMEOUT, 0);
         return 0;
     }
@@ -775,7 +775,7 @@ static int loader_sync(struct ck_frame *f, uint64_t esr)
 
 static struct ck_frame *loader_tick(struct ck_frame *f)
 {
-    if ((f->spsr & 0xf) == 0 && rt.active && expired(ck_rd(cntpct_el0)))
+    if ((f->spsr & 0xf) == 0 && rt.active && expired(ck_timer_count()))
         terminate(f, ST_TIMEOUT, 0);
     return f;
 }
@@ -797,19 +797,19 @@ static void run_task(struct task *t, struct outcome *o)
     uint64_t kttbr = ck_rd(ttbr0_el1), cpacr = ck_rd(cpacr_el1), cntkctl = ck_rd(cntkctl_el1);
     ck_lower_sync = loader_sync;
     ck_tick_switch = loader_tick;
-    rt.start = ck_rd(cntpct_el0);
+    rt.start = ck_timer_count();
     rt.active = 1;
     ck_wr(cpacr_el1, (cpacr & ~(3ull << 20)) | (1ull << 20)); /* FP/SIMD traps at EL0 */
     /* EL0 must not touch the physical/virtual timers (EL0PTEN, EL0VTEN): the
      * budget timer is the kernel's, whatever firmware left in CNTKCTL_EL1. */
     ck_wr(cntkctl_el1, cntkctl & ~((1ull << 9) | (1ull << 8)));
     swap_ttbr0(t->root);
-    ck_wr(cntp_cval_el0, rt.start + interval);
-    ck_wr(cntp_ctl_el0, 1);
+    ck_timer_set_cval( rt.start + interval);
+    ck_timer_set_ctl( 1);
     ck_isb();
     ck_el0_enter(t->entry_pc, t->sp, regs);
     __asm__ volatile("msr daifset, #2" ::: "memory");
-    ck_wr(cntp_ctl_el0, 0);
+    ck_timer_set_ctl( 0);
     ck_isb();
     swap_ttbr0(kttbr);
     ck_wr(cpacr_el1, cpacr);

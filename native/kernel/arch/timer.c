@@ -1,16 +1,18 @@
-/* timer.c -- EL1 physical generic timer (CNTP, PPI INTID 30) and the
+/* timer.c -- EL1 generic timer (CNTP, PPI INTID 30; or CNTV, INTID 27 under
+ * a hypervisor that keeps CNTP, see arch.h) and the
  * monotonic time services. Tick semantics match the Rust kernel: the IRQ
  * re-arms CNTP_CVAL 10 ms after "now", then records the interval since the
  * previous tick (the first interval is measured from arming). */
 #include "arch.h"
 #include "ck_internal.h"
 
+int ck_timer_virt; /* arch.h: 0 CNTP (INTID 30), 1 CNTV (INTID 27) */
 static volatile uint64_t ticks, last, tmin, tmax;
 
 static uint64_t counter(void)
 {
     ck_isb();
-    return ck_rd(cntpct_el0);
+    return ck_timer_count();
 }
 
 uint64_t ck_counter_to_us(uint64_t c, uint64_t f)
@@ -38,8 +40,8 @@ void ck_timer_tick(void)
 {
     uint64_t hz = ck_rd(cntfrq_el0);
     uint64_t now = counter();
-    ck_wr(cntp_cval_el0, now + (hz ? hz / 100 : 625000));
-    ck_wr(cntp_ctl_el0, 1);
+    ck_timer_set_cval( now + (hz ? hz / 100 : 625000));
+    ck_timer_set_ctl( 1);
     ck_isb();
     ticks++;
     uint64_t t = counter();
@@ -61,8 +63,8 @@ int ck_timer_window(uint32_t ms, struct ck_timer_window *w)
     last = start;
     tmin = ~0ull;
     tmax = 0;
-    ck_wr(cntp_cval_el0, start + hz / 100);
-    ck_wr(cntp_ctl_el0, 1); /* ENABLE, IMASK clear */
+    ck_timer_set_cval( start + hz / 100);
+    ck_timer_set_ctl( 1); /* ENABLE, IMASK clear */
     ck_isb();
     ck_irq_on();
     ck_isb();
@@ -71,7 +73,7 @@ int ck_timer_window(uint32_t ms, struct ck_timer_window *w)
         ;
     ck_irq_off();
     ck_isb();
-    ck_wr(cntp_ctl_el0, 0);
+    ck_timer_set_ctl( 0);
     ck_isb();
     w->ticks = ticks;
     w->ms = ms;

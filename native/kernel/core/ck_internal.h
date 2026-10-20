@@ -18,6 +18,9 @@ size_t strlen(const char *s);
 void ck_console_set_efi(void (*write)(const char *s, size_t n));
 /* SPCR UART: returns 0 if the interface type is supported. */
 int ck_console_set_uart(const struct ck_spcr *spcr);
+/* No UART: attach the virtio console (core/vcon.c) and replay the early
+ * output there. 0 attached, <0 ck_vcon_attach reason. */
+int ck_console_attach_vcon(void);
 /* Name of the active UART driver for the report, e.g. "pl011". */
 const char *ck_console_uart_name(void);
 uint64_t ck_console_uart_base(void);

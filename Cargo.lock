@@ -125,6 +125,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "aienos-run"
+version = "0.1.0"
+
+[[package]]
 name = "aienos-store-tool"
 version = "0.1.0"
 dependencies = [
