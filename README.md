@@ -8,6 +8,20 @@ AIENOS is our own operating system kernel, built to replace Linux on the DGX Spa
 Firmware -> AIEN Boot -> AIEN Kernel -> AIEN Runtime -> AIEN Agent -> You
 ```
 
+## Try it on your computer
+
+`aienos-run` is one program that starts AienOS inside a virtual machine, a computer simulated in a program, on Windows, macOS or Linux. The page [www.aienos.com/try](https://www.aienos.com/try/) has one box per system: the command, the sha256 of the program, what happens next, what is not there yet, and how to remove it.
+
+```bash
+curl -fsSL https://www.aienos.com/try.sh | sh   # macOS and Linux; Windows downloads aienos-run from the page
+```
+
+The script ([source](https://www.aienos.com/try.sh)) downloads the runner from the latest release of this repository, checks its sha256 against the release's `aienos-run-SHA256SUMS` and refuses on a mismatch.
+
+- **Published:** no `aienos-run` release exists yet (checked 2026-10-20). Until one does, the command says so and stops; nothing is installed.
+- **Not measured:** boot time on any system. The page shows NOT MEASURED until a receipt exists.
+- **Not there yet:** no GPU inside the virtual machine; no language model published in the image; the runner list is not signed; the Windows runner is not code-signed and the macOS runner is not notarized.
+
 ## Current state
 
 The kernel is being rewritten in C (the `native/` directory) and is IMPLEMENTED / NOT QUALIFIED: all 24 emulator gates pass in the [newest receipt](evidence/ck_gates_29ed03c97454354a18676f768273dd7f7a8e15462c4be1939d9994d277d0d639.json) (run at 7f0de7e on 2026-10-09, QEMU only), and `scripts/ck_gates.sh` now lists 26 gates, so a newer receipt is owed. It has not been booted on the DGX Spark. Its first runs on real hardware were on a Raspberry Pi 5 on 2026-10-13: a bring-up run that reached interrupts, four cores, user-mode tasks, scheduling and message passing and wrote its log to the SD card, then two runs that wrote and re-read a test region on the card's AIENOS partition (pull requests [#345](https://github.com/aien-spark/aienos/pull/345) and [#346](https://github.com/aien-spark/aienos/pull/346); the run logs are not stored in this repository). The earlier Rust kernel in `crates/` is legacy and is being replaced; it is not extended. Trust-chain and encrypted-storage work (TRUST-1 and M5) is NOT_QUALIFIED, with hardware and operator steps outstanding. Do not trust any number in this file over the live documents:
