@@ -337,12 +337,22 @@ static void test_bar_init(void)
     bar0    = test_bar0;
     bench_dev_ready = 1;
     ck_puts("bench: TEST BUILD: BARs are RAM stand-ins (emulated), not PCI hardware\n");
-    ck_printf("bench: GPU bench console ready port=%u (HMAC-SHA256, key bound in image)\n",
-              (unsigned)CK_X86_BENCH_PORT);
 }
 #endif
 
 /* ---- Public API ---- */
+
+/* "ready" means the main loop polls the console now: ck_gpu_bench sends its first request on this
+ * line, and a request sent while the kernel is still booting waits unanswered (the tool gives up). */
+static void announce_ready(void)
+{
+    static int said;
+    if (said || !bench_dev_ready)
+        return;
+    said = 1;
+    ck_printf("bench: GPU bench console ready port=%u (HMAC-SHA256, key bound in image)\n",
+              (unsigned)CK_X86_BENCH_PORT);
+}
 
 void ck_x86_bench_init(volatile uint8_t *gpu_cfg, volatile uint32_t *gpu_bar5,
                         volatile uint32_t *gpu_bar0)
@@ -359,13 +369,13 @@ void ck_x86_bench_init(volatile uint8_t *gpu_cfg, volatile uint32_t *gpu_bar5,
     bar5    = gpu_bar5;
     bar0    = gpu_bar0;
     bench_dev_ready = 1;
-    ck_printf("bench: GPU bench console ready port=%u (HMAC-SHA256, key bound in image)\n",
-              (unsigned)CK_X86_BENCH_PORT);
+    ck_puts("bench: GPU registers mapped (BAR5, BAR0); the console answers from the main loop\n");
 #endif
 }
 
 void ck_x86_bench_step(uint64_t tsc_hz)
 {
+    announce_ready();
 #ifdef CK_X86_BENCH_TEST
     test_tsc_hz = tsc_hz;
     if (test_inited)
