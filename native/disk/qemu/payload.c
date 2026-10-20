@@ -266,7 +266,7 @@ __attribute__((unused)) static void run_quiesce(uint32_t drain_us)
     check(q.completed_ok + q.completed_err + q.aborted == q.inflight_at_start, "quiesce: every command accounted", q.aborted);
     check(nvme_inflight(&C) == 0, "quiesce: nothing in flight", nvme_inflight(&C));
     check(sent >= 2 && inflight >= 1, "quiesce: commands were in flight", inflight);
-    if (drain_us) check(q.completed_ok == sent && same(wbuf, rbuf, sizeof rbuf), "quiesce: drained reads landed", q.completed_ok);
+    if (drain_us) check(q.completed_ok == sent && same(wbuf, rbuf, sent * 16384u), "quiesce: drained reads landed", q.completed_ok);
     check(nvme_read(&C, 0, 1, rbuf) == NVME_ESTATE, "quiesce: I/O refused afterwards", 0);
     check(nvme_disable(&C) == NVME_OK, "quiesce: disable", 0);
     rc = nvme_init(&C, &OPS_MAP, &dma, &cfg);

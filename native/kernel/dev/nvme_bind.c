@@ -333,7 +333,8 @@ int ck_nvme_bind(ck_nvme *n, const pci_found *found, uint32_t nfound, const pci_
     if (dblocks > n->part.blocks) dblocks = n->part.blocks - n->part.blocks % bpu;
     uint64_t dc0 = c->stats.direct_cmds, bc0 = c->stats.bounce_cmds;
     rc = disk_read(&n->part.dev, 0, (uint32_t)dblocks, n->data);
-    int dmatch = rc == 0 && c->stats.direct_cmds > dc0 && c->stats.bounce_cmds == bc0;
+    uint64_t dcmds = c->stats.direct_cmds - dc0, bcmds = c->stats.bounce_cmds - bc0; /* before the probe reads */
+    int dmatch = rc == 0 && dcmds > 0 && bcmds == 0;
     for (int e = 0; e < 2 && dmatch; e++) {
         uint64_t at = e ? dblocks - bpu : 0;
         if (disk_read(&n->part.dev, at, bpu, probe_rd)) dmatch = 0;
@@ -342,8 +343,8 @@ int ck_nvme_bind(ck_nvme *n, const pci_found *found, uint32_t nfound, const pci_
             if (dw[i] != probe_rd[i]) dmatch = 0;
     }
     ck_printf("nvme: direct dma read part_lba=0 bytes=%llu direct_cmds=%llu bounce_cmds=%llu max_inflight=%u -> %s (rc=%d)\n",
-              (unsigned long long)(dblocks * c->block_size), (unsigned long long)(c->stats.direct_cmds - dc0),
-              (unsigned long long)(c->stats.bounce_cmds - bc0), c->stats.max_inflight, dmatch ? "match" : "FAIL", rc);
+              (unsigned long long)(dblocks * c->block_size), (unsigned long long)dcmds,
+              (unsigned long long)bcmds, c->stats.max_inflight, dmatch ? "match" : "FAIL", rc);
     if (!dmatch) return rc ? rc : DISK_EIO;
     if (n->confined) {
         rc = smmu_negative_test(n);
@@ -362,7 +363,9 @@ int ck_nvme_shutdown_bound(ck_nvme *n)
      * of the data window are left outstanding, then the driver drains them,
      * deletes the I/O SQ (aborting anything left) and the I/O CQ. Step 4
      * (CC.SHN) follows below. */
-    if (n->bound && n->data && n->ctrl.ready && !n->ctrl.failed) {
+    /* ck_dev_nvme_release clears n->bound first (no new users); the
+     * controller itself is still live here. */
+    if (n->data && n->ctrl.ready && !n->ctrl.failed) {
         nvme_ctrl *c = &n->ctrl;
         uint32_t per = 16384u / c->block_size, sent = 0;
         for (uint32_t i = 0; i < 4u; i++) {

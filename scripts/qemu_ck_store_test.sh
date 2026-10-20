@@ -247,7 +247,7 @@ nvme_checks() { # block bytes, confined|bypass: the bound NVMe path
     check "direct DMA into the granted data window, several commands in flight, matches the bounce path (C only, L199)" \
         "nvme: direct dma read part_lba=0 bytes=[0-9]* direct_cmds=[1-9][0-9]* bounce_cmds=0 max_inflight=\([2-9]\|[1-9][0-9]\) -> match (rc=0)$"
     check "Store root write power-fail atomic on this geometry (row 70, L199)" \
-        "nvme: store root atomicity block_size= required_blocks=1 slot0=atomic slot1=atomic -> PASS$"
+        "nvme: store root atomicity block_size=${bs} required_blocks=1 slot0=atomic slot1=atomic -> PASS$"
     check "scratch unit (last unit of the AIENOS partition) write+flush+readback matched (differs)" \
         "nvme: rw probe part_lba=[0-9]* disk_lba=[0-9]* bytes=4096 write+flush+readback match"
     check "NVMe bound by the devices stage (differs)" "devices: pci=ok nvme=bound"
