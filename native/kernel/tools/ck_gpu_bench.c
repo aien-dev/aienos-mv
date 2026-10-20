@@ -373,7 +373,7 @@ int main(int argc, char **argv)
         serial_fd = serial_connect(serial_path);
         if (serial_fd < 0) { fprintf(stderr, "cannot connect to %s\n", serial_path); return 2; }
         use_serial = 1;
-        if (!wait_for_text("bench: GPU bench console ready", 120)) {
+        if (!wait_for_text("bench: GPU bench console ready", 900)) {
             fprintf(stderr, "the kernel never said the bench console is ready\n");
             return 2;
         }

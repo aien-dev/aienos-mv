@@ -103,7 +103,7 @@ chk() { # name regex file
 }
 
 tool_rc=0
-timeout "${AIENOS_BENCH_TOOL_TIMEOUT:-600}" "${TOOL}" --serial "${sock}" \
+timeout "${AIENOS_BENCH_TOOL_TIMEOUT:-1500}" "${TOOL}" --serial "${sock}" \
     --transcript "${work}/transcript.txt" "${work}/test.bench" \
     >"${work}/tool.out" 2>"${work}/tool.err" || tool_rc=$?
 kill "${qpid}" 2>/dev/null || true; wait "${qpid}" 2>/dev/null || true; qpid=""

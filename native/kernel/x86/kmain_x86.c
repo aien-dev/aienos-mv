@@ -1142,6 +1142,18 @@ static void wx_retire_trampoline(void)
     __asm__ volatile("invlpg (%0)" ::"r"(tramp_pa) : "memory");
 }
 
+/* Lab swap only, called once after a verified payload and before the jump: the
+ * trampoline page becomes writable and executable again. The application processors
+ * are halted by then (quiesce_aps), so this BSP-only invlpg is the only TLB to flush. */
+void ck_x86_swap_tramp_open(void)
+{
+    uint64_t *e = tramp_pa ? pte4k(tramp_pa) : 0;
+    if (!e)
+        return;
+    *e = (*e | PTE_W) & ~PTE_NX;
+    __asm__ volatile("invlpg (%0)" ::"r"(tramp_pa) : "memory");
+}
+
 /* Every present leaf of the identity map: writable+executable ones, and
  * executable 4 KiB units (must equal the code pages). */
 static void wx_audit(uint64_t *wx, uint64_t *exec4k)

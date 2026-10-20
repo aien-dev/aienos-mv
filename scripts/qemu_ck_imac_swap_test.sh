@@ -78,6 +78,8 @@ mkimg "${out}" -B CK_X86_REPORT=1 CK_TEST_SLOT_KEY=1
 cp "${out}/IMACKERN-LAB.EFI" "${work}/KERNB.EFI"
 mkimg "${outdef}" -D
 make -s -C native/kernel OUT="${out}" slot-tool >/dev/null
+make -s -C native/kernel OUT="${out}" gpt-image >/dev/null
+gpt="${out}/host/ck_gpt_image"
 SLOT="${out}/host/ck_slot_tool"
 
 # ---- the slot object for B: manifest unit signed with the TEST key, then the kernel ----
@@ -104,7 +106,7 @@ mkswap() { # image slot-object
     dd if="$2" of="$1" bs=512 seek=2048 conv=notrunc 2>/dev/null
 }
 esp="${work}/esp.img"; mkesp "${esp}"
-data="${work}/data.img"; truncate -s 64M "${data}"
+data="${work}/data.img"; truncate -s 64M "${data}"; "${gpt}" create "${data}" 512 64 one-old >/dev/null
 swp="${work}/swap.img"; mkswap "${swp}" "${work}/SLOT_B.bin"
 
 # boot ESP DATA SWAP SERIAL-LOG: starts QEMU in the background, sets qpid. A USB keyboard is
@@ -182,7 +184,7 @@ fi
 # ---- run 2: the bad signature must be refused ----
 badesp="${work}/esp_bad.img"; mkesp "${badesp}"
 badswp="${work}/swap_bad.img"; mkswap "${badswp}" "${work}/SLOT_BAD.bin"
-badata="${work}/data_bad.img"; truncate -s 64M "${badata}"
+badata="${work}/data_bad.img"; truncate -s 64M "${badata}"; "${gpt}" create "${badata}" 512 64 one-old >/dev/null
 logR="${work}/serialR.log"
 boot "${badesp}" "${badata}" "${badswp}" "${logR}"
 wait_for "swap: REJECTED" "${logR}" "${B_WAIT}" || true
