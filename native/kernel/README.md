@@ -252,6 +252,24 @@ tree with uncommitted changes to tracked files stamps `aienos_commit: <HEAD>-dir
 `run.log`, and says "NOT commit-bound (dirty build)" for a `-dirty` image. Hardware
 receipts from earlier runs are in `evidence/pi5_hardware_runs_2026-10-13/`.
 
+## GB10 GPU boot package builder (host only, not in any image)
+
+`dev/gb10_gsp_boot.c` builds, in plain memory, everything NVIDIA's Linux driver
+(open-gpu-kernel-modules 580.173.02) hands the GB10 to start its GPU management
+processor (GSP): the WprMeta page, libos arguments, log buffers, RPC queues with the two
+pre-boot messages, the radix-3 firmware table, the bootloader, signature and FMC copies,
+the FMC boot parameters, the one SEC2 chain-of-trust packet, and the messages a native
+kernel sends after GSP is up (object alloc, control, free, static info) plus a reader for
+GSP's replies. It is freestanding kernel C but writes no register and loads nothing; no
+part of it has run on the GB10. Host checks:
+
+    make -C native/kernel test-gb10-gsp-boot   # layout, ring, refusals (also in make test)
+    make -C native/kernel gb10-gsp-nvhdr-test  # every field vs the NVIDIA headers (needs OGKM_DIR)
+    make -C native/kernel gb10-gsp-free        # kernel flags, no hidden library calls, small stack
+    make -C native/kernel gb10-gsp-mutants     # four broken variants, each must fail
+
+What is known and what still needs the chip: `docs/GB10_FIRMWARE_INVENTORY.md` section 14.
+
 ## Known hardware risk: disk footprint (CK gate DISK_LAYOUT: NOT_RUN)
 
 **Do not boot the C kernel on a disk holding data until CK gate `DISK_LAYOUT`

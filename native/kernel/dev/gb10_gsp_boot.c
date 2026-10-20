@@ -247,6 +247,9 @@ int gsp_mq_send(gsp_mq *q, uint32_t function, const gsp_seg *segs, uint32_t nseg
             slot[k] = b < placed ? next_byte(&c) : 0;
         }
     }
+    /* message_queue_cpu.c:574-576: store fence before the writePtr publish (the doorbell after it is
+     * the caller's; this file writes no register). */
+    __atomic_thread_fence(__ATOMIC_SEQ_CST);
     wr32(q->cmdq + TXH(writePtr), (wr + elems) % GSP_MQ_MSG_COUNT);
     q->tx_seq++;
     if (sync) q->rpc_seq++;
@@ -330,6 +333,7 @@ int gsp_mq_recv(gsp_mq *q, uint8_t *out, uint32_t cap, uint32_t *function, uint3
         return -1;
     }
     uint32_t wr = rd32(tx + TXH(writePtr));
+    __atomic_thread_fence(__ATOMIC_SEQ_CST);          /* read the slots only after the writePtr that covers them */
     uint8_t *rdp = q->cmdq + GSP_MQ_RXHDR_OFF;                   /* our readPtr lives in our own queue (SWAP_RX) */
     uint32_t rd = rd32(rdp);
     if (wr >= GSP_MQ_MSG_COUNT || rd >= GSP_MQ_MSG_COUNT) { *why = "ring pointer corrupt"; return -1; }
@@ -349,6 +353,7 @@ int gsp_mq_recv(gsp_mq *q, uint8_t *out, uint32_t cap, uint32_t *function, uint3
     if (gsp_checksum32(out, (uint32_t)up(msg_len, 8)) != 0) { *why = "checksum not zero"; return -1; }
     if (rd32(out + OFF(gsp_mirror_elem, seqNum)) != q->rx_seq) { *why = "bad sequence number"; return -1; }
     if (rd32(out + RH(signature)) != GSP_RPC_SIGNATURE) { *why = "rpc signature bad"; return -1; }
+    __atomic_thread_fence(__ATOMIC_SEQ_CST);          /* finish reading before handing the slots back */
     wr32(rdp, (rd + elems) % GSP_MQ_MSG_COUNT);
     q->rx_seq++;
     if (function) *function = rd32(out + RH(function));
