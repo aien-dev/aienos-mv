@@ -25,7 +25,7 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use crate::backend::{PortForward, Proto};
+use crate::net::{Forward, Proto};
 
 pub const GUEST_IP: Ipv4Addr = Ipv4Addr::new(10, 0, 2, 15);
 pub const GATEWAY_IP: Ipv4Addr = Ipv4Addr::new(10, 0, 2, 2);
@@ -241,7 +241,7 @@ pub struct Stats {
     pub dropped: AtomicU64,
 }
 
-struct Forward {
+struct Fwd {
     guest: u16,
     sock: Arc<UdpSocket>,
     peers: Mutex<HashSet<SocketAddrV4>>,
@@ -257,7 +257,7 @@ struct Shared {
     guest: UnixDatagram,
     stop: AtomicBool,
     stats: Stats,
-    forwards: Vec<Forward>,
+    forwards: Vec<Fwd>,
     flows: Mutex<HashMap<u16, Flow>>,
     threads: Mutex<Vec<JoinHandle<()>>>,
     last_drop: Mutex<Option<&'static str>>,
@@ -293,7 +293,7 @@ const POLL: Duration = Duration::from_millis(200);
 impl UserNet {
     /// Binds every UDP forward on 127.0.0.1 and returns the network plus the
     /// socket end the hypervisor gets (one Ethernet frame per datagram).
-    pub fn start(forwards: &[PortForward]) -> io::Result<(UserNet, UnixDatagram)> {
+    pub fn start(forwards: &[Forward]) -> io::Result<(UserNet, UnixDatagram)> {
         let (vm_end, ours) = UnixDatagram::pair()?;
         // VZ drains its end until EAGAIN: a blocking end hangs its network
         // queue after the first frame we send (OBSERVED, macOS 26.6.2).
@@ -305,13 +305,15 @@ impl UserNet {
         for f in forwards {
             if f.proto != Proto::Udp {
                 return Err(io::Error::new(io::ErrorKind::Unsupported,
-                    format!("tcp:{}:{}: the macOS user network forwards UDP only (yet)", f.host, f.guest)));
+                    format!("{f}: the macOS user network forwards UDP only (yet)")));
             }
-            let s = UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, f.host)).map_err(|e| {
-                io::Error::new(e.kind(), format!("forward udp 127.0.0.1:{}: {e}", f.host))
+            let addr: Ipv4Addr = f.host_addr.parse().map_err(|_| {
+                io::Error::new(io::ErrorKind::InvalidInput, format!("{f}: host address must be IPv4"))
             })?;
+            let s = UdpSocket::bind(SocketAddrV4::new(addr, f.host_port))
+                .map_err(|e| io::Error::new(e.kind(), format!("forward {f}: {e}")))?;
             s.set_read_timeout(Some(POLL))?;
-            fw.push(Forward { guest: f.guest, sock: Arc::new(s), peers: Mutex::new(HashSet::new()) });
+            fw.push(Fwd { guest: f.guest_port, sock: Arc::new(s), peers: Mutex::new(HashSet::new()) });
         }
         let sh = Arc::new(Shared {
             nat: Mutex::new(Nat::default()),
@@ -582,7 +584,7 @@ mod tests {
     #[test]
     fn forwarded_udp_port_reaches_the_guest_and_back() {
         let free = UdpSocket::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
-        let fw = [PortForward { proto: Proto::Udp, host: free, guest: 47030 }];
+        let fw = [Forward { proto: Proto::Udp, host_addr: "127.0.0.1".into(), host_port: free, guest_port: 47030, label: "test".into() }];
         let (net, vm) = UserNet::start(&fw).unwrap();
         // The guest speaks first (its ARP), so its MAC is known.
         vm.send(&arp_request(GATEWAY_IP)).unwrap();
@@ -634,7 +636,7 @@ mod tests {
 
     #[test]
     fn tcp_forward_is_refused_not_ignored() {
-        let e = UserNet::start(&[PortForward { proto: Proto::Tcp, host: 1, guest: 1 }]).err().unwrap();
+        let e = UserNet::start(&[Forward::parse("tcp:1:1").unwrap()]).err().unwrap();
         assert_eq!(e.kind(), io::ErrorKind::Unsupported);
     }
 }

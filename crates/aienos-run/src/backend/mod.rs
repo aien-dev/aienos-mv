@@ -1,159 +1,130 @@
-//! The Backend trait: one per hypervisor. The core (CLI, image cache, Store
-//! disk, console pump, port forwards) is the same on every host; a backend only
-//! turns a `VmSpec` into a running VM and a console byte stream.
+//! The one seam every host plugs into: a [`Backend`] boots a [`VmSpec`] and moves bytes
+//! between the guest's serial port and the shared [`Console`].
+//!
+//! Backends:
+//! - `kvm`  (Linux, aarch64 host + aarch64 image): our own VMM on /dev/kvm (`kvm/`).
+//! - `qemu` (any host with QEMU installed): QEMU with the best accelerator the host has
+//!   (KVM on Linux, HVF on macOS, WHPX on Windows, TCG otherwise). The day-one fallback.
+//! - `whpx` (Windows, ledger L261) and `vz` (macOS Virtualization.framework) implement the
+//!   same trait in their own modules.
 
-use std::io::{Read, Write};
+use crate::console::Console;
+use crate::manifest::{Arch, ImageKind};
+use crate::net::Forward;
+use std::fmt;
 use std::path::PathBuf;
+
+pub mod qemu;
+
+#[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+pub mod kvm;
 
 #[cfg(target_os = "macos")]
 pub mod objc;
-pub mod qemu;
 #[cfg(target_os = "macos")]
 pub mod vz;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Proto {
-    Udp,
-    Tcp,
+/// Everything a backend needs to boot AienOS. Backend-neutral: no backend reads a
+/// field it does not understand as a hint to do something else.
+#[derive(Debug, Clone)]
+pub struct VmSpec {
+    pub arch: Arch,
+    pub image: PathBuf,
+    pub image_kind: ImageKind,
+    /// Persistent Store disk (raw), attached read-write.
+    pub store_disk: Option<PathBuf>,
+    /// Writable copy of the UEFI variable store (firmware backends only).
+    pub firmware_vars: Option<PathBuf>,
+    pub mem_mib: u32,
+    pub cpus: u32,
+    pub forwards: Vec<Forward>,
+    /// Scratch directory the backend may use for this run (deleted by the caller).
+    pub scratch: PathBuf,
 }
 
-/// Host port -> guest port. The signed transport's UDP port is forwarded by
-/// default (`DEFAULT_FORWARDS`).
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PortForward {
-    pub proto: Proto,
-    pub host: u16,
-    pub guest: u16,
+/// How a VM run ended.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum VmExit {
+    /// The guest powered itself off (PSCI SYSTEM_OFF / ACPI off).
+    PowerOff,
+    /// The guest asked for a reset (aienos-run does not reboot it: like `-no-reboot`).
+    Reset,
+    /// The user (or a ready marker in measurement mode) asked for a stop.
+    Stopped,
+    /// The VM died: the text says why (guest crash, VMM error, emulator exit status).
+    Failed(String),
 }
 
-/// CK_NET_LOCAL_PORT of the signed transport (L260/L261 contract note).
-pub const SIGNED_TRANSPORT_UDP: u16 = 47030;
-
-pub fn default_forwards() -> Vec<PortForward> {
-    vec![PortForward { proto: Proto::Udp, host: SIGNED_TRANSPORT_UDP, guest: SIGNED_TRANSPORT_UDP }]
-}
-
-impl PortForward {
-    /// "udp:47030:47030" or "tcp:8080:80".
-    pub fn parse(s: &str) -> Result<Self, String> {
-        let p: Vec<&str> = s.split(':').collect();
-        if p.len() != 3 {
-            return Err(format!("port forward {s:?}: want proto:host:guest, e.g. udp:47030:47030"));
+impl VmExit {
+    /// Process exit code for this outcome (documented in docs/AIENOS_RUN_LINUX.md).
+    pub fn exit_code(&self) -> i32 {
+        match self {
+            VmExit::PowerOff | VmExit::Reset | VmExit::Stopped => 0,
+            VmExit::Failed(_) => 1,
         }
-        let proto = match p[0] {
-            "udp" => Proto::Udp,
-            "tcp" => Proto::Tcp,
-            o => return Err(format!("port forward {s:?}: protocol {o:?} is not udp or tcp")),
-        };
-        let port = |v: &str| -> Result<u16, String> {
-            match v.parse::<u16>() {
-                Ok(0) | Err(_) => Err(format!("port forward {s:?}: {v:?} is not a port 1..65535")),
-                Ok(n) => Ok(n),
-            }
-        };
-        Ok(PortForward { proto, host: port(p[1])?, guest: port(p[2])? })
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum NetMode {
-    None,
-    /// User-mode NAT, guest 10.0.2.15, gateway 10.0.2.2 = host loopback.
-    /// QEMU: slirp with hostfwd rules. VZ: the runner's own UDP network
-    /// (crate::usernet) on a VZFileHandleNetworkDeviceAttachment.
-    Nat,
+#[derive(Debug)]
+pub enum BackendError {
+    /// This backend cannot run on this host or for this image (the text says why).
+    Unavailable(String),
+    /// Setting up or running the VM failed.
+    Vmm(String),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum StoreBus {
-    /// The AienOS Store driver is NVMe (native/kernel dev/nvme): default.
-    Nvme,
-    VirtioBlk,
+impl fmt::Display for BackendError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BackendError::Unavailable(s) => write!(f, "backend unavailable: {s}"),
+            BackendError::Vmm(s) => write!(f, "vm error: {s}"),
+        }
+    }
 }
 
-#[derive(Clone, Debug)]
-pub struct VmSpec {
-    /// Raw GPT disk with an ESP holding \EFI\BOOT\BOOTAA64.EFI.
-    pub boot_disk: PathBuf,
-    pub boot_read_only: bool,
-    /// Per-user persistent Store disk (raw), blank on first run.
-    pub store_disk: Option<PathBuf>,
-    pub store_bus: StoreBus,
-    /// Per-user EFI variable store (VZ format for vz, edk2 vars.fd for qemu).
-    pub efi_vars: PathBuf,
-    pub cpus: u32,
-    pub mem_mib: u64,
-    pub net: NetMode,
-    pub mac: Option<String>,
-    pub forwards: Vec<PortForward>,
-    pub framebuffer: bool,
-}
-
-/// The guest console as two byte streams.
-pub struct Console {
-    pub from_guest: Box<dyn Read + Send>,
-    pub to_guest: Box<dyn Write + Send>,
-}
-
-pub trait RunningVm: Send {
-    /// None until the hypervisor confirms the start.
-    fn started(&mut self) -> Option<Result<(), String>>;
-    /// None while running; Some(Ok) after a clean guest stop.
-    fn poll_exit(&mut self) -> Option<Result<(), String>>;
-    /// Ask the guest to power off (ACPI power button / VZ requestStop).
-    fn request_stop(&mut self) -> bool;
-    /// Pull the plug.
-    fn force_stop(&mut self);
-}
+impl std::error::Error for BackendError {}
 
 pub trait Backend {
+    /// Short name used by `--backend` (`kvm`, `qemu`, `whpx`, `vz`).
     fn name(&self) -> &'static str;
-    fn available(&self) -> Result<(), String>;
-    fn boot(&self, spec: &VmSpec) -> Result<(Box<dyn RunningVm>, Console), String>;
+    /// Ok when this backend can boot `spec` on this host; otherwise why not.
+    fn probe(&self, spec: &VmSpec) -> Result<(), BackendError>;
+    /// Boots `spec` and runs until the guest powers off or resets, the VM fails, or
+    /// `console.stop_requested()` turns true (then stops the VM cleanly and returns
+    /// [`VmExit::Stopped`]). Guest serial output goes to `console.guest_output`, user
+    /// input comes from `console.pop_input`.
+    fn run(&mut self, spec: &VmSpec, console: &Console) -> Result<VmExit, BackendError>;
 }
 
-/// Backends this host can run, fastest first (by measurement, see docs).
-pub fn for_host(name: Option<&str>) -> Result<Box<dyn Backend>, String> {
-    match name {
-        #[cfg(target_os = "macos")]
-        Some("vz") | None => Ok(Box::new(vz::Vz)),
-        Some("qemu") => Ok(Box::new(qemu::Qemu::for_host())),
-        #[cfg(not(target_os = "macos"))]
-        None => Ok(Box::new(qemu::Qemu::for_host())),
-        Some(o) => Err(format!("unknown backend {o:?} (this build has: {})", names().join(", "))),
-    }
+/// Backends this build knows, in `auto` preference order.
+#[allow(clippy::vec_init_then_push)] // the pushes are per-host cfg
+pub fn all() -> Vec<Box<dyn Backend>> {
+    #[allow(unused_mut)]
+    let mut v: Vec<Box<dyn Backend>> = Vec::new();
+    #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+    v.push(Box::new(kvm::KvmBackend::default()));
+    #[cfg(target_os = "macos")]
+    v.push(Box::new(vz::VzBackend));
+    v.push(Box::new(qemu::QemuBackend::default()));
+    v
 }
 
-pub fn names() -> Vec<&'static str> {
-    vec![
-        #[cfg(target_os = "macos")]
-        "vz",
-        "qemu",
-    ]
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn forward_parse_accepts_udp_and_tcp() {
-        assert_eq!(
-            PortForward::parse("udp:47030:47030").unwrap(),
-            PortForward { proto: Proto::Udp, host: 47030, guest: 47030 }
-        );
-        assert_eq!(PortForward::parse("tcp:8080:80").unwrap(), PortForward { proto: Proto::Tcp, host: 8080, guest: 80 });
-    }
-
-    #[test]
-    fn forward_parse_refuses_bad_input() {
-        for bad in ["", "udp:1", "icmp:1:1", "udp:0:1", "udp:1:70000", "udp:a:1", "udp:1:2:3"] {
-            assert!(PortForward::parse(bad).is_err(), "{bad} accepted");
+/// Picks the backend: by name, or the first one whose probe passes.
+pub fn select(name: &str, spec: &VmSpec) -> Result<Box<dyn Backend>, BackendError> {
+    let mut why = Vec::new();
+    for b in all() {
+        if name != "auto" && b.name() != name {
+            continue;
+        }
+        match b.probe(spec) {
+            Ok(()) => return Ok(b),
+            Err(e) => why.push(format!("{}: {e}", b.name())),
         }
     }
-
-    #[test]
-    fn default_forward_is_the_signed_transport_port() {
-        assert_eq!(default_forwards(), vec![PortForward { proto: Proto::Udp, host: 47030, guest: 47030 }]);
+    if why.is_empty() {
+        return Err(BackendError::Unavailable(format!(
+            "no backend named {name:?} in this build"
+        )));
     }
+    Err(BackendError::Unavailable(why.join("; ")))
 }
