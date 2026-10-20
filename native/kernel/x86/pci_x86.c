@@ -359,10 +359,13 @@ void ck_x86_display(uint64_t fb_pa, uint64_t fb_bytes, uint64_t tsc_hz)
         uint64_t bar5v = (((uint64_t)b5hi << 32 | b5lo) & ~0xfull);
         uint32_t b0lo = cr32(own->cfg, 0x10), b0hi = (b0lo & 6) == 4 ? cr32(own->cfg, 0x14) : 0;
         uint64_t bar0v = (((uint64_t)b0hi << 32 | b0lo) & ~0xfull);
-        if (bar5v && !(b5lo & 1) && ck_x86_map_mmio(bar5v, 0x40000) == 0 && bar0v && !(b0lo & 1)) {
+        /* No register aperture (QEMU's display has no BAR5): the bench says it is off, and the
+         * QEMU test build (CK_X86_BENCH_TEST) uses its RAM stand-ins. */
+        if (bar5v && !(b5lo & 1) && ck_x86_map_mmio(bar5v, 0x40000) == 0 && bar0v && !(b0lo & 1))
             ck_x86_bench_init(own->cfg, (volatile uint32_t *)(uintptr_t)bar5v,
-                               (volatile uint32_t *)(uintptr_t)bar0v);
-        }
+                              (volatile uint32_t *)(uintptr_t)bar0v);
+        else
+            ck_x86_bench_init(0, 0, 0);
     } else {
         ck_x86_panel_start(0, 0, 0, 0, 0, 0, 0, fb_pa, fb_bytes, tsc_hz);
         ck_x86_bench_init(0, 0, 0);

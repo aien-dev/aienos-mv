@@ -17,6 +17,7 @@
 #   2   A reads the staged slot object
 #   3   the swap verifies with ck_slot_verify ("swap: verified ok") and jumps
 #   4   B boots (commit -B) and reaches DONE, after the jump
+#   4b  B starts every core again (the cores A stopped with INIT)
 #   5   no reset: the QEMU process that started A is still running with B up (-no-reboot
 #       would have ended it on a guest reset)
 #   6   Allen's memory is intact: B loads the generation A saved, with the name A taught
@@ -166,14 +167,31 @@ if grep -aq "swap: jumping to new kernel" "${logA}"; then pass "3b swap jumps to
 jump_line="$(grep -an "swap: jumping to new kernel" "${logA}" | head -1 | cut -d: -f1 || true)"
 GA="$(head -n "${jump_line:-0}" "${logA}" | grep -a "allen_memory: saved generation" | tail -1 | sed -n 's/.*saved generation \([0-9][0-9]*\).*/\1/p' || true)"
 after="${work}/after_jump.log"
-if [[ -n "${jump_line}" ]]; then tail -n +"$((jump_line + 1))" "${logA}" > "${after}"; else : > "${after}"; fi
-
-wait_for "AIENOS-KERNEL-0 DONE" "${after}" "${B_WAIT}" || true
-sleep 2
+# wait_after REGEX SECONDS: 0 when REGEX shows up in B's output; the serial log keeps growing,
+# so the copy of what follows the jump line is taken again on every try
+wait_after() {
+    local i
+    for ((i = 0; i < $2; i++)); do
+        if [[ -n "${jump_line}" ]]; then tail -n +"$((jump_line + 1))" "${logA}" > "${after}"; else : > "${after}"; fi
+        grep -aqE -- "$1" "${after}" && return 0
+        kill -0 "${qpid}" 2>/dev/null || return 1
+        sleep 1
+    done
+    return 1
+}
+wait_after "AIENOS-KERNEL-0 DONE" "${B_WAIT}" || true
+# B's greeting comes after DONE, once it has loaded Allen's memory
+wait_after "^allen: " "${B_WAIT}" || true
 if grep -aq -- "${commit}-B" "${after}" && grep -aq "AIENOS-KERNEL-0 DONE" "${after}"; then
     pass "4  kernel B boots (commit -B) and reaches DONE after the jump"
 else
     fail "4  kernel B boots (commit -B) and reaches DONE after the jump"
+fi
+b_cores="$(grep -a "^summary: cores=" "${after}" | head -1 | sed -n 's/^summary: cores=\([0-9]*\/[0-9]*\).*/\1/p' || true)"
+if [[ -n "${b_cores}" && "${b_cores%/*}" == "${b_cores#*/}" && "${b_cores%/*}" -gt 1 ]]; then
+    pass "4b B starts every core again after the swap (cores=${b_cores})"
+else
+    fail "4b B starts every core again after the swap: cores=${b_cores:-none}, $(grep -a '^smp:' "${after}" | head -1 || echo 'no smp line')"
 fi
 if kill -0 "${qpid}" 2>/dev/null; then
     pass "5  no reset: the QEMU process that booted A is still running with B up"

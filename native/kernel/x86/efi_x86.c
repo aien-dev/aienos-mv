@@ -78,10 +78,13 @@ EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE *st)
 #if defined(CK_X86_SWAP) && CK_X86_SWAP
     /* A live swap, not the firmware: the running kernel already left UEFI and hands over its
      * CHANDOF3 record (swap_x86.c). The console is this image's own state, so probe it again;
-     * ck_x86_kernel_entry checks the record. */
+     * ck_x86_kernel_entry checks the record. The record sits in the old kernel's trampoline page
+     * below 1 MiB: copied into this image, that page is free again for the secondary-core
+     * trampoline (kmain_x86.c mm_build takes the lowest free page). */
     if ((uint64_t)(uintptr_t)image == CK_X86_SWAP_ENTRY_MAGIC) {
+        memcpy(&handoff, (const void *)st, sizeof handoff);
         ck_x86_com1_probe();
-        ck_x86_kernel_entry((struct ck_handoff *)(void *)st);
+        ck_x86_kernel_entry(&handoff);
     }
 #endif
     struct ck_handoff *h = &handoff;
