@@ -1,6 +1,6 @@
 # First run: from power on to "Allen is ready"
 
-Status: DRAFT 2 (L266, 2026-10-20). This is the spec the setup wizard (L267) and the driver builder (L268) build
+Status: DRAFT 3 (L266, 2026-10-20). This is the spec the setup wizard (L267) and the driver builder (L268) build
 against. Change it by ledger note on L266; the owner folds the notes in and bumps the draft number.
 
 What this page fixes: every screen a person sees after AienOS is installed (or after `aienos-run` starts it), in
@@ -26,7 +26,9 @@ before the person sees it moving, and how to undo each part.
 7. **Honest numbers only.** Any number on the screen (frames a second, model speed, memory) comes from a measurement
    made on this machine, or it is not shown. "Not measured yet" is a valid answer.
 8. **Keyboard, mouse and touch all work.** Enter or a click picks the lit choice; arrow keys move between choices;
-   Escape is "Not now". Typing a sentence anywhere goes to Allen.
+   Escape is "Not now". Typing a sentence goes to Allen on the intent screen; elsewhere in kernel images letters are ignored.
+   (Kernel images today have no mouse driver: choices move with the arrow keys, Tab or a digit, Enter picks, Escape
+   is "Not now". A mouse or touch works only in a window of a host that has one, such as `aienos-run`.)
 
 ## 1. The two ways people arrive
 
@@ -81,19 +83,21 @@ From the merger's light Allen gathers in the centre (the mind drawn as light). T
 >
 > I'm going to look after this computer with you.
 
-After a pause (about as long as it takes to read the lines), the bar at the bottom comes up with one line:
+After a pause (about as long as it takes to read the lines), the question comes up above the choices of screen 4:
 
 > What would you like this computer to do best?
+
+The bar at the bottom says: **Or just tell me**.
 
 ### Screen 4. The one question (intent)
 
 Three choices, in this order, the first one lit:
 
 > **Play games smoothly**
-> Faster frames, a steady picture, the most from your screen and graphics.
+> Faster, steadier frames from your graphics and screen.
 >
 > **Run an AI model here**
-> Use the graphics and memory in this computer to run an AI that stays on it.
+> An AI that runs on this computer and stays on it.
 >
 > **Something else**
 > Tell me in your own words.
@@ -151,7 +155,7 @@ Allen shows, in a short list, what he wants to do, then asks once:
 > - [Run the AI on your graphics card]
 > - [Build drivers for the 2 parts I can't drive yet]
 >
-> Nothing on your other drives is changed. You can undo any of this.
+> I won't touch your other drives, and you can undo any of this.
 >
 > **Set it up**     **Show me each one**     **Not now**
 
@@ -186,7 +190,7 @@ Lines appear as each is done:
 > Finding the best way to run an AI here.
 
 > Your graphics card has [12 GB] of its own memory. [Models up to about 14 billion parameters fit on it. The 30
-> billion one fits if I share it with main memory, slower.]
+> billion one fits if I share it with main memory, but it runs slower.]
 
 Then the model choice (screen 7c).
 
@@ -216,10 +220,10 @@ pair when a machine on the network serves it, else the 30B on this computer when
 - **Connect my own:**
   > Which service?  **Claude**   **ChatGPT**   **Another service**
   >
-  > Paste your key for [Claude]. It stays sealed on this computer and is never shown again.
+  > Paste your key for [Claude]. I'll keep it sealed on this computer and won't show it again.
   (Another service also asks for its web address, with "the address your service's settings show for
   OpenAI-compatible apps" as the hint.) Allen tests it with one short request: "That works." or "That key didn't
-  work. [The service said: key not valid.] Try again?"
+  work. [Claude said the key isn't valid.] Try again?"
 - **Never asked:** endpoints of known services, model file paths, model names the machine can read itself.
 
 ### Screen 8. Setting up the hardware (the driver builder, L268)
@@ -241,11 +245,11 @@ One line per device, each with a calm state word:
   written and tested in a sandbox against a model of the chip; the real device is never touched until the tests
   pass and the person agrees.
 - **The second consent** (only when a built driver is ready for a real device):
-  > I built a driver for your [Wi-Fi] and tested it safely. Turn it on?
+  > I built a driver for your [Wi-Fi] and tested it without touching the real one. Turn it on?
   >
   > **Turn it on**     **Not now**
   If it fails on the real device, Allen puts the old one back by himself and says: "That didn't work on the real
-  [Wi-Fi]. I've put the old one back. I'll keep working on it."
+  [Wi-Fi]. I've put the old driver back, and I'll keep working on it."
 - **Never asked:** which driver to use, whether to unbind the maker's driver (Allen asks to turn his on; the swap is
   his job), log levels, test settings.
 
@@ -311,6 +315,12 @@ meet and measure; they are not measurements. Each build reports its observed tim
 
 ## Change log
 
+- Draft 3 (2026-10-20): wording from L282's mockups taken (docs/design/screens/README.md, 9 changes: screens 3, 4, 6, 7b, 7c, 8)
+  and the L267 build notes: no mouse in kernel images, letters outside the intent screen ignored. Also, from
+  L267: the AI pick runs on the games path too (the driver builder needs an AI); an API key lives in kernel RAM
+  only (no sealed store on x86 yet), crosses once to the host relay as a key test, is wiped, and `llm.conf` names
+  the key variable only; https services cannot be tested yet (no TLS in the relay, none hand-rolled);
+  the host description reader is only in the launcher image.
 - Draft 2 (2026-10-20): default local AI is the 27B + 30B pair when the network has it (L267 note); section 5
   points to the measured boot sequence.
 - Draft 1 (2026-10-20): first version, from Drake's words in the L266/L267/L268 briefs and the iMac's boot.

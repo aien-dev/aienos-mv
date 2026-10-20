@@ -51,7 +51,56 @@ a virtio-sound device model with the same commands (section 3 lists exactly whic
 
 ## 2. Measured
 
-RESULTS PENDING (filled from the gate runs below).
+How to read a receipt: the night lasts 15.2 s, which is 912 beats of a 60 Hz screen. A "dropped" beat is one
+where no new picture was ready. fps is frames drawn divided by 15.2 s.
+
+**Inside the VM (the aienos-run window).** `quiet-build bash scripts/qemu_ck_boot_show_test.sh <arch> <accel>`;
+kept files (serial log, mid-night screendump, captured WAV) in `target/boot-show/<arch>-<accel>/`.
+
+Three runs, each exit 0 and `AIENOS_CK_BOOT_SHOW: PASS` (OBSERVED, 2026-10-20, Spark, QEMU 8.2.2, 1280x800):
+
+| Image | Machine | Screen path | Frames in 15.2 s | Dropped of 912 | fps | Draw average | Slowest |
+|---|---|---|---|---|---|---|---|
+| aarch64 | virt, KVM (host speed) | virtio-gpu | 940 | 9 | 61.8 | 6.6 ms | 33.0 ms |
+| aarch64 | virt, TCG (every instruction emulated) | virtio-gpu | 419 | 501 | 27.5 | 33.2 ms | 257.2 ms |
+| x86_64 | q35 + OVMF, TCG | GOP framebuffer | 189 | 723 | 12.4 | 77.9 ms | 312.6 ms |
+
+Sound, same runs: the chirp starts at night 11.25 s (aarch64) and 11.31 s (x86_64); the virtio-sound device
+plays 11 to 12 periods of 100 ms with 0 starved and 0 refused, then stops cleanly. QEMU wrote what the guest
+played to a WAV file; 44936 of 44936 chirp frames are present, correlation with the host-made chirp 1.0000,
+largest sample difference 0 (all three runs). A mid-night screendump shows the sky drawn (0.30% of pixels lit,
+brightest 255).
+
+Reading it: with KVM the aarch64 image holds 60 Hz in the VM window. TCG emulates the CPU one instruction at a
+time, so its numbers say how slow emulation is, not how slow the code is; the x86_64 image can only run under TCG
+on this aarch64 host (no x86 KVM here), so x86_64 at 60 Hz in a VM is UNKNOWN until a run on an x86 host with
+WHPX, Hyper-V or KVM. The sound and picture are bit-identical in every run; only the pace differs. QEMU prints
+`audio: Could not create a backend for voice virtio-sound.in` in every run: the microphone side of the device has
+no backend in the gate, the playback side is the one measured, and nothing in the gate depends on capture.
+
+**The same drawing code on the Spark, no VM** (one core, real clock, memory instead of a screen):
+`BOOT_SHOW_SIZES="1280x800 1920x1080 3840x2160 5120x2880" quiet-build sh scripts/ck_boot_show_test.sh`,
+exit 0 (OBSERVED):
+
+| Screen | Frames | Dropped of 912 | fps | Draw average | Slowest |
+|---|---|---|---|---|---|
+| 1280x800 | 948 | 2 | 62.3 | 4.5 ms | 22.3 ms |
+| 1920x1080 | 947 | 3 | 62.3 | 5.8 ms | 15.6 ms |
+| 3840x2160 | 652 | 273 | 42.8 | 21.6 ms | 157.2 ms |
+| 5120x2880 | 422 | 490 | 27.7 | 35.1 ms | 97.0 ms |
+
+One Spark core keeps 60 Hz up to 1920x1080 and falls behind at 4K and 5K (OBSERVED). The VM runners cap the
+screen at 1920x1080 for that reason.
+
+**The iMac itself** (27-inch, 5K panel driven at 3840x2160, build `0930240`, the netboot report
+`imac-2d27001cbf587fae`, OBSERVED, not a run of this branch): "1126 frames by 20 s after Allen woke, average
+12.6 ms, slowest 46.8 ms (drawn by a secondary core)"; "the sky made in 476 ms (66 MiB drawing memory)"; the
+night on screen 15260 ms after power on. An average of 12.6 ms is inside one 60 Hz beat (16.7 ms), so on
+average the iMac holds 60 Hz at 3840x2160; the slowest frame (46.8 ms) missed about two beats (INFERRED from
+the report; that report does not count dropped beats, the receipt line on this branch does). The iMac
+splits each frame across its cores, the Spark fixture above uses one.
+
+UNKNOWN: the frame rate on the Spark's own screen, on a Pi 5 and on a PC; none has run this build yet.
 
 ## 3. What the drivers use
 
@@ -80,6 +129,14 @@ in strips (the iMac kernel splits a frame across its cores). What drawing it on 
 3. **The VM.** Inside aienos-run the guest has no real GPU. A virtio-gpu with 3D (virgl or Venus) would let
    the guest hand shaders to the host's GPU; that is a separate driver (virtio-gpu 3D contexts) and is not
    started.
-4. **Is it needed?** On the iMac the CPU path already holds 60 Hz on average at 3840x2160 (section 2). A GPU path
+4. **Is it needed?** On the iMac the CPU path holds 60 Hz on average at 3840x2160 (section 2, INFERRED from a 12.6 ms average frame). A GPU path
    is worth it for 5K panels, for doing more each frame, and for battery; it is not needed for the boot as it
    is today.
+
+## 5. Open findings
+
+- **Dim hint text (from L282, OBSERVED there).** `ui/allen_ui.c` draws the hint line at alpha 150/256 and the faint
+  line at 110/256 over the night; measured contrast 3.26:1 and 1.98:1, under the 4.5:1 floor
+  (`docs/design/tokens/contrast.txt` on `feat/allen-design-system`). Drawing both at full alpha gives 7.73:1 and
+  6.02:1. Not changed here: `ui/` is kept byte-identical to the iMac build (`0930240`) so the iMac stack merges
+  cleanly; the one-line fix goes in once that stack has landed, or on the iMac lane if it moves first.
