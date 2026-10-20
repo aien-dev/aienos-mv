@@ -254,3 +254,38 @@ pi5-agent-mutants:
 	done; exit $$fail
 stage-test: pi5-agent-test
 stage-sanitize: pi5-agent-sanitize
+
+# ---- L207: Intel HD Audio driver against a software controller/codec model ----
+# dev/tests/hda_test.c links only dev/hda.c and the host ck.h stand-ins. Each
+# mutant (-DCK_TEST_HDA_MUT=n in dev/hda.c: 1 wrong stream tag, 2 half-size
+# cyclic buffer, 3 44.1 kHz format word, 4 shutdown leaves CRST set) must FAIL.
+HDA_TEST_SRCS := $(STAGE_DIR)/dev/hda.c $(STAGE_DIR)/svc/tests/ck_host.c $(STAGE_DIR)/dev/tests/hda_test.c
+HDA_TEST_DEPS := $(HDA_TEST_SRCS) $(STAGE_DIR)/dev/hda.h $(wildcard $(STAGE_DIR)/include/*.h)
+HDA_TEST_INC := $(STAGE_INC) -I$(STAGE_DIR)/svc/tests
+HDA_MUTANTS := 1 2 3 4
+
+$(STAGE_OUT)/hda_test: $(HDA_TEST_DEPS)
+	@mkdir -p $(@D)
+	$(STAGE_CC) $(STAGE_HOST_FLAGS) $(HDA_TEST_INC) -o $@ $(HDA_TEST_SRCS) -lm
+$(STAGE_OUT)/hda_test_san: $(HDA_TEST_DEPS)
+	@mkdir -p $(@D)
+	$(STAGE_CC) $(STAGE_HOST_FLAGS) $(STAGE_SAN_FLAGS) $(HDA_TEST_INC) -o $@ $(HDA_TEST_SRCS) -lm
+$(STAGE_OUT)/hda_test_mut%: $(HDA_TEST_DEPS)
+	@mkdir -p $(@D)
+	$(STAGE_CC) $(STAGE_HOST_FLAGS) -DCK_TEST_HDA_MUT=$* $(HDA_TEST_INC) -o $@ $(HDA_TEST_SRCS) -lm
+
+.PHONY: hda-test hda-sanitize
+hda-test: $(STAGE_OUT)/hda_test $(foreach m,$(HDA_MUTANTS),$(STAGE_OUT)/hda_test_mut$(m))
+	$(STAGE_OUT)/hda_test
+	@for m in $(HDA_MUTANTS); do \
+	  if $(STAGE_OUT)/hda_test_mut$$m >$(STAGE_OUT)/hda_test_mut$$m.log 2>&1; then \
+	    echo "CK_HDA_MUTANT: FAIL (mutant $$m passed the host checks)"; exit 1; fi; \
+	  n=$$(grep -c "^  FAIL " $(STAGE_OUT)/hda_test_mut$$m.log || true); \
+	  if [ "$$n" -lt 1 ]; then echo "CK_HDA_MUTANT: FAIL (mutant $$m exited non-zero without a failing check: crash?)"; exit 1; fi; \
+	  echo "CK_HDA_MUTANT $$m: caught by $$n failing checks"; \
+	done; echo "CK_HDA_MUTANTS: PASS"
+hda-sanitize: $(STAGE_OUT)/hda_test_san
+	ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=print_stacktrace=1 $<
+
+stage-test: hda-test
+stage-sanitize: hda-sanitize
