@@ -41,7 +41,14 @@ extern "system" {
     pub fn GetConsoleProcessList(lpdwProcessList: *mut DWORD, dwProcessCount: DWORD) -> DWORD;
     pub fn SetConsoleOutputCP(wCodePageID: u32) -> BOOL;
     pub fn SetConsoleCP(wCodePageID: u32) -> BOOL;
+    // libloaderapi.h
+    pub fn LoadLibraryExW(lpLibFileName: *const u16, hFile: HANDLE, dwFlags: DWORD) -> HANDLE;
+    pub fn GetProcAddress(hModule: HANDLE, lpProcName: *const u8) -> *mut c_void;
 }
+
+/// LoadLibraryExW flag: search System32 only, so a planted DLL next to the downloaded exe
+/// is never loaded.
+pub const LOAD_LIBRARY_SEARCH_SYSTEM32: DWORD = 0x0000_0800;
 
 /// UTF-16, NUL-terminated.
 pub fn wide(s: &str) -> Vec<u16> {

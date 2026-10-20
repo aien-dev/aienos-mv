@@ -17,7 +17,7 @@ options:
   --image <file>          boot this local image instead of the downloaded one
   --kind <kind>           image kind for --image: uefi-app (default), disk-raw, disk-qcow2, disk-vhdx, iso
   --arch <arch>           guest architecture: aarch64 or x86_64 (default: this computer's)
-  --backend <name>        auto (default), kvm (own VMM, Linux), qemu
+  --backend <name>        auto (default), kvm (own VMM, Linux), qemu, whpx (own VMM, Windows, experimental)
   --manifest <url>        manifest location (default $AIENOS_RUN_MANIFEST or the aienos.com one)
   --allow-test-key        accept a manifest signed with the public TEST key (never a release)
   --cpus <n>              virtual CPUs (default 1)

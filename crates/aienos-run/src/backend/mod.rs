@@ -16,6 +16,8 @@ use std::path::PathBuf;
 
 pub mod qemu;
 pub mod qmp;
+pub mod whpx;
+pub mod x86;
 
 #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
 pub mod kvm;
@@ -100,6 +102,7 @@ pub fn all() -> Vec<Box<dyn Backend>> {
     #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
     v.push(Box::new(kvm::KvmBackend::default()));
     v.push(Box::new(qemu::QemuBackend::from_env()));
+    v.push(Box::new(whpx::WhpxBackend));
     v
 }
 
