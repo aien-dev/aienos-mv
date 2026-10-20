@@ -62,7 +62,7 @@ Not in the report (UNKNOWN until read): the Bluetooth part, the camera, the Cirr
 | GPU core driver (display flip, memory controller read, SMU check; microcode, SDMA, compute are stubs) | `feat/imac-gpu-core`, `fix/imac-gpu-regs-verified` | branch (L143, fix L187) |
 | GCN4 shader encoder, PM4 packets, interpreter | `feat/imac-gpu-shader` | branch (L144) |
 
-Read: the merged `native/kernel/x86/` directory has 11 files; the stacked branch `feat/imac-gpu-bench` has 22 plus a `gpu/` directory (OBSERVED, `git ls-tree`).
+Read: the merged `native/kernel/x86/` directory has 11 files; the stacked branch `feat/imac-gpu-bench` has 23; `feat/imac-gpu-core` adds a `gpu/` directory of 11 files (OBSERVED, `git ls-tree`).
 
 ## 4. The gap table
 
