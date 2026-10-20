@@ -104,8 +104,10 @@ lib="${repo_root}/target/infer-kernel/aarch64-unknown-none/release/libaienos_inf
 map_tool="${out}/host/ck_model_map"
 loader='\EFI\AIENOS\aienos-ck-service.efi'
 label="AIENOS C kernel service (one-time)"
-recov_entry="0004"
+recov_entry=""   # the firmware picks it; found by partition GUID below
 recov_label="AIENOSRECOV"
+# shellcheck source=scripts/lib_recovery_entry.sh
+source "${repo_root}/scripts/lib_recovery_entry.sh"
 hold_s=120
 secure_boot_var="/sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c"
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -209,14 +211,14 @@ else
     order_before="$(sed -n 's/^BootOrder: //p' <<<"${boot_state}")"
     current_before="$(sed -n 's/^BootCurrent: //p' <<<"${boot_state}")"
     next_before="$(sed -n 's/^BootNext: //p' <<<"${boot_state}")"
-    recov_line="$(grep -E "^Boot${recov_entry}\*? " <<<"${boot_state}" || true)"
+    recov_entry="$(recovery_entry "${boot_state}")"
     echo "BootCurrent:   ${current_before}"
     echo "BootOrder:     ${order_before} (never changed)"
     [[ -z "${next_before}" ]] || stop "BootNext is already set (${next_before}); another staging is pending"
-    if [[ "${recov_line}" == *"${recov_label}"* ]]; then
+    if [[ -n "${recov_entry}" ]]; then
         echo "recovery:      Boot${recov_entry} ${recov_label} present (kept untouched)"
     else
-        stop "Boot${recov_entry} ${recov_label} not present: insert the recovery stick and check docs/RECOVERY_MEDIA_MACHINE1.md (got: '${recov_line:-none}')"
+        stop "the ${recov_label} recovery stick is not in the boot list (no entry on GPT partition ${AIENOS_RECOV_PARTUUID}): plug it in, see docs/RECOVERY_MEDIA_MACHINE1.md"
     fi
     existing="$(sed -n "s/^Boot\([0-9A-F]\{4\}\)\*\{0,1\} ${label}.*/\1/p" <<<"${boot_state}" | head -1)"
     echo "boot entry:    '${label}' ${existing:+exists as Boot${existing}}${existing:-will be created (create-only, not in BootOrder)}"
@@ -372,7 +374,7 @@ else
         if [[ "${order_after}" != "${order_before}" ]]; then
             run sudo efibootmgr --quiet --bootorder "${order_before}"
         fi
-        efibootmgr | grep -qE "^Boot${recov_entry}\*? .*${recov_label}" \
+        [[ "$(recovery_entry "$(efibootmgr)")" == "${recov_entry}" ]] \
             || { echo "STOP: Boot${recov_entry} ${recov_label} is gone; BootNext NOT set"; exit 1; }
         echo "aienos_boot_entry: ${entry}" >>"${evidence_dir}/STAGED-CK-SERVICE.TXT"
     else

@@ -24,8 +24,9 @@ set -uo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 default_entry="0001"
-recov_entry="0004"
 recov_label="AIENOSRECOV"
+# shellcheck source=scripts/lib_recovery_entry.sh
+source "${repo_root}/scripts/lib_recovery_entry.sh"
 sb_default="/sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c"
 
 # preflight EFIBOOTMGR_TEXT SB_FILE ESP QUIET_FLAG TREE_STATUS IMAGE EXPECT
@@ -42,10 +43,10 @@ preflight() {
         order="$(sed -n 's/^BootOrder: //p' <<<"${boot}")"
         next="$(sed -n 's/^BootNext: //p' <<<"${boot}")"
         current="$(sed -n 's/^BootCurrent: //p' <<<"${boot}")"
-        recov="$(grep -E "^Boot${recov_entry}\*? " <<<"${boot}" || true)"
+        recov="$(recovery_entry "${boot}")"
         echo "INFO  BootCurrent=${current:-?} BootOrder=${order:-?}"
-        [[ "${recov}" == *"${recov_label}"* ]] && ok "recovery stick: Boot${recov_entry} ${recov_label} listed" \
-            || stop "recovery stick: Boot${recov_entry} ${recov_label} not listed (got '${recov:-none}'); plug it in, see docs/RECOVERY_MEDIA_MACHINE1.md"
+        [[ -n "${recov}" ]] && ok "recovery stick: Boot${recov} ${recov_label} listed (GPT partition ${AIENOS_RECOV_PARTUUID})" \
+            || stop "recovery stick: ${recov_label} not listed (no entry on GPT partition ${AIENOS_RECOV_PARTUUID}); plug it in, see docs/RECOVERY_MEDIA_MACHINE1.md"
         [[ "${order%%,*}" == "${default_entry}" ]] && ok "BootOrder starts with ${default_entry} (Linux, the permanent default)" \
             || stop "BootOrder does not start with ${default_entry} (got '${order:-none}')"
         [[ -z "${next}" ]] && ok "BootNext is not set (no other one-time boot pending)" \
@@ -88,7 +89,9 @@ preflight() {
 
 if [[ "${1:-}" == --self-test ]]; then
     st=0; t="$(mktemp -d)"; trap 'rm -rf "${t}"' EXIT
-    good=$'BootCurrent: 0001\nTimeout: 5 seconds\nBootOrder: 0001,0003\nBoot0001* ubuntu\nBoot0003* UEFI PXE\nBoot0004* AIENOSRECOV'
+    # The stick line as the firmware wrote it on 2026-09-24 (evidence/gate1_machine1_selftest_report_2026-09-24.txt).
+    stick=$'Boot0004* UEFI: USB USB Hard Drive, Partition 1\tVenHw(0d51905b-b77e-452a-a2c0-eca0cc8d514a,0000b91d0000000000)/USB(1,0)/USB(1,0)/HD(1,GPT,f227357c-1e80-4fd0-a55e-2efbef1dd25c,0x800,0x1df000)'
+    good=$'BootCurrent: 0001\nTimeout: 5 seconds\nBootOrder: 0001,0003\nBoot0001* ubuntu\nBoot0003* UEFI PXE\n'"${stick}"
     printf '\0\0\0\0\0' >"${t}/sb_off"; printf '\0\0\0\0\1' >"${t}/sb_on"
     esp="/"   # any mounted path stands in for the ESP in the self-test
     printf 'img' >"${t}/img"; dig="$(sha256sum "${t}/img" | cut -c1-64)"
@@ -98,7 +101,9 @@ if [[ "${1:-}" == --self-test ]]; then
     }
     case_ "good state is READY" 0 "${good}" "${t}/sb_off" "${t}/noflag" "" "${t}/img" "${dig}"
     case_ "BootNext pending -> NOT_READY" 1 "${good}"$'\nBootNext: 0000' "${t}/sb_off" "${t}/noflag" "" "" ""
-    case_ "recovery stick absent -> NOT_READY" 1 "${good/Boot0004\* AIENOSRECOV/}" "${t}/sb_off" "${t}/noflag" "" "" ""
+    case_ "recovery stick absent -> NOT_READY" 1 "${good/${stick}/}" "${t}/sb_off" "${t}/noflag" "" "" ""
+    case_ "stick under another entry number -> READY" 0 "${good/Boot0004/Boot0002}" "${t}/sb_off" "${t}/noflag" "" "" ""
+    case_ "entry named AIENOSRECOV on another partition -> NOT_READY" 1 "${good/${stick}/Boot0004* AIENOSRECOV}" "${t}/sb_off" "${t}/noflag" "" "" ""
     case_ "BootOrder not Linux first -> NOT_READY" 1 "${good/BootOrder: 0001,0003/BootOrder: 0000,0001}" "${t}/sb_off" "${t}/noflag" "" "" ""
     case_ "booted from another entry -> NOT_READY" 1 "${good/BootCurrent: 0001/BootCurrent: 0004}" "${t}/sb_off" "${t}/noflag" "" "" ""
     case_ "Secure Boot on -> NOT_READY" 1 "${good}" "${t}/sb_on" "${t}/noflag" "" "" ""
