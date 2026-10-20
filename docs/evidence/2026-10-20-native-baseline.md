@@ -120,5 +120,28 @@ The other 29 QEMU gates (27 + LIFECYCLE + MEMORY) pass at this commit. Section 6
   not part of this baseline.
 - Hardware: every gate here is QEMU only. Nothing physical was touched or qualified.
 
-## 6. Re-run on the timer fix
-PENDING (queued behind another agent's gate lock when this was written).
+## 6. Re-run on the timer fix, and the owner-keys check
+
+SERVICE_DISK, `quiet-build bash scripts/qemu_ck_service_disk_test.sh`, run in a throwaway worktree of
+`origin/fix/timer-window-starvation` at 54fe5b96 (PR aienos#438): exit 0, 100 rows PASS, 0 FAIL,
+`AIENOS_CK_SERVICE_DISK: PASS (QEMU only; hardware NOT_RUN)` (OBSERVED, svcdisk-fix.log; two earlier attempts
+returned exit 3, gate lock held by another agent, and were retried on exit 3 only).
+One PASS on the fix branch is consistent with the cause in section 5 but does not prove it: the flake needs host
+load to show, and this run was a single run (INFERRED; the 18/20 to 20/20 repeat evidence belongs to #438's own record).
+Result for main 18e27659 plus this branch's text-only changes: SERVICE_DISK stays FAIL until #438 lands.
+
+Owner-keys check, `quiet-build bash scripts/ck_owner_keys_check.sh`: exit 0, 37 PASS, 0 FAIL,
+`CK_OWNER_KEYS_CHECK: PASS` (OBSERVED, owner-keys.log). Hardware staging refuses the TEST Store keys and TEST machine id.
+
+## 7. Baseline verdict
+
+| Item | Result |
+|---|---|
+| Host `make test`, test_smmu (202 checks), IORT mutants | PASS |
+| IORT decode fixture vs `docs/GB10_IORT_DECODE.md` | PASS (15 maps, limit 32) |
+| 27 `ck_gates.sh` gates + LIFECYCLE + MEMORY | PASS |
+| SERVICE_DISK on current main | **FAIL** (timer flake, fix = #438, PASS once on fix branch) |
+| Owner-keys check | PASS |
+| TRUST-1 Gate 4, Rust-reference scripts | NOT_RUN by design (section 5) |
+
+The baseline is NOT fully green: one gate fails on current main until #438 merges.
