@@ -366,19 +366,25 @@ Linux `xhci_plat_hcd` maps. Table digests are in
 `tests/fixtures/spark_xhci_acpi_expected.txt`.
 
 **What the Spark will print** (INFERRED from those tables, high confidence;
-hardware NOT_RUN): the walker finds all six controllers, and every one is
-then **denied** with `dma_gate: xhci USBn denied (SmmuNotReady), controller
-left halted`. The reason is not USB: the kernel's SMMU service refuses the
-Spark's IORT as a whole (`smmu: IORT malformed, SMMU unusable (fail
-closed)`), because the first SMMUv3 (0x13800000, the one behind the USB
-controllers) has 15 PCI root-complex mappings (the service keeps at most 8)
-with stream ids up to 0xfffff (its linear stream table holds 0x0-0xfff).
-The same refusal already applies to the NVMe on the Spark. The USB streams
-themselves (0x0-0x5) would fit. So on the Spark this cut still gives
-`keyboard: unavailable (no keyboard on any platform xHCI)` and normal boot,
-now for a stated reason, and fails closed. Making the SMMU service accept
-the Spark IORT (a two-level stream table, more root-complex mappings) is
-the next cut. Also UNKNOWN until a hardware run: whether the MediaTek glue
+hardware NOT_RUN): the walker finds all six controllers. The kernel's SMMU
+service accepts the Spark's IORT: the first SMMUv3 (0x13800000, the one
+behind the USB controllers) has 15 PCI root-complex mappings, and the parse
+keeps up to `CK_IORT_MAX_MAPS` (32, `core/acpi.h`) of them. Its stream ids
+reach 0xfffff, which the two-level stream table (`core/smmu_svc.c`, used
+when the SMMU reports `ST_LEVEL` two-level) can hold. Each controller is
+then granted its own stream (0x0-0x5) with `dma_gate: xhci USBn granted
+(Confined) smmu=0x13800000 stream=N`, and the keyboard phase runs on each
+in turn. MEASURED on the committed IORT table (3904 bytes, sha256
+`5e0096a2...`, read under Ubuntu 2026-10-05) with `ck_acpi_scan --iort`:
+`ck_iort_parse` accepts it, 15 mappings against a limit of 32, three
+SMMUv3 nodes, segment 15 (the GB10) routed to the second SMMU
+(0x13000000, stream 0x100). Earlier text here said the service refused the
+table (15 mappings against a limit of 8, linear table 0x0-0xfff); that was
+true before the limit became 32 and the two-level table landed, and the
+GB10 console expectation file was regenerated from the current tool on
+2026-10-20 (docs/evidence/2026-10-20-native-baseline.md). Also UNKNOWN until
+a hardware run: whether the SMMU bring-up itself succeeds on the Spark
+(only the table parse is measured), whether the MediaTek glue
 around each controller is powered and clocked when the kernel reads its
 registers (Linux handles that in firmware `_STA`/`_PS0` and its own glue
 driver; reading a powered-down block could fault), and whether
