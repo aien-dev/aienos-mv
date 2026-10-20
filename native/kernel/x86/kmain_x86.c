@@ -1161,9 +1161,11 @@ void ck_x86_swap_tramp_open(void)
             *pd = (*pd | PTE_W) & ~PTE_NX;
             continue;
         }
+        /* The stack guard (kstack's first page) is unmapped: it is image memory the copy
+         * writes too, mapped back identity, write-back, like the image pages around it. */
         uint64_t *pte = pte4k(a);
-        if (pte && (*pte & PTE_P))
-            *pte = (*pte | PTE_W) & ~PTE_NX;
+        if (pte)
+            *pte = (*pte & PTE_P) ? (*pte | PTE_W) & ~PTE_NX : a | PTE_P | PTE_W;
     }
     ck_wr_cr3(ck_rd_cr3());
 }
