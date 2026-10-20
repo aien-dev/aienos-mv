@@ -66,6 +66,8 @@ mcopy -i "${img}" "${out}/IMACKERN-LAB.EFI" ::/EFI/BOOT/BOOTX64.EFI
 # 6674 = 0x1A12 GRPH_FLIP_CONTROL (both ends of the DCP0 surface range), 148 = 0x94 SMC_MESSAGE_0,
 # 149 = 0x95 SMC_RESP_0, 164 = 0xA4 SMC_MSG_ARG_0; refused neighbours 6659 = 0x1A03 GRPH_SWAP_CNTL,
 # 6675 = 0x1A13, 150 = 0x96 SMC_MESSAGE_1, 165 = 0xA5 SMC_MSG_ARG_1.
+# The two polls on 0x4800 (holding 0xABCD0001): the first matches the high half; the second waits
+# for a low half of 0x0002 that never comes, so it must end in TIMEOUT.
 cat > "${work}/test.bench" <<'BENCH'
 ping
 pci_cfg 0
@@ -76,7 +78,7 @@ bar5_write 256 1
 bar0_write 5 0x42
 bar0_read 5
 bar5_poll 18432 0xFFFF0000 0xABCD0000 100
-bar5_poll 18432 0x0000FFFF 0x00000001 50
+bar5_poll 18432 0x0000FFFF 0x00000002 50
 bar5_rmw 18432 0x0000FF00 0x00005500
 bar5_write 6660 0x11110001
 bar5_write 6674 0x11110002
