@@ -2283,8 +2283,7 @@ IMACKERN_OBJS := $(IMACKERN_DIR)/efi_entry_x86_64.o $(IMACKERN_DIR)/efi_x86.o $(
 	$(IMACKERN_DIR)/paint.o $(IMACKERN_DIR)/night.o $(IMACKERN_DIR)/mind.o $(IMACKERN_DIR)/flow.o $(IMACKERN_DIR)/chirp.o \
 	$(IMACKERN_DIR)/allen_memory.o $(IMACKERN_DIR)/allen_notes.o $(IMACKERN_DIR)/gpt_add.o $(IMACKERN_DIR)/memory_x86.o \
 	$(IMACKERN_DIR)/fat_boot.o $(IMACKERN_DIR)/sha512.o $(IMACKERN_DIR)/ct.o $(IMACKERN_DIR)/panel_x86.o \
-	$(IMACKERN_DIR)/gpu_x86.o $(IMACKERN_DIR)/amd_display.o $(IMACKERN_DIR)/amd_mc.o \
-	$(IMACKERN_DIR)/amd_smu.o $(IMACKERN_DIR)/amd_ucode.o $(IMACKERN_DIR)/amd_sdma.o $(IMACKERN_DIR)/amd_compute.o
+	$(IMACKERN_DIR)/gpu_x86.o
 IMACKERN_REPORT_OBJS := $(IMACKERN_DIR)/report_x86.o $(IMACKERN_DIR)/aienos_net.o
 # Symbols only the lab image may contain; the default image is checked for them after linking.
 IMACKERN_REPORT_SYMS := ck_x86_report_hold|ck_x86_report_frame|ck_x86_report_filter|ck_x86_report_parts|ck_x86_tg3_send|ck_x86_tg3_drain|net_udp_build
@@ -2303,6 +2302,10 @@ GPU_DIR := $(KDIR)/gpu
 CK_X86_GPU ?= 0
 ifeq ($(CK_X86_GPU),1)
 IMACKERN_CFLAGS += -DCK_X86_GPU=1
+# The driver itself is linked only when it is on; with it off, gpu_x86.c
+# supplies the stubs (linking both defined every ck_gpu_* entry twice).
+IMACKERN_OBJS += $(IMACKERN_DIR)/amd_display.o $(IMACKERN_DIR)/amd_mc.o $(IMACKERN_DIR)/amd_smu.o \
+	$(IMACKERN_DIR)/amd_ucode.o $(IMACKERN_DIR)/amd_sdma.o $(IMACKERN_DIR)/amd_compute.o
 CK_X86_GPU_UCODE ?= 0
 ifeq ($(CK_X86_GPU_UCODE),1)
 ifeq ($(wildcard $(REPO)/target/native-kernel/gpu_ucode.inc),)
