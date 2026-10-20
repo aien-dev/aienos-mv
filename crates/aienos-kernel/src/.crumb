@@ -45,14 +45,14 @@
     "generated": {
       "children": [
         {
-          "digest": "ad829eca65ef7878ec3f262d4ba17592c984c4f25e29b2012ea00fd6d3909260",
-          "last_commit": "49ff776",
+          "digest": "f7f95ba631cdc9eecd2bda80d78c2df989e082fa584d2618d3aed352b36068ef",
+          "last_commit": "eef497c",
           "name": "arch",
           "purpose": "Directory crates/aienos-kernel/src/arch. Purpose not yet described by a human."
         },
         {
-          "digest": "b7d0aa65cc5d5530c8946550c0c917d2f5b413fd7fd26c951a927061e88c42ac",
-          "last_commit": "f0facc7",
+          "digest": "a00dd99bbe0798e29933663ed4ee59c498ae6fc18782cd632cf9a06af5a044c3",
+          "last_commit": "eef497c",
           "name": "crypto",
           "purpose": "Directory crates/aienos-kernel/src/crypto. Purpose not yet described by a human."
         },
@@ -69,8 +69,8 @@
           "purpose": "Directory crates/aienos-kernel/src/infer. Purpose not yet described by a human."
         },
         {
-          "digest": "fedb9de89144afbd947950265a8abd584f23af9188889330b1efb7ac600b6655",
-          "last_commit": "3a6174a",
+          "digest": "b4c22d0640172552972e3bbadbf5cd6d31f1dd9a0f7af9bf709ac41dede075e3",
+          "last_commit": "eef497c",
           "name": "mem",
           "purpose": "Directory crates/aienos-kernel/src/mem. Purpose not yet described by a human."
         },
@@ -81,8 +81,8 @@
           "purpose": "Directory crates/aienos-kernel/src/nvme. Purpose not yet described by a human."
         },
         {
-          "digest": "65eae3c74fff17cf4adf6f795c72ce3a65a32bb8d90a735fa8674a9a7bbe5a4e",
-          "last_commit": "a2a0382",
+          "digest": "730053171a7e0a879410e544deee69a772c97b39fb5a62492aee741d603dd2c3",
+          "last_commit": "eef497c",
           "name": "store",
           "purpose": "Directory crates/aienos-kernel/src/store. Purpose not yet described by a human."
         },
@@ -93,21 +93,21 @@
           "purpose": "Directory crates/aienos-kernel/src/sync. Purpose not yet described by a human."
         },
         {
-          "digest": "f51233705a5c33d1c72abca84575d077a80fd907e73c14ee95d9939a02c06eb0",
-          "last_commit": "49ff776",
+          "digest": "a39c612b394c9b6a8bb45fcb0076324614c99c794e819668c754d564472c7751",
+          "last_commit": "eef497c",
           "name": "usb",
           "purpose": "Directory crates/aienos-kernel/src/usb. Purpose not yet described by a human."
         }
       ],
-      "children_root": "sha256:e84717f6b7c3368dbb75c1fe5496c2b6b70a63404a35a96dc89e2aa5dec251b2",
-      "compiled_at": "2026-10-14T05:42:42Z",
+      "children_root": "sha256:a9019309dbc198473eaba3ffd2cf29f197d187f8ead1de96866c2ea837beb58c",
+      "compiled_at": "2026-10-20T13:31:27Z",
       "compiler": "crumb-compile/1",
-      "digest": "sha256:734b26e98d61b37aac677c0414839f40a617df3d632281dcdb103300def3fb33",
+      "digest": "sha256:e72487248c39e2a06194b668a5ccc7895fd6fe302a060e3ed62f79d782babdc8",
       "evidence_files": 0,
       "evidence_root": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "files": 75,
-      "generated_at_commit": "02f8eab6a95907159c13e8b83fc0aaf2c100db11",
-      "source_tree": "sha256:6922d3c9969a87d4fa673b02e20dba31cec91d56266fdc7ff3a57454fcef3de0"
+      "generated_at_commit": "eef497c1b76183262c3fcc086a539532a6f32923",
+      "source_tree": "sha256:63ec675a0fc9f036f8b83305cc2c3c174241fb9ad9f0d774c897f0bcdf25b0ec"
     },
     "owner_lane": "",
     "provenance": {

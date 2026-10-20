@@ -13,21 +13,21 @@
     "generated": {
       "children": [
         {
-          "digest": "1ea60299f5c468e6713aff04a2588ae50d1d9667270d629368f6bcf3a6837ef0",
-          "last_commit": "bc25e73",
+          "digest": "98d85e1a4ca5a7c213bede675cb9254a7acff5cfe1f7f334c1d2ac14b67b4d52",
+          "last_commit": "eef497c",
           "name": "src",
           "purpose": "Directory crates/aienos-cortex/src. Purpose not yet described by a human."
         }
       ],
-      "children_root": "sha256:92d1cbf580400ebb38fb86483abce93e4ec128765daa059f5d84d27f9ef52eee",
-      "compiled_at": "2026-10-04T13:47:18Z",
+      "children_root": "sha256:b68f7870a67a81354f9b83d1d4c83e5ebcb25cbbd973268ed3faed384975c85d",
+      "compiled_at": "2026-10-20T13:31:27Z",
       "compiler": "crumb-compile/1",
-      "digest": "sha256:f062e2e58faa2950ce8adeb2e4c16234dacce6672d560ed4fdeb7224c5093a77",
+      "digest": "sha256:84284487e5d7286712bbb6cb50772bd473b1669d257849d99783b0abe8c9441a",
       "evidence_files": 0,
       "evidence_root": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "files": 6,
-      "generated_at_commit": "a863d5c1f5bd89c88c5f6671eecfd27b599ee512",
-      "source_tree": "sha256:8d85c1d3b93b28be2a5bada5c383d51b4d1bf11af78751aef5f628465b43a93d"
+      "generated_at_commit": "eef497c1b76183262c3fcc086a539532a6f32923",
+      "source_tree": "sha256:fb9a236468de2f70e60563801fe3b7413e47588e4b4ad67164c9f52a19d09dda"
     },
     "owner_lane": "",
     "provenance": {

@@ -13,21 +13,21 @@
     "generated": {
       "children": [
         {
-          "digest": "65a8c460540b0190c0d00418ba79639832abd8764dc0ea59a1ddec40cc1747bb",
-          "last_commit": "39e246a",
+          "digest": "36128930279272433ecdc0d78397b3e39429e5f4d4f2579f881d04cd6e1df71a",
+          "last_commit": "eef497c",
           "name": "src",
           "purpose": "Directory crates/aienos-agent-state/src. Purpose not yet described by a human."
         }
       ],
-      "children_root": "sha256:141b42405835f497b7769439b232fa33c45b093c4022ed8df2d70cfcc7bedba0",
-      "compiled_at": "2026-10-04T13:47:18Z",
+      "children_root": "sha256:cc12f881d627a0a4b2bf068bff5c000247807f6bc1f9bb75f46b1e565442deef",
+      "compiled_at": "2026-10-20T13:31:27Z",
       "compiler": "crumb-compile/1",
-      "digest": "sha256:d5ad195a8f38c6bd0e1cc00feb8c5040f0fc8eabe47a9a69d961c73d6901d61e",
+      "digest": "sha256:2b40a200ff69ddad9742f219e11e604606d93a12c66205a741331e36b7d1e7b2",
       "evidence_files": 0,
       "evidence_root": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "files": 8,
-      "generated_at_commit": "a863d5c1f5bd89c88c5f6671eecfd27b599ee512",
-      "source_tree": "sha256:15f902241a2f247dfeec1b22c4f35fd957718fc9d76ecf7256fac0603f11f0c1"
+      "generated_at_commit": "eef497c1b76183262c3fcc086a539532a6f32923",
+      "source_tree": "sha256:eee05ee843c24b67758faf99e218ed76b011e02332e9fefcdba875a34e7b9a37"
     },
     "owner_lane": "",
     "provenance": {

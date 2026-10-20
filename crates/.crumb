@@ -65,20 +65,20 @@
     "generated": {
       "children": [
         {
-          "digest": "0a8510e7fedafbf6b5d1ea15307da3a1eb6e8d6bd6ffa7caabf193fabaa464b5",
-          "last_commit": "3e71759",
+          "digest": "c402de2eabc1066a9b74d545b73d1b9d951e9cbf382c71e714e599bb156147ea",
+          "last_commit": "eef497c",
           "name": "aienos-accel",
           "purpose": "Directory crates/aienos-accel. Purpose not yet described by a human."
         },
         {
-          "digest": "68682a56017aef2e95b4101731a5bc023e0d297127e6b07af7d3be9f3d8afaeb",
-          "last_commit": "15d5f3d",
+          "digest": "4002c7b1d6de3a26d97b903787717a0cfc8dcf724d36215533c6cdb712c61082",
+          "last_commit": "eef497c",
           "name": "aienos-aegis",
           "purpose": "Directory crates/aienos-aegis. Purpose not yet described by a human."
         },
         {
-          "digest": "d5ad195a8f38c6bd0e1cc00feb8c5040f0fc8eabe47a9a69d961c73d6901d61e",
-          "last_commit": "39e246a",
+          "digest": "2b40a200ff69ddad9742f219e11e604606d93a12c66205a741331e36b7d1e7b2",
+          "last_commit": "eef497c",
           "name": "aienos-agent-state",
           "purpose": "Directory crates/aienos-agent-state. Purpose not yet described by a human."
         },
@@ -95,32 +95,32 @@
           "purpose": "Directory crates/aienos-artifact-tool. Purpose not yet described by a human."
         },
         {
-          "digest": "223e3399133c766986b1044a16c8367b51b78158d3070c0ec63c7ed3e639d644",
-          "last_commit": "49ff776",
+          "digest": "fdd4f79269a32a06cf90b109846a2789743f9c0be114085d37f1eed7343fd2f2",
+          "last_commit": "eef497c",
           "name": "aienos-boot",
           "purpose": "Directory crates/aienos-boot. Purpose not yet described by a human."
         },
         {
-          "digest": "01d4fe4a0bd556f338ac4615b7ed1c9141e4f8035c07e0082f2894a57fa071d0",
-          "last_commit": "bc25e73",
+          "digest": "964e66597f7fb9c19a0d891eb7665ed4311b899fd68e8bc066fe1dd2364a378a",
+          "last_commit": "eef497c",
           "name": "aienos-c1-tree",
           "purpose": "Directory crates/aienos-c1-tree. Purpose not yet described by a human."
         },
         {
-          "digest": "ca15c2b9ae570b0aa2c7859672de2c976d6ce046188c09b7c74b5ccbee350136",
-          "last_commit": "51c05da",
+          "digest": "6592a8687f9a7343cb895ee1f9e0ea55f9768f9054d03ebb02e6d44a8dbb8ddd",
+          "last_commit": "eef497c",
           "name": "aienos-capability",
           "purpose": "Directory crates/aienos-capability. Purpose not yet described by a human."
         },
         {
-          "digest": "c63ab3d5643ac3c0974eee276273a0ab80584c54926cbb62c637294b5b857718",
-          "last_commit": "51c05da",
+          "digest": "bbc032bae72210d6e10f6d69da14a69778d3e423336dd7afd4a414ccf1c36072",
+          "last_commit": "eef497c",
           "name": "aienos-capability-ffi",
           "purpose": "Directory crates/aienos-capability-ffi. Purpose not yet described by a human."
         },
         {
-          "digest": "f062e2e58faa2950ce8adeb2e4c16234dacce6672d560ed4fdeb7224c5093a77",
-          "last_commit": "bc25e73",
+          "digest": "84284487e5d7286712bbb6cb50772bd473b1669d257849d99783b0abe8c9441a",
+          "last_commit": "eef497c",
           "name": "aienos-cortex",
           "purpose": "Directory crates/aienos-cortex. Purpose not yet described by a human."
         },
@@ -137,8 +137,8 @@
           "purpose": "Directory crates/aienos-evidence. Purpose not yet described by a human."
         },
         {
-          "digest": "a0d0036c90e3d64d6e1caa67b77bf2b8deb898c597e9f0b797df4a144468e061",
-          "last_commit": "2951ea1",
+          "digest": "1ad2fa8729775f2c6b6b8b45f61aea7eadea54f32629d906879fbde83f786574",
+          "last_commit": "eef497c",
           "name": "aienos-kernel",
           "purpose": "Directory crates/aienos-kernel. Purpose not yet described by a human."
         },
@@ -149,15 +149,15 @@
           "purpose": "Directory crates/aienos-store-tool. Purpose not yet described by a human."
         }
       ],
-      "children_root": "sha256:ca16d018c0c02840ba1f87e2a7b64ed259a36253ed29230f274ebcabb43c8a7e",
-      "compiled_at": "2026-10-14T14:58:51Z",
+      "children_root": "sha256:7003c88176505feff12e32f43b2cb9391816ba84eb67042e8f4429c5a6bc6247",
+      "compiled_at": "2026-10-20T13:31:27Z",
       "compiler": "crumb-compile/1",
-      "digest": "sha256:b5ced6fea583b485206b73ec08b91de68a5cfd2672ac448191831754c9e0907d",
+      "digest": "sha256:e785e6f35cdabf3d10d80a4b97069bcb57961ee0fa2e9d55418e32b6b85032e4",
       "evidence_files": 0,
       "evidence_root": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "files": 268,
-      "generated_at_commit": "596870d6ef47c5238cc2c7fa1c08f5e5486e5d84",
-      "source_tree": "sha256:cc0bfe148dc436da2bb46428408257fbc55e5643cf516241a3e9021656c5fc2c"
+      "generated_at_commit": "eef497c1b76183262c3fcc086a539532a6f32923",
+      "source_tree": "sha256:306a712e54c410a0c71fc5136384fc7ecba3a615e2c1760a33950ef45f844c18"
     },
     "owner_lane": "",
     "provenance": {
