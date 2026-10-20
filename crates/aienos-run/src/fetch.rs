@@ -26,10 +26,16 @@ impl std::fmt::Display for FetchError {
             FetchError::Io(e) => write!(f, "{e}"),
             FetchError::Download { url, status } => write!(f, "download of {url} failed: {status}"),
             FetchError::SizeMismatch { expected, got } => {
-                write!(f, "size mismatch: manifest says {expected} bytes, file has {got}")
+                write!(
+                    f,
+                    "size mismatch: manifest says {expected} bytes, file has {got}"
+                )
             }
             FetchError::DigestMismatch { expected, got } => {
-                write!(f, "sha256 mismatch: manifest says {expected}, file is {got}")
+                write!(
+                    f,
+                    "sha256 mismatch: manifest says {expected}, file is {got}"
+                )
             }
         }
     }

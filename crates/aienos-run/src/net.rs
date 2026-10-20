@@ -57,7 +57,11 @@ impl Forward {
         let (proto, addr, hp, gp) = match parts.as_slice() {
             [p, h, g] => (*p, "127.0.0.1", *h, *g),
             [p, a, h, g] => (*p, *a, *h, *g),
-            _ => return Err(format!("forward {s:?}: expected proto:host-port:guest-port")),
+            _ => {
+                return Err(format!(
+                    "forward {s:?}: expected proto:host-port:guest-port"
+                ))
+            }
         };
         let proto = match proto {
             "tcp" => Proto::Tcp,
@@ -99,7 +103,11 @@ pub fn check_table(table: &[Forward]) -> Result<(), String> {
     for (i, a) in table.iter().enumerate() {
         for b in &table[i + 1..] {
             if a.proto == b.proto && a.host_port == b.host_port && a.host_addr == b.host_addr {
-                return Err(format!("two forwards use host {} port {}", a.proto.as_str(), a.host_port));
+                return Err(format!(
+                    "two forwards use host {} port {}",
+                    a.proto.as_str(),
+                    a.host_port
+                ));
             }
         }
     }
@@ -116,8 +124,18 @@ mod tests {
         assert_eq!(f.proto, Proto::Udp);
         assert_eq!(f.host_addr, "127.0.0.1");
         let f = Forward::parse("tcp:0.0.0.0:2222:22").unwrap();
-        assert_eq!((f.host_addr.as_str(), f.host_port, f.guest_port), ("0.0.0.0", 2222, 22));
-        for bad in ["udp:1", "icmp:1:1", "tcp:0:1", "tcp:70000:1", "tcp:a,b:1:1", "tcp::1:1"] {
+        assert_eq!(
+            (f.host_addr.as_str(), f.host_port, f.guest_port),
+            ("0.0.0.0", 2222, 22)
+        );
+        for bad in [
+            "udp:1",
+            "icmp:1:1",
+            "tcp:0:1",
+            "tcp:70000:1",
+            "tcp:a,b:1:1",
+            "tcp::1:1",
+        ] {
             assert!(Forward::parse(bad).is_err(), "{bad}");
         }
     }

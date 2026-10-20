@@ -149,10 +149,17 @@ fn open_kvm() -> Result<OwnedFd, BackendError> {
         )));
     }
     let kvm = owned(fd);
-    let v = ioctl_val(kvm.as_raw_fd(), KVM_GET_API_VERSION, 0, "KVM_GET_API_VERSION")
-        .map_err(|e| BackendError::Unavailable(e.to_string()))?;
+    let v = ioctl_val(
+        kvm.as_raw_fd(),
+        KVM_GET_API_VERSION,
+        0,
+        "KVM_GET_API_VERSION",
+    )
+    .map_err(|e| BackendError::Unavailable(e.to_string()))?;
     if v != 12 {
-        return Err(BackendError::Unavailable(format!("KVM API version {v}, need 12")));
+        return Err(BackendError::Unavailable(format!(
+            "KVM API version {v}, need 12"
+        )));
     }
     Ok(kvm)
 }
@@ -176,9 +183,17 @@ impl Backend for KvmBackend {
             )));
         }
         let kvm = open_kvm()?;
-        for (cap, name) in [(KVM_CAP_ONE_REG, "ONE_REG"), (KVM_CAP_ARM_PSCI_0_2, "ARM_PSCI_0_2")] {
-            let r = ioctl_val(kvm.as_raw_fd(), KVM_CHECK_EXTENSION, cap, "KVM_CHECK_EXTENSION")
-                .map_err(|e| BackendError::Unavailable(e.to_string()))?;
+        for (cap, name) in [
+            (KVM_CAP_ONE_REG, "ONE_REG"),
+            (KVM_CAP_ARM_PSCI_0_2, "ARM_PSCI_0_2"),
+        ] {
+            let r = ioctl_val(
+                kvm.as_raw_fd(),
+                KVM_CHECK_EXTENSION,
+                cap,
+                "KVM_CHECK_EXTENSION",
+            )
+            .map_err(|e| BackendError::Unavailable(e.to_string()))?;
             if r <= 0 {
                 return Err(BackendError::Unavailable(format!("KVM lacks {name}")));
             }
@@ -189,9 +204,8 @@ impl Backend for KvmBackend {
     fn run(&mut self, spec: &VmSpec, console: &Console) -> Result<VmExit, BackendError> {
         self.probe(spec)?;
         let kvm = open_kvm()?;
-        let vm = owned(
-            ioctl_val(kvm.as_raw_fd(), KVM_CREATE_VM, 0, "KVM_CREATE_VM").map_err(vmm_err)?,
-        );
+        let vm =
+            owned(ioctl_val(kvm.as_raw_fd(), KVM_CREATE_VM, 0, "KVM_CREATE_VM").map_err(vmm_err)?);
         let ram_bytes = (spec.mem_mib as u64) << 20;
         let mut ram = GuestRam::new(ram_bytes as usize).map_err(vmm_err)?;
         let mut region = UserMemoryRegion {
@@ -201,8 +215,13 @@ impl Backend for KvmBackend {
             memory_size: ram_bytes,
             userspace_addr: ram.ptr as u64,
         };
-        ioctl_ptr(vm.as_raw_fd(), KVM_SET_USER_MEMORY_REGION, &mut region, "KVM_SET_USER_MEMORY_REGION")
-            .map_err(vmm_err)?;
+        ioctl_ptr(
+            vm.as_raw_fd(),
+            KVM_SET_USER_MEMORY_REGION,
+            &mut region,
+            "KVM_SET_USER_MEMORY_REGION",
+        )
+        .map_err(vmm_err)?;
 
         // The kernel image.
         let file = std::fs::read(&spec.image).map_err(vmm_err)?;
@@ -210,11 +229,21 @@ impl Backend for KvmBackend {
         let pe = load_pe(&file, &mut mem[IMAGE_OFF as usize..]).map_err(BackendError::Vmm)?;
 
         // vCPUs (all created and initialised before the vGIC, per the KVM API document).
-        let run_len = ioctl_val(kvm.as_raw_fd(), KVM_GET_VCPU_MMAP_SIZE, 0, "KVM_GET_VCPU_MMAP_SIZE")
-            .map_err(vmm_err)? as usize;
+        let run_len = ioctl_val(
+            kvm.as_raw_fd(),
+            KVM_GET_VCPU_MMAP_SIZE,
+            0,
+            "KVM_GET_VCPU_MMAP_SIZE",
+        )
+        .map_err(vmm_err)? as usize;
         let mut init = VcpuInit::default();
-        ioctl_ptr(vm.as_raw_fd(), KVM_ARM_PREFERRED_TARGET, &mut init, "KVM_ARM_PREFERRED_TARGET")
-            .map_err(vmm_err)?;
+        ioctl_ptr(
+            vm.as_raw_fd(),
+            KVM_ARM_PREFERRED_TARGET,
+            &mut init,
+            "KVM_ARM_PREFERRED_TARGET",
+        )
+        .map_err(vmm_err)?;
         let mut vcpus = Vec::new();
         let mut mpidrs = Vec::new();
         for i in 0..spec.cpus {
@@ -240,8 +269,13 @@ impl Backend for KvmBackend {
             if i > 0 {
                 vi.features[0] |= 1 << KVM_ARM_VCPU_POWER_OFF;
             }
-            ioctl_ptr(fd.as_raw_fd(), KVM_ARM_VCPU_INIT, &mut vi, "KVM_ARM_VCPU_INIT")
-                .map_err(vmm_err)?;
+            ioctl_ptr(
+                fd.as_raw_fd(),
+                KVM_ARM_VCPU_INIT,
+                &mut vi,
+                "KVM_ARM_VCPU_INIT",
+            )
+            .map_err(vmm_err)?;
             mpidrs.push(get_one_reg(&fd, REG_MPIDR_EL1).map_err(vmm_err)?);
             vcpus.push(Vcpu {
                 fd,
@@ -256,20 +290,45 @@ impl Backend for KvmBackend {
             fd: 0,
             flags: 0,
         };
-        ioctl_ptr(vm.as_raw_fd(), KVM_CREATE_DEVICE, &mut cd, "KVM_CREATE_DEVICE(vgic-v3)")
-            .map_err(vmm_err)?;
+        ioctl_ptr(
+            vm.as_raw_fd(),
+            KVM_CREATE_DEVICE,
+            &mut cd,
+            "KVM_CREATE_DEVICE(vgic-v3)",
+        )
+        .map_err(vmm_err)?;
         let gic = owned(cd.fd as libc::c_int);
         let dist = GICD_BASE;
         let redist = GICR_BASE;
-        set_device_attr(&gic, KVM_DEV_ARM_VGIC_GRP_ADDR, KVM_VGIC_V3_ADDR_TYPE_DIST, &dist as *const u64 as u64)
-            .map_err(vmm_err)?;
-        set_device_attr(&gic, KVM_DEV_ARM_VGIC_GRP_ADDR, KVM_VGIC_V3_ADDR_TYPE_REDIST, &redist as *const u64 as u64)
-            .map_err(vmm_err)?;
+        set_device_attr(
+            &gic,
+            KVM_DEV_ARM_VGIC_GRP_ADDR,
+            KVM_VGIC_V3_ADDR_TYPE_DIST,
+            &dist as *const u64 as u64,
+        )
+        .map_err(vmm_err)?;
+        set_device_attr(
+            &gic,
+            KVM_DEV_ARM_VGIC_GRP_ADDR,
+            KVM_VGIC_V3_ADDR_TYPE_REDIST,
+            &redist as *const u64 as u64,
+        )
+        .map_err(vmm_err)?;
         let nr_irqs: u32 = 128;
-        set_device_attr(&gic, KVM_DEV_ARM_VGIC_GRP_NR_IRQS, 0, &nr_irqs as *const u32 as u64)
-            .map_err(vmm_err)?;
-        set_device_attr(&gic, KVM_DEV_ARM_VGIC_GRP_CTRL, KVM_DEV_ARM_VGIC_CTRL_INIT, 0)
-            .map_err(vmm_err)?;
+        set_device_attr(
+            &gic,
+            KVM_DEV_ARM_VGIC_GRP_NR_IRQS,
+            0,
+            &nr_irqs as *const u32 as u64,
+        )
+        .map_err(vmm_err)?;
+        set_device_attr(
+            &gic,
+            KVM_DEV_ARM_VGIC_GRP_CTRL,
+            KVM_DEV_ARM_VGIC_CTRL_INIT,
+            0,
+        )
+        .map_err(vmm_err)?;
 
         // Firmware-side tables in RAM.
         let acpi = &mut mem[ACPI_OFF as usize..(ACPI_OFF + ACPI_SIZE) as usize];
@@ -331,7 +390,10 @@ impl Backend for KvmBackend {
             for v in &vcpus {
                 let (shared, threads) = (&shared, &threads);
                 s.spawn(move || {
-                    threads.lock().unwrap().push(unsafe { libc::pthread_self() });
+                    threads
+                        .lock()
+                        .unwrap()
+                        .push(unsafe { libc::pthread_self() });
                     vcpu_loop(v, shared);
                 });
             }
@@ -365,13 +427,22 @@ impl Backend for KvmBackend {
                 .iter()
                 .map(|(a, w)| format!("0x{a:x}{}", if *w { " (write)" } else { "" }))
                 .collect();
-            eprintln!("aienos-run: kvm: unemulated MMIO touched: {}", list.join(", "));
+            eprintln!(
+                "aienos-run: kvm: unemulated MMIO touched: {}",
+                list.join(", ")
+            );
         }
         Ok(match shared.end.load(Ordering::SeqCst) {
             END_OFF => VmExit::PowerOff,
             END_RESET => VmExit::Reset,
             END_STOP => VmExit::Stopped,
-            _ => VmExit::Failed(shared.fail.get().cloned().unwrap_or_else(|| "unknown".into())),
+            _ => VmExit::Failed(
+                shared
+                    .fail
+                    .get()
+                    .cloned()
+                    .unwrap_or_else(|| "unknown".into()),
+            ),
         })
     }
 }
@@ -433,15 +504,27 @@ fn vcpu_loop(v: &Vcpu, sh: &Shared) {
                 return;
             }
             KVM_EXIT_FAIL_ENTRY => {
-                sh.finish(END_FAIL, Some(format!("KVM_EXIT_FAIL_ENTRY reason 0x{:x}", v.rd_u64(0x20))));
+                sh.finish(
+                    END_FAIL,
+                    Some(format!("KVM_EXIT_FAIL_ENTRY reason 0x{:x}", v.rd_u64(0x20))),
+                );
                 return;
             }
             KVM_EXIT_INTERNAL_ERROR => {
-                sh.finish(END_FAIL, Some(format!("KVM_EXIT_INTERNAL_ERROR suberror {}", v.rd_u32(0x20))));
+                sh.finish(
+                    END_FAIL,
+                    Some(format!(
+                        "KVM_EXIT_INTERNAL_ERROR suberror {}",
+                        v.rd_u32(0x20)
+                    )),
+                );
                 return;
             }
             other => {
-                sh.finish(END_FAIL, Some(format!("unexpected KVM exit reason {other}")));
+                sh.finish(
+                    END_FAIL,
+                    Some(format!("unexpected KVM exit reason {other}")),
+                );
                 return;
             }
         }

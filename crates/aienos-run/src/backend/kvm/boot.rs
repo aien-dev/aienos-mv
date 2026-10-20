@@ -33,8 +33,15 @@ pub const PSTATE_EL1H_DAIF: u64 = 0x3c5;
 /// MAIR: attr0 Device-nGnRnE, attr1 Normal write-back RW-allocate.
 pub const MAIR: u64 = 0xff << 8;
 /// SCTLR_EL1: RES1 bits (11, 20, 22, 23, 28, 29) + M (MMU) + C (data cache) + I (icache).
-pub const SCTLR: u64 = (1 << 0) | (1 << 2) | (1 << 12) | (1 << 11) | (1 << 20) | (1 << 22)
-    | (1 << 23) | (1 << 28) | (1 << 29);
+pub const SCTLR: u64 = (1 << 0)
+    | (1 << 2)
+    | (1 << 12)
+    | (1 << 11)
+    | (1 << 20)
+    | (1 << 22)
+    | (1 << 23)
+    | (1 << 28)
+    | (1 << 29);
 /// CPACR_EL1.FPEN = 0b11: FP/SIMD not trapped (as UEFI leaves it).
 pub const CPACR: u64 = 3 << 20;
 
@@ -286,7 +293,10 @@ pub fn load_pe(file: &[u8], dst: &mut [u8]) -> Result<PeImage, String> {
     let size_of_image = rd32(opt + 56).ok_or("truncated")? as u64;
     let size_of_headers = rd32(opt + 60).ok_or("truncated")? as usize;
     if size_of_image as usize > dst.len() {
-        return Err(format!("image needs {size_of_image} bytes, slot has {}", dst.len()));
+        return Err(format!(
+            "image needs {size_of_image} bytes, slot has {}",
+            dst.len()
+        ));
     }
     if entry >= size_of_image || size_of_headers > file.len() {
         return Err("PE header values out of range".into());
@@ -300,8 +310,15 @@ pub fn load_pe(file: &[u8], dst: &mut [u8]) -> Result<PeImage, String> {
         let raw_size = rd32(s + 16).ok_or("truncated")? as usize;
         let raw_ptr = rd32(s + 20).ok_or("truncated")? as usize;
         // Raw data beyond VirtualSize is file-alignment padding.
-        let n = if vsize == 0 { raw_size } else { raw_size.min(vsize) };
-        if va.checked_add(vsize.max(n)).is_none_or(|e| e as u64 > size_of_image) {
+        let n = if vsize == 0 {
+            raw_size
+        } else {
+            raw_size.min(vsize)
+        };
+        if va
+            .checked_add(vsize.max(n))
+            .is_none_or(|e| e as u64 > size_of_image)
+        {
             return Err(format!("section {i} lies outside SizeOfImage"));
         }
         let src = file
@@ -347,10 +364,16 @@ mod tests {
                 // 44 header+fixed, 2 GICC, GICD, GICR.
                 assert_eq!(len, 44 + 2 * 80 + 24 + 16);
                 assert_eq!(t[44], 0x0b);
-                assert_eq!(u64::from_le_bytes(t[44 + 68..44 + 76].try_into().unwrap()), 0x8000_0000 & 0xff00ff_ffff);
+                assert_eq!(
+                    u64::from_le_bytes(t[44 + 68..44 + 76].try_into().unwrap()),
+                    0x8000_0000 & 0xff00ff_ffff
+                );
                 let gicr = &t[44 + 160 + 24..];
                 assert_eq!(gicr[0], 0x0e);
-                assert_eq!(u32::from_le_bytes(gicr[12..16].try_into().unwrap()) as u64, 2 * GICR_STRIDE);
+                assert_eq!(
+                    u32::from_le_bytes(gicr[12..16].try_into().unwrap()) as u64,
+                    2 * GICR_STRIDE
+                );
             }
             if &t[0..4] == b"FACP" {
                 assert!(len >= 131);
@@ -363,7 +386,10 @@ mod tests {
                 assert_eq!(u64::from_le_bytes(t[44..52].try_into().unwrap()), UART_BASE);
             }
         }
-        assert_eq!(sigs, vec![b"FACP".to_vec(), b"APIC".to_vec(), b"SPCR".to_vec()]);
+        assert_eq!(
+            sigs,
+            vec![b"FACP".to_vec(), b"APIC".to_vec(), b"SPCR".to_vec()]
+        );
     }
 
     #[test]
@@ -380,7 +406,10 @@ mod tests {
         }
         assert_eq!(next, RAM_BASE + ram);
         let code = &m[2 * DESC_SIZE..3 * DESC_SIZE];
-        assert_eq!(u32::from_le_bytes(code[0..4].try_into().unwrap()), EFI_LOADER_CODE);
+        assert_eq!(
+            u32::from_le_bytes(code[0..4].try_into().unwrap()),
+            EFI_LOADER_CODE
+        );
         assert_eq!(u64::from_le_bytes(code[24..32].try_into().unwrap()), 0x13);
     }
 
@@ -405,9 +434,15 @@ mod tests {
         let r = direct_record(0x4000_0000, 0x4001_0040, 160, 0x4001_0100);
         assert_eq!(&r[0..8], b"AIENDIRB");
         assert_eq!(u32::from_le_bytes(r[8..12].try_into().unwrap()), 1);
-        assert_eq!(u64::from_le_bytes(r[16..24].try_into().unwrap()), 0x4000_0000);
+        assert_eq!(
+            u64::from_le_bytes(r[16..24].try_into().unwrap()),
+            0x4000_0000
+        );
         assert_eq!(u64::from_le_bytes(r[40..48].try_into().unwrap()), 40);
-        assert_eq!(u64::from_le_bytes(r[48..56].try_into().unwrap()), 0x4001_0100);
+        assert_eq!(
+            u64::from_le_bytes(r[48..56].try_into().unwrap()),
+            0x4001_0100
+        );
     }
 
     fn tiny_pe() -> Vec<u8> {

@@ -16,10 +16,7 @@ pub fn ensure(path: &Path, bytes: u64) -> io::Result<bool> {
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
     }
-    let f = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(path)?;
+    let f = OpenOptions::new().write(true).create_new(true).open(path)?;
     f.set_len(bytes)?;
     f.sync_all()?;
     Ok(true)

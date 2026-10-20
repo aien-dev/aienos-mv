@@ -113,7 +113,10 @@ fn check(r: libc::c_int, what: &str) -> io::Result<libc::c_int> {
 
 /// ioctl with an integer argument.
 pub fn ioctl_val(fd: RawFd, req: u64, arg: u64, what: &str) -> io::Result<libc::c_int> {
-    check(unsafe { libc::ioctl(fd, req as _, arg as libc::c_ulong) }, what)
+    check(
+        unsafe { libc::ioctl(fd, req as _, arg as libc::c_ulong) },
+        what,
+    )
 }
 
 /// ioctl with a pointer argument.
@@ -151,5 +154,11 @@ pub fn set_device_attr(dev: &OwnedFd, group: u32, attr: u64, addr: u64) -> io::R
         attr,
         addr,
     };
-    ioctl_ptr(dev.as_raw_fd(), KVM_SET_DEVICE_ATTR, &mut a, "KVM_SET_DEVICE_ATTR").map(|_| ())
+    ioctl_ptr(
+        dev.as_raw_fd(),
+        KVM_SET_DEVICE_ATTR,
+        &mut a,
+        "KVM_SET_DEVICE_ATTR",
+    )
+    .map(|_| ())
 }
