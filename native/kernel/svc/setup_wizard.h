@@ -178,6 +178,9 @@ int sw_event(sw_wizard *w, char *out, unsigned cap);
 unsigned sw_save(const sw_wizard *w, char *out, unsigned cap);
 unsigned sw_llm_conf(const sw_wizard *w, char *out, unsigned cap);
 unsigned sw_consent(const sw_wizard *w, char *out, unsigned cap);
+/* The three in one text, as kept on disk (svc/setup_store.h): sw_save, then
+ * sw_llm_conf (absent until an AI is picked), then sw_consent. 0 if cap is short. */
+unsigned sw_record(const sw_wizard *w, char *out, unsigned cap);
 /* 1 when a saved record says setup ran to the end. */
 int sw_saved_done(const char *saved, unsigned n);
 

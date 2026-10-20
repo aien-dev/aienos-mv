@@ -35,6 +35,8 @@ static const disk_dev *part;
 static const ck_courier *wire;
 static uint64_t hz, t0;
 static int on;
+static int pending;       /* open, waiting for Allen to form before the first word */
+static unsigned saved_n;  /* the saved record to carry on from (0: a first start) */
 static unsigned said = ~0u, gen = ~0u;
 static uint32_t test_seq;
 static char text[CK_SETUP_TEXT + 1];
@@ -127,21 +129,19 @@ static void save(void)
 {
     if (!part)
         return;
-    unsigned n = sw_save(&wiz, text, sizeof text);
-    unsigned m = n ? sw_llm_conf(&wiz, text + n, (unsigned)sizeof text - n) : 0;
-    unsigned c = m ? sw_consent(&wiz, text + n + m, (unsigned)sizeof text - n - m) : 0;
-    if (!c || n + m + c > CK_SETUP_TEXT) {
+    unsigned n = sw_record(&wiz, text, CK_SETUP_TEXT + 1);
+    if (!n) {
         ck_puts("wizard: the record did not fit; not saved\n");
         return;
     }
-    int rc = ck_setup_save(&store, text, n + m + c);
+    int rc = ck_setup_save(&store, text, n);
     if (rc) {
         ck_printf("wizard: saving the step FAILED (rc=%d); setup carries on without it\n", rc);
         part = 0;
         return;
     }
     ck_printf("wizard: saved at %s (generation %llu, %u bytes)\n", sw_step_name(sw_step_of(&wiz)),
-              (unsigned long long)store.gen, n + m + c);
+              (unsigned long long)store.gen, n);
 }
 
 static void show(void)
@@ -156,6 +156,20 @@ static void show(void)
         on = 0;
         ck_puts("wizard: finished; Allen's window is his own again\n");
     }
+}
+
+/* The first screen once Allen can speak: its timers (hello moves on after 6 s)
+ * count from his first word, not from the window opening. */
+static void begin(void)
+{
+    if (!pending || !ck_allen_ui_formed(ck_rdtsc()))
+        return;
+    pending = 0;
+    t0 = ck_rdtsc();
+    sw_start(&wiz, &inv, wire != 0, saved_n ? text : 0, saved_n, now_ms());
+    said = gen = ~0u;
+    events();
+    show();
 }
 
 int ck_x86_setup_open(const struct ck_x86_setup_facts *f, const struct ck_courier *c, uint64_t tsc_hz, int again)
@@ -181,11 +195,9 @@ int ck_x86_setup_open(const struct ck_x86_setup_facts *f, const struct ck_courie
         return 0;
     }
     gather(f);
-    sw_start(&wiz, &inv, c != 0, rc == 0 && !again ? text : 0, rc == 0 && !again ? n : 0, now_ms());
-    on = 1;
-    said = gen = ~0u;
-    events();
-    show();
+    saved_n = rc == 0 && !again ? n : 0;
+    on = pending = 1; /* keys before Allen has formed are taken and dropped */
+    begin();
     return 1;
 }
 
@@ -200,6 +212,8 @@ int ck_x86_setup_key(int kind, char c)
     };
     if (!on)
         return 0;
+    if (pending)
+        return 1;
     if (kind <= 0 || (unsigned)kind >= sizeof map || !map[kind])
         return 1; /* anything else is taken and dropped while the wizard is up */
     int step = sw_step_of(&wiz);
@@ -225,7 +239,7 @@ int ck_x86_setup_line(const char *line)
         seq = seq * 10u + (uint32_t)(*p++ - '0');
     if (*p == ' ')
         p++;
-    if (!on || seq != test_seq)
+    if (!on || pending || seq != test_seq)
         return 1;
     int step = sw_step_of(&wiz);
     sw_test_done(&wiz, ok, ok ? 0 : p, now_ms());
@@ -240,6 +254,10 @@ void ck_x86_setup_step(void)
 {
     if (!on)
         return;
+    if (pending) {
+        begin();
+        return;
+    }
     int step = sw_step_of(&wiz);
     sw_tick(&wiz, now_ms());
     const char *kind, *url, *model, *key;
@@ -249,7 +267,8 @@ void ck_x86_setup_step(void)
         int sent = -1;
         if (wire && wire->ready()) {
             test_seq++;
-            n = (unsigned)ck_snprintf(out, sizeof out, "KEYTEST %u %s %s %s\n", (unsigned)test_seq, kind,
+            /* the wire ends the line itself (courier.h) */
+            n = (unsigned)ck_snprintf(out, sizeof out, "KEYTEST %u %s %s %s", (unsigned)test_seq, kind,
                                       url[0] ? url : "-", key[0] ? key : "-");
             if (n < sizeof out)
                 sent = wire->send(out, n);

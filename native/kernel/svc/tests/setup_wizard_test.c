@@ -260,6 +260,9 @@ static void test_games(void)
     sw_consent(&w, rec, sizeof rec);
     CHECK(!strcmp(rec, "aienos-consent v1\ndrivers-own yes\nscreen-refresh yes\ncpu-games yes\ndrivers-build yes\n"),
           "consent: %s", rec);
+    CHECK(sw_record(&w, rec, sizeof rec) && strstr(rec, "\nkind openai\nbase_url http://127.0.0.1:18091\n") &&
+              strstr(rec, "\naienos-consent v1\ndrivers-own yes\n"),
+          "the disk record carries llm.conf and consent: %s", rec);
     enter(&w);
     CHECK(sw_step_of(&w) == SW_DONE && w.v.nchoice == 0 && w.v.nline == 0, "done clears the panel");
     n = sw_save(&w, rec, sizeof rec);
@@ -510,6 +513,11 @@ static void test_resume(void)
     enter(&w);
     enter(&w);
     CHECK(sw_step_of(&w) == SW_CONSENT, "at consent");
+    /* the disk record before an AI is picked: the step and the consent, no llm.conf yet */
+    unsigned r = sw_record(&w, rec, sizeof rec);
+    CHECK(r && strstr(rec, "aienos-setup v1\nstep 5\n") && strstr(rec, "aienos-consent v1\n") && !strstr(rec, "base_url"),
+          "record before a pick: %s", rec);
+    CHECK(sw_record(&w, rec, 40) == 0 && rec[0] == 0, "a short buffer gets no record");
     unsigned n = sw_save(&w, rec, sizeof rec);
     CHECK(n && !sw_saved_done(rec, n), "saved mid-way: %s", rec);
     log_text[0] = 0;

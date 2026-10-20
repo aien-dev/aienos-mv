@@ -36,6 +36,9 @@ int ck_allen_ui_started(void);
  * short line shown under the empty bar. */
 void ck_allen_ui_wake(const char *footer, uint64_t now);
 int ck_allen_ui_on(void);
+/* 1 once Allen has gathered out of the night and can speak (his first words
+ * wait for it): what waits on his words, like the setup wizard, starts then. */
+int ck_allen_ui_formed(uint64_t now);
 /* The line being typed changed (buf holds len characters). */
 void ck_allen_ui_input(const char *buf, unsigned len, uint64_t now);
 /* A line was entered and Allen answered: the line rises from the bar into

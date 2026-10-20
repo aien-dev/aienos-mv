@@ -1188,3 +1188,16 @@ void sw_start(sw_wizard *w, const si_inv *inv, int courier, const char *saved, u
     event(w, "step ", "hello");
     render(w);
 }
+
+unsigned sw_record(const sw_wizard *w, char *out, unsigned cap)
+{
+    unsigned n = sw_save(w, out, cap);
+    unsigned m = n ? sw_llm_conf(w, out + n, cap - n) : 0; /* 0 too: no AI picked yet */
+    unsigned c = n ? sw_consent(w, out + n + m, cap - n - m) : 0;
+    if (!n || !c) {
+        if (cap)
+            out[0] = 0;
+        return 0;
+    }
+    return n + m + c;
+}

@@ -830,7 +830,7 @@ static void take_notes(uint32_t t)
     if (note.panel_gen != ui.seen_panel) {
         ui.seen_panel = note.panel_gen;
         const struct panel *p = &note.panel;
-        uint32_t at = t + 300; /* after the words have started */
+        uint32_t at = (uint32_t)ck_max((int32_t)t + 300, (int32_t)ui.speak_t); /* after the words have started */
         for (unsigned i = 0; i < p->nline; i++) {
             int kept = ui.pan.on && i < ui.pan.nline;
             for (unsigned k = 0; kept && k < PL_MAX; k++) {
@@ -1077,6 +1077,8 @@ size_t ck_allen_ui_mem_bytes(uint32_t w, uint32_t h)
 
 int ck_allen_ui_started(void) { return ui.started; }
 int ck_allen_ui_on(void) { return ui.on; }
+
+int ck_allen_ui_formed(uint64_t now) { return ui.started && ms(now) >= FORMED_MS + 300u; }
 
 int ck_allen_ui_start(volatile uint32_t *fb, uint32_t w, uint32_t h, uint32_t pitch, uint32_t format, void *mem,
                       size_t mem_len, uint64_t hz, uint64_t now, uint64_t (*clock)(void))
