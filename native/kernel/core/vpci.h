@@ -44,13 +44,17 @@ struct ck_vpci {
 /* Errors: no MCFG (-1), no such device on the root bus (-2), no capability
  * list (-3), no common/notify capability (-4), no VERSION_1 (-5),
  * FEATURES_OK refused (-6), queue setup failed (-7). */
-/* Finds vendor 0x1af4 with device id `modern` (0x1040 + type) or the
- * transitional `modern - 0x40` with subsystem id `type`; maps its common
+/* Finds vendor 0x1af4 with device id `modern` (0x1040 + type) or a
+ * transitional id (0x1000..0x103f) with subsystem id `type`; maps its common
  * and notify windows; resets it and negotiates VERSION_1 only. */
 int ck_vpci_open(uint16_t modern, struct ck_vpci *v);
 /* Queue `index`: rings and an 8 KiB buffer in DMA memory, MSI-X off. */
 int ck_vpci_queue(struct ck_vpci *v, unsigned index, struct ck_vq *q);
 void ck_vpci_driver_ok(struct ck_vpci *v);
+/* The devices stage's bus-master sweep (dev/devices.c) clears every endpoint,
+ * these too; QEMU honours that (VZ does not). Turns bus master back on for the
+ * functions ck_vpci_open opened, with one log line each. */
+void ck_vpci_after_sweep(void);
 /* Posts descriptor `slot` (already filled) and notifies the device. */
 void ck_vq_post(struct ck_vq *q, uint16_t slot);
 /* 1 when the device has used everything posted so far. */

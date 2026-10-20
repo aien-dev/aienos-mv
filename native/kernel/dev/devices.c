@@ -9,6 +9,7 @@
 #include "net_bind.h"
 #include "xhci_fence.h"
 #include "usb_kbd.h"
+#include "vpci.h"
 #include "../../boot/slot_format.h"
 
 static pci_system g_pci;
@@ -101,6 +102,7 @@ int ck_stage_devices(void)
         pci_sweep sw;
         pci_sweep_bus_master(&g_pci.acc, &sw);
         pci_sweep_report(&g_pci.ecam, &sw);
+        ck_vpci_after_sweep(); /* VM edition: its console and entropy devices keep DMA */
     }
     ck_xhci_after_sweep(&g_pci); /* TEST-ONLY bm-left-on mutation hook; no-op otherwise */
     /* NVMe is bound from the multi-segment discovery result (aienos#31), any segment; the segment-0

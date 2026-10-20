@@ -250,6 +250,10 @@ pub fn command_line(
     push(&netdev);
     push("-device");
     push("virtio-net-pci,netdev=n0");
+    // Entropy for guests without RNDR (Apple M1/M2 under HVF: the VM edition kernel,
+    // CK_VM_GUEST=1, reads it; core/vguest.h). Without it security fails closed.
+    push("-device");
+    push("virtio-rng-pci");
     push("-chardev");
     push("stdio,id=s0,signal=off");
     push("-serial");
@@ -405,6 +409,7 @@ mod tests {
         );
         assert!(j.contains("file=fat:rw:/s/esp"));
         assert!(j.contains("hostfwd=udp:127.0.0.1:47040-:47040"));
+        assert!(j.contains("virtio-rng-pci"));
         assert!(j.contains("nvme,serial=aienos-store,drive=store"));
         assert!(j.contains("-no-reboot"));
         assert!(j.contains("stdio,id=s0,signal=off"));

@@ -18,6 +18,7 @@ void ck_vguest_set_firmware_el(unsigned el);
 int ck_vguest(void);
 /* 1 when ck_vguest() and vendor:device is a hypervisor-emulated device this
  * image may give DMA without an SMMU window: virtio (0x1af4, any device id)
- * or the Apple Virtualization.framework NVMe controller (0x106b:0x1a09). */
+ * the Apple Virtualization.framework NVMe controller (0x106b:0x1a09) or QEMU's
+ * emulated NVMe controller (0x1b36:0x0010, QEMU's own vendor id). */
 int ck_vguest_dma_device(uint16_t vendor, uint16_t device);
 #endif

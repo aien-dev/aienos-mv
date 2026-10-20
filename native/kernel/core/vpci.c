@@ -4,6 +4,7 @@
 #include "ck_internal.h"
 #include "arch.h"
 #include "vpci.h"
+#include "vguest.h"
 
 #define C8(v, o) (*(volatile uint8_t *)((v)->common + (o)))
 #define C16(v, o) (*(volatile uint16_t *)((v)->common + (o)))
@@ -32,6 +33,12 @@ static uint64_t bar_base(volatile uint8_t *cfg, unsigned bar)
     return b;
 }
 
+/* Functions this kernel opened (console, entropy): the boot's bus-master
+ * sweep clears them too, ck_vpci_after_sweep gives them back. */
+#define CK_VPCI_OPEN_MAX 4
+static struct ck_vpci *opened[CK_VPCI_OPEN_MAX];
+static unsigned n_opened;
+
 int ck_vpci_open(uint16_t modern, struct ck_vpci *v)
 {
     const uint8_t *mcfg = ck_acpi_find("MCFG");
@@ -55,8 +62,12 @@ int ck_vpci_open(uint16_t modern, struct ck_vpci *v)
                 continue;
             }
             uint16_t dev = (uint16_t)(id >> 16);
+            /* Transitional ids (0x1000..0x103f) are not 0x1040 + type in any
+             * fixed way (net 0x1000, console 0x1003, entropy 0x1005): the
+             * virtio type is the PCI subsystem id. */
             if ((id & 0xffff) == 0x1af4 &&
-                (dev == modern || (dev == modern - 0x40 && (cfg32(c, 0x2c) >> 16) == (uint32_t)(modern - 0x1040)))) {
+                (dev == modern ||
+                 (dev >= 0x1000 && dev <= 0x103f && (cfg32(c, 0x2c) >> 16) == (uint32_t)(modern - 0x1040)))) {
                 cfg = c;
                 v->bus = bus0;
                 v->dev = (uint8_t)d;
@@ -97,6 +108,8 @@ int ck_vpci_open(uint16_t modern, struct ck_vpci *v)
     /* Memory decode + bus master (the firmware may have left them off). */
     *(volatile uint16_t *)(cfg + 4) |= 0x6;
     ck_vpci_mb();
+    if (n_opened < CK_VPCI_OPEN_MAX)
+        opened[n_opened++] = v;
     v->common = ck_mmio_map(common & ~0xfffull, ((common & 0xfff) + common_len + 0xfff) & ~0xfffull) +
                 (common & 0xfff);
     v->notify_base = ck_mmio_map(notify & ~0xfffull, 0x2000) + (notify & 0xfff);
@@ -172,4 +185,28 @@ int ck_vq_idle(struct ck_vq *q)
         return 0;
     q->last_used = q->next_avail;
     return 1;
+}
+
+void ck_vpci_after_sweep(void)
+{
+    if (!ck_vguest())
+        return; /* only the VM edition under EL1 firmware gives these DMA */
+    for (unsigned i = 0; i < n_opened; i++) {
+        volatile uint8_t *cfg = opened[i]->cfg;
+        uint16_t before = *(volatile uint16_t *)(cfg + 4);
+        if (before & 0x4)
+            continue;
+        *(volatile uint16_t *)(cfg + 4) = (uint16_t)(before | 0x6);
+        ck_vpci_mb();
+        /* QEMU also drops DRIVER_OK when bus master goes off; the queues stay
+         * configured, so setting it again resumes the device. */
+        struct ck_vpci *v = opened[i];
+        if (!(C8(v, STATUS) & 4))
+            C8(v, STATUS) = 1 | 2 | 8 | 4;
+        ck_vpci_mb();
+        ck_printf("dma_gate: %02x:%02x.%u %04x:%04x bus master back on after the sweep (VM edition: "
+                  "the hypervisor's own device, in use by this kernel)\n",
+                  opened[i]->bus, opened[i]->dev, opened[i]->fn, (unsigned)(cfg32(cfg, 0) & 0xffff),
+                  (unsigned)(cfg32(cfg, 0) >> 16));
+    }
 }

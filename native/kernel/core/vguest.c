@@ -21,5 +21,5 @@ int ck_vguest_dma_device(uint16_t vendor, uint16_t device)
 {
     if (!ck_vguest())
         return 0;
-    return vendor == 0x1af4 || (vendor == 0x106b && device == 0x1a09);
+    return vendor == 0x1af4 || (vendor == 0x106b && device == 0x1a09) || (vendor == 0x1b36 && device == 0x0010);
 }
