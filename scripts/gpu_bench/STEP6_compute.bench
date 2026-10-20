@@ -1,0 +1,32 @@
+# STEP6_compute.bench -- MEC HQD compute queue setup.
+# Sources: gca/gfx_8_0_d.h MIT (C) 2016 AMD; gfx_v8_0.c.
+
+# --- Select SE=0 SH=0 INSTANCE=0 for HQD programming ---
+w32 BAR5+0x200C 0x00000000   # mmGRBM_GFX_INDEX (0x0803*4=0x200C) = SE=0,SH=0,INST=0
+
+# --- Deactivate HQD ---
+r32 BAR5+0x8480   # mmCP_HQD_ACTIVE (0x2120*4=0x8480)
+w32 BAR5+0x8480 0x00000000   # CP_HQD_ACTIVE = 0
+
+# --- Programme HQD ---
+# (mec_ring_pa = physical address of 1KiB ring buffer)
+# w32 BAR5+0x8484 <mec_ring_pa >> 8>    # mmCP_HQD_PQ_BASE (0x2121*4=0x8484)
+# w32 BAR5+0x8488 <mec_ring_pa >> 40>   # mmCP_HQD_PQ_BASE_HI
+w32 BAR5+0x848C 0x00000000   # mmCP_HQD_PQ_RPTR (0x2123*4=0x848C) = 0
+# w32 BAR5+0x8490 <rptr_report_pa lo>   # mmCP_HQD_PQ_RPTR_REPORT_ADDR
+# w32 BAR5+0x8494 <rptr_report_pa hi>
+# w32 BAR5+0x8498 <wptr_poll_pa lo>     # mmCP_HQD_PQ_WPTR_POLL_ADDR
+# w32 BAR5+0x849C <wptr_poll_pa hi>
+w32 BAR5+0x84A0 0x00000007   # mmCP_HQD_PQ_CNTL (0x2128*4=0x84A0) = size log2-1=7 (256dw)
+# w32 BAR5+0x84E4 <eop_pa >> 8>         # mmCP_HQD_EOP_BASE_ADDR
+# w32 BAR5+0x84E8 <eop_pa >> 40>
+w32 BAR5+0x84EC 0x00000017   # mmCP_HQD_EOP_CONTROL = EOP_SIZE=5, MTYPE=3
+
+# --- Activate HQD ---
+w32 BAR5+0x8480 0x00000001   # CP_HQD_ACTIVE = 1
+r32 BAR5+0x8480   # read back: should be 1
+
+# --- Restore GRBM_GFX_INDEX to broadcast ---
+w32 BAR5+0x200C 0xA0000000   # GRBM_GFX_INDEX = SE_BROADCAST | SH_BROADCAST
+
+# --- HQD is ready for DISPATCH_DIRECT from feat/imac-gpu-shader ---

@@ -1,0 +1,18 @@
+# STEP3_smu_check.bench -- Check SMU state as Apple's firmware left it.
+# Format: r32 BAR5+offset, w32 BAR5+offset value, poll ...
+# Sources: smu/smu_7_1_3_d.h MIT (C) 2016 AMD.
+
+# Check if SMC registers are accessible (all-ones = not accessible)
+r32 BAR5+0x5E0   # mmSMC_MSG (0x0178*4=0x5E0)
+r32 BAR5+0x600   # mmSMC_MSG_RESP_0 (0x0180*4=0x600)
+
+# Try MSG_GetSMFWVersion (0x0201): clear response, write arg, write msg, poll
+w32 BAR5+0x600 0x00000000         # clear response
+w32 BAR5+0x5E4 0x00000000         # mmSMC_MSG_ARG_0 (0x0179*4=0x5E4) = 0
+w32 BAR5+0x5E0 0x00000201         # MSG_GetSMFWVersion = 0x0201
+poll BAR5+0x600 0xFFFFFFFF 0x00000000 50   # wait up to 50ms for non-zero response
+r32 BAR5+0x600   # read firmware version
+
+# Read SMC firmware header from VRAM (if VRAM mapped):
+# VRAM + 0x20000 + 0x4 = firmware version uint32 (polaris10_smumgr.c)
+# r32 BAR0+0x20004  # SMU7 firmware header version field

@@ -1,0 +1,35 @@
+# STEP5_sdma.bench -- SDMA0 ring init, constant fill, timed copy.
+# Sources: oss/oss_3_0_d.h MIT (C) 2016 AMD; sdma_v3_0.c.
+
+# --- Check SDMA0 status ---
+r32 BAR5+0xD0A0   # mmSDMA0_STATUS_REG (0x3428*4=0xD0A0) -- bit 0 = IDLE
+
+# --- Stop SDMA0 GFX ring ---
+w32 BAR5+0xD258   # mmSDMA0_GFX_RB_CNTL (0x3496*4=0xD258) = 0 (disable)
+
+# --- Programme SDMA0 ring ---
+# (ring_pa = physical address of 8KiB ring buffer)
+# w32 BAR5+0xD240 <ring_pa >> 8>    # mmSDMA0_GFX_RB_BASE (0x3490*4=0xD240)
+# w32 BAR5+0xD244 <ring_pa >> 40>   # mmSDMA0_GFX_RB_BASE_HI
+# w32 BAR5+0xD250 <rptr_pa lo>      # mmSDMA0_GFX_RB_RPTR_ADDR_LO (0x3494*4=0xD250)
+# w32 BAR5+0xD254 <rptr_pa hi>      # mmSDMA0_GFX_RB_RPTR_ADDR_HI
+w32 BAR5+0xD24C 0x00000000   # mmSDMA0_GFX_RB_WPTR (0x3493*4=0xD24C) = 0
+w32 BAR5+0xD248 0x00000000   # mmSDMA0_GFX_RB_RPTR (0x3492*4=0xD248) = 0
+w32 BAR5+0xD258 0x00000017   # mmSDMA0_GFX_RB_CNTL = RB_ENABLE(1) | RB_SIZE(11=2048dw)
+
+# --- Submit CONSTANT_FILL to back buffer ---
+# Ring content (5 dwords):
+#   SDMA_PACKET(SDMA_OP_CONST_FILL=0x0b, 0, 0) = 0x00000B00
+#   dst_pa lo (back buffer = BAR0+0x2400000, PA lo)
+#   dst_pa hi
+#   fill value = 0xdeadbeef
+#   count = (512 * 4) | (2 << 30) = 0x800007F0  [DWORD element]
+# Advance WPTR by 5*4=20 bytes (SDMA uses byte offset):
+# w32 BAR5+0xD24C 20   # mmSDMA0_GFX_RB_WPTR = 20
+
+# --- Follow with SDMA WRITE fence, poll result ---
+# fence: SDMA_PACKET(SDMA_OP_WRITE=0x02, 0, 0) = 0x00000200
+# followed by fence_pa lo, fence_pa hi, count-1=0, seq
+
+# --- Verify fill: read back dword from back buffer ---
+# r32 BAR0+0x2400000   # should read 0xdeadbeef

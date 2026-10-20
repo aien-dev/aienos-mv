@@ -1,0 +1,18 @@
+# scripts/gpu_ucode_sha256.txt -- pinned SHA-256 for polaris11 firmware blobs
+# Source: linux-firmware tag 20231211
+# AMD redistributable firmware license; see THIRD_PARTY_NOTICES
+# URL: https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git
+#
+# These are the SHA-256 hashes of the firmware files as distributed in
+# linux-firmware.  Verify with: sha256sum amdgpu/polaris11_*.bin
+#
+# IMPORTANT: verify these hashes against the upstream linux-firmware tree
+# before building with CK_X86_GPU_UCODE=1.
+SHA_PFP=PLACEHOLDER_VERIFY_FROM_LINUX_FIRMWARE_polaris11_pfp_bin
+SHA_ME=PLACEHOLDER_VERIFY_FROM_LINUX_FIRMWARE_polaris11_me_bin
+SHA_CE=PLACEHOLDER_VERIFY_FROM_LINUX_FIRMWARE_polaris11_ce_bin
+SHA_MEC=PLACEHOLDER_VERIFY_FROM_LINUX_FIRMWARE_polaris11_mec_bin
+SHA_MEC2=PLACEHOLDER_VERIFY_FROM_LINUX_FIRMWARE_polaris11_mec2_bin
+SHA_RLC=PLACEHOLDER_VERIFY_FROM_LINUX_FIRMWARE_polaris11_rlc_bin
+SHA_SDMA=PLACEHOLDER_VERIFY_FROM_LINUX_FIRMWARE_polaris11_sdma_bin
+SHA_SDMA1=PLACEHOLDER_VERIFY_FROM_LINUX_FIRMWARE_polaris11_sdma1_bin

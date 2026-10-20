@@ -1,0 +1,33 @@
+# STEP1_display_flip.bench -- Bare-metal register ops to verify DCE 11.2 page flip.
+# Format: each line is an operation on the register aperture (BAR5).
+# r32 BAR5+offset -- read 32-bit register
+# w32 BAR5+offset value -- write 32-bit register
+# poll BAR5+offset mask want timeout_ms -- poll until (reg & mask) == want
+# All offsets are BAR5 byte offsets (register_index * 4).
+# Sources: dce/dce_11_2_d.h MIT (C) 2016 AMD.
+
+# --- Confirm CRTC 0 is active ---
+r32 BAR5+0x1213C   # mmCRTC_STATUS (0x604e*4=0x18138) -- bit 0 = in vblank
+r32 BAR5+0x14114   # mmGRPH_PRIMARY_SURFACE_ADDRESS (0x5045*4=0x14114) -- front buffer PA lo
+r32 BAR5+0x14118   # mmGRPH_PRIMARY_SURFACE_ADDRESS_HIGH (0x5046*4=0x14118) -- front buffer PA hi
+r32 BAR5+0x1411C   # mmGRPH_FLIP_CONTROL (0x5047*4=0x1411C) -- flip timing
+r32 BAR5+0x14120   # mmGRPH_UPDATE (0x5048*4=0x14120) -- lock bits
+
+# --- Programme back buffer flip ---
+# 1. Lock the surface update (GRPH_SURFACE_UPDATE_LOCK = bit 0)
+w32 BAR5+0x14120 0x00000001   # GRPH_UPDATE = GRPH_SURFACE_UPDATE_LOCK
+# 2. Request vsync flip (GRPH_FLIP_AT_VSYNC = bit 0)
+w32 BAR5+0x1411C 0x00000001   # GRPH_FLIP_CONTROL = flip at next vsync
+# 3. Write new surface address (back buffer: BAR0 + 0x2400000 = depends on BAR0 PA)
+#    Example: BAR0 = 0xc0000000, back buffer = 0xc2400000
+w32 BAR5+0x14118 0x00000000   # GRPH_PRIMARY_SURFACE_ADDRESS_HIGH (bits 39:32 = 0)
+w32 BAR5+0x14114 0xc2400000   # GRPH_PRIMARY_SURFACE_ADDRESS = 0xc2400000
+# 4. Unlock
+w32 BAR5+0x14120 0x00000000   # GRPH_UPDATE = unlock
+
+# --- Wait for flip (GRPH_SURFACE_UPDATE_PENDING clears when flip lands) ---
+poll BAR5+0x14120 0x00000002 0x00000000 50   # wait up to 50 ms
+
+# --- Read back to confirm ---
+r32 BAR5+0x14114   # should now read 0xc2400000
+r32 BAR5+0x14118   # should read 0x00000000
