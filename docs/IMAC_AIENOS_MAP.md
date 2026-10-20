@@ -112,7 +112,7 @@ OBSERVED: the inference engine (`crates/aienos-infer`) has an Arm dot-product fa
 
 OBSERVED in the repo:
 
-- Pairwise secure transport: `native/net/aienos_sec.{h,c}`, a three-message SIGMA-style handshake (X25519, Ed25519 identities, HKDF, AES-256-GCM-SIV records). Each side is told one peer public key (a pinned roster of one). Only TEST identities exist; real keys wait for the owner-key ceremony (`docs/OWNER_KEY_CEREMONY.md`, BLOCKED_OPERATOR on the Spark map).
+- Pairwise secure transport: `native/net/aienos_sec.{h,c}`, a three-message SIGMA-style handshake (X25519, Ed25519 identities, HKDF, AES-256-GCM-SIV records). Each side is told one peer public key (a pinned roster of one). Only TEST identities exist; real keys wait for the owner-key chain. An owner-key ceremony was PERFORMED for the Pi on 2026-10-14 (`docs/native/PI5-8-OWNER-CEREMONY.md`); the Spark map lists the hardware-image ceremony as BLOCKED_OPERATOR. Whether the Pi key is the root for other machines' transport identities: UNKNOWN.
 - A reliable channel inside it: `native/net/aienos_ctl.c`. Plain UDP, IPv4, ARP, ICMP below: `aienos_net.c`. No TCP, no TLS, no DNS, no DHCP in `native/` (L191 grep).
 - Lab wire formats already on the iMac: UDP 47031 report (unauthenticated, lab only), 47032/47033 netboot (kernels checked with Ed25519 before start), 47034 live kernel swap (signed slot), 47035 GPU register console (HMAC-SHA256 plus counter) on `feat/imac-gpu-bench`.
 - The word "gateway" does not appear in `native/net`, `docs/adr` or `docs/*.md`. A gateway is a design item, not code.
@@ -155,3 +155,7 @@ None of these is authorized by this document.
 - Reuse search: `origin/main`, every `origin/feat/imac-*` and `fix/*imac*` branch, open PR bodies #412 to #426, `~/handoffs` (five iMac files), the ledger (L040, L142 to L145, L187, L210), and `modinfo` on this machine for `brcmfmac`, `tg3`, `amdgpu`. The 2026-10-16 evidence folders `imac_boot0`, `imac_kernel0`, `imac_kernel1` exist; only `imac_boot0` was read in full.
 - The iMac was not contacted. The hardware table is the 2026-10-16 report, 4 days old.
 - No speed, size or time estimate is given because none was measured, except where a receipt id is named.
+
+## 9. Joining the tailnet (Drake's idea of 2026-10-20, mind map `2026-10-20-aienos-on-the-imac-joins-tailscale`)
+
+A native tailnet node needs the WireGuard data plane and Tailscale's control protocol, which runs over TCP and TLS; none exists in `native/` (L191 grep). INFERRED (medium): the near-term route is the Linux hub (`docs/PI5_AIENOS_MAP.md` section 4) advertising the home LAN so the Spark and the Macs reach the iMac at its LAN address, with the iMac speaking the signed UDP transport. The native node waits on TCP, TLS and a vetted WireGuard implementation (crypto is never hand-rolled).
