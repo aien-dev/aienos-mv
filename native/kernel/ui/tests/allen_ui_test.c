@@ -318,7 +318,9 @@ int main(int argc, char **argv)
               "self: a rename needs one word");
         CHECK(!strncmp(ck_allen_answer(&m, "my name is sky", 8), "You haven't told me yet", 23) && !m.mem.name[0],
               "self: the person cannot take his name");
-        CHECK(!strcmp(ck_allen_welcome(&m), "Hello. I'm Sky."), "self: the next window opening says who he is");
+        /* no sky mode chosen yet, so the welcome also offers the two sky choices (allen_reply.c) */
+        CHECK(!strcmp(ck_allen_welcome(&m), "Hello. I'm Sky. The sky behind me can be the real sky above you right now, or a different part of the universe each time. Tell me which you'd like."),
+              "self: the next window opening says who he is, and offers the sky");
         CHECK(!strcmp(ck_allen_answer(&m, "forget everything", 9),
                       "Done. I've forgotten everything you taught me, and your name.") &&
                   !strcmp(m.mem.self, "Sky"),

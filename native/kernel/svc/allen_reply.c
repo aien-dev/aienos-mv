@@ -760,6 +760,140 @@ const char *ck_allen_welcome(ck_allen_mind *m)
     return m->out;
 }
 
+/* A place given as coordinates, read from the raw line (the folded one has lost the points and
+ * minus signs): "35 north 90 west", "35.1 n, 90.0 w", "35.1, -90.0", "lat 35.1 lon -90", "-33.87 151.21"
+ * (the last one needs a comma or a sign, so that a bare "35 90" is not taken for a place). Two
+ * numbers only, latitude first; words other than the direction and filler words make it no place.
+ * Integer arithmetic: the results are millionths of a degree. Returns 1 when it is a place. */
+int ck_allen_parse_place(const char *s, int32_t *lat_udeg, int32_t *lon_udeg)
+{
+    struct item {
+        int64_t udeg; /* magnitude, millionths of a degree */
+        int dir;      /* +1 north or east, -1 south or west, 0 none given */
+        int minus;    /* a minus sign */
+    } it[2] = {{0, 0, 0}, {0, 0, 0}};
+    int n = 0, after_num = 0, comma = 0, pend = 0, any_dir = 0;
+    const char *p = s ? s : "";
+    while (*p) {
+        char c = *p;
+        if (c == ',') {
+            comma = 1;
+            p++;
+            after_num = 0;
+            continue;
+        }
+        if (c == ' ' || c == '\t' || c == '.' || c == '\'' || c == '"' || c == '?' || c == '!' || c == ';' || c == ':') {
+            p++;
+            continue;
+        }
+        if (c == '-' && p[1] >= '0' && p[1] <= '9') {
+            /* a sign: the number after it */
+            if (n >= 2)
+                return 0;
+            p++;
+            it[n].minus = 1;
+            continue;
+        }
+        if (c >= '0' && c <= '9') {
+            if (n >= 2)
+                return 0;
+            int64_t ip = 0, fp = 0;
+            int nf = 0;
+            while (*p >= '0' && *p <= '9') {
+                ip = ip * 10 + (*p - '0');
+                if (ip > 1000)
+                    return 0;
+                p++;
+            }
+            if (*p == '.') {
+                p++;
+                while (*p >= '0' && *p <= '9') {
+                    if (nf < 6) {
+                        fp = fp * 10 + (*p - '0');
+                        nf++;
+                    }
+                    p++;
+                }
+            }
+            while (nf < 6) {
+                fp *= 10;
+                nf++;
+            }
+            it[n].udeg = ip * 1000000 + fp;
+            it[n].dir = pend;
+            pend = 0;
+            n++;
+            after_num = 1;
+            continue;
+        }
+        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) {
+            char w[16];
+            int wl = 0;
+            while (((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')) && wl < 15) {
+                char l = *p;
+                w[wl++] = (char)((l >= 'A' && l <= 'Z') ? l - 'A' + 'a' : l);
+                p++;
+            }
+            w[wl] = 0;
+            int d = 0;
+            if (eq(w, "north") || eq(w, "n") || eq(w, "east") || eq(w, "e"))
+                d = 1;
+            else if (eq(w, "south") || eq(w, "s") || eq(w, "west") || eq(w, "w"))
+                d = -1;
+            if (d) {
+                any_dir = 1;
+                if (after_num && n > 0 && !it[n - 1].dir)
+                    it[n - 1].dir = d;
+                else
+                    pend = d;
+                after_num = 0;
+                continue;
+            }
+            static const char *const filler[] = {"lat", "latitude", "lon", "long", "longitude", "deg", "degrees",
+                                                 "degree", "at", "in", "is", "my", "location", "coordinates",
+                                                 "i", "m", "am", "im", "of", "the", "at", 0};
+            int ok = 0;
+            for (int k = 0; filler[k]; k++)
+                if (eq(w, filler[k]))
+                    ok = 1;
+            if (!ok)
+                return 0;
+            after_num = 0;
+            continue;
+        }
+        return 0; /* anything else, such as an operator, makes it no place */
+    }
+    if (n != 2 || (!any_dir && !comma && !it[0].minus && !it[1].minus))
+        return 0;
+    int64_t v[2];
+    for (int k = 0; k < 2; k++) {
+        if (it[k].dir && it[k].minus)
+            return 0; /* "-35 north": say one or the other */
+        v[k] = it[k].dir ? it[k].udeg * it[k].dir : it[k].minus ? -it[k].udeg : it[k].udeg;
+    }
+    if (v[0] > 90000000 || v[0] < -90000000 || v[1] > 180000000 || v[1] < -180000000)
+        return 0;
+    *lat_udeg = (int32_t)v[0];
+    *lon_udeg = (int32_t)v[1];
+    return 1;
+}
+
+/* the place as a line: "35.000 north, 90.000 west" */
+static void put_place(struct say *s, int32_t udeg, const char *pos, const char *neg)
+{
+    int64_t a = udeg < 0 ? -(int64_t)udeg : udeg;
+    putu(s, (uint64_t)(a / 1000000));
+    put(s, ".");
+    uint64_t f = (uint64_t)(a % 1000000) / 1000;
+    if (f < 100)
+        put(s, "0");
+    if (f < 10)
+        put(s, "0");
+    putu(s, f);
+    put(s, " ");
+    put(s, udeg < 0 ? neg : pos);
+}
+
 const char *ck_allen_answer(ck_allen_mind *m, const char *line, uint64_t awake_s)
 {
     char f[96];
@@ -893,6 +1027,23 @@ const char *ck_allen_answer(ck_allen_mind *m, const char *line, uint64_t awake_s
             put(&s, ".");
         }
         return m->out;
+    }
+    /* a place as coordinates: "35 north 90 west", "35.1, -90.0" (before the town names) */
+    {
+        int32_t la = 0, lo = 0;
+        if (line && ck_allen_parse_place(line, &la, &lo)) {
+            m->mem.sky_lat_udeg = la;
+            m->mem.sky_lon_udeg = lo;
+            m->mem.sky_have_loc = 1;
+            m->sky_changed = 1;
+            m->changed = 1;
+            put(&s, "Got it: ");
+            put_place(&s, la, "north", "south");
+            put(&s, ", ");
+            put_place(&s, lo, "east", "west");
+            put(&s, ". Say sky above me, and the sky turning above that place is shown.");
+            return m->out;
+        }
     }
     /* location: "I'm in Memphis" / "my location is Chicago" */
     for (const char *lead = 0, **ll = (const char **)loc_words; *ll && !lead; ll++)

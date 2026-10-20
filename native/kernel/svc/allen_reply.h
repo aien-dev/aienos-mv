@@ -72,6 +72,9 @@ void ck_allen_mind_init(ck_allen_mind *m, const ck_allen_facts *facts);
 /* Allen's answer to one typed line (never NULL; valid until the next call).
  * awake_s: seconds since the machine started. */
 const char *ck_allen_answer(ck_allen_mind *m, const char *line, uint64_t awake_s);
+/* A place given as coordinates ("35 north 90 west", "35.1, -90.0"): 1 and the latitude and
+ * longitude in millionths of a degree (east positive), or 0 when the line is no place. */
+int ck_allen_parse_place(const char *s, int32_t *lat_udeg, int32_t *lon_udeg);
 /* What Allen says first when the window opens: a welcome back by name when
  * it remembers someone; on a first meeting (nothing remembered, no name of
  * his own yet) he asks what to call him, and the next single word typed

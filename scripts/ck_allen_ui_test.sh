@@ -13,6 +13,7 @@
 #     match drawing everything. 1280x800 RGBX with a padded pitch: red and
 #     blue swap, nothing past the visible width, and three helper threads
 #     draw exactly the same frames as one.
+#  4. Coordinates typed to Allen become his place (allen_place_test.c).
 # Pictures of each state land in target/native-kernel-allen-ui/ for a person
 # to look at. Hosted only. Ends with "AIENOS_ALLEN_UI: PASS" or
 # "AIENOS_ALLEN_UI: FAIL <why>".
@@ -30,4 +31,9 @@ $CC -std=gnu11 -O2 -Wall -Wextra -Werror -pthread -o "$W/test" $K/ui/tests/allen
     $K/ui/allen_font.c $K/svc/allen_reply.c $K/svc/allen_notes.c $K/svc/allen_intent.c || fail "test does not build"
 "$W/test" "$OUT" || fail "window checks"
 echo "pictures: $OUT"
+# 4. Coordinates typed to Allen ("35 north 90 west", "35.1, -90.0") become his place; lines that are no place
+#    (arithmetic, names, a bare pair of numbers) do not (native/kernel/svc/tests/allen_place_test.c).
+$CC -std=gnu11 -O2 -Wall -Wextra -Werror -I $K/svc -o "$W/place" $K/svc/tests/allen_place_test.c $K/svc/allen_reply.c \
+    $K/svc/allen_notes.c $K/svc/allen_intent.c || fail "place test does not build"
+"$W/place" || fail "place checks"
 echo "AIENOS_ALLEN_UI: PASS"
