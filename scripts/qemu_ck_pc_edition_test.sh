@@ -11,7 +11,8 @@
 #   live-usb   the live ISO written to a USB stick (xHCI usb-storage), byte for byte
 #   vm-qcow2   the VM disk as aienos-run starts it: virtio-blk snapshot=on, a blank
 #              qcow2 store disk as vdb, virtio-net user net with UDP 47030 forwarded,
-#              virtio-keyboard, virtio-vga, x2APIC on, 4 cores; stopped by QMP
+#              virtio-keyboard, virtio-vga, x2APIC asked for (QEMU 8.2 TCG cannot offer it: then
+#              NOT_RUN for the x2APIC path, said in the final line), 4 cores; stopped by QMP
 #              system_powerdown (the ACPI power button), must exit by itself
 #   vm-vhdx    the Hyper-V disk read by QEMU's vhdx driver, virtio-blk
 # Each run: serial must show "aienos: console ready" and the prompt, the commands
@@ -52,6 +53,7 @@ wait_for() {
 type_line() { printf '%s\r' "$2" > "$1/serial.in"; sleep 2; }
 
 fails=()
+x2apic_notrun=0
 run() { # NAME STOP(poweroff|button) APIC(x2apic|xapic) QEMU-ARGS...
     local name="$1" stop="$2" apic="$3"; shift 3
     local d="${work}/${name}" ok=1 cpu=EPYC-Genoa
@@ -70,6 +72,11 @@ run() { # NAME STOP(poweroff|button) APIC(x2apic|xapic) QEMU-ARGS...
     check() { grep -aq -- "$2" "${d}/serial.txt" && echo "  ok: $1" || { echo "  FAIL: $1 (no '$2')"; ok=0; }; }
     if wait_for "${d}" "aienos: console ready" "${boot_s}" && wait_for "${d}" "aienos> " 30; then
         echo "  console ready after $((SECONDS - t0)) s (TCG, not a speed figure)"
+        if [[ "${apic}" == x2apic ]] && grep -q "x2apic \[bit 21\]" "${d}/qemu.txt"; then
+            echo "  NOT_RUN: x2APIC path (this QEMU's TCG does not offer x2APIC: $(grep -o "TCG doesn.t support requested feature: CPUID.01H:ECX.x2apic" "${d}/qemu.txt"));"
+            echo "           checking instead that the kernel kept xAPIC when the CPU does not offer x2APIC"
+            apic=xapic x2apic_notrun=1
+        fi
         sleep 2
         qmp "${d}/qmp.sock" "{\"execute\":\"screendump\",\"arguments\":{\"filename\":\"${d}/screen.ppm\"}}" > /dev/null
         type_line "${d}" help
@@ -128,4 +135,6 @@ run vm-vhdx poweroff xapic -drive if=none,id=vda,format=vhdx,readonly=on,file="$
     "${vm_dev[@]}" -vga none
 
 if (( ${#fails[@]} )); then echo "${tag}: FAIL ${fails[*]}"; exit 1; fi
-echo "${tag}: PASS (4 runs: live-cd live-usb vm-qcow2 vm-vhdx; -cpu EPYC-Genoa; QEMU qualifies nothing physical)"
+note=""
+(( x2apic_notrun )) && note="; x2APIC path NOT_RUN: QEMU TCG has no x2APIC"
+echo "${tag}: PASS (4 runs: live-cd live-usb vm-qcow2 vm-vhdx; -cpu EPYC-Genoa${note}; QEMU qualifies nothing physical)"

@@ -22,7 +22,7 @@ What it does **not** do yet:
 - On the real PC (the USB stick), typing may not work yet: the USB keyboard driver is not in this edition. The screen report works; the power button turns it off.
 - The "virtual machine" version is the better way to try typing commands.
 
-How it was tested: in QEMU (a virtual-machine program) pretending to be an AMD Zen 4 processor, the same family as your Ryzen 5 7600X. **No real PC has run it yet.** Your PC would be the first.
+How it was tested: in QEMU (a virtual-machine program) pretending to be an AMD Zen 4 processor, the same family as your Ryzen 5 7600X. **No real PC has run it yet.** Your PC would be the first. One part could not be tried in QEMU: the newer way AMD processors handle interrupts (called x2APIC). The emulator on our test machine cannot offer it, so that code is written but untested until a real PC or a faster virtual machine runs it.
 
 ## Download
 

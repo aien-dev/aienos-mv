@@ -194,12 +194,12 @@ void ck_x86_pc_console(const struct ck_x86_pc_status *s, uint64_t rsdp, void (*a
             (void)ck_inb(0x60);
         ps2_on = 1;
     }
+    arm_tick(); /* the power button line prints here, before the ready line */
     ck_printf("keyboard: ps2=%s virtio=%s serial=%s\n", ps2_on ? "present" : "absent",
               ck_x86_virtio_result()->kbd_up ? "present" : "absent", "com1-if-present");
     ck_puts("note: QEMU qualifies nothing physical\n");
     ck_puts("aienos: console ready\n");
     prompt();
-    arm_tick();
     for (;;) {
         __asm__ volatile("sti; hlt" ::: "memory"); /* the 100 Hz tick wakes the core */
         int c;
