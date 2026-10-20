@@ -20,9 +20,9 @@ number (smaller is bluer).
 | Part | Verdict |
 |---|---|
 | Stars (9096 in the catalogue, 8404 to V 6.5) | Real: position, brightness, colour. Limits in section 3. |
-| Milky Way | Real: Gaia DR3 star counts and G-band flux per HEALPix cell, scaled so the brightest band is the published 20.7 V mag/arcsec2 (Leinert et al. 1998). Shown at that brightness, calibrated to the physical contrast over the sky (gain 1.2, section 3). |
+| Milky Way | Real: Gaia DR3 G, BP and RP flux per HEALPix level-7 cell, moved to V with each cell's own colour, on the physical scale with no anchor or gain. Brightest band V 20.17 mag/arcsec2 against the published 20.7 (Leinert et al. 1998), section 3. |
 | Dark sky glow | Real: V 22.0 mag/arcsec2, the published dark-site sky (Leinert et al. 1998). Not boosted. |
-| Large and Small Magellanic Clouds | Real, at true place, size and tilt. |
+| Large and Small Magellanic Clouds | Real: true place, size and tilt (OpenNGC); their light is Gaia DR3's resolved stars raised to the catalogue total V (LMC 0.29, SMC 2.30), section 3. Visible: centre 2.0 (LMC) and 1.8 (SMC) times the surrounding sky. |
 | The view | Real: a pinhole-camera projection centred on GW150914's most probable sky position. |
 | Starlight bent by the black holes | Real physics (point-mass lens), with one invented edge and one invented scale (section 4). |
 | Black hole shadows and the thin ring | Real size rule (shadow radius sqrt(27)/2 Rs), drawn as a simple disc and ring. |
@@ -40,8 +40,9 @@ number (smaller is bluer).
 | Yale Bright Star Catalogue, 5th revised ed. (Hoffleit and Warren 1991), CDS V/50 | 9096 stars with J2000 position, proper motion, V, B-V | The CDS ReadMe carries no licence or copyright line. Credit: Hoffleit and Warren 1991, via CDS Strasbourg. |
 | Gaia DR3 `gaia_source`, query 1 below (ESA/Gaia/DPAC) | Source count and summed G, BP, RP mean flux of every source with G > 7, per HEALPix level-7 cell (nside 128, 196608 cells) | CC BY-NC 3.0 IGO. Credit: ESA/Gaia/DPAC. Pinned sha256 in `scripts/ck_sky_gen.sh`. |
 | Gaia DR3 `astrophysical_parameters`, query 2 below | Mean G-band extinction `ag_gspphot` per the same level-7 cells (the dust) | CC BY-NC 3.0 IGO. Credit: ESA/Gaia/DPAC. |
-| Leinert et al. 1998 (A&AS 127, 1), as quoted in arXiv:2401.15518 (Bochum V 20.7 at the bright Milky Way) and arXiv:2604.09427 (dark-sky reference V 22) | The two physical brightnesses the display is tied to | Cited only: published numbers, no data copied. |
-| OpenNGC (Mattia Verga), pinned to commit be3cd6c | Galaxy positions, sizes, tilt angles | CC BY-SA 4.0. Credit: Mattia Verga. Only two galaxies (their positions and sizes, which are facts) reach the tables. The ShareAlike term against this repository's licence (AGPL-3.0-or-later) is for the desk to clear. |
+| Leinert et al. 1998 (A&AS 127, 1), as quoted in arXiv:2401.15518 (Bochum V 20.7 at the bright Milky Way) and arXiv:2604.09427 (dark-sky reference V 22) | The dark sky (V 22, the one brightness the display is tied to) and the bright Milky Way (V 20.7, now an independent check of the Gaia scale) | Cited only: published numbers, no data copied. |
+| Gaia DR3 documentation (ESA/Gaia/DPAC), chapter 5: section 5.4.1 Table 5.4 (zero points G 25.6874, BP 25.3385, RP 24.7479), https://gea.esac.esa.int/archive/documentation/GDR3/Data_processing/chap_cu5pho/cu5pho_sec_photProc/cu5pho_ssec_photCal.html ; Table 5.9 (G - V from BP - RP), https://gea.esac.esa.int/archive/documentation/GDR3/Data_processing/chap_cu5pho/cu5pho_sec_photSystem/cu5pho_ssec_photRelations.html | Gaia flux to V surface brightness, per cell | Cited only: published constants. |
+| OpenNGC (Mattia Verga), pinned to commit be3cd6c | Galaxy positions, sizes, tilt angles, and the integrated V that sets the Magellanic Clouds' total light | CC BY-SA 4.0. Credit: Mattia Verga. Only two galaxies (their positions, sizes and magnitudes, which are facts) reach the tables. The ShareAlike term against this repository's licence (AGPL-3.0-or-later) is for the desk to clear. |
 | GWTC-1 sky map of GW150914, LIGO-P1800381-v7 | Where on the sky the signal came from (HEALPix probability map) | Released by LIGO and Virgo through the LIGO Document Control Center. Credit: LIGO Scientific Collaboration and Virgo Collaboration. |
 | Abbott et al., PRL 116, 061102 (2016) | The published numbers the audit measures against | Cited only. |
 
@@ -137,85 +138,75 @@ channels by a tint from its BP-RP colour (reddened by the mean G-band extinction
 `ag_gspphot`, E(B-V) = A_G / 2.285, Cardelli et al. 1989), with the channel weights chosen so
 that their luminance (0.2126 R + 0.7152 G + 0.0722 B) is exactly the cell's light. The first build
 put almost all of the light into the red channel, so the band was about a third of its
-true luminance. That is corrected and measured below.
+true luminance. That is corrected.
 
-Scale: the number is a count of light, so it has no brightness until it is tied to one. It is
-tied to the brightest band, not to a photograph:
+Scale: physical, with no anchor (since 9ab1281 / 176bc51). The number is Gaia's own measured light:
 
-- The brightest band of the Milky Way (the Sagittarius and Scutum bulge) is V 20.7 mag/arcsec2
-  (Bochum photometry, Leinert et al. 1998; the same value is quoted in arXiv:2401.15518, Table 3).
-  That is 678 S10 (1 S10 is the light of a V 10 star per square degree, 27.78 V mag/arcsec2 by
-  definition). The generator divides the grid by its brightest cell and multiplies by 678 S10.
+- A cell's summed G flux F (electrons per second) over its area A (arcsec2) is a surface brightness,
+  G = 25.6874 - 2.5 log10(F / A) mag/arcsec2 (the DR3 G zero point; Gaia DR3 documentation, section
+  5.4.1, Table 5.4). 1 S10 (the light of a V 10 star per square degree) is V 27.78 mag/arcsec2.
+- G is not V. Each cell is moved to Johnson V with its own integrated colour, BP - RP from its summed
+  BP and RP fluxes and the DR3 zero points (BP 25.3385, RP 24.7479, same table), through
+  G - V = -0.02704 + 0.01424 c - 0.2156 c^2 + 0.01426 c^3, c = BP - RP, valid -0.5 to 5, scatter
+  0.03 mag (Gaia DR3 documentation, chapter 5, relationships with other photometric systems,
+  Table 5.9). For the reddened bulge (c about 2) G - V is -0.75: taking G as V made the brightest band
+  0.6 magnitude too bright (V 19.69 in G against 20.31 in V, both at the old 1.5 degree splat).
+- Result (`native/kernel/ui/sky_data.txt`): the brightest band is **V 20.17 mag/arcsec2 (1111 S10)**.
+  The published Bochum value is V 20.7 (Leinert et al. 1998; arXiv:2401.15518, Table 3). The two are
+  independent: Leinert's number is now a check, not the scale. Gaia is 0.5 magnitude brighter here
+  (UNVERIFIED cause; Bochum's beam and the bulge's patchy dust differ from a 0.75 degree average).
 - The dark sky's own glow is V 22.0 mag/arcsec2 (205 S10; Leinert et al. 1998, also the reference
-  V 22 of arXiv:2604.09427). It is added everywhere, with no gain.
-- Physical contrast of the brightest band over the dark sky: 678 / 205 = 3.31 (luminance).
+  V 22 of arXiv:2604.09427). It is added everywhere, with no gain. Brightest band over the dark sky:
+  5.42 (luminance).
+- The gain (`SKY_GAIN` / `--gain`) is 1.0 and stays 1.0: it exists only for a deliberate test. The
+  earlier gain 1.2 (tied to a 678 S10 anchor and measured with the old inverse projection, which was
+  off by a factor of two, see below) is retired; its table is in `evidence/real-sky/gain-measure.txt`
+  as history.
+- Each grid point (1 degree) averages the level-7 cells within 0.75 degree (about 8 cells). It was 1.5
+  degree, sized for level 6; that smeared the Small Magellanic Cloud over a 3 degree disk.
 
-**The gain (`SKY_GAIN` / `--gain`, chosen 1.2).** One factor on the Milky Way's light only.
-Rule: the luminance ratio the screen shows between the brightest band and the dark sky must equal
-the physical 3.31. Measured on the Galactic-centre view (80 degrees across, 3840 x 2160, the peak of
-the Milky Way grid at the centre of the frame, `evidence/real-sky/gain-measure.txt`), the ratio is
-not 3.31 at gain 1: sRGB is 8-bit and gamma-coded, and the sky is only 4 to 5 levels, so the
-rendered band is darker than the physical one.
-
-| gain | on-screen added light over sky (luminance), Galactic-centre view | physical |
-|---|---|---|
-| 1.0 | 2.59 (L6 build; L7 gives the same to 2 places at gain 1.2) | 3.31 |
-| 1.2 | 3.23 (L7, chosen) | 3.31 |
-| 1.3 | 3.57 | 3.31 |
-| 1.5 | 3.93 | 3.31 |
-| 3.0 | 6.72 (L7) | 3.31 |
-| 5.0 | 11.23 (L7) | 3.31 |
-
-Gain 1.2 is the closest of the tested values (within 3 percent; the steps between 1.2 and 1.4 are
-quantisation, not a trend). So the chosen gain is **1.2**. The gain is not a taste choice: it is
-the value that makes the rendered ratio equal the physical one.
-
-Earlier build (49ab287): `--boost 5` multiplied the sky glow by 5 (to V 20.3, far brighter than any
-dark site) and left the Milky Way unchanged. The Milky Way was barely above its own sky, which is
-the faintness this change fixes. The first version of this generator also scaled the Milky Way to
-its 95th-percentile cell, which put the Galactic centre at 18.6 V mag/arcsec2, about 2 magnitudes
-brighter than the published band (20.7). Both are corrected.
-
-**What the screen shows, measured (3840 x 2160, the frames in `evidence/real-sky/`):**
-
-| build | dark sky (dimmest cell), sRGB R | brightest cell in the chosen view, sRGB R | added light over sky, chosen view (luminance) | added light over sky, Galactic-centre view (luminance) |
-|---|---|---|---|---|
-| 49ab287 (before, boost 5 on the sky) | 21.5 | 38.6 | 0.61 | 1.46 |
-| L7, gain 1.2 (chosen) | 4.5 | 11.0 | 1.49 | 3.23 |
-| L7, gain 3 | 5.5 | 18.6 | 3.05 | 6.72 |
-| L7, gain 5 | 5.5 | 25.8 | 5.49 | 11.23 |
-
-"Added light over sky" is (band luminance minus sky luminance) over sky luminance, the same
-quantity as the physical 678 / 205 = 3.31. The Galactic-centre column is the measured check of the
-rule, and the one the gain was chosen by. Physical values for comparison are in the table above.
-
-The chosen view is centred on GW150914 (galactic latitude -23 degrees), so its brightest cell is
-dimmer than the Galactic centre.
-A magnitude 6.5 star's centre is sRGB 69. A screen cannot show the whole range (section 3,
-limits), so the stars are the top of the picture and the Milky Way sits below them at its physical
-level. Frames: `evidence/real-sky/sky-whole.png` and `sky-centre-1to1.png` (chosen), with
-`gain-3-whole.png` and `gain-5-whole.png` for comparison.
-
-
+**The screen-to-sky step (fixed at 9ab1281).** `sky_real.c` turns each screen point back into a sky
+direction to read the grid. The forward projection puts a tangent-plane offset u at u / tan(fov/2)
+half-widths; the inverse used half that, so the grid was read from points twice as far from the view
+centre as the pixel. The Milky Way and the Clouds were drawn in the wrong places. The sky test now
+catches it (below): with the old step both Clouds read 0.95 to 0.99 times their surround.
 
 **Galaxies.** Brighter than V 6.5 and in the view, OpenNGC has two: the Large
 Magellanic Cloud (ESO056-115, V 0.29, 646 x 550 arcminutes, position angle 170)
 and the Small Magellanic Cloud (NGC0292, V 2.30, 300 x 180 arcminutes, position
 angle 45). They are placed at their true centre, size and tilt. On a 3840 wide
-screen the LMC's half axes are 219 x 191 px, the SMC's 112 x 74.
+screen the LMC's half axes are 219 x 191 px, the SMC's 112 x 74. Their outlines only carry the
+gravitational-wave shimmer; their steady light is in the Milky Way grid:
 
-**Not done, stated plainly: the Magellanic Clouds are not visible.** Their light used
-to come from the ESO photograph, which is removed. Nothing measured replaces it yet: the
-galaxy is drawn as an elliptical profile with a tint and no brightness from data. Measured on
-the frame at gain 1.2, the LMC's box averages sRGB R 6.6 against a sky of 4.5 (G 4.4, B 3.8 for
-the SMC box at 5.0), so both are barely above the sky. The Gaia cells should already hold the
-clouds' light (their stars are in the catalogue), but at the LMC's centre the Milky Way grid is
-no brighter than the dark sky (sRGB luma 4 to 5). The LMC should not be that dark. Its
-integrated V 0.29 over its ellipse (area pi/4 x 646 x 550 arcmin2 = 1.0e9 arcsec2) gives a mean
-surface brightness of 0.29 + 2.5 log10(1.0e9) = V 22.8 mag/arcsec2, about twice the dark sky's
-light: a physical LMC is a faint glow of about 1.1 times the sky's light added, similar to the
-Milky Way band in the chosen view (1.5). So the grid, or its use, is a fault to chase before the
-clouds can be drawn from data. Open.
+**The Magellanic Clouds' light (real, from two catalogues).** Gaia sees each Cloud's brightest stars
+(the LMC is about 50 kpc away, so Gaia's G 20.7 limit reaches absolute G about +2) but not the faint,
+crowded rest. The generator (`gaia_clouds` in `ck_sky_gen.c`), for each catalogue galaxy at least 2
+degrees long:
+
+1. takes the Gaia cells inside its OpenNGC ellipse (the D25 isophote);
+2. takes the local sky as the median cell between 1.2 and 1.6 ellipse radii (Milky Way foreground);
+3. sums the light above that sky: the resolved part;
+4. compares it with the catalogue's integrated V and adds the missing part in the pattern of the
+   resolved stars (each cell's excess times total / resolved), so the total inside the ellipse is the
+   catalogue's and the shape is Gaia's.
+
+| galaxy | Gaia cells | local sky (S10) | Gaia resolves | catalogue V | share | centre before, after (V mag/arcsec2) |
+|---|---|---|---|---|---|---|
+| LMC (ESO056-115) | 372 | 48.7 | V 0.83 | 0.29 | 61% | 21.58, 21.11 |
+| SMC (NGC0292) | 55 | 42.2 | V 2.78 | 2.30 | 64% | 21.64, 21.22 |
+| M31 (NGC0224) | | | V 6.53 | 3.44 | 5.8% | not added (under 25%: too few stars to carry the shape) |
+
+"Centre" is the inner fifth of the ellipse, the light added to the dark sky's V 22.0. A physical check
+from the catalogue alone: V 0.29 over the LMC's ellipse (1.0e9 arcsec2) is a mean of V 22.8
+mag/arcsec2; an exponential disk is several times brighter at its centre than its mean, which puts
+the centre near V 21, as found.
+
+On screen (`scripts/ck_sky_test.sh`, check "galaxy N glows at its place": median linear luminance
+inside 0.3 of the short half axis over the median of a ring at 1.3 to 1.6 long half axes; the stars
+do not move a median): **LMC 1.99, SMC 1.81** times the surround (bar 1.5). With the old screen-to-sky
+step: 0.99 and 0.95. Limits: Gaia's crowding limit thins the LMC bar's stars, so the true centre is
+somewhat more concentrated than drawn (UNVERIFIED how much); the grid is 1 degree, so the bar and
+30 Doradus are not resolved.
 
 **The sky above you (wired).** `sky_real.c` holds Greenwich mean sidereal time (IAU 1982),
 the zenith for a latitude and longitude, and the 1976 IAU precession back to J2000
@@ -372,10 +363,10 @@ Sizes, timings and pictures are in `evidence/real-sky/README.md`. On one core of
 - Level 6 against level 7: same table size and the same timing within noise, so the level is chosen
   by the input. Level 7 uses all 196608 Gaia cells (the level-6 build used 49152). Its table differs
   from level 6 in 945 of its 5610 lines. The Galactic-centre luminance ratio is the same to two
-  decimals (3.23 at gain 1.2).
-- `IMACKERN.EFI` is 405504 bytes, built by `make -C native/kernel imac-kernel` at `4221f12` (the code
+  decimals (3.23 at gain 1.2, the retired anchored build).
+- `IMACKERN.EFI` is 405504 bytes, built by `make -C native/kernel imac-kernel` at `176bc51` (and at `4221f12`, the earlier code
   commit; the docs commit after it changes no code). The earlier real-sky figure was 348160.
-- Host checks: the sky test 13 of 13 pass (`ck_sky_test.sh`); the Allen window test and its picture
+- Host checks (at 176bc51): the sky test 15 of 15 pass (`ck_sky_test.sh`, two new checks: each Cloud glows at its place); the Allen window test and its picture
   checks, the Allen place test (26 checks) and the Allen memory test are in
   `evidence/real-sky/README.md`. Not run: the full `make -C native/kernel test` suite and the QEMU
   tests; those were not run in this change.
@@ -383,12 +374,14 @@ Sizes, timings and pictures are in `evidence/real-sky/README.md`. On one core of
 
 ## 9. Open
 
-- The Magellanic Clouds have no light model since the photograph was removed, and the Gaia grid does
-  not show the LMC (section 3). Fix before the clouds are called real.
+- The Clouds' centres are drawn in the pattern of the stars Gaia resolves; crowding thins the LMC bar, so
+  the true centre is more concentrated (not measured). M31 has no steady light (Gaia resolves 5.8%).
+- The Milky Way's brightest band from Gaia (V 20.17) is 0.5 magnitude brighter than Bochum's 20.7; the
+  cause is not established.
 - The level-7 grid is still 1 degree. A 0.5-degree grid would use the cells in full; it doubles the table
   (about 260 KB more) and has not been measured.
-- The Milky Way gain 1.2 is calibrated on the host's sRGB path (8 bits, gamma). The iMac's panel may differ;
-  the calibration is repeated on the iMac when a frame can be read there.
+- The on-screen ratios (Clouds over surround) are measured on the host's sRGB path (8 bits, gamma). The
+  iMac's panel may differ; they are measured again on the iMac when a frame can be read there.
 - The flight through nearby stars is a plan (`docs/SKY_FLIGHT_PLAN.md`), not code.
 - Gaia DR3 is CC BY-NC 3.0 IGO; the repository is AGPL-3.0-or-later. The desk to confirm the use.
 - The real chirp (section 5): a decision for Drake.

@@ -9,20 +9,21 @@ note: zenith at 946728000, lat 0.000 lon 0.000: J2000 RA 280.4645 Dec -0.0055 de
 note: zenith at 2524608000, lat 64.000 lon -21.000: J2000 RA 78.6456 Dec 63.9459 deg (date RA 79.8456)
 ok    zenith: precessed back to J2000 and forward again, worst 24.2 arcsec
 ok    the location setting is unset by default
-ok    the sky is made (132.3 ms)
-ok    the sky is made (109.5 ms)
-ok    the sky is made (120.1 ms)
-note: the sky made in 109.5 ms at 3840x2160 (best of 3, this host, one core)
+ok    the sky is made (389.6 ms)
+ok    the sky is made (200.6 ms)
+ok    the sky is made (204.1 ms)
+note: the sky made in 200.6 ms at 3840x2160 (best of 3, this host, one core)
 ok    galaxies in the view: 2 (the catalogue's in the view: 2)
 ok    the brightest stars twinkle: 4 of them
-note: mean level 6.52
+note: mean level 7.37
 ok    no pixel of the sky is black (the night sky glows): 0 black
+ok    galaxy 0 glows at its place: centre 0.00310 over surround 0.00156 linear = 1.99 (at least 1.5)
+ok    galaxy 1 glows at its place: centre 0.00271 over surround 0.00150 linear = 1.81 (at least 1.5)
 note: wrote target/native-kernel-sky/sky-whole.png (1920x1080)
 note: wrote target/native-kernel-sky/sky-centre-1to1.png (1280x720)
 note: wrote target/native-kernel-sky/sky-galaxy0-1to1.png (1280x720)
 note: wrote target/native-kernel-sky/sky-galaxy1-1to1.png (1280x720)
 note: wrote target/native-kernel-sky/sky-brightest-1to1.png (640x360)
-SKY_TEST: PASS (13 checks, 0 failed)
+SKY_TEST: PASS (15 checks, 0 failed)
 pictures: target/native-kernel-sky
 AIENOS_SKY: PASS
-EXIT 0

@@ -1,4 +1,4 @@
-note: the night made in 147 ms (this host)
+note: the night made in 264 ms (this host)
 note: wrote target/native-kernel-allen-ui/night-1-stars.png (1920x1080)
 note: wrote target/native-kernel-allen-ui/night-2-holes.png (1920x1080)
 note: wrote target/native-kernel-allen-ui/night-2-holes-detail.png (1800x1120)
@@ -13,7 +13,7 @@ note: wrote target/native-kernel-allen-ui/allen-5-waiting.png (1920x1080)
 note: wrote target/native-kernel-allen-ui/allen-6-notes.png (1920x1080)
 note: wrote target/native-kernel-allen-ui/allen-6-notes-detail.png (760x820)
 note: wrote target/native-kernel-allen-ui/allen-7-dusk.png (1920x1080)
-note: 3912 frames at 3840x2160 on one core of this host: average 21296 us, slowest 147071 us
+note: 3912 frames at 3840x2160 on one core of this host: average 21887 us, slowest 223731 us
 note: wrote target/native-kernel-allen-ui/allen-1280x800.png (1280x800)
 ALLEN_UI_TEST: PASS (91 checks)
 pictures: target/native-kernel-allen-ui
@@ -45,4 +45,3 @@ ok      "-35 north, 90 west" -> 0 (0.000007, 0.000007) want 0 (0, 0)
 ok      "" -> 0 (0.000007, 0.000007) want 0 (0, 0)
 ALLEN_PLACE: PASS (26 checks, 0 failed)
 AIENOS_ALLEN_UI: PASS
-EXIT 0

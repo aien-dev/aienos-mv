@@ -19,10 +19,13 @@ colour: B-V 0.00 -> 10125 K -> sRGB (204, 217, 255)
 colour: B-V 0.65 -> 5778 K -> sRGB (255, 241, 234)
 colour: B-V 1.50 -> 3794 K -> sRGB (255, 207, 155)
 display: a magnitude 6.5 star peaks at 0.060 linear (sRGB level 69); a magnitude 0 star holds 33.8 linear x design px; 1 S10 is 5.86e-06 linear per design px
-Gaia DR3 Milky Way: 196608 HEALPix level-7 cells (nside 128), 196608 non-empty; sky glow 0.00120 linear/design-px (V 22.0, physical, no gain)
-Milky Way: brightest band set to 678 S10 (V 20.70 mag/arcsec2) = grid 1.0 (was 5.725 before the scale); gain 1.20 on the Milky Way only
+Gaia DR3 Milky Way: 196608 HEALPix level-7 cells (nside 128), 196608 non-empty, 0 with no BP/RP colour (G kept as V); sky glow 0.00120 linear/design-px (V 22.0, physical, no gain)
+cloud light NGC0224 Andromeda Galaxy: Gaia resolves V 6.53 of the catalogue's V 3.44 (5.8%), under 25%: not added
+cloud light NGC0292 Small Magellanic Cloud: 55 Gaia cells in the 300x180 arcmin ellipse, local sky 42.2 S10 (median of 61 cells at 1.2-1.6 radii); Gaia resolves V 2.78 of the catalogue's V 2.30 (64%); the rest added in the Gaia stars' pattern (excess x 1.55); centre (inner fifth) V 21.64 -> 21.22 mag/arcsec2, 287 -> 422 S10
+cloud light ESO056-115 Large Magellanic Cloud: 372 Gaia cells in the 646x550 arcmin ellipse, local sky 48.7 S10 (median of 395 cells at 1.2-1.6 radii); Gaia resolves V 0.83 of the catalogue's V 0.29 (61%); the rest added in the Gaia stars' pattern (excess x 1.65); centre (inner fifth) V 21.58 -> 21.11 mag/arcsec2, 302 -> 466 S10
+Milky Way: brightest band 1111.1 S10 = V 20.17 mag/arcsec2 (Gaia flux in V, physical scale, no anchor; the published Bochum value is V 20.7, Leinert et al. 1998); 5.42 times the dark sky; gain 1.00
 galaxies on screen brighter than V 6.5 (OpenNGC): ESO056-115 Large Magellanic Cloud V 0.29 646x550 arcmin PA 170, NGC0292 Small Magellanic Cloud V 2.30 300x180 arcmin PA 45
 galaxy ESO056-115: on screen half axes 218.7 x 190.9 px at 3840 wide, long axis at 131.7 deg from right
 galaxy NGC0292: on screen half axes 111.6 x 73.5 px at 3840 wide, long axis at 323.4 deg from right
 tables: stars 8280 B, Milky Way luma 64980 B + colour 32580 B, other tables about 10496 B
-made in 94 s
+made in 44 s
