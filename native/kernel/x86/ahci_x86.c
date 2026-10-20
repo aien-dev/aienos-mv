@@ -388,3 +388,17 @@ void ck_x86_ahci_allow_none(unsigned index)
         ck_printf("ahci_disk: ctrl=%u disk=%u write ranges closed\n", disks[index].ctrl, index);
     }
 }
+
+#ifdef CK_X86_SWAP_TEST_DISK
+/* Read LBAs directly for the swap inbox (QEMU/lab test only, not production). */
+int ck_x86_ahci_read_lba(unsigned ctrl, unsigned disk_idx, uint64_t lba,
+                           unsigned count, uint8_t *buf)
+{
+    for (unsigned i = 0; i < ndisks; i++) {
+        if (disks[i].ctrl == ctrl && i == disk_idx) {
+            return disk_read(&disks[i].dev, lba, count, buf);
+        }
+    }
+    return -1;
+}
+#endif /* CK_X86_SWAP_TEST_DISK */

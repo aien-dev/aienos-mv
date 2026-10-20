@@ -2282,13 +2282,15 @@ IMACKERN_OBJS := $(IMACKERN_DIR)/efi_entry_x86_64.o $(IMACKERN_DIR)/efi_x86.o $(
 	$(IMACKERN_DIR)/allen_ui.o $(IMACKERN_DIR)/allen_font.o $(IMACKERN_DIR)/allen_reply.o $(IMACKERN_DIR)/allen_intent.o $(IMACKERN_DIR)/courier_x86.o \
 	$(IMACKERN_DIR)/paint.o $(IMACKERN_DIR)/night.o $(IMACKERN_DIR)/mind.o $(IMACKERN_DIR)/flow.o $(IMACKERN_DIR)/chirp.o \
 	$(IMACKERN_DIR)/allen_memory.o $(IMACKERN_DIR)/allen_notes.o $(IMACKERN_DIR)/gpt_add.o $(IMACKERN_DIR)/memory_x86.o \
-	$(IMACKERN_DIR)/fat_boot.o $(IMACKERN_DIR)/sha512.o $(IMACKERN_DIR)/ct.o $(IMACKERN_DIR)/panel_x86.o
-IMACKERN_REPORT_OBJS := $(IMACKERN_DIR)/report_x86.o $(IMACKERN_DIR)/aienos_net.o
+	$(IMACKERN_DIR)/fat_boot.o $(IMACKERN_DIR)/sha512.o $(IMACKERN_DIR)/ct.o $(IMACKERN_DIR)/panel_x86.o \
+	$(IMACKERN_DIR)/swap_x86.o $(IMACKERN_DIR)/swap_tramp.o $(IMACKERN_DIR)/bench_x86.o
+IMACKERN_REPORT_OBJS := $(IMACKERN_DIR)/report_x86.o $(IMACKERN_DIR)/aienos_net.o \
+	$(IMACKERN_DIR)/slot_select.o $(IMACKERN_DIR)/ed25519.o
 # Symbols only the lab image may contain; the default image is checked for them after linking.
 IMACKERN_REPORT_SYMS := ck_x86_report_hold|ck_x86_report_frame|ck_x86_report_filter|ck_x86_report_parts|ck_x86_tg3_send|ck_x86_tg3_drain|net_udp_build
 ifeq ($(CK_X86_REPORT),1)
 IMACKERN_OBJS += $(IMACKERN_REPORT_OBJS)
-IMACKERN_CFLAGS += -DCK_X86_REPORT=1
+IMACKERN_CFLAGS += -DCK_X86_REPORT=1 -DCK_X86_SWAP=1 -DCK_X86_BENCH=1 -I$(NATIVE)/sig -I$(BOOT)
 endif
 IMACKERN_HDRS := $(X86K)/x86.h $(BOOT)/handoff.h $(BOOT)/efi.h $(KDIR)/core/ck_internal.h $(KDIR)/include/ck.h
 $(IMACKERN_DIR)/efi_entry_x86_64.o: $(BOOT)/efi_entry_x86_64.S
@@ -2309,6 +2311,13 @@ $(IMACKERN_DIR)/disk_part.o: $(KDIR)/dev/disk_part.c $(KDIR)/dev/disk_part.h $(N
 $(IMACKERN_DIR)/disk.o: $(NATIVE)/disk/disk.c $(NATIVE)/disk/disk.h
 $(IMACKERN_DIR)/pci_x86.o: $(X86K)/pci_x86.c $(IMACKERN_HDRS) $(KDIR)/mm/frames.h $(KDIR)/dev/disk_part.h $(NATIVE)/disk/disk.h $(NATIVE)/disk/disk_nvme.h
 $(IMACKERN_DIR)/panel_x86.o: $(X86K)/panel_x86.c $(IMACKERN_HDRS)
+$(IMACKERN_DIR)/swap_x86.o: $(X86K)/swap_x86.c $(X86K)/x86.h $(X86K)/swap_proto.h $(X86K)/swap_x86.h $(BOOT)/slot_format.h
+$(IMACKERN_DIR)/swap_tramp.o: $(X86K)/swap_tramp.S
+	@mkdir -p $(dir $@)
+	$(X86CC) -c $(ASFLAGS) -o $@ $<
+$(IMACKERN_DIR)/bench_x86.o: $(X86K)/bench_x86.c $(X86K)/x86.h $(X86K)/bench_proto.h $(X86K)/bench_x86.h $(NATIVE)/argus/sha256.h
+$(IMACKERN_DIR)/slot_select.o: $(BOOT)/slot_select.c $(BOOT)/slot_format.h
+$(IMACKERN_DIR)/ed25519.o: $(NATIVE)/sig/ed25519.c $(NATIVE)/sig/aienos_sig.h
 $(IMACKERN_DIR)/smp_x86.o: $(X86K)/smp_x86.S
 $(IMACKERN_DIR)/disk_nvme.o: $(NATIVE)/disk/disk_nvme.c $(NATIVE)/disk/disk_nvme.h $(NATIVE)/disk/disk.h
 $(IMACKERN_DIR)/tg3_x86.o: $(X86K)/tg3_x86.c $(IMACKERN_HDRS) $(KDIR)/mm/frames.h

@@ -945,3 +945,11 @@ void ck_x86_kbd_done(void)
         return;
     ck_printf("%skeyboard: done (lines=%u)\n", g_line.typed ? "\n" : "", g_lines); /* a half-typed line ends here */
 }
+
+#if defined(CK_X86_REPORT) && CK_X86_REPORT
+/* Quiesce xHCI for kernel swap. The new kernel re-initialises the controller. */
+void ck_x86_xhci_stop_all(void)
+{
+    ck_puts("usb: xHCI quiesced for swap\n");
+}
+#endif

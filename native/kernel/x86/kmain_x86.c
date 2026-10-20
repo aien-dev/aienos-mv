@@ -41,6 +41,8 @@
 #include "../ui/allen_ui.h"
 #include "x86.h"
 #include "../../boot/netboot_proto.h"
+#include "swap_x86.h"
+#include "bench_x86.h"
 
 #ifndef AIENOS_COMMIT
 #define AIENOS_COMMIT "unknown"
@@ -151,6 +153,7 @@ static void tables_load(void)
 
 /* ---- power ---- */
 static uint64_t tsc_hz;
+uint64_t ck_x86_tsc_hz(void) { return tsc_hz; }
 
 static void delay_ms(uint64_t ms)
 {
@@ -376,6 +379,7 @@ static void rest_wait(uint32_t g)
         __asm__ volatile("mwait" ::"a"(rest_hint), "c"(0) : "memory");
 }
 static void rest_wake(void) { __atomic_fetch_add(&park.gen, 1, __ATOMIC_RELEASE); }
+void ck_x86_swap_wake_aps(void) { rest_wake(); }
 static void rest_boot(void); /* after the LAPIC registers, below */
 
 /* The processor's own energy counter (RAPL MSR_PKG_ENERGY_STATUS 0x611, units
@@ -877,6 +881,8 @@ void ck_x86_hold_step(uint64_t *end)
     if (poll && power_button_tapped())
         allen_sleep(!allen_asleep);
     panel_step();
+    ck_x86_swap_step(hand, tramp_pa);
+    ck_x86_bench_step(tsc_hz);
     meter_step(ck_rdtsc());
     *end = ~0ull;
     if (allen_asleep)
@@ -1821,6 +1827,7 @@ static __attribute__((noreturn)) void kernel_main(void *arg)
         else
             ck_x86_display(0, 0, tsc_hz);
     }
+    ck_x86_swap_init(&frames);
     allen_facts.cores = sr.started + 1;
     allen_facts.sata_disks = st->ahci_disks;
     allen_facts.nvme_disks = st->nvme_disks;

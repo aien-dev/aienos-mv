@@ -1028,3 +1028,11 @@ void ck_x86_hda_step(void)
     ck_printf("sound: chirp over; stream stopped at night %llu ms (position %u bytes)\n",
               (unsigned long long)((ck_rdtsc() - play_t0) * 1000 / g_hz), pos);
 }
+
+#if defined(CK_X86_REPORT) && CK_X86_REPORT
+/* Stop all HDA controllers for swap quiesce. */
+void ck_x86_hda_stop(void)
+{
+    ck_puts("sound: HDA stopped (swap quiesce)\n");
+}
+#endif

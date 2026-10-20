@@ -128,6 +128,9 @@ const disk_dev *ck_x86_ahci_dev(unsigned index, const char **model);
 int ck_x86_ahci_allow(unsigned index, uint64_t first, uint64_t last);
 /* Closes every write range of the disk. */
 void ck_x86_ahci_allow_none(unsigned index);
+#ifdef CK_X86_SWAP_TEST_DISK
+int ck_x86_ahci_read_lba(unsigned ctrl, unsigned disk, uint64_t lba, unsigned count, uint8_t *buf);
+#endif
 
 /* efi_x86.c: what the network loader handed this kernel (boot/netboot_proto.h),
  * or 0 when it was not started by the loader (the firmware started it from a
@@ -222,6 +225,22 @@ int ck_x86_tg3_drain(unsigned ms);
  * lines as unauthenticated UDP broadcasts every 2 s while the link is up;
  * returns the rounds sent. */
 unsigned ck_x86_report_hold(uint64_t tsc_hz, unsigned seconds);
+/* tg3 receive (lab only, for swap and bench): poll for one received Ethernet
+ * frame; fills frame_out (up to cap bytes) with the UDP payload, returns
+ * the payload length, 0 if no frame yet, -1 on error.
+ * src_mac_out receives the sender MAC (6 bytes), dst_port filters by UDP port. */
+int  ck_x86_tg3_recv(uint8_t *frame_out, size_t cap, size_t *len_out,
+                      uint8_t src_mac_out[6], uint16_t dst_port);
+int  ck_x86_tg3_recv_bench(uint8_t *pkt, size_t cap, size_t *len, uint8_t src_mac[6]);
+/* UDP broadcast send helper. */
+void ck_x86_udp_send(const uint8_t dst_mac[6], const uint8_t *pkt, size_t len,
+                      uint16_t src_port, uint16_t dst_port);
+/* Swap helpers (swap_x86.c, exposed to kmain_x86.c). */
+void ck_x86_swap_wake_aps(void);
+uint64_t ck_x86_tsc_hz(void);
+void ck_x86_xhci_stop_all(void);
+void ck_x86_tg3_stop(void);
+void ck_x86_hda_stop(void);
 #endif
 
 /* smp_x86.S: the secondary-core trampoline, copied below 1 MiB and patched. */
