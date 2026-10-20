@@ -123,6 +123,12 @@ typedef struct {
     uint32_t max_retries;    /* resends of one flight before LINK_DOWN */
     uint64_t rekey_interval; /* records per key epoch, >= SEC_MIN_REKEY_INTERVAL */
     uint64_t max_records;    /* records per direction before EXHAUSTED, >= 1 */
+    /* Responder only, optional (Interplane roster, aienos_ipj.h). When set, the
+     * responder accepts any initiator identity for which peer_ok returns 1
+     * (instead of peer_pk); the accepted key is then copied to peer_pk. The
+     * initiator always pins peer_pk. */
+    int (*peer_ok)(void *ctx, const uint8_t pk[32]);
+    void *peer_ctx;
 } sec_config;
 
 typedef struct {
@@ -134,6 +140,8 @@ typedef struct {
 typedef struct {
     uint8_t role, state, confirmed, flight_pending, confirm_pending, close_sent;
     uint8_t id_sk[32], id_pk[32], peer_pk[32];
+    int (*peer_ok)(void *ctx, const uint8_t pk[32]); /* responder roster hook, or NULL */
+    void *peer_ctx;
     uint8_t eph_sk[32], eph_pk[32], random[32];
     uint8_t fin_key_i[32], prk[32];        /* responder keeps them until HS3 */
     uint8_t hs1[SEC_HS1_LEN], hs2[SEC_HS2_LEN], hs3[SEC_HS3_LEN];

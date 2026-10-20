@@ -35,7 +35,10 @@ DIFF_DIGEST = 9ddf33a859ade2d92d0e86a213d29d682708b0ac308239a7b6f003dbf9a5cdfe
 # build (out/net_diff_ref). C-only pin, recorded 2026-10-01; no Rust run.
 DIFF_DIGEST_FIXED = 034151b28953e23cbcdc2b805885ea88887b3da52e46369e8c01bd5b276241cb
 
-SRCS = aienos_net.c aienos_virtio_pci.c aienos_virtio_net.c aienos_ctl.c x25519.c aienos_sec.c
+SRCS = aienos_net.c aienos_virtio_pci.c aienos_virtio_net.c aienos_ctl.c x25519.c aienos_sec.c aienos_ipj.c
+# Interplane join tests also link the Store (roster object, kind 25).
+STORE_SRCS = aienos_ipj_store.c ../store/store_v1.c ../store/store_engine.c ../store/store_disk.c ../disk/disk.c
+STORE_INC = -I../store -I../argus -I../disk
 # M6-B links (never edits) the in-house AES-GCM-SIV/HMAC and Ed25519 code.
 CRYPTO_SRCS = ../crypto/aes.c ../crypto/polyval.c ../crypto/gcm_siv.c ../crypto/hmac.c ../crypto/ct.c
 SIG_SRCS = ../sig/ed25519.c ../sig/sha512.c ../sig/ct.c
@@ -43,7 +46,7 @@ DEP_SRCS = ../argus/sha256.c $(CRYPTO_SRCS) $(SIG_SRCS)
 DEP_OBJS = $(OUT)/sha256.o $(OUT)/crypto_aes.o $(OUT)/crypto_polyval.o $(OUT)/crypto_gcm_siv.o \
            $(OUT)/crypto_hmac.o $(OUT)/crypto_ct.o $(OUT)/sig_ed25519.o $(OUT)/sig_sha512.o $(OUT)/sig_ct.o
 OBJS = $(SRCS:%.c=$(OUT)/%.o) $(DEP_OBJS)
-SEC_GUARD_FILES = x25519.c aienos_sec.c aienos_ctl.c
+SEC_GUARD_FILES = x25519.c aienos_sec.c aienos_ctl.c aienos_ipj.c
 LIB = $(OUT)/libaienos_net.a
 SANFLAGS = -fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all -g
 
@@ -79,12 +82,17 @@ $(OUT)/x25519_test: tests/x25519_test.c $(LIB)
 	$(CC) $(CFLAGS) -o $@ $< $(LIB)
 $(OUT)/sec_test: tests/sec_test.c $(LIB)
 	$(CC) $(CFLAGS) -o $@ $< $(LIB)
+$(OUT)/ipj_tool: tools/ipj_tool.c $(LIB)
+	$(CC) $(CFLAGS) -o $@ tools/ipj_tool.c $(LIB)
+$(OUT)/ipj_test: tests/ipj_test.c $(STORE_SRCS) $(LIB) $(wildcard ../store/*.h)
+	$(CC) $(CFLAGS) $(STORE_INC) -o $@ tests/ipj_test.c $(STORE_SRCS) $(LIB)
 
-test: lib-checks $(OUT)/net_test $(OUT)/ctl_test $(OUT)/vnet_test $(OUT)/x25519_test $(OUT)/sec_test diff-check
+test: lib-checks $(OUT)/net_test $(OUT)/ctl_test $(OUT)/vnet_test $(OUT)/x25519_test $(OUT)/sec_test $(OUT)/ipj_test $(OUT)/ipj_tool diff-check
 	./$(OUT)/net_test $(SEED) $(ITERS)
 	./$(OUT)/ctl_test
 	./$(OUT)/x25519_test
 	./$(OUT)/sec_test
+	./$(OUT)/ipj_test
 	./$(OUT)/vnet_test
 
 # Protocol objects must not allocate, read a clock or do their own I/O.
@@ -130,6 +138,8 @@ ifeq ($(shell uname -s),Linux)
 	$(CC) $(CFLAGS) $(SANFLAGS) -o $(OUT)/sec_test_asan tests/sec_test.c $(SRCS) $(DEP_SRCS)
 	ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 ./$(OUT)/x25519_test_asan
 	ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 ./$(OUT)/sec_test_asan
+	$(CC) $(CFLAGS) $(SANFLAGS) $(STORE_INC) -o $(OUT)/ipj_test_asan tests/ipj_test.c $(SRCS) $(STORE_SRCS) $(DEP_SRCS)
+	ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 ./$(OUT)/ipj_test_asan
 	$(CC) $(CFLAGS) $(SANFLAGS) -o $(OUT)/vnet_test_asan tests/vnet_test.c $(SRCS) $(DEP_SRCS)
 	ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 ./$(OUT)/vnet_test_asan
 	@echo "NET_SANITIZE: PASS"
@@ -141,9 +151,12 @@ endif
 # the M6-B sources and the Lane 19 resend jitter in aienos_ctl.c; the X25519,
 # secure transport and control-transport tests must then fail. A
 # mutant that compiles and passes all three tests SURVIVED, and fails this target.
-NET_MUT_TEST_OBJS = $(OUT)/t_x25519_test.o $(OUT)/t_sec_test.o $(OUT)/t_ctl_test.o
+NET_MUT_TEST_OBJS = $(OUT)/t_x25519_test.o $(OUT)/t_sec_test.o $(OUT)/t_ctl_test.o $(OUT)/t_ipj_test.o $(OUT)/ipj_store.a
 $(OUT)/t_%_test.o: tests/%_test.c $(wildcard *.h) | $(OUT)
-	$(CC) $(CFLAGS) -Wno-error -I. -c -o $@ $<
+	$(CC) $(CFLAGS) -Wno-error -I. $(STORE_INC) -c -o $@ $<
+$(OUT)/ipj_store.a: $(STORE_SRCS) | $(OUT)
+	mkdir -p $(OUT)/ipjst && for s in $(STORE_SRCS); do $(CC) $(CFLAGS) $(STORE_INC) -c -o $(OUT)/ipjst/$$(basename $${s%.c}).o $$s || exit 1; done
+	$(AR) rcs $@ $(OUT)/ipjst/*.o
 
 mutants: $(OBJS) $(NET_MUT_TEST_OBJS) | $(OUT)
 	@killed=0; total=0; survived=""; list=""; \
@@ -158,11 +171,13 @@ mutants: $(OBJS) $(NET_MUT_TEST_OBJS) | $(OUT)
 	      if ! $(CC) $(CFLAGS) -Wno-error -I. -c -o $$mdir/m.o $$mdir/$$f 2>/dev/null || \
 	         ! $(CC) $(CFLAGS) -Wno-error -o $$mdir/x25519_t $(OUT)/t_x25519_test.o $$mdir/m.o $$others $(DEP_OBJS) 2>/dev/null || \
 	         ! $(CC) $(CFLAGS) -Wno-error -o $$mdir/sec_t $(OUT)/t_sec_test.o $$mdir/m.o $$others $(DEP_OBJS) 2>/dev/null || \
-	         ! $(CC) $(CFLAGS) -Wno-error -o $$mdir/ctl_t $(OUT)/t_ctl_test.o $$mdir/m.o $$others $(DEP_OBJS) 2>/dev/null; then \
+	         ! $(CC) $(CFLAGS) -Wno-error -o $$mdir/ctl_t $(OUT)/t_ctl_test.o $$mdir/m.o $$others $(DEP_OBJS) 2>/dev/null || \
+	         ! $(CC) $(CFLAGS) -Wno-error -o $$mdir/ipj_t $(OUT)/t_ipj_test.o $(OUT)/ipj_store.a $$mdir/m.o $$others $(DEP_OBJS) 2>/dev/null; then \
 	        echo "mutant $$g: does not compile (counts as not killed)" > $$mdir/msg; echo "$$g" > $$mdir/surv; exit 0; fi; \
 	      case "$$f" in \
-	        x25519.c)     order="$$mdir/x25519_t $$mdir/sec_t $$mdir/ctl_t" ;; \
-	        aienos_sec.c) order="$$mdir/sec_t $$mdir/x25519_t $$mdir/ctl_t" ;; \
+	        x25519.c)     order="$$mdir/x25519_t $$mdir/sec_t $$mdir/ctl_t $$mdir/ipj_t" ;; \
+	        aienos_ipj.c) order="$$mdir/ipj_t $$mdir/sec_t" ;; \
+	        aienos_sec.c) order="$$mdir/sec_t $$mdir/x25519_t $$mdir/ctl_t $$mdir/ipj_t" ;; \
 	        *)            order="$$mdir/ctl_t $$mdir/x25519_t $$mdir/sec_t" ;; \
 	      esac; \
 	      pass=1; for b in $$order; do if ! ./$$b >/dev/null 2>&1; then pass=0; break; fi; done; \

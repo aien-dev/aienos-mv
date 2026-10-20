@@ -12,6 +12,9 @@ control-transport stub. No Rust, no Python, no heap, no outside library.
 | `aienos_ctl.{h,c}` | Control-transport stub: authenticated frames, ordered exactly-once delivery, retransmit, link-down. **TEST identity only.** The frame format is specified in the header. |
 | `x25519.{h,c}` | M6-B: X25519 (RFC 7748), constant-time ladder, small-order outputs refused. |
 | `aienos_sec.{h,c}` | M6-B: mutually authenticated secure control transport over the M6-A UDP framing. **TEST identities only.** The wire format is specified in the header. |
+| `aienos_ipj.{h,c}` | Interplane join (L263): owner-signed roster (add, revoke, rotate, generation only rises, TEST refused in production), signed LAN beacon, rendezvous through a gateway, origin-signed relayable message, and a node of up to 8 secure sessions on UDP 47040 admitted by the roster. Wire formats in the header; design in `docs/INTERPLANE_JOIN.md`. |
+| `aienos_ipj_store.{h,c}` | The roster as a Store v1 object (kind 25); load picks the highest generation that verifies. |
+| `tools/ipj_tool.c` | Owner-side fixture tool for the QEMU gate (fresh owner and machine keys, rosters, `JOIN.BIN` bundles). |
 
 ## Tests (`make test`, `make sanitize`)
 
@@ -63,7 +66,10 @@ targets: `make secure` runs everything below and prints
 messages:
 
 - **Identities.** Ed25519 keys (`native/sig`). Each side is configured with
-  the single peer key it accepts.
+  the single peer key it accepts. A responder may instead be given a
+  roster hook (`sec_config.peer_ok`, used by `aienos_ipj`): it then accepts
+  any initiator key the roster admits and adopts it as `peer_pk` only after
+  the signature and finished MAC verify. Without the hook nothing changes.
 - **Key exchange.** Fresh ephemeral X25519 keys (`x25519.c`) for every
   session.
 - **Key derivation.** HKDF-SHA256 built on `native/crypto`'s HMAC.

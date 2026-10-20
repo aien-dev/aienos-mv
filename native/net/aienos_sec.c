@@ -153,6 +153,10 @@ sec_status sec_init(sec_endpoint *ep, const sec_config *cfg)
         return SEC_ERR_ARG;
     }
     memcpy(ep->peer_pk, cfg->peer_pk, 32);
+    if (cfg->role == 1) {
+        ep->peer_ok = cfg->peer_ok;
+        ep->peer_ctx = cfg->peer_ctx;
+    }
     memcpy(ep->eph_sk, cfg->entropy, 32);
     memcpy(ep->random, cfg->entropy + 32, 32);
     aienos_x25519_base(ep->eph_pk, ep->eph_sk);
@@ -421,14 +425,17 @@ static sec_status on_hs3(sec_endpoint *ep, const uint8_t *m)
         return SEC_OK;
     }
     if (ep->state != SEC_ST_WAIT_HS3) { ep->c.rx_refused++; return SEC_ERR_REFUSED; }
-    if (memcmp(m + 8, ep->peer_pk, 32) != 0) {
+    /* The claimed initiator key: the pinned peer_pk, or (roster hook) any key
+     * the roster accepts. It is adopted as peer_pk only after every check. */
+    const uint8_t *id_i = m + 8;
+    if (ep->peer_ok ? ep->peer_ok(ep->peer_ctx, id_i) != 1 : memcmp(id_i, ep->peer_pk, 32) != 0) {
         ep->c.rx_identity++;
         return SEC_ERR_IDENTITY; /* GUARD:hs-identity-i */
     }
     uint8_t th[32], sm[52], fin[32];
     transcript(th, ep->hs1, SEC_HS1_LEN, ep->hs2, SEC_HS2_LEN, m, 40); /* TH_c */
     sig_msg(sm, SIG_I_LABEL, th);
-    if (aienos_ed25519_verify(m + 40, sm, sizeof sm, ep->peer_pk) != AIENOS_SIG_OK) {
+    if (aienos_ed25519_verify(m + 40, sm, sizeof sm, id_i) != AIENOS_SIG_OK) {
         ep->c.rx_bad_sig++;
         return SEC_ERR_BAD_SIG; /* GUARD:hs-sig-i */
     }
@@ -438,6 +445,7 @@ static sec_status on_hs3(sec_endpoint *ep, const uint8_t *m)
         ep->c.rx_bad_tag++;
         return SEC_ERR_BAD_TAG; /* GUARD:hs-fin-i */
     }
+    memcpy(ep->peer_pk, id_i, 32);
     memcpy(ep->hs3, m, SEC_HS3_LEN);
     transcript(th, ep->hs1, SEC_HS1_LEN, ep->hs2, SEC_HS2_LEN, ep->hs3, SEC_HS3_LEN); /* TH_f */
     install_keys(ep, th);
