@@ -52,6 +52,12 @@
 #define BENCH_BAR5_WRITE_HI0  0x4900u
 #define BENCH_BAR5_WRITE_LO1  0x4A00u   /* DCE 11.2 CRTC / display engine */
 #define BENCH_BAR5_WRITE_HI1  0x4C00u
+/* GRPH primary surface, flip and update (dce_11_2_d.h: mmGRPH_PRIMARY_SURFACE_ADDRESS 0x5045 .. mmGRPH_UPDATE 0x5048). */
+#define BENCH_BAR5_WRITE_LO2  0x5040u
+#define BENCH_BAR5_WRITE_HI2  0x5050u
+/* SMU 7.1.3 SMC message registers (smu_7_1_3_d.h: mmSMC_MSG 0x0178, mmSMC_MSG_ARG_0 0x0179, mmSMC_MSG_RESP_0 0x0180). */
+#define BENCH_BAR5_WRITE_LO3  0x0170u
+#define BENCH_BAR5_WRITE_HI3  0x0180u
 
 /* BAR5 read range: any DWORD index in [0, 65535]. */
 #define BENCH_BAR5_READ_MAX   0xFFFFu

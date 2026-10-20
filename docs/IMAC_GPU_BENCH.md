@@ -113,7 +113,11 @@ The kernel answers an ALLONES read and carries on. The Spark tool is what stops 
 batch: `ck_gpu_bench` sends nothing after an ERR_ALLONES reply.
 
 BAR5 write allowlist (DWORD indexes, inclusive): `0x4800`-`0x4900` (DCE 11.2 panel
-power sequencer and backlight) and `0x4A00`-`0x4C00` (DCE 11.2 CRTC / display engine).
+power sequencer and backlight), `0x4A00`-`0x4C00` (DCE 11.2 CRTC / display engine),
+`0x5040`-`0x5050` (DCE 11.2 GRPH primary surface address, flip control and update:
+`mmGRPH_PRIMARY_SURFACE_ADDRESS` 0x5045 to `mmGRPH_UPDATE` 0x5048) and `0x0170`-`0x0180`
+(SMU 7.1.3 SMC message, argument and response: `mmSMC_MSG` 0x0178, `mmSMC_MSG_ARG_0` 0x0179,
+`mmSMC_MSG_RESP_0` 0x0180).
 BAR5 reads: any index 0..65535. BAR0 (VRAM): words 0..65535 (the first 256 KiB only).
 
 ## Build

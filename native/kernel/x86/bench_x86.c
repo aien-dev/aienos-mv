@@ -107,7 +107,9 @@ static int ct_eq32(const uint8_t *a, const uint8_t *b)
 static int bar5_write_allowed(uint32_t reg_idx)
 {
     return (reg_idx >= BENCH_BAR5_WRITE_LO0 && reg_idx <= BENCH_BAR5_WRITE_HI0) ||
-           (reg_idx >= BENCH_BAR5_WRITE_LO1 && reg_idx <= BENCH_BAR5_WRITE_HI1);
+           (reg_idx >= BENCH_BAR5_WRITE_LO1 && reg_idx <= BENCH_BAR5_WRITE_HI1) ||
+           (reg_idx >= BENCH_BAR5_WRITE_LO2 && reg_idx <= BENCH_BAR5_WRITE_HI2) ||
+           (reg_idx >= BENCH_BAR5_WRITE_LO3 && reg_idx <= BENCH_BAR5_WRITE_HI3);
 }
 
 /* ---- Command execution ---- */

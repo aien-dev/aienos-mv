@@ -151,6 +151,7 @@ if grep -aq "allen_memory: saved generation" "${logA}"; then
 else
     fail "1b A saves Allen's memory before the swap"
 fi
+wait_for "swap: inbox at LBA 2048" "${logA}" "${A_WAIT}" || true
 if grep -aq "swap: inbox at LBA 2048" "${logA}"; then pass "2  A reads the staged slot object"; else fail "2  A reads the staged slot object"; fi
 wait_for "swap: jumping to new kernel|swap: REJECTED" "${logA}" "${B_WAIT}" || true
 if grep -aq "swap: verified ok" "${logA}"; then pass "3  swap verifies with ck_slot_verify"; else fail "3  swap verifies"; fi

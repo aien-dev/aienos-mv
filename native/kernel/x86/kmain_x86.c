@@ -1188,6 +1188,10 @@ static void mm_build(void)
         ck_panic("memory: bad UEFI memory map");
     /* Page 0 stays out: a null pointer must never be a usable frame. */
     ck_frames_reserve(&frames, 0, CK_PAGE);
+    /* The running kernel's own image is never a frame. Its pages can be typed conventional in the
+     * map, and then a frame taken from them (the swap stack did) is inside the image that a live
+     * swap copies over. Reserving it keeps every frame the kernel hands out outside its image. */
+    ck_frames_reserve(&frames, (uint64_t)(uintptr_t)__image_base, (uint64_t)(uintptr_t)__image_end);
     /* The secondary-core trampoline needs a page below 1 MiB; take the
      * lowest free page before anything else does. */
     if (ck_frames_alloc(&frames, 1, CK_PAGE, &tramp_pa) || tramp_pa >= 0x100000)
