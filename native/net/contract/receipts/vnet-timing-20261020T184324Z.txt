@@ -1,0 +1,9 @@
+receipt vnet-timing 20261020T184324Z
+host spark-b87b aarch64 kernel 7.0.0-1019-nvidia cores 5-9,15-19
+commit 8aa25827c678ed880c53d57491c36b17a0261080 dirty=2
+cc cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+contract cfe7c9f716e07afb7e8a70d53a8fb2e25b7c296f4b338004ce89531c18430fe9
+method rounds=20 reps=5 trips=20000 interleaved hand,contract; median over all reps
+init_ns hand_median=2210 contract_median=2188 diff=-22 noise_bound=44 (hand odd 2206 vs even 2220, floor 2%) WITHIN_NOISE
+rtt_ns hand_median=102 contract_median=102 diff=0 noise_bound=2 (hand odd 101 vs even 102, floor 2%) WITHIN_NOISE
+VNET_TIMING: WITHIN_NOISE
