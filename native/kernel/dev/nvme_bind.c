@@ -45,6 +45,18 @@ static void m_delay(void *ctx, uint32_t us)
     (void)ctx;
     ck_udelay(us);
 }
+/* Direct DMA only into the data window this bind allocated and confined
+ * (the SMMU window is the driver region plus the data window, identity
+ * IOVA): any other buffer goes through the bounce slots. */
+static int m_map(void *ctx, const void *buf, uint64_t len, uint64_t *bus)
+{
+    ck_nvme *n = ctx;
+    const uint8_t *b = buf;
+    if (!n->data || b < n->data || b >= n->data + CK_NVME_DATA_BYTES || len > (uint64_t)(n->data + CK_NVME_DATA_BYTES - b))
+        return -1;
+    *bus = n->data_phys + (uint64_t)(b - n->data);
+    return 0;
+}
 
 static uint8_t probe_buf[CK_LAYOUT_UNIT];
 static uint8_t probe_rd[CK_LAYOUT_UNIT];
@@ -69,11 +81,13 @@ static int smmu_negative_test(ck_nvme *n)
         canary[i] = 0x5a;
     (void)ck_dma_faults(n->stream_id, 0); /* drain anything older */
     nvme_ctrl *c = &n->ctrl;
-    uint64_t saved = c->bounce_phys;
-    c->bounce_phys = cphys;
+    /* probe_rd is outside the granted data window, so the read bounces
+     * through slot 0 (the first free slot) */
+    uint64_t saved = c->slot[0].bnc_phys;
+    c->slot[0].bnc_phys = cphys;
     ck_mb();
     int rc = disk_read(&n->disk, 0, 1, probe_rd);
-    c->bounce_phys = saved;
+    c->slot[0].bnc_phys = saved;
     ck_mb();
     struct ck_dma_fault fl = { 0, 0, 0, 0 };
     int faults = ck_dma_faults(n->stream_id, &fl);
@@ -202,13 +216,13 @@ int ck_nvme_bind(ck_nvme *n, const pci_found *found, uint32_t nfound, const pci_
      * up never falls back to the bypass. The DMA region is allocated first
      * so the confinement window is exactly the region the driver uses. */
     uint64_t phys = 0;
-    uint8_t *dma = ck_dma_alloc(CK_NVME_DMA_BYTES, NVME_PAGE, &phys);
+    uint8_t *dma = ck_dma_alloc(CK_NVME_DMA_BYTES + CK_NVME_DATA_BYTES, NVME_PAGE, &phys);
     if (!dma) {
-        ck_printf("nvme: unavailable (DMA allocation of %u bytes failed)\n", (unsigned)CK_NVME_DMA_BYTES);
+        ck_printf("nvme: unavailable (DMA allocation of %u bytes failed)\n", (unsigned)(CK_NVME_DMA_BYTES + CK_NVME_DATA_BYTES));
         return NVME_EARG;
     }
     uint32_t rid = ((uint32_t)f->bus << 8) | ((uint32_t)f->dev << 3) | (uint32_t)f->fn;
-    uint64_t win = ((uint64_t)CK_NVME_DMA_BYTES + NVME_PAGE - 1u) & ~(uint64_t)(NVME_PAGE - 1u);
+    uint64_t win = ((uint64_t)CK_NVME_DMA_BYTES + CK_NVME_DATA_BYTES + NVME_PAGE - 1u) & ~(uint64_t)(NVME_PAGE - 1u);
     struct ck_dma_confinement cf;
     int src = ck_dma_confine(f->segment, rid, phys, win, &cf);
     if (src == 0) {
@@ -235,7 +249,9 @@ int ck_nvme_bind(ck_nvme *n, const pci_found *found, uint32_t nfound, const pci_
     n->bar0 = (volatile uint8_t *)ck_mmio_map(b->addr, (size_t)b->size);
     pci_enable(f, 1);
     n->bm_on = 1;
-    nvme_ops ops = {n, m_r32, m_w32, 0, 0, m_barrier, m_delay};
+    n->data = dma + CK_NVME_DMA_BYTES;
+    n->data_phys = phys + CK_NVME_DMA_BYTES;
+    nvme_ops ops = {n, m_r32, m_w32, 0, 0, m_barrier, m_delay, m_map};
     nvme_dma region = {dma, phys, CK_NVME_DMA_BYTES};
     nvme_config cfg = {0, 0};
     int rc = nvme_init(&n->ctrl, &ops, &region, &cfg);
@@ -250,6 +266,9 @@ int ck_nvme_bind(ck_nvme *n, const pci_found *found, uint32_t nfound, const pci_
               (unsigned long long)c->block_count, c->block_size);
     ck_printf("nvme: atomicity block_size=%u awupf_raw=%u nawupf_raw=%u nabspf_raw=%u nabo_blocks=%u\n",
               c->block_size, c->awupf_raw, c->nawupf_raw, c->nabspf_raw, c->nabo_blocks);
+    ck_printf("nvme: queues io_depth=%u slots=%u max_xfer=%u bounce_slot=%u bounce_slots=%u data_window=%u\n",
+              (unsigned)c->io.depth, c->slots, c->max_xfer_bytes, c->bounce_slot_bytes, c->nbounce,
+              (unsigned)CK_NVME_DATA_BYTES);
     rc = nvme_disk(c, &n->disk);
     if (rc) {
         ck_printf("nvme: disk_dev refused rc=%d\n", rc);
@@ -297,6 +316,35 @@ int ck_nvme_bind(ck_nvme *n, const pci_found *found, uint32_t nfound, const pci_
               (unsigned long long)lba, (unsigned long long)dlba, CK_LAYOUT_UNIT, rc ? "FAIL" : "match", rc);
     if (rc) return rc;
     if (xr) return DISK_ERANGE;
+    /* Store root write (ADR 0015): only the blocks holding superblock bytes
+     * 0..171 must survive a power cut whole; slot A is unit 0 and slot B
+     * unit 1 of the partition. Reported, not enforced here. */
+    uint32_t bpu = CK_LAYOUT_UNIT / c->block_size, need0 = 0, need1 = 0;
+    int ra = nvme_store_root_is_power_fail_atomic(c, n->part.first_lba, &need0);
+    int rb = nvme_store_root_is_power_fail_atomic(c, n->part.first_lba + bpu, &need1);
+    ck_printf("nvme: store root atomicity block_size=%u required_blocks=%u slot0=%s slot1=%s -> %s\n", c->block_size,
+              need0, ra == NVME_ATOMIC ? "atomic" : ra == NVME_NOT_ATOMIC ? "not_atomic" : "unknown",
+              rb == NVME_ATOMIC ? "atomic" : rb == NVME_NOT_ATOMIC ? "not_atomic" : "unknown",
+              ra == NVME_ATOMIC && rb == NVME_ATOMIC && need0 == need1 ? "PASS" : "FAIL");
+    /* Direct DMA with several commands in flight: the whole data window from
+     * partition LBA 0, then its first and last unit again through the bounce
+     * slots (probe_rd is outside the window); the bytes must agree. */
+    uint64_t dblocks = CK_NVME_DATA_BYTES / c->block_size;
+    if (dblocks > n->part.blocks) dblocks = n->part.blocks - n->part.blocks % bpu;
+    uint64_t dc0 = c->stats.direct_cmds, bc0 = c->stats.bounce_cmds;
+    rc = disk_read(&n->part.dev, 0, (uint32_t)dblocks, n->data);
+    int dmatch = rc == 0 && c->stats.direct_cmds > dc0 && c->stats.bounce_cmds == bc0;
+    for (int e = 0; e < 2 && dmatch; e++) {
+        uint64_t at = e ? dblocks - bpu : 0;
+        if (disk_read(&n->part.dev, at, bpu, probe_rd)) dmatch = 0;
+        const uint8_t *dw = n->data + at * c->block_size;
+        for (uint32_t i = 0; i < CK_LAYOUT_UNIT && dmatch; i++)
+            if (dw[i] != probe_rd[i]) dmatch = 0;
+    }
+    ck_printf("nvme: direct dma read part_lba=0 bytes=%llu direct_cmds=%llu bounce_cmds=%llu max_inflight=%u -> %s (rc=%d)\n",
+              (unsigned long long)(dblocks * c->block_size), (unsigned long long)(c->stats.direct_cmds - dc0),
+              (unsigned long long)(c->stats.bounce_cmds - bc0), c->stats.max_inflight, dmatch ? "match" : "FAIL", rc);
+    if (!dmatch) return rc ? rc : DISK_EIO;
     if (n->confined) {
         rc = smmu_negative_test(n);
         if (rc) return DISK_EIO;
@@ -310,6 +358,26 @@ int ck_nvme_shutdown_bound(ck_nvme *n)
     if (!n || !n->bar0 || !n->bm_on || n->shut)
         return CK_NVME_SHUT_EARG;
     n->shut = 1;
+    /* NVMe 1.4 section 7.6.2 steps 1-3 with commands in flight: four reads
+     * of the data window are left outstanding, then the driver drains them,
+     * deletes the I/O SQ (aborting anything left) and the I/O CQ. Step 4
+     * (CC.SHN) follows below. */
+    if (n->bound && n->data && n->ctrl.ready && !n->ctrl.failed) {
+        nvme_ctrl *c = &n->ctrl;
+        uint32_t per = 16384u / c->block_size, sent = 0;
+        for (uint32_t i = 0; i < 4u; i++) {
+            uint64_t lba = 0;
+            if (ck_part_xlate(&n->part, (uint64_t)i * per, per, &lba) == 0 &&
+                nvme_submit(c, 0, lba, per, n->data + (uint64_t)i * 16384u) >= 0)
+                sent++;
+        }
+        uint32_t infl = nvme_inflight(c);
+        nvme_quiesce_report q;
+        int qrc = nvme_quiesce(c, 1000000u, &q, 0);
+        ck_printf("nvme: quiesce submitted=%u inflight=%u completed_ok=%u completed_err=%u aborted=%u "
+                  "sq_deleted=%d cq_deleted=%d drained_us=%u rc=%d\n",
+                  sent, infl, q.completed_ok, q.completed_err, q.aborted, q.sq_deleted, q.cq_deleted, q.drained_us, qrc);
+    }
     struct ck_nvme_shut_ops o = {n, m_r32, m_w32, m_barrier, m_delay};
     struct ck_nvme_shut_result r = {0, 0, 0, 0};
     int rc = ck_nvme_shutdown(&o, CK_NVME_SHUT_TIMEOUT_US, &r);

@@ -105,29 +105,64 @@ static int pci_find_nvme(void)
 }
 
 /* ---- DMA region (identity mapped: phys == virt with the MMU off) ---- */
-#define DMA_BYTES (6u * 4096u + 128u * 1024u)
+#ifdef NVME_DMA_BYTES_FOR
+#define DMA_BYTES NVME_DMA_BYTES_FOR(NVME_IO_DEPTH_MAX, 4u * 128u * 1024u)
+#else
+#define DMA_BYTES (6u * 4096u + 128u * 1024u) /* the queue-depth-1 driver (timing baseline) */
+#endif
 static uint8_t dma_mem[DMA_BYTES] __attribute__((aligned(4096)));
-static uint8_t wbuf[300u * 1024u], rbuf[300u * 1024u];
+static uint8_t wbuf[300u * 1024u] __attribute__((aligned(4096))), rbuf[300u * 1024u] __attribute__((aligned(4096)));
 
-static void fill(uint8_t *b, uint32_t n, uint32_t seed)
+__attribute__((unused)) static void fill(uint8_t *b, uint32_t n, uint32_t seed)
 {
     for (uint32_t i = 0; i < n; i++) b[i] = (uint8_t)(seed * 37u + i * 13u + (i >> 8));
 }
-static void zero(uint8_t *b, uint32_t n) { for (uint32_t i = 0; i < n; i++) ((volatile uint8_t *)b)[i] = 0; }
-static int same(const uint8_t *a, const uint8_t *b, uint32_t n)
+__attribute__((unused)) static void zero(uint8_t *b, uint32_t n) { for (uint32_t i = 0; i < n; i++) ((volatile uint8_t *)b)[i] = 0; }
+__attribute__((unused)) static int same(const uint8_t *a, const uint8_t *b, uint32_t n)
 {
     for (uint32_t i = 0; i < n; i++) if (a[i] != b[i]) return 0;
     return 1;
 }
 
 static nvme_ctrl C;
+#ifdef NVME_SLOTS_MAX
+static const nvme_ops OPS = {0, r32, w32, 0, 0, bar, delay, 0}; /* no dma_map: bounce only */
+#else
 static const nvme_ops OPS = {0, r32, w32, 0, 0, bar, delay};
+#endif
+#ifdef NVME_SLOTS_MAX
+/* MMU off and no SMMU here: every RAM address is device visible at the same
+ * bus address. dma_map still names the buffers it grants (the payload's own
+ * data buffers), as a kernel would name its SMMU window. */
+#ifdef NVME_BENCH
+#define BENCH_BYTES (32u << 20)
+static uint8_t bench_buf[BENCH_BYTES] __attribute__((aligned(4096)));
+#endif
+static int in(const uint8_t *b, uint64_t len, const uint8_t *base, uint64_t size)
+{
+    return b >= base && b < base + size && len <= (uint64_t)(base + size - b);
+}
+static int map(void *c, const void *buf, uint64_t len, uint64_t *bus)
+{
+    (void)c;
+    const uint8_t *b = buf;
+    if (!in(b, len, wbuf, sizeof wbuf) && !in(b, len, rbuf, sizeof rbuf)
+#ifdef NVME_BENCH
+        && !in(b, len, bench_buf, sizeof bench_buf)
+#endif
+    )
+        return -1;
+    *bus = (uint64_t)(uintptr_t)b;
+    return 0;
+}
+static const nvme_ops OPS_MAP = {0, r32, w32, 0, 0, bar, delay, map};
+#endif
 
-static void run_namespace(uint32_t nsid, uint32_t want_bs)
+__attribute__((unused)) static void run_namespace(const nvme_ops *ops, uint32_t nsid, uint32_t want_bs)
 {
     nvme_dma dma = {dma_mem, (uint64_t)(uintptr_t)dma_mem, DMA_BYTES};
     nvme_config cfg = {nsid, 0};
-    int rc = nvme_init(&C, &OPS, &dma, &cfg);
+    int rc = nvme_init(&C, ops, &dma, &cfg);
     check(rc == NVME_OK, "nvme_init", rc);
     if (rc) return;
     puts_("ns ");
@@ -173,7 +208,7 @@ static void run_namespace(uint32_t nsid, uint32_t want_bs)
     /* controller reset (disable + full re-init), data still there */
     check(nvme_disable(&C) == NVME_OK, "disable", 0);
     check(nvme_read(&C, 0, 1, rbuf) == NVME_ESTATE, "I/O refused while disabled", 0);
-    rc = nvme_init(&C, &OPS, &dma, &cfg);
+    rc = nvme_init(&C, ops, &dma, &cfg);
     check(rc == NVME_OK, "re-init", rc);
     zero(rbuf, bs);
     check(nvme_read(&C, d.block_count - 1, 1, rbuf) == NVME_OK && same(wbuf, rbuf, bs),
@@ -186,6 +221,139 @@ static void run_namespace(uint32_t nsid, uint32_t want_bs)
     check(nvme_disable(&C) == NVME_OK, "final disable", 0);
 }
 
+#ifdef NVME_SLOTS_MAX
+/* Commands in flight when the driver is told to stop (NVMe 1.4 section
+ * 7.6.2): every one ends completed or aborted, the I/O queues are deleted,
+ * nothing is left in flight, and a re-init reads the data back. */
+__attribute__((unused)) static void run_quiesce(uint32_t drain_us)
+{
+    nvme_dma dma = {dma_mem, (uint64_t)(uintptr_t)dma_mem, DMA_BYTES};
+    nvme_config cfg = {0, 0};
+    int rc = nvme_init(&C, &OPS_MAP, &dma, &cfg);
+    check(rc == NVME_OK, "quiesce: init", rc);
+    if (rc) return;
+    uint32_t bs = C.block_size, per = 16384u / bs, sent = 0;
+    fill(wbuf, sizeof wbuf, 55);
+    check(nvme_write(&C, 4096, (uint32_t)(sizeof wbuf / bs), wbuf) == NVME_OK, "quiesce: write", 0);
+    zero(rbuf, sizeof rbuf);
+    for (uint32_t i = 0; i < (uint32_t)(sizeof rbuf / 16384u); i++)
+        if (nvme_submit(&C, 0, 4096 + (uint64_t)i * per, per, rbuf + (uint64_t)i * 16384u) >= 0)
+            sent++;
+    uint32_t inflight = nvme_inflight(&C);
+    nvme_quiesce_report q;
+    int st[NVME_SLOTS_MAX];
+    rc = nvme_quiesce(&C, drain_us, &q, st);
+    puts_("nvme: quiesce drain_us=");
+    putdec(drain_us);
+    puts_(" submitted=");
+    putdec(sent);
+    puts_(" inflight_at_call=");
+    putdec(inflight);
+    puts_(" completed_ok=");
+    putdec(q.completed_ok);
+    puts_(" completed_err=");
+    putdec(q.completed_err);
+    puts_(" aborted=");
+    putdec(q.aborted);
+    puts_(" sq_deleted=");
+    putdec(q.sq_deleted);
+    puts_(" cq_deleted=");
+    putdec(q.cq_deleted);
+    puts_(" rc=");
+    putdec(rc);
+    puts_("\n");
+    check(rc == NVME_OK && q.sq_deleted && q.cq_deleted, "quiesce: queues deleted", rc);
+    check(q.completed_ok + q.completed_err + q.aborted == q.inflight_at_start, "quiesce: every command accounted", q.aborted);
+    check(nvme_inflight(&C) == 0, "quiesce: nothing in flight", nvme_inflight(&C));
+    check(sent >= 2 && inflight >= 1, "quiesce: commands were in flight", inflight);
+    if (drain_us) check(q.completed_ok == sent && same(wbuf, rbuf, sizeof rbuf), "quiesce: drained reads landed", q.completed_ok);
+    check(nvme_read(&C, 0, 1, rbuf) == NVME_ESTATE, "quiesce: I/O refused afterwards", 0);
+    check(nvme_disable(&C) == NVME_OK, "quiesce: disable", 0);
+    rc = nvme_init(&C, &OPS_MAP, &dma, &cfg);
+    zero(rbuf, sizeof rbuf);
+    check(rc == NVME_OK && nvme_read(&C, 4096, (uint32_t)(sizeof rbuf / bs), rbuf) == NVME_OK && same(wbuf, rbuf, sizeof rbuf),
+          "quiesce: re-init reads the data", rc);
+    check(nvme_disable(&C) == NVME_OK, "quiesce: final disable", 0);
+}
+#endif
+
+#ifdef NVME_BENCH
+#ifndef NVME_SLOTS_MAX
+#define BENCH_BYTES (32u << 20)
+static uint8_t bench_buf[BENCH_BYTES] __attribute__((aligned(4096)));
+#endif
+static uint64_t sum64(const uint8_t *b, uint32_t n)
+{
+    uint64_t h = 1469598103934665603ull;
+    for (uint32_t i = 0; i < n; i += 8) h = (h ^ *(const volatile uint64_t *)(b + i)) * 1099511628211ull;
+    return h;
+}
+static void fill64(uint8_t *b, uint32_t n, uint64_t seed)
+{
+    for (uint32_t i = 0; i < n; i += 8) *(volatile uint64_t *)(b + i) = (seed + i) * 0x9e3779b97f4a7c15ull;
+}
+/* One timed pass; prints raw bytes and counter ticks (MB/s is computed on
+ * the host from these, with a receipt). */
+static void bench_line(const char *drv, const char *path, uint32_t depth, const char *op, uint64_t bytes, uint64_t ticks, int ok)
+{
+    puts_("BENCH driver=");
+    puts_(drv);
+    puts_(" path=");
+    puts_(path);
+    puts_(" depth=");
+    putdec(depth);
+    puts_(" op=");
+    puts_(op);
+    puts_(" bytes=");
+    putdec((int64_t)bytes);
+    puts_(" ticks=");
+    putdec((int64_t)ticks);
+    puts_(" freq=");
+    putdec((int64_t)cntfrq());
+    puts_(ok ? " verify=ok\n" : " verify=MISMATCH\n");
+    check(ok, "bench data verify", 0);
+}
+static void bench_pass(const nvme_ops *ops, uint16_t depth, const char *drv, const char *path, uint32_t rounds)
+{
+    nvme_dma dma = {dma_mem, (uint64_t)(uintptr_t)dma_mem, DMA_BYTES};
+    nvme_config cfg = {0, depth};
+    int rc = nvme_init(&C, ops, &dma, &cfg);
+    check(rc == NVME_OK, "bench init", rc);
+    disk_dev d;
+    if (rc || nvme_disk(&C, &d) != DISK_OK) return;
+    uint32_t n = BENCH_BYTES / d.block_size;
+    uint32_t qd = depth ? depth : 1;
+#ifdef NVME_SLOTS_MAX
+    qd = C.slots;
+#endif
+    fill64(bench_buf, BENCH_BYTES, depth + 7u);
+    uint64_t want = sum64(bench_buf, BENCH_BYTES);
+    uint64_t t0 = cntvct();
+    rc = disk_write(&d, 0, n, bench_buf);
+    if (rc == DISK_OK) rc = disk_flush(&d);
+    bench_line(drv, path, qd, "write", BENCH_BYTES, cntvct() - t0, rc == DISK_OK);
+    for (uint32_t r = 0; r < rounds; r++) {
+        fill64(bench_buf, BENCH_BYTES, 0); /* the verify must see read data, not the source */
+        t0 = cntvct();
+        rc = disk_read(&d, 0, n, bench_buf);
+        uint64_t t = cntvct() - t0;
+        bench_line(drv, path, qd, "read", BENCH_BYTES, t, rc == DISK_OK && sum64(bench_buf, BENCH_BYTES) == want);
+    }
+    nvme_disable(&C);
+}
+static void bench(void)
+{
+#ifdef NVME_SLOTS_MAX
+    static const uint16_t depths[] = {2, 4, 8, 16, 32, 64};
+    for (uint32_t i = 0; i < sizeof depths / sizeof depths[0]; i++)
+        bench_pass(&OPS_MAP, depths[i], "queue", "direct", 3);
+    bench_pass(&OPS, 0, "queue", "bounce", 3);
+#else
+    bench_pass(&OPS, 0, "qd1", "bounce", 3);
+#endif
+}
+#endif
+
 void payload_main(void)
 {
     puts_("AIENOS native NVMe payload (C driver, QEMU virt)\n");
@@ -193,8 +361,24 @@ void payload_main(void)
         puts_("no NVMe function found\nNVME_QEMU_PAYLOAD: FAIL\n");
         return;
     }
-    run_namespace(0, 512);  /* first active namespace: 512 B LBAs */
-    run_namespace(2, 4096); /* second namespace: 4 KiB LBAs */
+#ifdef NVME_BENCH
+    bench();
+#else
+#ifdef NVME_SLOTS_MAX
+    run_namespace(&OPS_MAP, 0, 512);  /* first active namespace: 512 B LBAs, direct DMA */
+    run_namespace(&OPS_MAP, 2, 4096); /* second namespace: 4 KiB LBAs, direct DMA */
+    puts_("direct commands ");
+    putdec((int64_t)C.stats.direct_cmds);
+    puts_(" max in flight ");
+    putdec(C.stats.max_inflight);
+    puts_("\n");
+    check(C.stats.direct_cmds > 0, "direct DMA used", 0);
+    run_quiesce(0);       /* stop at once: Delete I/O SQ ends what is left */
+    run_quiesce(1000000); /* drain first */
+#endif
+    run_namespace(&OPS, 0, 512);  /* bounce path: 512 B LBAs */
+    run_namespace(&OPS, 2, 4096); /* bounce path: 4 KiB LBAs */
+#endif
     puts_("payload checks ");
     putdec(checks);
     puts_(", failures ");

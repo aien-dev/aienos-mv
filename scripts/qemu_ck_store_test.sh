@@ -242,6 +242,12 @@ nvme_checks() { # block bytes, confined|bypass: the bound NVMe path
     check "read past the namespace end is rejected before any command (differs)" \
         "nvme: bounds read lba=${count} -> refused"
     check "LBA 0 read (differs)" "nvme: read lba=0 blocks=1 ok"
+    check "I/O queue keeps more than one command in flight (C only, L199)" \
+        "nvme: queues io_depth=[0-9]* slots=\([2-9]\|[1-9][0-9]\) max_xfer=[0-9]* bounce_slot=[0-9]* bounce_slots=[1-9][0-9]* data_window=[0-9]*$"
+    check "direct DMA into the granted data window, several commands in flight, matches the bounce path (C only, L199)" \
+        "nvme: direct dma read part_lba=0 bytes=[0-9]* direct_cmds=[1-9][0-9]* bounce_cmds=0 max_inflight=\([2-9]\|[1-9][0-9]\) -> match (rc=0)$"
+    check "Store root write power-fail atomic on this geometry (row 70, L199)" \
+        "nvme: store root atomicity block_size= required_blocks=1 slot0=atomic slot1=atomic -> PASS$"
     check "scratch unit (last unit of the AIENOS partition) write+flush+readback matched (differs)" \
         "nvme: rw probe part_lba=[0-9]* disk_lba=[0-9]* bytes=4096 write+flush+readback match"
     check "NVMe bound by the devices stage (differs)" "devices: pci=ok nvme=bound"
@@ -285,6 +291,13 @@ shutdown_checks() {
         echo "${out}"; })
     [[ "${order}" == ok ]] && echo "PASS  QEMU device trace: shutdown set while BME on, then BME cleared" \
         || { echo "FAIL  QEMU device trace order (${order})"; failed=1; }
+    check "commands in flight at shutdown drained, I/O SQ and CQ deleted before CC.SHN (C only, L199)" \
+        "nvme: quiesce submitted=4 inflight=4 completed_ok=[0-4] completed_err=0 aborted=[0-4] sq_deleted=1 cq_deleted=1 drained_us=[0-9]* rc=0$"
+    local lq ln
+    lq=$(grep -n "^nvme: quiesce submitted=" "${work}/serial.txt" | head -1 | cut -d: -f1)
+    ln=$(grep -nE "^nvme: shutdown normal " "${work}/serial.txt" | head -1 | cut -d: -f1)
+    if [[ -n "${lq}" && -n "${ln}" && "${lq}" -lt "${ln}" ]]; then echo "PASS  quiesce reported before the normal shutdown (serial order)"
+    else echo "FAIL  quiesce not before the normal shutdown (serial lines ${lq:-none} / ${ln:-none})"; failed=1; fi
     check_absent "no fallback disable needed (normal shutdown completed)" "nvme: shutdown fallback disable"
     check "reset quiesce hook ran after the release (differs)" "devices: quiesce before reset nvme=already-released"
     fail_into shut_fail

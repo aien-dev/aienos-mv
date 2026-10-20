@@ -26,7 +26,7 @@
 
 #define PCI_MAX 64u
 #define NVME_MAX 2u
-#define NVME_DMA_PAGES (NVME_FIXED_PAGES + 32u) /* 128 KiB bounce */
+#define NVME_DMA_PAGES (NVME_DMA_BYTES_FOR(NVME_IO_DEPTH_DEFAULT, NVME_BOUNCE_SLOT_MAX) / NVME_PAGE) /* 128 KiB bounce */
 
 struct pfn {
     volatile uint8_t *cfg;
@@ -124,7 +124,7 @@ static void nvme_start(const struct pfn *f, struct ck_frames *fr)
     cw16(f->cfg, 4, (uint16_t)(cr16(f->cfg, 4) | 0x6)); /* memory decode + bus master */
     struct nvme_slot *s = &nvmes[idx];
     s->bar = (volatile uint8_t *)(uintptr_t)bar;
-    nvme_ops ops = {(void *)(uintptr_t)bar, nv_rd32, nv_wr32, 0, 0, nv_barrier, nv_delay_us};
+    nvme_ops ops = {(void *)(uintptr_t)bar, nv_rd32, nv_wr32, 0, 0, nv_barrier, nv_delay_us, 0}; /* no dma_map: bounce only */
     nvme_dma dma = {(uint8_t *)(uintptr_t)pa, pa, NVME_DMA_PAGES * CK_PAGE};
     nvme_config cfg = {0, 0};
     int rc = nvme_init(&s->c, &ops, &dma, &cfg);

@@ -88,8 +88,12 @@ M4  QUALIFIED IN QEMU  Storage, continuity, and recovery
     NVMe read                   QEMU_NVME: PASS (#129)
     NVMe write + flush          QEMU_NVME_RW: PASS (#132)
     4K root-write atomicity     QEMU_NVME_ATOMICITY_4K: PASS (#133); the Machine 1
-                                SSD is 512-byte LBA and does not meet it
-                                (NATIVE_GB10_STORE_ROOT_ATOMICITY: FAIL)
+                                SSD is 512-byte LBA (NATIVE_GB10_STORE_ROOT_ATOMICITY: FAIL
+                                under the old whole-4K rule). L199: the root
+                                write needs only block 0 atomic (bytes 172..4095
+                                frozen zero, CRC-covered); recomputed from the
+                                recorded Identify fields: PASS (host test); the
+                                live SSD was not re-read
     Store v1 format + engine    ADR 0015 frozen (#130), engine host-tested (#131),
                                 STORE_MALFORMED_PEER_RECOVERY: PASS (#135)
     Store over NVMe crash/reboot STORE_V1_QEMU: PASS (#134, 4K LBA)

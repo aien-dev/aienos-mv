@@ -7,8 +7,11 @@
   injector, used by the tests. It is not part of the freestanding library.
 - `disk_nvme.h` / `disk_nvme.c`: freestanding polled NVMe driver ported from
   `crates/aienos-kernel/src/nvme*.rs` and `docs/P3_NVME_*.md`. It does not use
-  libc or a heap. Platform access goes through `nvme_ops`, and DMA goes
-  through one caller region carved into fixed pages plus a bounce buffer.
+  libc or a heap. Platform access goes through `nvme_ops`. One I/O queue
+  keeps up to `io_depth - 1` commands in flight (default depth 32). Buffers
+  the platform's `dma_map` op says are already device visible (the kernel's
+  SMMU-granted data window) are transferred directly; any other buffer goes
+  through per-slot bounce areas in the one caller DMA region.
 - `disk_sdhci.h` / `disk_sdhci.c`: freestanding polled SD Host Controller
   driver for the Raspberry Pi 5 microSD slot (BCM2712 `brcm,bcm2712-sdhci`,
   a standard SDHCI). PIO only: no DMA, no heap, no libc, aligned 32-bit
@@ -53,15 +56,21 @@ unless they say otherwise.
 | [UA P3] VS never read | major version must be 1 or 2 (nvme-vs) | NVME_EVS | test_cap_checks (0.1, 3.0, 1.0, 2.0) |
 | command poll unbounded | max(1000 ms, TO x 500 ms) budget (nvme-cmd-bound); CFS during a command (nvme-cfs-cmd); fail-stop until re-init (nvme-failstop) | NVME_ETIMEOUT / ECFS / ESTATE | test_completion_faults, test_flush_and_reopen |
 | queue entry sizes | Identify SQES/CQES must allow 64 B / 16 B (nvme-sqes, nvme-cqes) | NVME_EQES | test_cap_checks |
-| transfer size / MDTS | min(128 KiB, 4 KiB << MDTS, bounce) (nvme-xfer); LBA range (nvme-range); a refused request rings no doorbell | NVME_ERANGE | test_mdts_and_range |
+| transfer size / MDTS | each command at most min(2 MiB, 4 KiB << MDTS), bounce commands also at most one 128 KiB bounce slot; longer requests are split (nvme-xfer, the model flags any command above MDTS); LBA range (nvme-range); a refused request rings no doorbell | NVME_ERANGE | test_mdts_and_range |
 | PRP construction | length/offset overflow (prp-len-wrap), address wrap (prp-addr-wrap), list capacity (prp-list-cap); lists chain through the last entry | NVME_EARG / ERANGE | test_prps |
 | power-fail atomicity | NAWUPF/AWUPF unit (atomic-unit), NABSPF/NABO boundary (atomic-boundary) | n/a | test_atomicity |
 | disk_dev bounds | zero count (disk-zero), LBA (disk-lba), end overflow (disk-end), queue depth (queue-bound), queue fail-stop (queue-failstop) | DISK_E* | tests/disk_test.c |
+| queue depth (L199) | at most io_depth - 1 in flight (nvme-sq-full); CID names a slot in flight (nvme-io-cid), SQID (nvme-io-sqid); CFS (nvme-io-cfs) and poll budget (nvme-io-bound) while waiting | NVME_ECID / ESQID / ECFS / ETIMEOUT | test_queue_depth (model holds commands, completes them out of order, checks CQ overflow and size - 1), test_completion_faults |
+| direct DMA (L199) | only buffers dma_map grants, at a dword aligned bus address (nvme-direct-align); one async command within its path limit (nvme-async-xfer) | bounce instead / NVME_ERANGE | test_queue_depth (window edge, odd bus address), test_async_quiesce |
+| fail-stop with commands in flight (L199) | CC.EN cleared so nothing DMAs after return (nvme-fail-reset) | as the cause | test_fail_reset (CID mismatch, timeout), test_async_quiesce |
+| clean stop (L199) | drain, Delete I/O SQ (nvme-quiesce-sq), Delete I/O CQ; implicit completions reported as aborted | NVME_EABORT per command | test_async_quiesce (explicit and implicit aborts, drained bounce reads) |
+| Store root write atomicity (L199) | only the blocks holding superblock bytes 0..171 must be atomic (root-live) | n/a | test_root_atomicity (512 B with AWUPF 0, the Spark's recorded fields, 4096 B, boundary) |
 
-Other limits: one command in flight at a time; every request goes through
-the bounce buffer; doorbells use the CAP.DSTRD stride (tested with DSTRD=2);
-a command that completes with a non-zero status returns DISK_EIO and the
-queue stays usable.
+Other limits: one I/O queue pair (polled, no interrupts); doorbells use the
+CAP.DSTRD stride (tested with DSTRD=2); a command that completes with a
+non-zero status returns DISK_EIO, the rest of that request is still reaped,
+and the queue stays usable. QEMU timing: `scripts/qemu_nvme_bench.sh`
+(evidence/nvme_queue_depth_qemu_2026-10-20.md).
 
 ## Errors found in the reference material
 

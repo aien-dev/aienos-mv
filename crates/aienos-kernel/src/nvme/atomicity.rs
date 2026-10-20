@@ -21,6 +21,12 @@ pub const ID_NS_NABO_OFFSET: usize = 42;
 pub const ID_NS_NABSPF_OFFSET: usize = 44;
 /// Permanent System Store unit size the root activation write must cover.
 pub const STORE_UNIT_BYTES: u64 = 4096;
+/// Superblock bytes that can be non-zero (ADR 0015: bytes 172..4095 are
+/// frozen zero and covered by the slot CRC). A torn root write that changes
+/// only blocks past these bytes leaves a slot the CRC refuses, which is the
+/// same as the write not having happened, so only the blocks holding bytes
+/// 0..171 must be power-fail atomic.
+pub const STORE_ROOT_LIVE_BYTES: u64 = 172;
 
 /// Read a little-endian u16 at `offset`, or `None` if the page is too short.
 pub fn read_u16_le(bytes: &[u8], offset: usize) -> Option<u16> {
@@ -130,10 +136,15 @@ impl AtomicityFields {
         Some((u64::from(slot).checked_mul(blocks)?, blocks))
     }
 
-    /// Qualification decision for one Store superblock slot (0 = A, 1 = B).
+    /// Qualification decision for one Store superblock slot (0 = A, 1 = B):
+    /// the blocks holding [`STORE_ROOT_LIVE_BYTES`] at the start of the unit
+    /// must be power-fail atomic (1 block at 512 B and at 4096 B).
     pub fn store_root_decision(&self, slot: u32) -> AtomicityDecision {
         match self.store_unit_lba(slot) {
-            Some((start, count)) => self.write_is_power_fail_atomic(start, count),
+            Some((start, _)) => {
+                let live = STORE_ROOT_LIVE_BYTES.div_ceil(u64::from(self.lba_bytes));
+                self.write_is_power_fail_atomic(start, live)
+            }
             None => AtomicityDecision::Unknown(AtomicityUnknown::UnsupportedGeometry),
         }
     }
@@ -256,6 +267,29 @@ mod tests {
         assert!(matches!(
             f.write_is_power_fail_atomic(4, 8),
             AtomicityDecision::Atomic { .. }
+        ));
+    }
+
+    #[test]
+    fn store_root_512_one_block_unit_is_enough() {
+        // The Spark SSD (evidence/p3_nvme_atomicity_2026-09-25.md): 512 B LBA,
+        // AWUPF 0 (one block), no namespace values, no boundary.
+        let f = fields(512, Some(0), Some(0), Some(0), 0);
+        assert_eq!(f.store_unit_lba(1), Some((8, 8)));
+        assert_eq!(
+            f.store_root_decision(0),
+            AtomicityDecision::Atomic {
+                effective_blocks: 1
+            }
+        );
+        assert!(matches!(
+            f.store_root_decision(1),
+            AtomicityDecision::Atomic { .. }
+        ));
+        // The whole 4096-byte unit is still not one atomic write.
+        assert!(matches!(
+            f.write_is_power_fail_atomic(0, 8),
+            AtomicityDecision::NotAtomic(AtomicityRefusal::ExceedsAtomicUnit { .. })
         ));
     }
 

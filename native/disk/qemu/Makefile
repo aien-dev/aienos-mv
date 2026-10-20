@@ -21,6 +21,8 @@ OBJS = $(OUT)/start.o $(OUT)/payload.o $(OUT)/disk.o $(OUT)/disk_nvme.o
 ELF = $(OUT)/nvme_payload.elf
 SOBJS = $(OUT)/start.o $(OUT)/sdhci_payload.o $(OUT)/disk.o $(OUT)/disk_sdhci.o
 SELF = $(OUT)/sdhci_payload.elf
+BOBJS = $(OUT)/start.o $(OUT)/bench_payload.o $(OUT)/disk.o $(OUT)/disk_nvme.o
+BELF = $(OUT)/nvme_bench.elf
 
 all: $(ELF) $(SELF)
 
@@ -31,6 +33,9 @@ $(OUT)/start.o: start.S | $(OUT)
 	$(CC) -c -o $@ $<
 $(OUT)/payload.o: payload.c ../disk.h ../disk_nvme.h | $(OUT)
 	$(CC) $(PFLAGS) -c -o $@ $<
+$(OUT)/bench_payload.o: payload.c ../disk.h ../disk_nvme.h | $(OUT)
+	$(CC) $(PFLAGS) -DNVME_BENCH -c -o $@ $<
+
 $(OUT)/sdhci_payload.o: sdhci_payload.c ../disk.h ../disk_sdhci.h | $(OUT)
 	$(CC) $(PFLAGS) -c -o $@ $<
 $(OUT)/disk_sdhci.o: ../disk_sdhci.c ../disk_sdhci.h ../disk.h | $(OUT)
@@ -48,7 +53,13 @@ $(SELF): $(SOBJS) payload.ld
 	$(LD) -nostdlib -static -T payload.ld -o $@ $(SOBJS)
 	@u=$$($(NM) -u $@); if [ -n "$$u" ]; then echo "payload has undefined symbols: $$u"; rm -f $@; exit 1; fi
 
+# Timing payload (scripts/qemu_nvme_bench.sh): not part of all.
+bench: $(BELF)
+$(BELF): $(BOBJS) payload.ld
+	$(LD) -nostdlib -static -T payload.ld -o $@ $(BOBJS)
+	@u=$$($(NM) -u $@); if [ -n "$$u" ]; then echo "payload has undefined symbols: $$u"; rm -f $@; exit 1; fi
+
 clean:
 	rm -rf $(OUT)
 
-.PHONY: all clean
+.PHONY: all bench clean

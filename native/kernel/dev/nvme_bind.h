@@ -7,8 +7,12 @@
 #include "pci.h"
 #include "disk_part.h"
 
-/* DMA region handed to the driver: 6 fixed pages + 128 KiB bounce. */
-#define CK_NVME_DMA_BYTES ((NVME_FIXED_PAGES * NVME_PAGE) + NVME_MAX_XFER)
+/* DMA region handed to the driver: queue pages, one PRP page per in-flight
+ * slot (default depth) and four 128 KiB bounce slots; then the data window,
+ * a caller buffer the driver DMAs into directly (no bounce). Both sit in one
+ * allocation that is the stream's only SMMU window. */
+#define CK_NVME_DMA_BYTES NVME_DMA_BYTES_FOR(NVME_IO_DEPTH_DEFAULT, 4u * NVME_BOUNCE_SLOT_MAX)
+#define CK_NVME_DATA_BYTES (1u << 20)
 
 typedef struct {
     nvme_ctrl ctrl;
@@ -23,6 +27,8 @@ typedef struct {
     int confined;      /* DMA confined by the SMMU (ck_dma_confine) */
     int shut;          /* normal shutdown already attempted (ck_nvme_shutdown_bound) */
     uint32_t stream_id; /* SMMU stream when confined */
+    uint8_t *data;      /* direct-DMA data window (CK_NVME_DATA_BYTES, inside the SMMU window) */
+    uint64_t data_phys;
     ck_part part;      /* the AIENOS partition view (dev/disk_part.h): the only writable disk */
 } ck_nvme;
 

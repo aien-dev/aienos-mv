@@ -923,9 +923,10 @@ mod tests {
         assert_eq!(a.nabo_blocks, 0);
         assert_eq!(a.effective_power_fail_blocks(), Some(4));
         assert_eq!(a.store_unit_lba(1), Some((8, 8)));
+        // Only block 0 of the slot carries live superblock bytes: atomic.
         assert!(matches!(
             a.store_root_decision(0),
-            AtomicityDecision::NotAtomic(_)
+            AtomicityDecision::Atomic { .. }
         ));
     }
 
