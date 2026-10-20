@@ -7,6 +7,8 @@
 #   make            build out/libaienos_agx.a, out/agx_dis, out/agx_as
 #   make test       round-trip, Mesa-vector, negative and coverage tests (host)
 #   make sanitize   the same test under ASan+UBSan (Linux)
+#   make gpu-ref    run every agx_cases.h case on this Mac's GPU through Metal
+#                   (macOS only) and check it against the C reference
 #   make clean
 
 CC ?= cc
@@ -59,7 +61,23 @@ else
 	@echo "sanitize: Linux only"
 endif
 
+# Real-GPU runner (macOS, Objective-C because Metal is the only user-space path
+# to the GPU there). Deployment target 13.0 so the same binary runs in the
+# macOS 13.5 install used for the hypervisor trace.
+$(OUT)/agx_metal_run: tools/agx_metal_run.m agx_cases.h | $(OUT)
+	$(CC) -fobjc-arc -mmacosx-version-min=13.0 -O2 -Wall -Wextra -Werror -o $@ tools/agx_metal_run.m \
+		-framework Metal -framework Foundation
+
+gpu-ref:
+ifeq ($(shell uname -s),Darwin)
+	$(MAKE) $(OUT)/agx_metal_run
+	@for c in vadd vadd_i32 vadd_bounds saxpy matmul_naive matmul_tiled; do \
+		./$(OUT)/agx_metal_run tests/fixtures/corpus $$c | head -1 || exit 1; done
+else
+	@echo "gpu-ref: macOS only"
+endif
+
 clean:
 	rm -rf $(OUT)
 
-.PHONY: all test lib-checks sanitize clean
+.PHONY: all test lib-checks sanitize gpu-ref clean

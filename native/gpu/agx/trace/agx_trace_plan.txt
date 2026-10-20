@@ -1,0 +1,61 @@
+# AienOS AGX hypervisor trace plan (ledger L214, step 4).
+#
+# Data only: which GPU address ranges, interrupts and m1n1 AGXTracer options
+# the attended trace uses. It is read by the m1n1 hypervisor module
+# aienos_agx_trace.py, which is kept outside this repository (the repository
+# carries no Python; see docs/MACBOOK_AGX_TRACE_PROCEDURE.md for where it lives
+# and its sha256). Nothing here is executed on its own.
+#
+# Addresses come from the guest's own Apple device tree (ADT) at trace time,
+# never from this file, because iBoot places the carveouts per OS version.
+# The values in the comments were OBSERVED on this Mac under macOS 26.6.2
+# (docs/AGX_FIRMWARE_INTERFACE.md section 3); the macOS 13.5 values are
+# UNKNOWN until the trace runs (the module records them in manifest.txt).
+#
+# Syntax, one directive per line:
+#   range <name> <base> <size> <mode>
+#       <base>: adt:<node>:reg<N> | adt:<node>:<property> | 0x<hex>
+#       <size>: adt:<node>:reg<N> | adt:<node>:<property> | 0x<hex>
+#       <mode>: off | async | unbuf | wsync | sync (m1n1 TraceMode)
+#   offset <name> <parent-range> 0x<offset> 0x<size> <mode>
+#   irq <node>                     trace every line in the node's interrupts
+#   agx <option> <true|false|int>  set an m1n1 AGXTracer attribute
+#   require <key> <value>          refuse to start unless the guest matches
+
+# The m1n1 GPU structure decoders exist for G14 at firmware V13_5 only
+# (m1n1 7cde7d1 constructutils.py version list; proxyutils.py maps
+# iBoot-8422.141.2, the macOS 13.5 iBoot, to V13_5). INFERRED.
+require gpu G14
+require fwver V13_5
+
+# GPU MMIO window 0 (OBSERVED on 26: 0x204000000, 64 MiB). The first 16 MiB
+# hold the registers m1n1 decodes (SGXRegs); tracing all 64 MiB synchronously
+# would slow the guest for no known gain. INFERRED from m1n1 hv/trace_agx.py.
+range sgx_regs adt:/arm-io/sgx:reg0 0x1000000 sync
+# Fault code register at +0x17030 inside window 0. INFERRED, m1n1 SGXRegs.
+offset sgx_faultcode sgx_regs 0x17030 0x8 sync
+# GPU MMIO window 1 (OBSERVED on 26: 0x204d00000, 128 KiB). Meaning UNKNOWN:
+# this trace is the experiment that shows who touches it and when.
+range sgx_win1 adt:/arm-io/sgx:reg1 adt:/arm-io/sgx:reg1 sync
+
+# Firmware shared memory. Mapping of each property to its role is INFERRED
+# (m1n1 kboot_gpu.c lines 689-693); OBSERVED on 26 at the addresses shown.
+# gpu-region: TTBAT, per-context page-table base pairs (26: 0x9fffb8000, 16 KiB)
+range ttbat adt:/arm-io/sgx:gpu-region-base adt:/arm-io/sgx:gpu-region-size sync
+# gfx-shared-region: kernel-half GPU page tables (26: 0x9fff78000, 256 KiB)
+range uat_pagetables adt:/arm-io/sgx:gfx-shared-region-base adt:/arm-io/sgx:gfx-shared-region-size sync
+# gfx-handoff (26: 0x9fff70000, 16 KiB) is traced by AGXTracer's own
+# HandoffTracer; it is not listed again here.
+
+# GPU interrupt lines (OBSERVED on 26: 0x2b9 0x2ba 0x2bb 0x2bc 0x2c9). Which
+# line fires for a compute completion is UNKNOWN (U7); this records it.
+irq /arm-io/sgx
+
+# AGXTracer: decode the RTKit mailbox on gfx-asc, InitData, the work queues and
+# every submitted command; write one dump file per command.
+agx verbose 1
+agx trace_kernmap false
+agx trace_usermap false
+agx trace_kernva false
+agx trace_userva false
+agx redump false
