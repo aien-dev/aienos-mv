@@ -379,7 +379,6 @@ static void rest_wait(uint32_t g)
         __asm__ volatile("mwait" ::"a"(rest_hint), "c"(0) : "memory");
 }
 static void rest_wake(void) { __atomic_fetch_add(&park.gen, 1, __ATOMIC_RELEASE); }
-void ck_x86_swap_wake_aps(void) { rest_wake(); }
 static void rest_boot(void); /* after the LAPIC registers, below */
 
 /* The processor's own energy counter (RAPL MSR_PKG_ENERGY_STATUS 0x611, units
@@ -1590,6 +1589,20 @@ static int icr_send(uint32_t id, uint32_t lo)
         delay_us(1);
     }
     return -1;
+}
+
+/* Lab swap only (swap_x86.c), before the trampoline overwrites this image: every other core
+ * gets INIT, all excluding self (SDM vol.3 13.4.7.3, broadcast 000C4500H as in 11.4.4.1), and
+ * waits for a start-up IPI with no code of ours running. A drawing core left in draw_loop would
+ * run the new kernel's bytes mid-copy. The new kernel starts them again with INIT, SIPI, SIPI. */
+void ck_x86_swap_stop_aps(void)
+{
+    if (!ap_up)
+        return;
+    if (icr_send(0, 0xc4500))
+        ck_puts("swap: INIT to the other cores not accepted by the local APIC\n");
+    delay_ms(10);
+    ck_printf("swap: %u other cores stopped (INIT, waiting for start-up)\n", (unsigned)ap_up);
 }
 
 static void tramp_put32(const char *sym, uint32_t v)

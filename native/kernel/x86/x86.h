@@ -241,7 +241,7 @@ void ck_x86_udp_send(const uint8_t dst_mac[6], const uint8_t *pkt, size_t len,
  * firmware and enters the kernel (efi_x86.c). */
 #define CK_X86_SWAP_ENTRY_MAGIC 0x5357415041454E49ull /* "INEAPAWS" */
 /* Swap helpers (swap_x86.c, exposed to kmain_x86.c). */
-void ck_x86_swap_wake_aps(void);
+void ck_x86_swap_stop_aps(void);
 uint64_t ck_x86_tsc_hz(void);
 void ck_x86_xhci_stop_all(void);
 void ck_x86_tg3_stop(void);

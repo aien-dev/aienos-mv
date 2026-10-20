@@ -264,21 +264,12 @@ static int slot_verify_swap(const uint8_t *obj, size_t obj_len,
 }
 
 /* ---- Quiesce helpers ---- */
-extern volatile uint32_t ap_up;       /* from kmain_x86.c (via x86.h) */
-extern volatile int      allen_asleep;/* from kmain_x86.c */
-static volatile int swap_quiescing;
-
 static void quiesce_aps(void)
 {
-    /* Signal APs to enter their HLT loop via the existing rest mechanism. */
-    __atomic_store_n(&swap_quiescing, 1, __ATOMIC_SEQ_CST);
-    ck_x86_panel_off();          /* panel off */
-    /* Wake any MWAIT'd APs, then wait for them to enter cli+hlt. */
-    ck_x86_swap_wake_aps();      /* declared in x86.h, defined in kmain_x86.c */
-    /* Give APs up to 100 ms to reach their HLT */
-    uint64_t limit = ck_rdtsc() + ck_x86_tsc_hz() / 10;
-    while (ck_rdtsc() < limit)
-        ck_pause();
+    ck_x86_panel_off();
+    /* INIT puts every other core in wait-for-SIPI: none runs this image while the copy
+     * replaces it (kmain_x86.c). */
+    ck_x86_swap_stop_aps();
 }
 
 /* Defined in kmain_x86.c: reopens the trampoline page for the lab swap jump. */

@@ -114,6 +114,9 @@ swp="${work}/swap.img"; mkswap "${swp}" "${work}/SLOT_B.bin"
 # -monitor none keeps QEMU from reading this job's stdin (EOF makes QEMU quit).
 boot() {
     local v="${work}/vars-$RANDOM$RANDOM.fd"
+    # AIENOS_SWAP_QEMU_LOG=FILE (diagnosis only): QEMU logs exceptions and CPU resets there
+    local dbg=()
+    [[ -z "${AIENOS_SWAP_QEMU_LOG:-}" ]] || dbg=(-d int,cpu_reset -D "${AIENOS_SWAP_QEMU_LOG}.$RANDOM")
     cp "${vars_fd}" "${v}"
     qemu-system-x86_64 -M q35 -accel tcg -cpu max -smp 4 -m 1024 \
         -drive if=pflash,format=raw,readonly=on,file="${code_fd}" \
@@ -122,6 +125,7 @@ boot() {
         -drive if=none,id=data,format=raw,file="$2" -device "ide-hd,drive=data,bus=ide.1,model=APPLE HDD ST1000DM003" \
         -drive if=none,id=swap,format=raw,file="$3" -device ide-hd,drive=swap,bus=ide.2 \
         -device qemu-xhci -device usb-kbd \
+        "${dbg[@]}" \
         -nographic -monitor none -serial file:"$4" -no-reboot 2>/dev/null &
     qpid=$!
 }
