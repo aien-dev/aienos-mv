@@ -1,0 +1,10 @@
+aienos_commit: 26e929f3b6b4a9c19c6e4363dbed828ec3af400d
+image_sha256: 216952c35e325a71385feb1668f7e72d76e4a4017bc3d85591d0281f9167b8bd
+staged_by: drakestapleton
+staged_at_utc: 2026-10-20T22:55:59Z
+boot_current_before: 0001
+boot_order_before: 0001,0003
+recovery_entry: Boot0002 (AIENOSRECOV, GPT partition f227357c-1e80-4fd0-a55e-2efbef1dd25c)
+evidence_dir: /home/drakestapleton/workspace/evidence-out/handoff/staging/20261020T225559Z
+linux_kernel_before: 7.0.0-1019-nvidia
+aienos_boot_entry: 0004

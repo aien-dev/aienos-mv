@@ -1,0 +1,20 @@
+{
+  "captured_utc": "2026-10-20T22:55:59Z",
+  "host": "spark-b87b",
+  "kernel": "7.0.0-1019-nvidia",
+  "git_commit": "26e929f3b6b4a9c19c6e4363dbed828ec3af400d",
+  "secure_boot": "disabled",
+  "boot_current": "0001",
+  "boot_order": "0001,0003",
+  "boot_next": "",
+  "root": {
+    "device": "/dev/nvme0n1p2",
+    "uuid": "d27bfd26-ff30-400e-9eca-9cdf73de9406",
+    "options": "rw,relatime,errors=remount-ro"
+  },
+  "esp": {
+    "device": "/dev/nvme0n1p1",
+    "uuid": "9DA2-3597",
+    "options": "rw,relatime,fmask=0022,dmask=0022,codepage=437,iocharset=iso8859-1,shortname=mixed,errors=remount-ro"
+  }
+}

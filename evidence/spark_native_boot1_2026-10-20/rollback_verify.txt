@@ -1,0 +1,12 @@
+=== NATIVE BOOT ROLLBACK VERIFICATION REPORT ===
+Pre-capture:  2026-10-20T22:55:59Z on spark-b87b
+Post-capture: 2026-10-20T23:36:23Z on spark-b87b
+Secure Boot:  before=disabled, after=disabled
+BootOrder:    before=['0001', '0003'], after=['0001', '0003', '0004']
+BootCurrent:  after=0001 (expected=0001)
+BootNext:     after=<empty>
+Root UUID:    d27bfd26-ff30-400e-9eca-9cdf73de9406 (matched=True)
+ESP UUID:     9DA2-3597 (matched=True)
+
+All rollback assertions verified.
+VERDICT: PASS

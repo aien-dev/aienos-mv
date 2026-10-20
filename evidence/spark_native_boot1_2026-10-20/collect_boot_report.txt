@@ -1,0 +1,61 @@
+== staging record (/boot/efi/EFI/AIENOS/STAGED.TXT)
+aienos_commit: 26e929f3b6b4a9c19c6e4363dbed828ec3af400d
+image_sha256: 216952c35e325a71385feb1668f7e72d76e4a4017bc3d85591d0281f9167b8bd
+staged_by: drakestapleton
+staged_at_utc: 2026-10-20T22:55:59Z
+boot_current_before: 0001
+boot_order_before: 0001,0003
+recovery_entry: Boot0002 (AIENOSRECOV, GPT partition f227357c-1e80-4fd0-a55e-2efbef1dd25c)
+evidence_dir: /home/drakestapleton/workspace/evidence-out/handoff/staging/20261020T225559Z
+linux_kernel_before: 7.0.0-1019-nvidia
+aienos_boot_entry: 0004
+== staged image
+sha256: 216952c35e325a71385feb1668f7e72d76e4a4017bc3d85591d0281f9167b8bd
+== pre-exit report (/boot/efi/EFI/AIENOS/BOOTREPORT.TXT)
+missing
+== native firmware-variable report
+report_version: 1
+aienos_commit: 52109bcb334a95bdd33410b4d22c59dee8c917f4
+report_kind: final
+last_stage: kernel_entered
+nvram_write_index: 2 of 3
+AIENOS
+arch: aarch64
+boot: native
+conventional_memory_kb: 130073720
+memory_map_descriptors: 184
+memory_map_conventional_regions: 36
+memory_map_rejected_regions: 0
+memory_map_largest_region: 0x323800000 pages 30776318
+gb10: unavailable
+cpu_cores: 20
+cpu_efficiency_class_0: 10
+cpu_efficiency_class_1: 10
+cpu_boot_core_listed: yes
+cpu_boot_core_class: 0
+boot_cpu_midr: 0x410fd871 (part 0xd87)
+allocator_managed_frames: 4096
+allocator_reserved_frame_phys: 0x323800000
+uefi_entry_to_handoff_ms: 64
+handoff_to_kernel_entry_ms: 0
+exception_level: EL2
+kernel: alive
+progress_record: saved
+== current boot state
+BootCurrent: 0001
+Timeout: 1 seconds
+BootOrder: 0001,0003,0004
+Boot0000* AIENOS Allen	HD(1,GPT,7c2b24e9-0ceb-4ad7-a401-9bf3c92c26ee,0x800,0x95000)/File(\EFI\AIENOS\ALLEN.EFI)
+kernel: 7.0.0-1019-nvidia
+root: rw
+== verdict
+PASS  image_unchanged: staged 26e929f3b6b4, image 216952c35e325a71
+FAIL  left_firmware_into_aienos: pre-exit file: missing, native report: present
+FAIL  native_code_after_firmware_exit: firmware variable written by AIENOS after ExitBootServices (kind final)
+PASS  kernel_alive: last stage kernel_entered
+PASS  boot_next_consumed: no pending one-time boot
+FAIL  boot_order_preserved: before 0001,0003, now 0001,0003,0004 (added by firmware: 0004)
+PASS  linux_entry_booted: BootCurrent 0001
+PASS  linux_kernel_unchanged: 7.0.0-1019-nvidia
+PASS  root_filesystem_writable: /
+M2_GATE: FAIL
