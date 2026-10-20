@@ -93,6 +93,11 @@ const BUF_STRIDE 2048
 const WAIT_US 10000
 
 # ---- bring-up (L198's chosen order; the vendor's probe+open minus MCU/EPHY/PHY patch code) ----
+# L198 e9ca5a0 ("never write to an unidentified chip"): the stop path wrote to a
+# chip rtl_init had not identified. devc2 makes that a checker rule, not a review
+# item: no `write` in any block (init, stop, failmark) may run before the block's
+# `expect ... chip-id` passed, and failmark is armed only after it.
+guard writes after chip-id               # devc2: checker refuses a write reachable before identification
 failmark CHIPCMD STOPREQ               # devc2: failure action = stop the chip, not a status bit
 init
   expect TXCONFIG chip-id else NOT_RTL8127            # devc2: `chip-id` condition from the table

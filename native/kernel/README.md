@@ -29,6 +29,10 @@ QEMU qualifies nothing physical: a PASS here says nothing about real hardware.
                                      # CK_QEMU_UNSAFE_DMA=1 build), ends AIENOS_CK_M4_NVME,
                                      # AIENOS_CK_M4_STORE, AIENOS_CK_ARGUS1_REVOKE
     scripts/qemu_ck_disk_layout_test.sh # QEMU GPT / AIENOS partition gate, ends AIENOS_CK_DISK_LAYOUT
+    make -C native/kernel full CK_VNET_IMPL=contract   # full image with the virtio-net driver generated
+                                     # from native/net/contract/virtio_net.devc (ADR 0021):
+                                     # target/native-kernel/full-vnet-contract/BOOTAA64.EFI
+    AIENOS_CK_NET_IMPL=contract scripts/qemu_ck_net_test.sh # the same NET gate on that image
 
 Toolchain: gcc, binutils (ld, objcopy, nm, readelf), make, shell. On a
 non-aarch64 host the Makefile uses the `aarch64-linux-gnu-` prefix.

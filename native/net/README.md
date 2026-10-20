@@ -267,3 +267,25 @@ and bus mastering, map the BARs named by the caps, supply `vnet_ops` (volatile
 MMIO at BAR + cap offset + off; notify = 16-bit write at the notify window +
 off), give a DMA-visible region of `vnet_mem_size(qsize)` bytes with its bus
 address, and call `vnet_init`; then poll `vnet_rx` / `vnet_tx_reclaim`.
+
+## ADR 0021: virtio-net as a device contract (prototype, QEMU only)
+
+`contract/virtio_net.devc` describes the virtio-net chip as data: register
+windows and registers (width, access, reset value, bank), feature policy,
+DMA ring layout, the bring-up state machine and the protocol rules. The host
+tool `crates/aienos-devc` checks it and generates, into `contract/gen/`, the
+driver (same API as `aienos_virtio_net.h`), a chip model that enforces the
+contract on every register access, a state-machine fuzzer, a documentation
+page and the Omegese form. See `docs/adr/0021-driver-contract-model.md`.
+
+    make contract-test       # generated driver through tests/vnet_test.c; fuzzer on both
+                             # drivers; register+DMA trace hand vs generated must be identical
+    make contract-sanitize   # the same under ASan + UBSan
+    make contract-check      # regenerate in memory, FAIL on drift; trace stays inside the contract
+    make contract-gen        # after editing the contract (needs cargo)
+
+Shown: the generated driver passes the same hosted test, fuzzer and QEMU NET
+gate (`AIENOS_CK_NET_IMPL=contract scripts/qemu_ck_net_test.sh`) as the
+hand-written one. Not shown: any real hardware. The contract has no hardware
+receipt, so it is UNPROVEN and a hardware staging image refuses to bind it.
+The hand-written `aienos_virtio_net.c` stays the reference.
