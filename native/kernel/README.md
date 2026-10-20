@@ -14,7 +14,7 @@ QEMU qualifies nothing physical: a PASS here says nothing about real hardware.
 | `core/` | Console, printf, ACPI, reports/panic/PSCI reset, M3 (threads, scheduler, EL0, capabilities, IPC), `kmain.c`. |
 | `tests/` | Host unit tests. |
 | `third_party/omega/` | The canonical Omega Cortex store, byte for byte from the omega commit in `omega.lock` (checked by `scripts/omega_lock_check.sh`); built freestanding by `svc/cortex_store.c` over the sealed Store through `svc/cortex_journal.c` (native v1 plan P06). |
-| `x86/` | x86_64 port, first cut (AIENOS-IMAC-KERNEL-0, 2017 iMac): UEFI stub, descriptor tables and interrupt stubs, page tables, local APIC timer, ACPI power off, console, secondary-core start, PCI walk, read-only AHCI and NVMe disks, transmit-only BCM57766 Ethernet report. |
+| `x86/` | x86_64 port, first cut (AIENOS-IMAC-KERNEL-0, 2017 iMac): UEFI stub, descriptor tables and interrupt stubs, page tables, local APIC timer, ACPI power off, console, secondary-core start, PCI walk, read-only AHCI and NVMe disks, BCM57766 Ethernet link detection; a lab-only, opt-in network report (`CK_X86_REPORT=1`). |
 | `../boot/` | Minimal UEFI entry stub (one image with the kernel). |
 
 ## Build and test
@@ -168,19 +168,39 @@ build refuses any other ATA command); NVMe through the shared
 `x86/`). Both disk_dev write hooks always refuse, serial numbers and MAC
 addresses are never printed, and each disk's GPT is checked by the shared
 `dev/disk_part.c` (both copies, CRCs, the AIENOS partition located if present).
-The Broadcom BCM57766 Ethernet chip (14e4:1686) gets a transmit-only, polled
-driver (`x86/tg3_x86.c`: core reset, bootcode handshake, rings in one DMA block
-below 4 GiB, PHY autonegotiation; it never receives and the MAC address is
-never printed). The last line before the hold is a one-line `summary:`. It
-prints `kernel: alive`, holds the screen 60 s and powers off through ACPI S5.
-During the hold `x86/report_x86.c` sends the RAM copy of the console (first
-16 KiB) every 2 s while the link is up, as UDP broadcast from 0.0.0.0 to
-255.255.255.255 port 47031 (TTL 1), in 1 KiB parts that each start with
-`AIENOS-IMAC-REPORT v=1 run=<id> part=<i>/<n> bytes=<total>`.
-`tools/ck_imac_report_listen.c` (`make -C native/kernel imac-report-listen`,
-run as `ck_imac_report_listen 47031 OUTDIR SECONDS`) rebuilds each run into
-`OUTDIR/imac-<run>.txt`; `scripts/ck_imac_report_test.sh` checks frames and
-reassembly on the host, so a wired iMac no longer needs a photo of its screen. Output: the GOP framebuffer
+The Broadcom BCM57766 Ethernet chip (14e4:1686) gets a polled driver
+(`x86/tg3_x86.c`: core reset, bootcode handshake, rings in one DMA block below
+4 GiB, PHY autonegotiation; it never reads received frames and the MAC address
+is never printed). In the default image it only detects the link: frame
+transmit is not compiled in. The last line before the hold is a one-line
+`summary:`. It prints `kernel: alive`, holds the screen 60 s and powers off
+through ACPI S5.
+
+**Network report: lab-only, opt-in, unauthenticated.** `make -C native/kernel
+imac-kernel CK_X86_REPORT=1` builds a separate lab image,
+`IMACKERN-LAB.EFI`, that adds `x86/report_x86.c`, `../net/aienos_net.c` and
+tg3 transmit. The default `IMACKERN.EFI`, and any resident or service (ALLEN)
+build, contain none of it; the link step fails a default image that has a
+report symbol. During the hold the lab image sends, every 2 s while the link
+is up, an allowlisted copy of the console (`ck_x86_report_filter`: only
+complete, printable lines of at most 240 bytes whose key is on a fixed list of
+kernel diagnostic keys; everything else, including `memory:`, is dropped
+whole, so chat, keys, tokens and credentials cannot enter it), as UDP
+broadcast from 0.0.0.0 to 255.255.255.255 port 47031 (TTL 1), in 1 KiB parts
+that each start with
+`AIENOS-IMAC-REPORT v=2 auth=none run=<id> part=<i>/<n> bytes=<total>`.
+Anyone on the LAN can read or forge these datagrams; the run id and checksum
+are not authenticity, so a report is never a receipt, evidence or a command.
+Future service diagnostics belong on the authenticated transport with an
+explicitly authorized peer. `tools/ck_imac_report_listen.c` (`make -C
+native/kernel imac-report-listen`, run as `ck_imac_report_listen 47031 OUTDIR
+SECONDS`) says so when it starts, refuses the retired v=1 raw-console format
+and rebuilds each run into `OUTDIR/imac-<run>.unauthenticated.txt`;
+`scripts/ck_imac_report_test.sh` checks the default and lab builds' symbols,
+the allowlist (sentinel lines never leave), the frames and reassembly on the
+host.
+
+Output: the GOP framebuffer
 (`core/fbcon.c`, lines from before ExitBootServices replayed onto it) and COM1
 when a 16550 answers there (QEMU; the iMac has none). Shared, unchanged:
 `core/fbcon.c`, `fmt.c`, `acpi.c`, `handoff_check.c`, `mm/frames.c`, `heap.c`,
@@ -188,10 +208,31 @@ when a 16550 answers there (QEMU; the iMac has none). Shared, unchanged:
 cores and attaches a SATA data disk and an NVMe disk, each with a GPT from
 `ck_gpt_image`, and fails unless three cores check in, the kernel finds each
 AIENOS partition where the tool wrote it and both disks are byte-identical
-afterwards. Not yet: work scheduled on the other cores, x2APIC, NX, disk writes,
+afterwards. Not yet: work scheduled on the other cores, x2APIC, disk writes,
 VT-d, receiving on the network, a store. QEMU (no BCM57766 there)
 qualifies nothing physical; copy the image to a FAT stick as
 `EFI/BOOT/BOOTX64.EFI` and start it from the Option-key boot picker.
+
+Page permissions (W^X, #409): the kernel refuses a CPU without NX, sets
+EFER.NXE and CR0.WP on the boot core and in the trampoline for every other
+core, and maps its code read-only executable, its PE header and read-only data
+(`.rodata`, relocations, GOT) read-only no-execute, and everything else (data,
+bss, stacks, heap, page tables, MMIO, the framebuffer) no-execute, keeping the
+PAT cache types and the stack guard; the 2 MiB pages around the image and the
+trampoline are split into 4 KiB pages at the boundaries from
+`../boot/image_x86_64.ld`. The trampoline page is never writable and executable
+at once (writable while it is filled, executable while a core runs it,
+read-only no-execute once the cores are parked). At boot the kernel proves it:
+writes to code and to read-only data and execution from heap and stack must
+each fault with the right error code (`wx: ok ...`), and after the cores and
+disks are up an audit of every page table leaf must find nothing writable and
+executable, only the code executable, and NXE and WP on every core
+(`wx_audit: ok ...`). The QEMU test also builds two TEST-ONLY mutants
+(`make imac-kernel IMACKERN_WX_MUTANT=no_nx` or `=text_writable`) and fails
+unless their probes panic. W^X is not process isolation: everything here still
+runs in ring 0 in one address space, any kernel code can change the page
+tables, and learned or generated code must never be given kernel authority.
+QEMU only; not yet run on the iMac.
 
 ## Raspberry Pi 5 image (AIENOS-PI5 step 1)
 
@@ -494,7 +535,7 @@ a FAIL to report, not to retry.
 3. `ck_enter_el1`: EL2 -> EL1h with the MMU already on our tables.
 4. EL1: `mmu: enabled`, `mmu_switch: ...` read back from the registers,
    heap check, guard-page self test, GICv3 from the MADT, 200 ms timer window
-   (INTID 30, 10 ms period), `kernel: alive`, `kernel_el: EL1h`.
+   (INTID 30, 10 ms period; on a starved emulator the window keeps counting up to 5 s until five ticks arrived, and each interval is measured from IRQ entry, so a host stall cannot produce a short interval), `kernel: alive`, `kernel_el: EL1h`.
 5. Stages, in order, if linked: `ck_stage_devices`, `ck_stage_security`,
    `ck_stage_store`. Each prints `stage <name>: ok`, `stage <name>: FAIL
    rc=<n>` or `stage <name>: not linked`.
@@ -538,6 +579,36 @@ low-water free bytes.
   and the handoff, and minus the RSDP, the XSDT/RSDT and every table the root
   lists (whole pages). Tables, stack, heap and pool come from it and are never
   handed out again.
+
+## Native pipes (AIENOS-NATIVE-PIPE-1, aienos-mv#428)
+
+`core/pipe.c` / `core/pipe.h` make a pipe a kernel primitive: two independently scheduled operations exchange ordered
+bytes through a bounded buffer, with no intermediate file. It is a byte stream, separate from the 56-byte typed
+message ring of `core/ipc.h`; it reuses only the ipc.h capability tables.
+
+- **Contract.** OSH_PLATFORM_ABI (aien-protocols-mv `specs/osh-platform/`, read at `fb5fca98e667`, v1 DRAFT, unfrozen):
+  PIPE_CREATE, STREAM_READ / WRITE / CLOSE / DUP (section 8.1), at least 64 KiB per pipe (8.5), the error codes of 8.6
+  (one shared copy in `core/osh_err.h`, also used by `core/osh_op.h`), epoch staleness (4.4) and authority at the
+  moment of the effect (9.2). Choices the draft does not pin are marked UNVERIFIED in `pipe.h`.
+- **Ends are capabilities.** The read end holds `CK_R_READ`, the write end `CK_R_WRITE`, never both; optional
+  `CK_R_DERIVE` (dup in the same table), `CK_R_GRANT` (dup into another principal's table) and `CK_R_REVOKE`. Every
+  operation calls `ck_cap_lookup` when it acts, so a handle that was closed, reused or revoked is refused even if it
+  was valid a moment earlier (STALE, DENIED, REVOKED).
+- **Bounded.** A static pool of `CK_PIPE_POOL_PIPES` (4) pipes of `CK_PIPE_CAPACITY` (65536) bytes; nothing is allocated.
+  A write past the free space is partial, a write on a full pipe returns WOULD_BLOCK (or parks with `CK_PIPE_F_BLOCK`
+  through the pool's wait / wake hook, which the kernel points at the scheduler). Last writer closed: reads return 0
+  bytes once drained (EOF). No reader: BROKEN_PIPE. Revoke scrubs the buffer and no byte is delivered after it; cancel
+  makes the next or the blocked call on that end return INTERRUPTED with no byte moved. Counters (bytes, max resident,
+  WOULD_BLOCK, waits, wakeups, cancellations, revocations, refusals) are in `struct ck_pipe_stats`.
+- **Versioned op table.** `ck_pipe_dispatch` takes a platform call frame (magic `OSHF`, `CK_PIPE_ABI_VERSION` 1, op id,
+  reserved, arguments) and refuses malformed frames and unknown ops or versions (INVALID_ARG, NOT_SUPPORTED) before any
+  effect.
+- **Tests.** `make test` runs `test_pipe` (the 20-case corpus in `tests/fixtures/pipe/`, format in its README, plus
+  producer / consumer transfers through `core/sched.c`) and `pipe-mutant` (the write-right check removed: the test must
+  fail); `make sanitize` runs it under ASan+UBSan. `scripts/qemu_ck_pipe_test.sh` builds the TEST-ONLY `CK_PIPE_TEST=1`
+  image and checks the in-kernel run (GATES.md, PIPE). Host and QEMU evidence qualify nothing physical.
+- **Not yet.** Task execution and shell dispatch over pipes are separate issues; the kernel's blocking hook yields
+  cooperatively inside one kernel thread, it does not switch M3 threads.
 
 ## Notes for stage code
 
