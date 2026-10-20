@@ -353,6 +353,7 @@ static void test_refusals(void)
     put(RTL_TCR, 4, 0x54000000u); /* an RTL8125 id */
     CHECK(rtl_init(&d, &OPS, region, DMA, RTL_MEM_SIZE) == RTL_E_CHIP, "wrong chip");
     CHECK(C.writes == 0, "nothing written to a wrong chip");
+    CHECK(rtl_stop(&d) == RTL_E_NOT_READY && C.writes == 0, "stop writes nothing to a wrong chip");
 
     chip_init(region, DMA, RTL_MEM_SIZE);
     put(RTL_TCR, 4, RTL_TCR_ID_8127 | 0x00300000u);

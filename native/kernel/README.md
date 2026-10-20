@@ -199,7 +199,7 @@ window first (no SMMU, no DMA), BAR 2, reset and bring-up from Realtek's Linux r
 v11.014.00 (no public datasheet: DOCS SILENT), link wait, then the console log
 (`core/klog.c` RAM copy) sent every 2 s for 20 s as UDP broadcasts in the iMac
 format with the tag `AIENUX-SPARK-REPORT`; the same `ck_imac_report_listen`
-writes it to `spark-<run>.txt`. Only a `CK_RTL8127=1` image calls it; every QEMU
+writes it to `spark-<run>.txt`. Only a `make full CK_RTL8127=1` image calls it; every QEMU
 gate image is unchanged. Tested against a chip model and on the host only;
 nothing has run on the chip. What attended boot #2 must confirm is listed in
 `docs/SPARK_RTL8127.md`.

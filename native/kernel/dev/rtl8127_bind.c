@@ -48,8 +48,11 @@ void ck_rtl8127_release(void)
 {
     if (!g_rtl.pf) return;
     if (g_rtl.bm_on) {
-        rtl_err e = g_rtl.bar ? rtl_stop(&g_rtl.dev) : RTL_E_ARG;
-        ck_printf("rtl8127: chip stop %s\n", rtl_err_name(e));
+        /* Only a chip rtl_init identified as an RTL8127 (mcfg set) is written to. */
+        if (g_rtl.bar && g_rtl.dev.mcfg)
+            ck_printf("rtl8127: chip stop %s\n", rtl_err_name(rtl_stop(&g_rtl.dev)));
+        else
+            ck_printf("rtl8127: chip stop skipped (not identified as an RTL8127, nothing written)\n");
         if (pci_bus_master_off(g_rtl.pf) == 0) {
             g_rtl.bm_on = 0;
             ck_printf("dma_gate: rtl8127 bus master revoked\n");

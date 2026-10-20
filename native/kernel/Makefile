@@ -353,8 +353,8 @@ OUT ?= $(REPO)/target/native-kernel-pi5
 CK_EXTRA_CFLAGS += -DCK_PI5=1 -DCK_KLOG=1
 endif
 
-# Spark attended boot #2 (L198): CK_RTL8127=1 binds the Realtek RTL8127 10 GbE
-# (dev/rtl8127_bind.c) in the devices stage and sends the console log as UDP
+# Spark attended boot #2 (L198): `make full CK_RTL8127=1` ($(OUT)/full/BOOTAA64.EFI)
+# binds the Realtek RTL8127 10 GbE (dev/rtl8127_bind.c) in the devices stage and sends the console log as UDP
 # broadcasts (tag AIENUX-SPARK-REPORT, port 47031). Empty (default) in every
 # QEMU gate: the binding is compiled but never called.
 ifneq ($(strip $(CK_RTL8127)),)

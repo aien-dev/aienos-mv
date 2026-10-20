@@ -200,7 +200,8 @@ unsigned rtl_tx_pending(const rtl_dev *d);
  * runt and multi-descriptor frames are dropped (counted) and skipped. */
 rtl_err rtl_rx(rtl_dev *d, uint8_t *out, size_t cap, size_t *len, int *got);
 
-/* Stop DMA: mask interrupts, close the RX gate, stop request, wait for the
+/* Stop DMA (only on a chip rtl_init identified; RTL_E_NOT_READY otherwise,
+ * nothing written): mask interrupts, close the RX gate, stop request, wait for the
  * FIFOs, soft reset. The rings are no longer in use when it returns OK. */
 rtl_err rtl_stop(rtl_dev *d);
 

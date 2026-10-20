@@ -109,7 +109,7 @@ interrupt mask, RX repost) was killed by the test every time.
 
 ## How attended boot #2 uses it
 
-Build the image with `CK_RTL8127=1` (adds the binding call and the RAM console copy). On another machine
+Build the full image with `make -C native/kernel full CK_RTL8127=1` (output `$(OUT)/full/BOOTAA64.EFI`; the binding call and the RAM console copy are added there; the core-only `make` image has no devices stage, so it never binds the NIC). On another machine
 on the same LAN, run `ck_imac_report_listen 47031 OUTDIR 120`
 (`make -C native/kernel imac-report-listen`); the Spark's log arrives as `OUTDIR/spark-<run>.txt`.
 The image never takes the chip out of the devices stage with DMA live: every path ends in

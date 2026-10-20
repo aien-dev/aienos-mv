@@ -408,6 +408,8 @@ rtl_err rtl_stop(rtl_dev *d)
 {
     if (!d || !d->ops.write)
         return RTL_E_ARG;
+    if (!d->mcfg)
+        return RTL_E_NOT_READY; /* never identified as an RTL8127: write nothing */
     d->ready = 0;
     return hw_reset(d);
 }
