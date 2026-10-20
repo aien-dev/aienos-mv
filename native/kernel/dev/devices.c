@@ -8,6 +8,7 @@
 #include "virtio_net.h"
 #include "net_bind.h"
 #include "xhci_fence.h"
+#include "hda_fence.h"
 #include "usb_kbd.h"
 #include "../../boot/slot_format.h"
 
@@ -127,14 +128,18 @@ int ck_stage_devices(void)
     int xrc = ck_xhci_fence(&g_pci);
     ck_printf("devices: xhci=%s (rc=%d)\n", ck_xhci_state(), xrc);
     ck_kbd_recovery_report(ck_xhci_state());
+    /* HD Audio: the same DMA fence (L207). Reported, never a devices-stage failure. */
+    int hrc = ck_hda_fence(&g_pci);
+    ck_printf("devices: hda=%s (rc=%d)\n", ck_hda_state(), hrc);
     if (ck_kbd_recovery_requested()) {
         /* Recovery access chosen: the xHCI is already revoked; release every
          * other device's DMA before the stub halts (no Store stage runs). */
         if (ck_net_live()) ck_net_release();
         ck_dev_nvme_release();
+        if (ck_hda_live()) ck_hda_release();
         ck_printf("devices: recovery halt nvme=%s virtio_net=%s xhci=%s\n", g_nvme.bm_on || g_nvme.confined ? "LIVE" : "released",
                   ck_net_live() ? "LIVE" : "released", ck_xhci_live() ? "LIVE" : "released");
-        if (!g_nvme.bm_on && !g_nvme.confined && !ck_net_live() && !ck_xhci_live()) ck_recovery_console_stub();
+        if (!g_nvme.bm_on && !g_nvme.confined && !ck_net_live() && !ck_xhci_live() && !ck_hda_live()) ck_recovery_console_stub();
         ck_panic("recovery access: device DMA still live, refusing to halt with it");
     }
     if (nrc == -1) return 0;  /* no NVMe present: not a devices failure; Store reports it */
@@ -151,6 +156,8 @@ void ck_stage_quiesce(void)
     if (net_live) ck_net_release();
     int xhci_live = ck_xhci_live();
     if (xhci_live) ck_xhci_release();
+    int hda_live = ck_hda_live();
+    if (hda_live) ck_hda_release();
     int was_live = g_nvme.pf && (g_nvme.bm_on || g_nvme.confined);
     if (was_live)
         ck_dev_nvme_release();
@@ -158,6 +165,7 @@ void ck_stage_quiesce(void)
               !g_nvme.pf ? "none" : was_live ? "released-now" : "already-released");
     if (net_live) ck_printf("devices: quiesce before reset virtio_net=released-now\n");
     if (xhci_live) ck_printf("devices: quiesce before reset xhci=released-now\n");
+    if (hda_live) ck_printf("devices: quiesce before reset hda=released-now\n");
 }
 
 #if defined(CK_CONSOLE_SESSION) && CK_CONSOLE_SESSION

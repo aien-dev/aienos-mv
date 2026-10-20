@@ -3,6 +3,7 @@
 #include "ck.h"
 #include "usb_kbd.h"
 #include "xhci_acpi_fmt.h"
+#include "usb_bt_phase.h"
 
 #if defined(CK_TEST_XHCI_MUTATION) && defined(CK_HARDWARE_STAGING)
 #error "CK_TEST_XHCI_MUTATION (TEST-ONLY xHCI DMA fence mutation) cannot be combined with CK_HARDWARE_STAGING"
@@ -32,6 +33,23 @@ static int g_session; /* 1 while ck_xhci_session drives the fence */
 #error "CK_TEST_CONSOLE_MUTATION needs CK_CONSOLE_SESSION=1"
 #endif
 #define KBD_RUN(b, m, p, n) ck_kbd_phase(b, m, p, n)
+#endif
+
+#if CK_BT_ENABLED
+/* L207: Bluetooth step after the keyboard phase, on the same confined window. Not when the
+ * operator chose recovery. A controller visited after the keyboard was found skips the
+ * keyboard phase (g_skip_kbd) so the recovery-access wait runs once. */
+static int g_skip_kbd;
+#define BT_AFTER_KBD(b, m, p, n)                                \
+    do {                                                        \
+        if (!ck_kbd_recovery_requested()) (void)ck_bt_phase(b, m, p, n); \
+    } while (0)
+#define KBD_ONCE(b, m, p, n) (g_skip_kbd ? 1 : KBD_RUN(b, m, p, n))
+#else
+#define BT_AFTER_KBD(b, m, p, n) \
+    do {                         \
+    } while (0)
+#define KBD_ONCE(b, m, p, n) KBD_RUN(b, m, p, n)
 #endif
 
 #define CMD_MEM 0x2u
@@ -285,7 +303,8 @@ static int plat_fence_one(int idx, int *kbd_rc)
     ck_printf(CK_XHCI_PLAT_GRANT_FMT, x->name, (unsigned long long)cf.smmu_base, cf.stream_id);
     ck_printf("smmu_dma_window: xhci %s only, translation active iova=0x%llx len=0x%llx\n", x->name,
               (unsigned long long)cf.iova, (unsigned long long)cf.len);
-    *kbd_rc = KBD_RUN(x->bar0, g_dma_mem, g_dma_phys, CK_XHCI_DMA_BYTES);
+    *kbd_rc = KBD_ONCE(x->bar0, g_dma_mem, g_dma_phys, CK_XHCI_DMA_BYTES);
+    BT_AFTER_KBD(x->bar0, g_dma_mem, g_dma_phys, CK_XHCI_DMA_BYTES);
     x->state = "fenced";
     ck_xhci_release();
     return CK_XHCI_OK;
@@ -300,13 +319,30 @@ static int plat_fence_all(void)
         return CK_XHCI_ABSENT;
     }
     int rc = CK_XHCI_ABSENT, any_fenced = 0;
+#if CK_BT_ENABLED
+    int kbd_found = 0;
+    g_skip_kbd = 0;
+#endif
     for (int i = 0; i < g_nplat; i++) {
         int krc;
         rc = plat_fence_one(i, &krc);
         if (rc == CK_XHCI_OK) any_fenced = 1;
-        if (rc == CK_XHCI_OK && krc == 0) return CK_XHCI_OK; /* keyboard found and its phase ran */
+        if (rc == CK_XHCI_OK && krc == 0) {
+#if CK_BT_ENABLED
+            kbd_found = 1; /* keep visiting the remaining controllers: the Bluetooth adapter may be on another one */
+            g_skip_kbd = 1;
+#else
+            return CK_XHCI_OK; /* keyboard found and its phase ran */
+#endif
+        }
         if (ck_kbd_recovery_requested()) return rc;
     }
+#if CK_BT_ENABLED
+    if (kbd_found) {
+        g_skip_kbd = 0;
+        return CK_XHCI_OK;
+    }
+#endif
     if (any_fenced) g_x.state = "fenced";
     ck_printf("keyboard: unavailable (no keyboard on any platform xHCI)\n");
     return any_fenced ? CK_XHCI_OK : rc;
@@ -402,6 +438,7 @@ int ck_xhci_fence(const pci_system *pci)
      * fence's DMA region; the release below halts and revokes whatever it
      * returns. A controller that would not halt is never driven. */
     int krc = hrc == 0 ? KBD_RUN(x->bar0, g_dma_mem, g_dma_phys, CK_XHCI_DMA_BYTES) : 1;
+    if (hrc == 0) BT_AFTER_KBD(x->bar0, g_dma_mem, g_dma_phys, CK_XHCI_DMA_BYTES);
     x->state = hrc ? "halt-failed" : "fenced";
     ck_xhci_release();
     /* A PCI controller without a keyboard: try the platform ones next. */

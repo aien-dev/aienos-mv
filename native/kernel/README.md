@@ -265,6 +265,28 @@ The kernel is partition-unaware. At every boot it writes and restores the last
 areas hold the protective MBR, the primary GPT and the backup GPT. Details and
 the operator-facing warning: `docs/TRUST-1-OPERATOR-STEPS.md`.
 
+## Spark Bluetooth (USB) and HD Audio (C kernel, L207)
+
+Status: **host simulators and QEMU only; nothing runs on the Spark.** Full facts,
+claims and unknowns, each tagged OBSERVED / INFERRED / UNKNOWN: `docs/SPARK_BT_HDA.md`.
+
+- **HD Audio.** `dev/hda.c` brings up an Intel HD Audio controller (reset, command
+  and response rings, codec and widget walk, one output stream, an integer sine).
+  `dev/hda_fence.c` runs it inside the same SMMU-confined DMA window as the
+  other devices (PCI class 0x0403 in QEMU, ACPI `NVDA2014` on the Spark). The tone
+  is only produced in the `CK_HDA_TONE=1` QEMU image. The Spark has no HDMI/DP
+  sink attached, so no sound on real hardware has been tried.
+- **Bluetooth over USB.** `dev/bt_hci.c` is the HCI command/event layer (reset,
+  read local version, inquiry, LE scan, pairing-less LE connect), proven only
+  against a controller simulator because QEMU 8.2.2 has no Bluetooth dongle.
+  `dev/usb_bt.c` reads the Spark adapter's real USB descriptors (MediaTek
+  `13d3:3630`); `dev/xhci_pipe.c` adds control, bulk and interrupt transfers.
+  The adapter needs MediaTek firmware that this work does **not** load, so what
+  the adapter answers before that is UNKNOWN. Default builds send nothing to any
+  Bluetooth adapter; `CK_BT=1` is a QEMU/inventory option refused in hardware staging.
+- **Tests.** `make -f stage.mk hda-test bt-test usb-bt-test` (with mutants) and the
+  QEMU gates `scripts/qemu_ck_hda_test.sh`, `scripts/qemu_ck_bt_test.sh`.
+
 ## Operator input and recovery access (C kernel)
 
 Status: **QEMU only.** CK gate `KEYBOARD` (rows 25-32, 30a-30c, 32a and 32b in

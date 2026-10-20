@@ -21,7 +21,8 @@ STAGE_OUT ?= $(abspath $(STAGE_DIR)/../../target/stage)
 # Own sources (image).
 STAGE_OWN_SRCS := $(STAGE_DIR)/dev/pci.c $(STAGE_DIR)/dev/mmio_window.c $(STAGE_DIR)/dev/disk_part.c $(STAGE_DIR)/dev/nvme_bind.c $(STAGE_DIR)/dev/nvme_shutdown.c $(STAGE_DIR)/dev/virtio_net.c \
                   $(STAGE_DIR)/dev/net_bind.c $(STAGE_DIR)/dev/net_udp.c $(STAGE_DIR)/dev/xhci_fence.c \
-                  $(STAGE_DIR)/dev/usb_hid.c $(STAGE_DIR)/dev/usb_kbd.c \
+                  $(STAGE_DIR)/dev/usb_hid.c $(STAGE_DIR)/dev/usb_kbd.c $(STAGE_DIR)/dev/hda.c $(STAGE_DIR)/dev/hda_fence.c \
+                  $(STAGE_DIR)/dev/bt_hci.c $(STAGE_DIR)/dev/usb_bt.c $(STAGE_DIR)/dev/xhci_pipe.c $(STAGE_DIR)/dev/usb_bt_phase.c \
                   $(STAGE_DIR)/dev/devices.c $(STAGE_DIR)/svc/security.c $(STAGE_DIR)/svc/store_boot.c \
                   $(STAGE_DIR)/svc/artifact_store.c $(STAGE_DIR)/svc/store_crash.c
 # Native modules, compiled unmodified.
@@ -289,3 +290,74 @@ hda-sanitize: $(STAGE_OUT)/hda_test_san
 
 stage-test: hda-test
 stage-sanitize: hda-sanitize
+
+# ---- L207: Bluetooth HCI host state machine against a software controller ----
+# dev/tests/bt_test.c links only dev/bt_hci.c (no kernel calls). Each mutant
+# (-DCK_TEST_BT_MUT=n in dev/bt_hci.c: 1 ignore command credits, 2 swap opcode
+# bytes, 3 inquiry class-of-device read at the wrong offset, 4 HCI status
+# ignored) must FAIL.
+BT_TEST_SRCS := $(STAGE_DIR)/dev/bt_hci.c $(STAGE_DIR)/dev/tests/bt_test.c
+BT_TEST_DEPS := $(BT_TEST_SRCS) $(STAGE_DIR)/dev/bt_hci.h
+BT_TEST_INC := -I$(STAGE_DIR)/dev
+BT_MUTANTS := 1 2 3 4
+
+$(STAGE_OUT)/bt_test: $(BT_TEST_DEPS)
+	@mkdir -p $(@D)
+	$(STAGE_CC) $(STAGE_HOST_FLAGS) $(BT_TEST_INC) -o $@ $(BT_TEST_SRCS)
+$(STAGE_OUT)/bt_test_san: $(BT_TEST_DEPS)
+	@mkdir -p $(@D)
+	$(STAGE_CC) $(STAGE_HOST_FLAGS) $(STAGE_SAN_FLAGS) $(BT_TEST_INC) -o $@ $(BT_TEST_SRCS)
+$(STAGE_OUT)/bt_test_mut%: $(BT_TEST_DEPS)
+	@mkdir -p $(@D)
+	$(STAGE_CC) $(STAGE_HOST_FLAGS) -DCK_TEST_BT_MUT=$* $(BT_TEST_INC) -o $@ $(BT_TEST_SRCS)
+
+.PHONY: bt-test bt-sanitize
+bt-test: $(STAGE_OUT)/bt_test $(foreach m,$(BT_MUTANTS),$(STAGE_OUT)/bt_test_mut$(m))
+	$(STAGE_OUT)/bt_test
+	@for m in $(BT_MUTANTS); do \
+	  if $(STAGE_OUT)/bt_test_mut$$m >$(STAGE_OUT)/bt_test_mut$$m.log 2>&1; then \
+	    echo "CK_BT_MUTANT: FAIL (mutant $$m passed the host checks)"; exit 1; fi; \
+	  n=$$(grep -c "^  FAIL " $(STAGE_OUT)/bt_test_mut$$m.log || true); \
+	  if [ "$$n" -lt 1 ]; then echo "CK_BT_MUTANT: FAIL (mutant $$m exited non-zero without a failing check: crash?)"; exit 1; fi; \
+	  echo "CK_BT_MUTANT $$m: caught by $$n failing checks"; \
+	done; echo "CK_BT_MUTANTS: PASS"
+bt-sanitize: $(STAGE_OUT)/bt_test_san
+	ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=print_stacktrace=1 $<
+
+stage-test: bt-test
+stage-sanitize: bt-sanitize
+
+# dev/tests/usb_bt_test.c links only dev/usb_bt.c (descriptor walk on the real
+# Spark adapter bytes, event reassembly, Bulk-Only packets). Mutants
+# (-DCK_TEST_UBT_MUT=n in dev/usb_bt.c: 1 composite device addressed as single
+# function, 2 reassembly hands out a short event, 3 CBW direction flag inverted)
+# must FAIL.
+UBT_TEST_SRCS := $(STAGE_DIR)/dev/usb_bt.c $(STAGE_DIR)/dev/tests/usb_bt_test.c
+UBT_TEST_DEPS := $(UBT_TEST_SRCS) $(STAGE_DIR)/dev/usb_bt.h $(STAGE_DIR)/dev/bt_hci.h
+UBT_MUTANTS := 1 2 3
+
+$(STAGE_OUT)/usb_bt_test: $(UBT_TEST_DEPS)
+	@mkdir -p $(@D)
+	$(STAGE_CC) $(STAGE_HOST_FLAGS) $(BT_TEST_INC) -o $@ $(UBT_TEST_SRCS)
+$(STAGE_OUT)/usb_bt_test_san: $(UBT_TEST_DEPS)
+	@mkdir -p $(@D)
+	$(STAGE_CC) $(STAGE_HOST_FLAGS) $(STAGE_SAN_FLAGS) $(BT_TEST_INC) -o $@ $(UBT_TEST_SRCS)
+$(STAGE_OUT)/usb_bt_test_mut%: $(UBT_TEST_DEPS)
+	@mkdir -p $(@D)
+	$(STAGE_CC) $(STAGE_HOST_FLAGS) -DCK_TEST_UBT_MUT=$* $(BT_TEST_INC) -o $@ $(UBT_TEST_SRCS)
+
+.PHONY: usb-bt-test usb-bt-sanitize
+usb-bt-test: $(STAGE_OUT)/usb_bt_test $(foreach m,$(UBT_MUTANTS),$(STAGE_OUT)/usb_bt_test_mut$(m))
+	$(STAGE_OUT)/usb_bt_test
+	@for m in $(UBT_MUTANTS); do \
+	  if $(STAGE_OUT)/usb_bt_test_mut$$m >$(STAGE_OUT)/usb_bt_test_mut$$m.log 2>&1; then \
+	    echo "CK_USB_BT_MUTANT: FAIL (mutant $$m passed the host checks)"; exit 1; fi; \
+	  n=$$(grep -c "^  FAIL " $(STAGE_OUT)/usb_bt_test_mut$$m.log || true); \
+	  if [ "$$n" -lt 1 ]; then echo "CK_USB_BT_MUTANT: FAIL (mutant $$m exited non-zero without a failing check: crash?)"; exit 1; fi; \
+	  echo "CK_USB_BT_MUTANT $$m: caught by $$n failing checks"; \
+	done; echo "CK_USB_BT_MUTANTS: PASS"
+usb-bt-sanitize: $(STAGE_OUT)/usb_bt_test_san
+	ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=print_stacktrace=1 $<
+
+stage-test: usb-bt-test
+stage-sanitize: usb-bt-sanitize

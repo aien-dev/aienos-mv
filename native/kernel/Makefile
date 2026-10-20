@@ -623,6 +623,95 @@ $(error CK_TEST_CONSOLE_MUTATION needs CK_CONSOLE_SESSION=1)
 endif
 endif
 
+# L207: CK_HDA_TONE=1 (TEST-ONLY QEMU image, only scripts/qemu_ck_hda_test.sh) plays a
+# sine tone through the first HD Audio output path inside the HD Audio DMA fence
+# (dev/hda_fence.c); every other image only brings the controller up, lists the
+# codecs and releases it. CK_TEST_HDA_MUTATION=no-revoke|grant-no-smmu|wrong-tone
+# (needs CK_HDA_TONE=1) breaks one fence or tone row on purpose for the gate's
+# red-before-green self-test. Both are refused with CK_HARDWARE_STAGING and
+# CK_QEMU_UNSAFE_DMA, and with CK_SERVICE.
+CK_HDA_TONE ?=
+CK_TEST_HDA_MUTATION ?=
+ifneq ($(strip $(CK_HDA_TONE)),)
+ifneq ($(strip $(CK_HDA_TONE)),1)
+$(error CK_HDA_TONE must be empty or 1)
+endif
+ifneq ($(strip $(CK_HARDWARE_STAGING)),)
+$(error CK_HDA_TONE (QEMU test tone) cannot be combined with CK_HARDWARE_STAGING)
+endif
+ifneq ($(strip $(CK_QEMU_UNSAFE_DMA)),)
+$(error CK_HDA_TONE cannot be combined with CK_QEMU_UNSAFE_DMA)
+endif
+ifneq ($(strip $(CK_SERVICE)),)
+$(error CK_HDA_TONE cannot be combined with CK_SERVICE)
+endif
+endif
+ifneq ($(strip $(CK_TEST_HDA_MUTATION)),)
+ifneq ($(strip $(CK_HDA_TONE)),1)
+$(error CK_TEST_HDA_MUTATION needs CK_HDA_TONE=1)
+endif
+HDA_MUT_NUM := $(if $(filter no-revoke,$(CK_TEST_HDA_MUTATION)),1,$(if $(filter grant-no-smmu,$(CK_TEST_HDA_MUTATION)),2,$(if $(filter wrong-tone,$(CK_TEST_HDA_MUTATION)),3,)))
+ifeq ($(HDA_MUT_NUM),)
+$(error CK_TEST_HDA_MUTATION must be one of no-revoke grant-no-smmu wrong-tone)
+endif
+endif
+
+# L207: Bluetooth over USB (dev/usb_bt_phase.c, inside the xHCI DMA fence, after
+# the keyboard phase). The default image links the phase as an empty function:
+# it sends nothing to any Bluetooth adapter.
+#   CK_BT=1           inventory of USB Bluetooth controllers (class e0/01/01) and
+#                     a live HCI bring-up: Reset, Read Local Version, Read
+#                     BD_ADDR, Set Event Mask. No firmware is loaded. Not run on
+#                     the Spark by L207; refused with CK_HARDWARE_STAGING until the
+#                     operator decides to try it.
+#   CK_BT_DISCOVER=1  (needs CK_BT=1) also an inquiry and an LE scan.
+#   CK_BT_TEST=1      TEST-ONLY QEMU image (only scripts/qemu_ck_bt_test.sh): bulk
+#                     and interrupt transfer proof on a usb-storage stick and a
+#                     usb-kbd, because this QEMU has no usb-bt-dongle.
+CK_BT ?=
+CK_BT_DISCOVER ?=
+CK_BT_TEST ?=
+ifneq ($(strip $(CK_BT)),)
+ifneq ($(strip $(CK_BT)),1)
+$(error CK_BT must be empty or 1)
+endif
+ifneq ($(strip $(CK_HARDWARE_STAGING)),)
+$(error CK_BT (live Bluetooth HCI bring-up) cannot be combined with CK_HARDWARE_STAGING)
+endif
+ifneq ($(strip $(CK_BT_TEST)),)
+$(error CK_BT and CK_BT_TEST are separate images)
+endif
+endif
+ifneq ($(strip $(CK_BT_DISCOVER)),)
+ifneq ($(strip $(CK_BT)),1)
+$(error CK_BT_DISCOVER needs CK_BT=1)
+endif
+endif
+ifneq ($(strip $(CK_BT_TEST)),)
+ifneq ($(strip $(CK_BT_TEST)),1)
+$(error CK_BT_TEST must be empty or 1)
+endif
+ifneq ($(strip $(CK_HARDWARE_STAGING)),)
+$(error CK_BT_TEST (QEMU transfer proof) cannot be combined with CK_HARDWARE_STAGING)
+endif
+ifneq ($(strip $(CK_QEMU_UNSAFE_DMA)),)
+$(error CK_BT_TEST cannot be combined with CK_QEMU_UNSAFE_DMA)
+endif
+ifneq ($(strip $(CK_SERVICE)),)
+$(error CK_BT_TEST cannot be combined with CK_SERVICE)
+endif
+endif
+CK_TEST_BT_MUTATION ?=
+ifneq ($(strip $(CK_TEST_BT_MUTATION)),)
+ifneq ($(strip $(CK_BT_TEST)),1)
+$(error CK_TEST_BT_MUTATION needs CK_BT_TEST=1)
+endif
+BT_MUT_NUM := $(if $(filter bulk-out-short,$(CK_TEST_BT_MUTATION)),1,$(if $(filter bulk-in-offset,$(CK_TEST_BT_MUTATION)),2,$(if $(filter intr-drop,$(CK_TEST_BT_MUTATION)),3,)))
+ifeq ($(BT_MUT_NUM),)
+$(error CK_TEST_BT_MUTATION must be one of bulk-out-short bulk-in-offset intr-drop)
+endif
+endif
+
 # CK_SERVICE=1 builds the resident production lifecycle image (core/lifecycle.c,
 # native v1 plan P03): after every boot stage the kernel serves bounded operator
 # requests on the serial console until "shutdown" (Store closed, NVMe released,
@@ -940,6 +1029,29 @@ STAGE_DMA_FLAGS += -DCK_CONSOLE_SESSION=1
 ifneq ($(strip $(CK_TEST_CONSOLE_MUTATION)),)
 FULL_NAME := full-test-console-mutation
 STAGE_DMA_FLAGS += -DCK_TEST_CONSOLE_MUTATION=1
+endif
+endif
+ifeq ($(strip $(CK_BT)),1)
+FULL_NAME := full-bt$(if $(strip $(CK_BT_DISCOVER)),-discover,)
+STAGE_DMA_FLAGS += -DCK_BT=1
+ifneq ($(strip $(CK_BT_DISCOVER)),)
+STAGE_DMA_FLAGS += -DCK_BT_DISCOVER=1
+endif
+endif
+ifeq ($(strip $(CK_BT_TEST)),1)
+FULL_NAME := full-bt-test
+STAGE_DMA_FLAGS += -DCK_BT_TEST=1
+ifneq ($(strip $(CK_TEST_BT_MUTATION)),)
+FULL_NAME := full-bt-test-$(strip $(CK_TEST_BT_MUTATION))
+STAGE_DMA_FLAGS += -DCK_TEST_XP_MUT=$(BT_MUT_NUM)
+endif
+endif
+ifeq ($(strip $(CK_HDA_TONE)),1)
+FULL_NAME := full-hda-tone
+STAGE_DMA_FLAGS += -DCK_HDA_TONE=1
+ifneq ($(strip $(CK_TEST_HDA_MUTATION)),)
+FULL_NAME := full-test-hda-$(strip $(CK_TEST_HDA_MUTATION))
+STAGE_DMA_FLAGS += -DCK_TEST_HDA_MUTATION=$(HDA_MUT_NUM)
 endif
 endif
 ifneq ($(strip $(CK_HARDWARE_STAGING)),)
