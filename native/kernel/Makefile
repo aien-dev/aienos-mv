@@ -1333,6 +1333,7 @@ HOST_SRCS := $(KDIR)/core/fmt.c $(KDIR)/core/acpi.c $(KDIR)/core/smmu.c $(KDIR)/
 TESTS := test_fmt test_frames test_pt test_acpi test_acpi_dev test_heap test_smmu test_sched test_ipc test_artifact test_osc_unit test_osc_launch test_osc_admit test_osc_receipt test_entropy test_handoff test_fbcon test_osh_op \
 	test_continuity_codec test_continuity_resolve test_continuity_commit test_continuity_recovery test_continuity_geometry \
 	test_continuity_subject test_continuity_subject_provision test_lifecycle test_console_rx test_klog test_klog_slot test_pi5 test_pi5_marker test_pi5_rng test_cpufeat test_dma_window test_pi5_pcie test_pi5_net test_pi5_gem test_unlock_req test_context test_agent_cmd test_artifact_card
+TESTS += test_gpu_sim
 HCFLAGS := -std=gnu11 -O1 -g -Wall -Wextra -Werror -I$(KDIR)/core -I$(KDIR)/mm -I$(KDIR)/tests -I$(BOOT)
 SANFLAGS := -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer
 
@@ -2435,6 +2436,38 @@ dma-window-mutants:
 	  if $(OUT)/host/test_dma_window_mut_$$m >/dev/null; then echo "MUTANT SURVIVED: $$m"; fail=1; else echo "mutant killed: $$m"; fi; \
 	done; test $$fail -eq 0
 .PHONY: test-dma-window dma-window-mutants
+
+# AIENOS-GB10 cut D, host side: GPU page tables, allocator and channel over a simulated GB10
+# (gpu/gpu_sim.c). Host test only, not linked into any image (dependency map: kernel-side D code waits for #163/B).
+GPU_SIM_SRCS := $(KDIR)/gpu/gmmu.c $(KDIR)/gpu/gpu_mem.c $(KDIR)/gpu/gpu_chan.c $(KDIR)/gpu/gpu_sim.c
+GPU_SIM_HDRS := $(KDIR)/gpu/gmmu.h $(KDIR)/gpu/gpu_mem.h $(KDIR)/gpu/gpu_chan.h $(KDIR)/gpu/gpu_sim.h
+GPU_SIM_DEPS := $(KDIR)/tests/test_gpu_sim.c $(GPU_SIM_SRCS) $(GPU_SIM_HDRS) $(KDIR)/tests/ck_test.h
+$(OUT)/host/test_gpu_sim: $(GPU_SIM_DEPS)
+	@mkdir -p $(dir $@)
+	$(HOSTCC) $(HCFLAGS) -I$(KDIR)/gpu -o $@ $< $(GPU_SIM_SRCS)
+$(OUT)/host-san/test_gpu_sim: $(GPU_SIM_DEPS)
+	@mkdir -p $(dir $@)
+	$(HOSTCC) $(HCFLAGS) $(SANFLAGS) -I$(KDIR)/gpu -o $@ $< $(GPU_SIM_SRCS)
+test-gpu-sim: $(OUT)/host/test_gpu_sim
+	$<
+# The three files that would run in the kernel must build with the kernel compiler and KCFLAGS and need no symbol from outside.
+gpu-freestanding:
+	@mkdir -p $(OUT)/host/gpu-fs
+	@for f in gmmu gpu_mem gpu_chan; do \
+	  $(KCC) $(KCFLAGS) -I$(KDIR)/gpu -c -o $(OUT)/host/gpu-fs/$$f.o $(KDIR)/gpu/$$f.c || exit 1; \
+	done; \
+	if nm -u $(OUT)/host/gpu-fs/*.o | grep -q .; then nm -u $(OUT)/host/gpu-fs/*.o; echo "gpu-freestanding: FAIL (undefined symbols)"; exit 1; fi; \
+	echo "gpu-freestanding: PASS (gmmu gpu_mem gpu_chan, no undefined symbols)"
+# Each mutant removes one check; test_gpu_sim must FAIL for every one.
+GPU_SIM_MUTANTS := NO_OVERLAP NO_PA_RANGE NO_VA_BITS NO_POOL_COUNT NO_INVAL_POLL NO_TIMEOUT_LATCH NO_QUARANTINE \
+	NO_POLLED_UNCACHED NO_GP_VA40 NO_RING_FULL NO_IDLE_QUARANTINE NO_MIXED_PAGES NO_INST_PDB NO_CHID_WIDTH NO_USERD_WIDTH
+gpu-sim-mutants:
+	@mkdir -p $(OUT)/host
+	@fail=0; for m in $(GPU_SIM_MUTANTS); do \
+	  $(HOSTCC) $(HCFLAGS) -DCK_GPU_MUTANT_$$m -I$(KDIR)/gpu -o $(OUT)/host/test_gpu_sim_mut_$$m $(KDIR)/tests/test_gpu_sim.c $(GPU_SIM_SRCS) || exit 1; \
+	  if $(OUT)/host/test_gpu_sim_mut_$$m >/dev/null; then echo "MUTANT SURVIVED: $$m"; fail=1; else echo "mutant killed: $$m"; fi; \
+	done; test $$fail -eq 0
+.PHONY: test-gpu-sim gpu-freestanding gpu-sim-mutants
 
 # AIENOS-PI5 PCIe root complex / RP1 enumerator logic over a fake register file. Not the hardware.
 PI5PCIE_SRCS := $(KDIR)/dev/pi5_pcie.c
