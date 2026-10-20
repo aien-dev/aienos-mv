@@ -137,10 +137,10 @@ Built by `scripts/aienos_run_windows_exe.sh`, which cross-builds for
 script fails if the exe names the build machine's home folder or imports any DLL that is
 not a Windows system DLL. The hypervisor DLLs are loaded at run time, from System32 only.
 
-OBSERVED on the MacBook, from commit `ebbf22e` (two rebuilds gave the same bytes):
+OBSERVED on the MacBook, from commit `b6f4977` (a clean rebuild gave the same bytes):
 
 ```text
-runner windows-x86_64 aienos-run-windows-x86_64.exe 1977811 d207ce8ebf776621b19de4eedc4c3e207f3c161ef71e91376f3f6667bc830868 aienos-run-windows-x86_64.exe
+runner windows-x86_64 aienos-run-windows-x86_64.exe 1977911 96d9968e19e2e3f53c6209fc3cf68daa334c4b25eec5468621aa876c656d4489 aienos-run-windows-x86_64.exe
 ```
 
 Put this line in the published manifest (before the `signature` line, then re-sign),
