@@ -848,6 +848,7 @@ static __attribute__((noreturn)) void kernel_main(void *arg)
                   (unsigned long long)tramp_pa);
     }
 
+    ck_x86_tpm_probe(h->rsdp, tsc_hz);
     const struct ck_x86_storage_result *st = ck_x86_storage(h->rsdp, &frames, tsc_hz, mm.top);
     ck_puts("kernel: alive\n");
     ck_printf("summary: cores=%u/%u timer=ok sata_disks=%u nvme_disks=%u gpt_valid=%u writes=none net=%s\n",

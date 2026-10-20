@@ -873,7 +873,7 @@ KCFLAGS := -std=gnu11 -O2 -Wall -Wextra -Werror -ffreestanding -nostdlib -fno-bu
 KLDFLAGS := -nostdlib -pie --no-dynamic-linker -z norelro -z noexecstack -z max-page-size=4096 --no-warn-rwx-segments \
 	-T $(BOOT)/image.ld
 
-CORE_C := $(BOOT)/efi_main.c $(BOOT)/efi_model.c $(BOOT)/efi_gop.c \
+CORE_C := $(BOOT)/efi_main.c $(BOOT)/efi_model.c $(BOOT)/efi_gop.c $(BOOT)/efi_time.c $(KDIR)/core/wallclock.c $(KDIR)/dev/tpm_crb.c \
 	$(KDIR)/arch/exception.c $(KDIR)/arch/gic.c $(KDIR)/arch/timer.c \
 	$(KDIR)/core/acpi.c $(KDIR)/core/acpi_dev.c $(KDIR)/core/acpi_platform.c $(KDIR)/core/console.c $(KDIR)/core/fbcon.c $(KDIR)/core/fmt.c \
 	$(KDIR)/core/kmain.c $(KDIR)/core/handoff_check.c $(KDIR)/core/libc_min.c $(KDIR)/core/report.c \
@@ -1332,7 +1332,7 @@ HOST_SRCS := $(KDIR)/core/fmt.c $(KDIR)/core/acpi.c $(KDIR)/core/smmu.c $(KDIR)/
 	$(KDIR)/core/line_rx.c $(KDIR)/core/klog.c $(KDIR)/core/klog_slot.c $(KDIR)/core/cpufeat.c $(KDIR)/core/unlock_req.c $(KDIR)/core/agent_cmd.c $(KDIR)/core/artifact_card.c
 TESTS := test_fmt test_frames test_pt test_acpi test_acpi_dev test_heap test_smmu test_sched test_ipc test_artifact test_osc_unit test_osc_launch test_osc_admit test_osc_receipt test_entropy test_handoff test_fbcon test_osh_op \
 	test_continuity_codec test_continuity_resolve test_continuity_commit test_continuity_recovery test_continuity_geometry \
-	test_continuity_subject test_continuity_subject_provision test_lifecycle test_console_rx test_klog test_klog_slot test_pi5 test_pi5_marker test_pi5_rng test_cpufeat test_dma_window test_pi5_pcie test_pi5_net test_pi5_gem test_unlock_req test_context test_agent_cmd test_artifact_card
+	test_continuity_subject test_continuity_subject_provision test_lifecycle test_console_rx test_klog test_klog_slot test_pi5 test_pi5_marker test_pi5_rng test_cpufeat test_dma_window test_pi5_pcie test_pi5_net test_pi5_gem test_unlock_req test_context test_agent_cmd test_artifact_card test_tpm_crb test_wallclock
 HCFLAGS := -std=gnu11 -O1 -g -Wall -Wextra -Werror -I$(KDIR)/core -I$(KDIR)/mm -I$(KDIR)/tests -I$(BOOT)
 SANFLAGS := -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer
 
@@ -2259,7 +2259,8 @@ IMACKERN_OBJS := $(IMACKERN_DIR)/efi_entry_x86_64.o $(IMACKERN_DIR)/efi_x86.o $(
 	$(IMACKERN_DIR)/frames.o $(IMACKERN_DIR)/heap.o $(IMACKERN_DIR)/libc_min.o \
 	$(IMACKERN_DIR)/ahci_x86.o $(IMACKERN_DIR)/disk_part.o $(IMACKERN_DIR)/disk.o \
 	$(IMACKERN_DIR)/pci_x86.o $(IMACKERN_DIR)/smp_x86.o $(IMACKERN_DIR)/disk_nvme.o \
-	$(IMACKERN_DIR)/tg3_x86.o $(IMACKERN_DIR)/report_x86.o $(IMACKERN_DIR)/aienos_net.o
+	$(IMACKERN_DIR)/tg3_x86.o $(IMACKERN_DIR)/report_x86.o $(IMACKERN_DIR)/aienos_net.o \
+	$(IMACKERN_DIR)/tpm_x86.o $(IMACKERN_DIR)/tpm_crb.o
 IMACKERN_HDRS := $(X86K)/x86.h $(BOOT)/handoff.h $(BOOT)/efi.h $(KDIR)/core/ck_internal.h $(KDIR)/include/ck.h
 $(IMACKERN_DIR)/efi_entry_x86_64.o: $(BOOT)/efi_entry_x86_64.S
 $(IMACKERN_DIR)/efi_x86.o: $(X86K)/efi_x86.c $(IMACKERN_HDRS)
@@ -2283,6 +2284,8 @@ $(IMACKERN_DIR)/disk_nvme.o: $(NATIVE)/disk/disk_nvme.c $(NATIVE)/disk/disk_nvme
 $(IMACKERN_DIR)/tg3_x86.o: $(X86K)/tg3_x86.c $(IMACKERN_HDRS) $(KDIR)/mm/frames.h
 $(IMACKERN_DIR)/report_x86.o: $(X86K)/report_x86.c $(X86K)/report_x86.h $(IMACKERN_HDRS) $(NATIVE)/net/aienos_net.h
 $(IMACKERN_DIR)/aienos_net.o: $(NATIVE)/net/aienos_net.c $(NATIVE)/net/aienos_net.h
+$(IMACKERN_DIR)/tpm_x86.o: $(X86K)/tpm_x86.c $(IMACKERN_HDRS) $(KDIR)/core/acpi.h $(KDIR)/dev/tpm_crb.h
+$(IMACKERN_DIR)/tpm_crb.o: $(KDIR)/dev/tpm_crb.c $(KDIR)/dev/tpm_crb.h
 $(IMACKERN_OBJS):
 	@mkdir -p $(dir $@)
 	$(X86CC) $(IMACKERN_CFLAGS) -DAIENOS_COMMIT='"$(AIENOS_COMMIT)"' -c -o $@ $<
@@ -2396,6 +2399,26 @@ test-pi5-rng: $(OUT)/host/test_pi5_rng
 $(OUT)/host-san/test_pi5_rng: $(KDIR)/tests/test_pi5_rng.c $(PI5_RNG_SRCS) $(KDIR)/tests/ck_test.h $(KDIR)/dev/pi5_rng.h $(KDIR)/core/entropy.h
 	@mkdir -p $(dir $@)
 	$(HOSTCC) $(HCFLAGS) $(SANFLAGS) -DCK_RNG200_SPINS=1000 -I$(KDIR)/dev -o $@ $< $(PI5_RNG_SRCS)
+
+# L200 TPM 2.0 CRB driver (dev/tpm_crb.c): unit mode over a register-level CRB simulator. The same binary in
+# "swtpm" mode is driven by scripts/tpm_crb_swtpm_test.sh against a real swtpm.
+TPM_CRB_SRCS := $(KDIR)/dev/tpm_crb.c
+$(OUT)/host/test_tpm_crb: $(KDIR)/tests/test_tpm_crb.c $(TPM_CRB_SRCS) $(KDIR)/tests/ck_test.h $(KDIR)/dev/tpm_crb.h
+	@mkdir -p $(dir $@)
+	$(HOSTCC) $(HCFLAGS) -I$(KDIR)/dev -o $@ $< $(TPM_CRB_SRCS)
+test-tpm-crb: $(OUT)/host/test_tpm_crb
+	$<
+$(OUT)/host-san/test_tpm_crb: $(KDIR)/tests/test_tpm_crb.c $(TPM_CRB_SRCS) $(KDIR)/tests/ck_test.h $(KDIR)/dev/tpm_crb.h
+	@mkdir -p $(dir $@)
+	$(HOSTCC) $(HCFLAGS) $(SANFLAGS) -I$(KDIR)/dev -o $@ $< $(TPM_CRB_SRCS)
+
+# L200 wall clock (core/wallclock.c): pure EFI_TIME / Unix / counter arithmetic against GNU date reference values.
+$(OUT)/host/test_wallclock: $(KDIR)/tests/test_wallclock.c $(KDIR)/core/wallclock.c $(KDIR)/core/wallclock.h $(KDIR)/tests/ck_test.h
+	@mkdir -p $(dir $@)
+	$(HOSTCC) $(HCFLAGS) -o $@ $< $(KDIR)/core/wallclock.c
+$(OUT)/host-san/test_wallclock: $(KDIR)/tests/test_wallclock.c $(KDIR)/core/wallclock.c $(KDIR)/core/wallclock.h $(KDIR)/tests/ck_test.h
+	@mkdir -p $(dir $@)
+	$(HOSTCC) $(HCFLAGS) $(SANFLAGS) -o $@ $< $(KDIR)/core/wallclock.c
 
 FORCE:
 .PHONY: uefi-vars slot-loader slot-loader-check pi5-diag imac-diag imac-kernel

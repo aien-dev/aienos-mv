@@ -54,6 +54,7 @@ void ck_boot_artifact_card_find(EFI_HANDLE image, EFI_SYSTEM_TABLE *st);
 void ck_boot_klog_find(EFI_HANDLE image, EFI_SYSTEM_TABLE *st);
 #endif
 void ck_boot_gop_find(EFI_SYSTEM_TABLE *st, struct ck_handoff *h);
+void ck_boot_wallclock_read(EFI_SYSTEM_TABLE *st);
 
 static void efi_write(const char *s, size_t n)
 {
@@ -133,6 +134,8 @@ EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE *st)
     ck_report_header("pre_exit");
     /* The GOP framebuffer for the kernel's screen console (efi_gop.c, CHANDOF3). */
     ck_boot_gop_find(st, h);
+    /* The firmware wall clock, read once while runtime services are still ours to call (efi_time.c, L200). */
+    ck_boot_wallclock_read(st);
 #ifdef CK_TEST_STALE_HANDOFF
     ck_puts("handoff: TEST-ONLY stale handoff image: the kernel gets a CHANDOF2 record; never counts toward a PASS\n");
 #endif

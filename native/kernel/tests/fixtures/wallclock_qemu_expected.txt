@@ -1,0 +1,3 @@
+wallclock: source=efi-gettime boot_utc=<utc> tz=unspecified-as-utc
+wallclock: now_utc=<utc> unix=<n> since_boot_read_s=<n> since_boot_read_ms=<n>
+wallclock: final_utc=<utc> unix=<n> since_boot_read_s=<n> since_boot_read_ms=<n>

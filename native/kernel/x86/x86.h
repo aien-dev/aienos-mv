@@ -98,6 +98,8 @@ const struct ck_x86_storage_result *ck_x86_storage(uint64_t rsdp, struct ck_fram
                                                    uint64_t map_top);
 /* kmain_x86.c: maps [pa, pa + len) uncached when it lies above the identity map. */
 int ck_x86_map_mmio(uint64_t pa, uint64_t len);
+/* TPM 2.0 CRB probe (tpm_x86.c, L200): prints "tpm: ..." lines; "tpm: none" without an ACPI TPM2 table. */
+void ck_x86_tpm_probe(uint64_t rsdp, uint64_t tsc_hz);
 /* ahci_x86.c: one AHCI controller at abar, polled, read-only. */
 void ck_x86_ahci_start(unsigned ctrl, uint64_t abar, struct ck_frames *fr, uint64_t tsc_hz);
 unsigned ck_x86_ahci_disks(void);

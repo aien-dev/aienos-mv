@@ -114,17 +114,32 @@ typedef struct {
     EFI_CONFIGURATION_TABLE *ConfigurationTable;
 } EFI_SYSTEM_TABLE;
 
-/* Runtime services: only ResetSystem is typed (UEFI 2.x section 8.5.1). */
+/* Runtime services: ResetSystem (UEFI 2.x section 8.5.1) and GetTime (section 8.3) are typed. */
+typedef struct {
+    uint16_t Year;
+    uint8_t Month, Day, Hour, Minute, Second, Pad1;
+    uint32_t Nanosecond;
+    int16_t TimeZone;
+    uint8_t Daylight, Pad2;
+} EFI_TIME;
+_Static_assert(sizeof(EFI_TIME) == 16, "EFI_TIME");
+typedef struct {
+    uint32_t Resolution;
+    uint32_t Accuracy;
+    uint8_t SetsToZero;
+} EFI_TIME_CAPABILITIES;
 typedef enum { EfiResetCold, EfiResetWarm, EfiResetShutdown, EfiResetPlatformSpecific } EFI_RESET_TYPE;
 typedef struct {
     EFI_TABLE_HEADER Hdr;
-    void *GetTime, *SetTime, *GetWakeupTime, *SetWakeupTime;
+    EFI_STATUS (*GetTime)(EFI_TIME *Time, EFI_TIME_CAPABILITIES *Capabilities);
+    void *SetTime, *GetWakeupTime, *SetWakeupTime;
     void *SetVirtualAddressMap, *ConvertPointer;
     void *GetVariable, *GetNextVariableName, *SetVariable;
     void *GetNextHighMonotonicCount;
     void (*ResetSystem)(EFI_RESET_TYPE ResetType, EFI_STATUS ResetStatus, uint64_t DataSize, void *ResetData);
 } EFI_RUNTIME_SERVICES;
 _Static_assert(offsetof(EFI_RUNTIME_SERVICES, ResetSystem) == 0x68, "ResetSystem");
+_Static_assert(offsetof(EFI_RUNTIME_SERVICES, GetTime) == 0x18, "GetTime");
 
 /* Offsets fixed by the specification (LP64). */
 _Static_assert(offsetof(EFI_BOOT_SERVICES, AllocatePages) == 0x28, "AllocatePages");

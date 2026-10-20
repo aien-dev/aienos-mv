@@ -14,6 +14,7 @@
 #include "cpufeat.h"
 #include "handoff_check.h"
 #include "frames.h"
+#include "wallclock.h"
 #ifdef CK_PI5_NET
 #include "../dev/pi5_net.h"
 #endif
@@ -204,6 +205,23 @@ static __attribute__((noreturn)) void ck_el1_main(void *arg)
               (unsigned long long)(tw.ticks ? ck_counter_to_us(tw.span / tw.ticks, f) : 0),
               (unsigned long long)ck_counter_to_us(tw.max_interval, f));
 
+    /* Wall clock (L200): the reading the stub took through UEFI GetTime, advanced by the counter. */
+    {
+        const struct ck_wallclock *w = &ck_wallclock_boot;
+        int64_t now;
+        struct ck_civil c0, c1;
+        if (w->valid && ck_wallclock_now(w, ck_rd(cntpct_el0), &now) == 0) {
+            ck_unix_to_civil(w->unix0, &c0);
+            ck_unix_to_civil(now, &c1);
+            ck_printf("wallclock: source=efi-gettime boot_utc=%04d-%02u-%02uT%02u:%02u:%02uZ tz=%s\n", c0.year, c0.month,
+                      c0.day, c0.hour, c0.minute, c0.second, w->tz_known ? "given" : "unspecified-as-utc");
+            ck_printf("wallclock: now_utc=%04d-%02u-%02uT%02u:%02u:%02uZ unix=%lld since_boot_read_s=%lld since_boot_read_ms=%llu\n", c1.year,
+                      c1.month, c1.day, c1.hour, c1.minute, c1.second, (long long)now, (long long)(now - w->unix0),
+                      (unsigned long long)((ck_rd(cntpct_el0) - w->cnt0) * 1000 / w->freq));
+        } else {
+            ck_printf("wallclock: unavailable (GetTime status=0x%llx)\n", (unsigned long long)w->status);
+        }
+    }
     uint64_t spsel = ck_rd(spsel);
     ck_printf("exception_level: EL%u\n", el);
     ck_puts("kernel: alive\n");
@@ -324,6 +342,18 @@ static __attribute__((noreturn)) void ck_el1_main(void *arg)
         ck_printf("stage lifecycle: %s rc=%d\n", lrc == 0 ? "ok" : "FAIL", lrc);
     }
 
+    /* Wall clock again at the end of the run: the counter, not the firmware, moved it (L200 gate). */
+    {
+        const struct ck_wallclock *w = &ck_wallclock_boot;
+        int64_t now;
+        struct ck_civil c;
+        if (w->valid && ck_wallclock_now(w, ck_rd(cntpct_el0), &now) == 0) {
+            ck_unix_to_civil(now, &c);
+            ck_printf("wallclock: final_utc=%04d-%02u-%02uT%02u:%02u:%02uZ unix=%lld since_boot_read_s=%lld since_boot_read_ms=%llu\n", c.year,
+                      c.month, c.day, c.hour, c.minute, c.second, (long long)now, (long long)(now - w->unix0),
+                      (unsigned long long)((ck_rd(cntpct_el0) - w->cnt0) * 1000 / w->freq));
+        }
+    }
     ck_set_stage("final");
     ck_puts("\n");
     ck_report_header("final");
