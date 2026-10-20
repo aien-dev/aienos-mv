@@ -17,7 +17,10 @@
  * device broken (sticky); the caller must reset and re-init.
  *
  * Features: VIRTIO_F_VERSION_1 is required; VIRTIO_NET_F_MAC and
- * VIRTIO_F_ACCESS_PLATFORM are accepted when offered (virtio 1.x 6.1: a driver
+ * VIRTIO_F_ACCESS_PLATFORM are accepted when offered; VIRTIO_NET_F_MTU is
+ * accepted when offered with an mtu in 68..1500 (read before FEATURES_OK, as
+ * 3.1.1 allows), and vnet_tx then caps frames at 14 + mtu. Apple
+ * Virtualization.framework refuses FEATURES_OK without it (virtio 1.x 6.1: a driver
  * SHOULD accept ACCESS_PLATFORM; with it the device DMAs through the
  * platform IOMMU, so `dma` below is an IOMMU bus address). With
  * VNET_INIT_REQUIRE_ACCESS_PLATFORM the driver refuses (fail closed, before
@@ -41,6 +44,7 @@
 #define VNET_BUF_LEN (VNET_HDR_LEN + VNET_FRAME_MAX)
 #define VNET_BUF_STRIDE 1536u
 
+#define VNET_F_MTU 3u                /* device advises an MTU (device config offset 10) */
 #define VNET_F_MAC 5u
 #define VNET_F_VERSION_1 32u
 #define VNET_F_ACCESS_PLATFORM 33u  /* VIRTIO_F_ACCESS_PLATFORM (was IOMMU_PLATFORM) */
@@ -125,7 +129,9 @@ typedef struct {
     uint8_t *mem;
     uint64_t dma;
     size_t mem_len;
+    uint64_t offered;       /* device feature bits (diagnostics) */
     uint64_t features;      /* accepted feature bits */
+    uint16_t mtu;           /* negotiated VIRTIO_NET_F_MTU value, else 0 (1500 implied) */
     uint8_t has_mac;
     uint8_t mac[6];
     uint8_t broken;

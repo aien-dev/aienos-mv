@@ -236,6 +236,7 @@ vnet_err vnet_init_flags(vnet_dev *d, const vnet_ops *ops, const virtio_pci_caps
     uint64_t offered = rd(d, VNET_WIN_COMMON, VNET_CC_DF, 4);
     wr(d, VNET_WIN_COMMON, VNET_CC_DFSELECT, 4, 1);
     offered |= (uint64_t)rd(d, VNET_WIN_COMMON, VNET_CC_DF, 4) << 32;
+    d->offered = offered;
     if (!(offered >> VNET_F_VERSION_1 & 1)) return fail(d, VNET_E_NO_VERSION_1);
     /* Fail closed: a caller that confines DMA with an IOMMU must not run a
      * device that would DMA around it. */
@@ -245,6 +246,19 @@ vnet_err vnet_init_flags(vnet_dev *d, const vnet_ops *ops, const virtio_pci_caps
         (1ull << VNET_F_VERSION_1) | (offered & ((1ull << VNET_F_MAC) | (1ull << VNET_F_ACCESS_PLATFORM)));
     if (accept >> VNET_F_MAC & 1) {
         if (caps->device_cfg.length < 6) return fail(d, VNET_E_CAPS);
+    }
+    /* VIRTIO_NET_F_MTU: only an mtu our RX buffers hold (5.1.4.2) and no
+     * smaller than IPv4 needs. 3.1.1 step 4 lets the driver read device
+     * config before FEATURES_OK; config generation is not settled yet, so
+     * read until two reads agree. */
+    if (offered >> VNET_F_MTU & 1 && caps->device_cfg.length >= 12) {
+        uint32_t m = rd(d, VNET_WIN_DEVICE, 10, 2), t = 0;
+        for (uint32_t m2; (m2 = rd(d, VNET_WIN_DEVICE, 10, 2)) != m; m = m2)
+            if (++t >= VNET_CFGGEN_TRIES) return fail(d, VNET_E_CONFIG);
+        if (m >= 68 && m <= VNET_FRAME_MAX - 14) {
+            accept |= 1ull << VNET_F_MTU;
+            d->mtu = (uint16_t)m;
+        }
     }
     wr(d, VNET_WIN_COMMON, VNET_CC_GFSELECT, 4, 0);
     wr(d, VNET_WIN_COMMON, VNET_CC_GF, 4, (uint32_t)accept);
@@ -307,7 +321,7 @@ vnet_err vnet_tx_reclaim(vnet_dev *d, unsigned *reclaimed)
 
 vnet_err vnet_tx(vnet_dev *d, const uint8_t *frame, size_t len)
 {
-    if (!d || !frame || len < 14 || len > VNET_FRAME_MAX) return VNET_E_ARG;
+    if (!d || !frame || len < 14 || len > VNET_FRAME_MAX || (d->mtu && len > 14u + d->mtu)) return VNET_E_ARG;
     if (d->broken) return VNET_E_BROKEN;
     vnet_queue *q = &d->q[VNET_TX_QUEUE];
     if (q->in_flight >= q->size) return VNET_E_FULL;

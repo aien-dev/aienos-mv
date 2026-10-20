@@ -399,7 +399,7 @@ int ck_net_bind_selftest(const pci_func *f, const virtio_pci_caps *caps)
     vnet_err e = vnet_init_flags(&n->dev, &ops, caps, mem, phys, need, CK_NET_QSIZE,
                                  hyp ? 0 : VNET_INIT_REQUIRE_ACCESS_PLATFORM);
     if (e != VNET_OK) {
-        ck_printf("virtio_net: init FAIL (%s)\n", vnet_err_name(e));
+        ck_printf("virtio_net: init FAIL (%s) offered=%llx\n", vnet_err_name(e), (unsigned long long)n->dev.offered);
         ck_net_release();
         return CK_NET_E_INIT;
     }

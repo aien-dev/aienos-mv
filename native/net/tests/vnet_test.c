@@ -106,9 +106,10 @@ typedef struct {
     uint16_t numq, qsel;
     simq q[2];
     uint8_t mac[6];
+    uint16_t mtu;
     uint32_t mult;
     /* knobs */
-    int refuse_features, reset_stuck, cfggen_unstable, preenabled;
+    int refuse_features, reset_stuck, cfggen_unstable, preenabled, require_mtu;
     uint32_t noff_override;
     /* observations */
     unsigned notifies[2], faults, status_writes;
@@ -129,7 +130,7 @@ static void s32(uint8_t *p, uint32_t v) { memcpy(p, &v, 4); }
 static uint32_t sim_read(void *ctx, vnet_window w, uint32_t off, unsigned width)
 {
     sim *s = ctx;
-    if (w == VNET_WIN_DEVICE) return off < 6 && width == 1 ? s->mac[off] : 0;
+    if (w == VNET_WIN_DEVICE) return off < 6 && width == 1 ? s->mac[off] : off == 10 && width == 2 ? s->mtu : 0;
     if (w != VNET_WIN_COMMON) return 0;
     simq *q = &s->q[s->qsel < 2 ? s->qsel : 0];
     switch (off) {
@@ -160,7 +161,9 @@ static void sim_write(void *ctx, vnet_window w, uint32_t off, unsigned width, ui
         s->status_writes++;
         if (v == 0) { s->status = 0; for (int i = 0; i < 2; i++) { s->q[i].enable = s->preenabled; s->q[i].size = s->q[i].max; s->q[i].last_avail = s->q[i].used_idx = 0; } break; }
         if ((v & VNET_S_FEATURES_OK) && !(s->status & VNET_S_FEATURES_OK)) {
-            if (s->refuse_features || (s->drv_features & ~s->dev_features)) v &= ~VNET_S_FEATURES_OK;
+            if (s->refuse_features || (s->drv_features & ~s->dev_features) ||
+                (s->require_mtu && !(s->drv_features >> VNET_F_MTU & 1)))
+                v &= ~VNET_S_FEATURES_OK;
         }
         s->status = (uint8_t)v;
         break;
@@ -461,6 +464,41 @@ static void test_datapath(void)
 }
 
 /* hostile completions: each must be refused and leave the device broken */
+/* VIRTIO_NET_F_MTU. Apple Virtualization.framework (macOS 26, M2) offers
+ * 0x5300119ab and refuses FEATURES_OK unless the driver accepts MTU (bit 3);
+ * OBSERVED under aienos-run. Accepted only for an mtu in 68..1500; vnet_tx
+ * then caps the frame at 14 + mtu. */
+static void test_mtu(void)
+{
+    sim s; vnet_dev d; uint8_t f[VNET_FRAME_MAX];
+    memset(f, 0xab, sizeof f);
+    sim_reset(&s, region, DMA, sizeof region);
+    s.dev_features = 0x5300119abull; s.require_mtu = 1; s.mtu = 1500;
+    EQ(bring_up(&d, &s, 16), VNET_OK);
+    EQ(s.drv_features, (1ull << VNET_F_VERSION_1) | (1ull << VNET_F_MAC) | (1ull << VNET_F_MTU));
+    EQ(d.mtu, 1500);
+    EQ(vnet_tx(&d, f, VNET_FRAME_MAX), VNET_OK);
+
+    sim_reset(&s, region, DMA, sizeof region);
+    s.dev_features |= 1ull << VNET_F_MTU; s.mtu = 1400;
+    EQ(bring_up(&d, &s, 16), VNET_OK);
+    EQ(d.mtu, 1400);
+    EQ(vnet_tx(&d, f, 14 + 1400 + 1), VNET_E_ARG);
+    EQ(vnet_tx(&d, f, 14 + 1400), VNET_OK);
+
+    /* an mtu the RX buffers cannot hold, or below IPv4's 68: declined, so a
+     * device that insists refuses FEATURES_OK (fail closed, not truncation) */
+    int bad[] = {9000, 1501, 67, 0};
+    for (unsigned i = 0; i < sizeof bad / sizeof bad[0]; i++) {
+        sim_reset(&s, region, DMA, sizeof region);
+        s.dev_features |= 1ull << VNET_F_MTU; s.mtu = (uint16_t)bad[i];
+        EQ(bring_up(&d, &s, 16), VNET_OK);
+        EQ(d.mtu, 0); EQ(s.drv_features >> VNET_F_MTU & 1, 0);
+        s.require_mtu = 1;
+        EQ(bring_up(&d, &s, 16), VNET_E_FEATURES);
+    }
+}
+
 static void test_hostile(void)
 {
     sim s; vnet_dev d;
@@ -591,6 +629,7 @@ int main(void)
     printf("VNET_ACCESS_PLATFORM_SIM: %s (bit 33 accepted when offered; required + not offered refused before FEATURES_OK)\n",
            failures == ap_before ? "PASS" : "FAIL");
     test_datapath();
+    test_mtu();
     test_hostile();
     test_m6a_udp();
     printf("vnet_test: %d checks, %d failures\n", checks, failures);
