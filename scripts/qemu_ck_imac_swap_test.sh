@@ -110,7 +110,7 @@ boot() {
         -drive if=pflash,format=raw,readonly=on,file="${code_fd}" \
         -drive if=pflash,format=raw,file="${v}" \
         -drive if=none,id=esp,format=raw,file="$1" -device ide-hd,drive=esp,bus=ide.0 \
-        -drive if=none,id=data,format=raw,file="$2" -device ide-hd,drive=data,bus=ide.1 \
+        -drive if=none,id=data,format=raw,file="$2" -device "ide-hd,drive=data,bus=ide.1,model=APPLE HDD ST1000DM003" \
         -drive if=none,id=swap,format=raw,file="$3" -device ide-hd,drive=swap,bus=ide.2 \
         -nographic -serial file:"$4" -no-reboot 2>/dev/null &
     qpid=$!
