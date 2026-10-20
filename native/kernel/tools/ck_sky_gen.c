@@ -33,7 +33,7 @@
  *
  * Usage: ck_sky_gen --cache DIR --out sky_data.c [--report FILE]
  *        [--inputs FILE] [--ra DEG --dec DEG] [--fov DEG] [--roll DEG]
- *        [--mag LIMIT] [--grid N] [--boost X] [--skyglow MAG]
+ *        [--mag LIMIT] [--grid N] [--gain X] [--skyglow MAG]
  *        [--mw-top-s10 X] [--exposure X]
  * Host tool only; plain C11 and libm.
  */
@@ -46,6 +46,13 @@
 #include <time.h>
 
 #define EPOCH 2026.8 /* the stars are moved along their proper motion to this year */
+/* The HEALPix level of the Gaia aggregates: 6 is 49152 cells (nside 64), 7 is 196608 (nside 128).
+ * scripts/ck_sky_gen.sh sets it (SKY_HPX_LEVEL); 6 is the committed default. */
+#ifndef HPX_LEVEL
+#define HPX_LEVEL 6
+#endif
+#define NSIDE (1 << HPX_LEVEL)
+#define NCELLS (12 * NSIDE * NSIDE)
 
 /* The screen shape the grid is made for: centre of the view at half the width
  * and 40% of the height (where allen_ui.c puts the merger); rows cover a 16:10
@@ -669,7 +676,7 @@ typedef struct {
  * Returns array of NCELLS (49152) cells indexed by hpx6; unvisited cells are zero. */
 static gaia_cell_t *parse_gaia_csv(const char *flux_path, const char *dust_path)
 {
-#define NCELLS 49152
+
     gaia_cell_t *cells = xmalloc(NCELLS * sizeof *cells);
     for (int i = 0; i < NCELLS; i++) cells[i] = (gaia_cell_t){0};
 
@@ -743,8 +750,13 @@ static double *gaia_to_grid(const gaia_cell_t *cells, double flux_gain)
         bprp += ebv * 0.3;  /* add dust reddening */
         /* Milky Way colour: warm orange-yellow in the galactic plane, cooler at the poles.
          * co: orange-red offset; cg: green offset (in the same linear units as luma_lin). */
-        double co = luma_lin * (bprp - 0.3) * 0.20;   /* ~20% orange tint relative to luma */
-        double cg = luma_lin * 0.08 * (1.0 - fabs(bprp - 0.8));  /* small green tint at mid-colors */
+        /* Colour at fixed luminance: the three channel weights have Y = 0.2126 R + 0.7152 G + 0.0722 B
+         * equal to 1, so the cell's luminance (its light) is exactly luma_lin and the colour only
+         * moves the light between the channels. An orange tint from BP-RP (t), a small green one. */
+        double t = 0.2 * (bprp - 0.3);
+        double wR = 1.0 + t, wB = 1.0 - t, wG = 1.0 + 0.08 * (1.0 - fabs(bprp - 0.8));
+        double Yw = 0.2126 * wR + 0.7152 * wG + 0.0722 * wB;
+        double r_lin = luma_lin * wR / Yw, g_lin = luma_lin * wG / Yw, b_lin = luma_lin * wB / Yw;
 
         /* Splat onto surrounding grid points (within 1.5 deg) */
         int j0 = (int)((90.0 - dec - 1.5) + 0.5);
@@ -768,9 +780,9 @@ static double *gaia_to_grid(const gaia_cell_t *cells, double flux_gain)
                 double dra_deg = dra * cos_dec;
                 if (dra_deg * dra_deg + ddec * ddec > 2.25) continue;
                 size_t off = (size_t)j * (size_t)(GCOLS + 1) + (size_t)i;
-                grid[off * 3]     += luma_lin;
-                grid[off * 3 + 1] += co;
-                grid[off * 3 + 2] += cg;
+                grid[off * 3]     += r_lin;
+                grid[off * 3 + 1] += g_lin;
+                grid[off * 3 + 2] += b_lin;
                 count[off]++;
             }
         }
@@ -810,7 +822,7 @@ static double *gaia_to_grid(const gaia_cell_t *cells, double flux_gain)
 
 typedef struct {
     const char *cache, *out, *report, *inputs;
-    double ra, dec, fov, roll, mag, boost, skyglow, mw_top_s10, exposure;
+    double ra, dec, fov, roll, mag, gain, skyglow, mw_top_s10, exposure;
     int have_ra, have_dec, grid;
     double glow_lin, g_phys;
 } opts_t;
@@ -864,7 +876,7 @@ static void emit(const opts_t *a, const view_t *view, const sel_t *sel, size_t n
 int main(int argc, char **argv)
 {
     opts_t a = {0};
-    a.fov = 80.0, a.mag = 6.5, a.grid = 240, a.boost = 5.0, a.skyglow = 22.0, a.mw_top_s10 = 900.0, a.exposure = 0.06;
+    a.fov = 80.0, a.mag = 6.5, a.grid = 240, a.gain = 1.2, a.skyglow = 22.0, a.mw_top_s10 = 678.0, a.exposure = 0.06;
     for (int i = 1; i < argc; i++) {
         const char *k = argv[i];
         const char *v = i + 1 < argc ? argv[i + 1] : NULL;
@@ -881,7 +893,7 @@ int main(int argc, char **argv)
         else if (!strcmp(k, "--roll")) a.roll = atof(v);
         else if (!strcmp(k, "--mag")) a.mag = atof(v);
         else if (!strcmp(k, "--grid")) a.grid = atoi(v);
-        else if (!strcmp(k, "--boost")) a.boost = atof(v);
+        else if (!strcmp(k, "--gain")) a.gain = atof(v);
         else if (!strcmp(k, "--skyglow")) a.skyglow = atof(v);
         else if (!strcmp(k, "--mw-top-s10")) a.mw_top_s10 = atof(v);
         else if (!strcmp(k, "--exposure")) a.exposure = atof(v);
@@ -991,15 +1003,16 @@ int main(int argc, char **argv)
     double star0 = a.exposure * (PI * r0 * r0 / 4) / 0.8 * pow(10, 0.4 * 6.5);
     double px_deg2 = (a.fov / 1920.0) * (a.fov / 1920.0);
     double s10 = 1e-4 * star0 * px_deg2; /* linear light per design px of 1 S10 */
-    a.glow_lin = pow(10, 0.4 * (27.78 - a.skyglow)) * s10 * a.boost;
+    /* The dark sky's own glow is physical: no gain on it. The gain (--gain) is on the Milky Way only. */
+    a.glow_lin = pow(10, 0.4 * (27.78 - a.skyglow)) * s10;
     report("display: a magnitude 6.5 star peaks at %.3f linear (sRGB level %.0f); "
            "a magnitude 0 star holds %.1f linear x design px; 1 S10 is %.3g linear per design px",
            a.exposure, srgb_encode(a.exposure), star0, s10);
-    gaia_cell_t *cells = parse_gaia_csv(path_join(a.cache, "gaia_hpx6.csv"),
-                                        path_join(a.cache, "gaia_dust.csv"));
+    gaia_cell_t *cells = parse_gaia_csv(path_join(a.cache, HPX_LEVEL == 7 ? "gaia_hpx7.csv" : "gaia_hpx6.csv"),
+                                        path_join(a.cache, HPX_LEVEL == 7 ? "gaia_dust7.csv" : "gaia_dust.csv"));
     /* Compute direction (ra, dec) of each HEALPix nested cell (nside=64) */
     for (int k = 0; k < NCELLS; k++)
-        healpix_nest_ang(64, k, &cells[k].ra, &cells[k].dec);
+        healpix_nest_ang(NSIDE, k, &cells[k].ra, &cells[k].dec);
     /* Calibrate flux: scale so that the 95th-percentile cell g_flux reaches a.mw_top_s10.
      * a.mw_top_s10 default 900 S10; Galactic centre exceeds this and is clipped by gaia_to_grid. */
     double *flux_vals = xmalloc(NCELLS * sizeof *flux_vals);
@@ -1013,9 +1026,9 @@ int main(int argc, char **argv)
     double flux_gain = peak_flux > 0 ? 1.0 / peak_flux : 1.0; /* normalise to [0,1]; emit() scales by g_phys */
     long nnonempty = 0;
     for (int k = 0; k < NCELLS; k++) if (cells[k].nsrc > 0) nnonempty++;
-    report("Gaia DR3 Milky Way: %d HEALPix level-6 cells (nside=64), %ld non-empty; "
-           "95th-percentile G flux %.3g; flux_gain=%.4g; sky glow %.5f linear/design-px (boost x%.2f)",
-           NCELLS, nnonempty, peak_flux, flux_gain, a.glow_lin, a.boost);
+    report("Gaia DR3 Milky Way: %d HEALPix level-%d cells (nside %d), %ld non-empty; "
+           "sky glow %.5f linear/design-px (V %.1f, physical, no gain)",
+           NCELLS, HPX_LEVEL, NSIDE, nnonempty, a.glow_lin, a.skyglow);
     double *grid = gaia_to_grid(cells, flux_gain);
     free(cells);
     int gw_cols = GCOLS, gw_rows = GROWS;
@@ -1027,12 +1040,17 @@ int main(int argc, char **argv)
             double v = grid[((size_t)j * (size_t)(gw_cols + 1) + (size_t)i) * 3];
             if (v > top) top = v;
         }
-    /* a.g_phys: converts grid units to linear display light (for the emit() scale comment) */
-    /* g_phys maps normalised grid (0..1) to linear display light;
-     * at the 95th-percentile cell: g_phys * boost = mw_top_s10 * s10 */
-    a.g_phys = a.mw_top_s10 * s10 / a.boost;
-    report("Gaia Milky Way grid: %d x %d equirectangular (full sphere, 1 deg/cell, north up); "
-           "peak luma %.1f / 4080 (16ths-of-level)", gw_cols, gw_rows, top);
+    /* The brightest band of the Milky Way is set to the published value, a.mw_top_s10 S10 (V 20.7
+     * mag/arcsec2, Leinert et al. 1998, Bochum). Every grid value is divided by the brightest one, so
+     * the brightest band is 1.0 and g_phys is the light of that band; the gain (--gain) multiplies it. */
+    if (top <= 0)
+        die("the Gaia Milky Way grid is empty");
+    for (size_t i = 0; i < (size_t)gw_rows * (size_t)(gw_cols + 1) * 3; i++)
+        grid[i] /= top;
+    a.g_phys = a.mw_top_s10 * s10;
+    report("Milky Way: brightest band set to %.0f S10 (V %.2f mag/arcsec2) = grid 1.0 (was %.4g before the scale); "
+           "gain %.2f on the Milky Way only",
+           a.mw_top_s10, 27.78 - 2.5 * log10(a.mw_top_s10), top, a.gain);
 
     /* galaxies in the view, bright enough for the eye */
     size_t gcap = 4096, ngx = 0;
@@ -1089,16 +1107,16 @@ static void emit(const opts_t *a, const view_t *view, const sel_t *sel, size_t n
     fprintf(o, " * Regenerate: scripts/ck_sky_gen.sh (downloads the inputs, checks their sha256).\n *\n");
     fprintf(o, " * Stars: Yale Bright Star Catalogue, 5th revised ed. (Hoffleit & Warren 1991),\n");
     fprintf(o, " *   CDS catalogue V/50, positions moved by proper motion to %.1f.\n", EPOCH);
-    fprintf(o, " * Milky Way: Gaia DR3 source counts and integrated G-band flux per HEALPix level-6 cell\n");
-    fprintf(o, " *   (nside=64); G-band extinction from gaiadr3.astrophysical_parameters.\n");
+    fprintf(o, " * Milky Way: Gaia DR3 source counts and integrated G-band flux per HEALPix level-%d cell\n", HPX_LEVEL);
+    fprintf(o, " *   (nside=%d); G-band extinction from gaiadr3.astrophysical_parameters.\n", NSIDE);
     fprintf(o, " *   ESA/Gaia/DPAC, CC BY-NC 3.0 IGO. Credit: ESA/Gaia/DPAC.\n");
     fprintf(o, " * Galaxies: OpenNGC (Mattia Verga), CC BY-SA 4.0.\n");
     fprintf(o, " * View centre: the most probable point of the GW150914 sky map, GWTC-1,\n");
     fprintf(o, " *   LIGO/Virgo (LIGO-P1800381-v7).\n");
     fprintf(o, " * Settings: centre RA %.3f Dec %.3f deg, %.1f deg across, roll %.1f deg, faintest V %.1f,\n", ra, dec, a->fov,
             a->roll, a->mag);
-    fprintf(o, " *   grid %d, exposure %.4f, sky glow %.1f mag/arcsec2, Milky Way boost %.2f. */\n", gw_cols, a->exposure,
-            a->skyglow, a->boost);
+    fprintf(o, " *   grid %d, exposure %.4f, sky glow %.1f mag/arcsec2, Milky Way gain %.2f (on the Milky Way only). */\n", gw_cols, a->exposure,
+            a->skyglow, a->gain);
     fprintf(o, "#include \"sky_data.h\"\n\n");
     fprintf(o, "const ck_sky_view ck_sky_the_view = {\n");
     fprintf(o, "    .ra_mdeg = %ld, .dec_mdeg = %ld, .fov_mdeg = %ld, .roll_mdeg = %ld,\n", rnd(ra * 1000), rnd(dec * 1000),
@@ -1185,7 +1203,7 @@ static void emit(const opts_t *a, const view_t *view, const sel_t *sel, size_t n
         for (int k = 0; k < 3; k++) {
             /* surface brightness is the same wherever it lands on the screen (radiance is conserved) */
             double c = grid[i * 3 + (size_t)k] - floor_;
-            double cc = glow[k] + (c > 0 ? c : 0) * a->g_phys * a->boost;
+            double cc = glow[k] + (c > 0 ? c : 0) * a->g_phys * a->gain;
             lv[i * 3 + (size_t)k] = srgb_encode(cc); /* sRGB levels 0..255 (float) */
         }
     uint8_t *Y = xmalloc(ng);
