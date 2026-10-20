@@ -1,0 +1,419 @@
+# aienos-run QEMU bundle lock, written by scripts/aienos_run_qemu_bundle.sh --refresh
+# mirror https://repo.msys2.org/mingw/ucrt64
+# pkg <file> <sha256> | file <pkg file> <member> | sysdll <name>
+pkg mingw-w64-ucrt-x86_64-SDL2-2.32.10-1-any.pkg.tar.zst 9e77124b14bedaafbfb44ac26e5fb43890184db23292cebf2251b2178fad6693
+pkg mingw-w64-ucrt-x86_64-SDL2_image-2.8.12-1-any.pkg.tar.zst b22b6e7534081346c1cbbdb76e48872839722b3f30ea77726859273263baf48c
+pkg mingw-w64-ucrt-x86_64-aom-3.15.2-1-any.pkg.tar.zst e81f01d419f262e31275771fad18f93617f7b321deeb416e5ac39d70f295b286
+pkg mingw-w64-ucrt-x86_64-atk-2.62.0.1-1-any.pkg.tar.zst 274a9f08d9d0f539406927ec6cd603ef673517e1d1df881f4a49c8836bc76195
+pkg mingw-w64-ucrt-x86_64-brotli-1.2.0-1-any.pkg.tar.zst 9cc89665496ea504751476eafba15c71c554aaf3004babc2004f7c07ffd60514
+pkg mingw-w64-ucrt-x86_64-bzip2-1.0.8-4-any.pkg.tar.zst f03a2174034ddd2d96cecd34f617c5f8e2ef86c812b8d2bb3b8875257f2c8bfa
+pkg mingw-w64-ucrt-x86_64-cairo-1.18.6-2-any.pkg.tar.zst 021c0a4d1df463d08d0cac170818a7cbaccaa5b09ac6edc7948e461cb5a46e85
+pkg mingw-w64-ucrt-x86_64-capstone-5.0.9-1-any.pkg.tar.zst be5f6ef080c1ccc64f96572e52e9f025bf95d826e58de34775b443ce80edd079
+pkg mingw-w64-ucrt-x86_64-curl-8.23.0-1-any.pkg.tar.zst cb1b4e7c0aa8e6e39ac88af83f083d36fb9ea4c50377e795fdb7c3e97ac9fda5
+pkg mingw-w64-ucrt-x86_64-cyrus-sasl-2.1.28-6-any.pkg.tar.zst d2fe22da2bde3ec7e2e7d60a58d3056314c2519de23cc70580e7fa217d1f772f
+pkg mingw-w64-ucrt-x86_64-dav1d-1.5.4-1-any.pkg.tar.zst ccf26c6f29fd36f5692d57fd5e0fe3becec492e0b875fd5e04f47a9582eb8b37
+pkg mingw-w64-ucrt-x86_64-db-6.2.32-1-any.pkg.tar.zst cccbf189bcbe893f340d624ada7ee0c6267729a48aae0f840eb3e3c0f02ef787
+pkg mingw-w64-ucrt-x86_64-dtc-1.8.1-1-any.pkg.tar.zst 0f3c4df43133b99e040f7d42666e36e50c9aea2f59a494e0aad3b475f3fdd32d
+pkg mingw-w64-ucrt-x86_64-expat-2.9.0-1-any.pkg.tar.zst f52364dc874009316e1ee1fe46ee89784594b80d10cbcc1cc856945d575308e0
+pkg mingw-w64-ucrt-x86_64-fontconfig-2.18.3-1-any.pkg.tar.zst d0b364f3ee37e3b6f6c136688ce8fa909bb6d8a69df7e08de1aa40870d9e1d60
+pkg mingw-w64-ucrt-x86_64-freetype-2.15.0-1-any.pkg.tar.zst a9a691f71d1a553099c54ca666e611abfb2b4ff08dae24f2a5af72e22a7e5feb
+pkg mingw-w64-ucrt-x86_64-fribidi-1.0.17-1-any.pkg.tar.zst 3581ee03cf83a9bb0e98bf688c4f532a29553500e317532d90746de295b0f8a8
+pkg mingw-w64-ucrt-x86_64-gdk-pixbuf2-2.44.8-1-any.pkg.tar.zst aacfe4bdf635b1ad5bd50ffe9b106f9256e5aee567aec37d4fabe142a0353419
+pkg mingw-w64-ucrt-x86_64-gettext-runtime-1.0-1-any.pkg.tar.zst ba693dda4ac375af76ce481ff3a6e7481286546cc7dc6d56c7021dae34084157
+pkg mingw-w64-ucrt-x86_64-glib2-2.90.1-1-any.pkg.tar.zst 9a7826349279bcca0c935b01880d812be9de9609aef2205be68fd7a6128c1695
+pkg mingw-w64-ucrt-x86_64-gmp-6.3.0-2-any.pkg.tar.zst e82a75968a556484a50084578238a84eb60fb93e34986fd6695c537975bd39ea
+pkg mingw-w64-ucrt-x86_64-gnutls-3.8.13-3-any.pkg.tar.zst 303da3babd11f545fcac647439298e8559951ce6a1086666faf8ad2a1f708be6
+pkg mingw-w64-ucrt-x86_64-graphite2-1.3.15-1-any.pkg.tar.zst 34ca1f88bff10ef182a6b1c8e5622d5029f13b05748e361af13b552b422ea849
+pkg mingw-w64-ucrt-x86_64-gst-plugins-base-1.28.8-1-any.pkg.tar.zst 2c6e937a3e551eea5a139c47896517bb6fa6a00dfefcf3a0968e3175c1ba4eaf
+pkg mingw-w64-ucrt-x86_64-gstreamer-1.28.8-1-any.pkg.tar.zst db13c201cbc385aebf23916b971ae0aaf4aeabb53c07f2ca232a644886b82e1b
+pkg mingw-w64-ucrt-x86_64-gtk3-3.24.52-1-any.pkg.tar.zst 1cdcac269932b5ac613ae6df0c097c8593029ef5d8651e7471ab252922dc8e97
+pkg mingw-w64-ucrt-x86_64-harfbuzz-14.6.0-1-any.pkg.tar.zst 8781d486c864bf91f482768cc5bd7267e49331636583d9f855af3974e6378e69
+pkg mingw-w64-ucrt-x86_64-highway-1.4.0-3-any.pkg.tar.zst 4d2ed7c528c2323e1bf05921963181412b7a33eee1cde798fdd7e613f59b2ab3
+pkg mingw-w64-ucrt-x86_64-jack2-1.9.22-4-any.pkg.tar.zst 377ad979254104c52bde75a8ccdcf973991479371d6fd4bae7ee9008a7f80554
+pkg mingw-w64-ucrt-x86_64-jbigkit-2.1-6-any.pkg.tar.zst 9e237d1041350e7436294cfa13d4bd3d1606d1f2a32ade2eb2958b4d4e79b7ad
+pkg mingw-w64-ucrt-x86_64-lcms2-2.19.1-1-any.pkg.tar.zst 144518cc80679f7bcc1d31b5dd7ec92e8737a1d8162014e30c8c1c181f47a156
+pkg mingw-w64-ucrt-x86_64-lerc-4.1.1-1-any.pkg.tar.zst c0afbf4832488d67030c6f313349cd814946c9a7bc3ae9fd54524825c9ca055d
+pkg mingw-w64-ucrt-x86_64-libavif-1.4.2-1-any.pkg.tar.zst 9dea354b257d2e593c82c88390a178be547faaaa06f366070b4f8abc784277e6
+pkg mingw-w64-ucrt-x86_64-libcacard-2.8.1-2-any.pkg.tar.zst 3049d30666a5943d40e4469c556455ec2dffdd81326b1db111a46a44bd9cac2b
+pkg mingw-w64-ucrt-x86_64-libdatrie-0.2.14-1-any.pkg.tar.zst ea92777801ad325278193a362967540752ae37035016df2f6bcee2d89928a195
+pkg mingw-w64-ucrt-x86_64-libdeflate-1.26-1-any.pkg.tar.zst 17720c77bd01641a3554801cafd71d96fb7fff7427f4cc20ac9f36efb8cb3da0
+pkg mingw-w64-ucrt-x86_64-libepoxy-1.5.10-7-any.pkg.tar.zst c6c6994e8ec49071f06cc1fae475406bdf17603d4687ad0bcac2e11078cfd7c8
+pkg mingw-w64-ucrt-x86_64-libffi-3.8.0-1-any.pkg.tar.zst 99ad12f4ecfa00a889ef9c5c0188592368a5bac109d0c508ce4e04f29ea95a76
+pkg mingw-w64-ucrt-x86_64-libgcc-16.2.0-6-any.pkg.tar.zst 80b2497f019977dd9528b1abc8621b1328a0115ab1f724047ccbb56bf323f11d
+pkg mingw-w64-ucrt-x86_64-libiconv-1.19-1-any.pkg.tar.zst 9a500f38c2b91808741c62fae746b3e9110b33a1ecf5c30fa0c66dbedddf7e16
+pkg mingw-w64-ucrt-x86_64-libidn2-2.3.8-4-any.pkg.tar.zst d5f4b5e9d99ff7b2a986d1dc0c73da2bcd93ba68462be7b1debbd6ef76371f57
+pkg mingw-w64-ucrt-x86_64-libjpeg-turbo-3.2.0-1-any.pkg.tar.zst 7c001d00df557cfee969ad43d37b9c31ae22869e8aac4091a89dc3ae6d95e11d
+pkg mingw-w64-ucrt-x86_64-libjxl-0.12.0-2-any.pkg.tar.zst 4affd5d7b94f4ee1513e6fa15c9273ab28e29dab294f548c9bf52e872b40f06d
+pkg mingw-w64-ucrt-x86_64-libnfs-6.0.2-1-any.pkg.tar.zst 16c1af952b68bc1ace8443fb1fae3dd6031cc07f6e1fa4064ecde9b288671a37
+pkg mingw-w64-ucrt-x86_64-libpng-1.6.59-1-any.pkg.tar.zst 7f8448e06eceba8f8ce130390addea49f767bdf8f6b7e7eede8ca6d595e3d3a8
+pkg mingw-w64-ucrt-x86_64-libpsl-0.21.5-3-any.pkg.tar.zst d96e0bb50ac3f8b6e44a39ea8de8d186f7b08f6938b0676eb69a7ba1f127bcf4
+pkg mingw-w64-ucrt-x86_64-libslirp-4.9.3-1-any.pkg.tar.zst c982be43767a950f220b498f0f212eb2e2c945d93c968bd0e4f66b1b5da94f6c
+pkg mingw-w64-ucrt-x86_64-libssh-0.12.2-1-any.pkg.tar.zst 1be494f5fad8bf1210a1eeaccdd07d3e8319f4d13cd79a9302ae196fcc96da8b
+pkg mingw-w64-ucrt-x86_64-libssh2-1.11.1-2-any.pkg.tar.zst 0e91316dfa4979dcabbfa9e71528ec9882ece619ce549cb25312089b4754fa65
+pkg mingw-w64-ucrt-x86_64-libstdc++-16.2.0-6-any.pkg.tar.zst 33c5e58a85a538cf843a8672991cce591f0231d66da3b66a57629712d64be17f
+pkg mingw-w64-ucrt-x86_64-libsystre-1.0.2-3-any.pkg.tar.zst 62f564b1395d4862db1599b77f6588c32de5c80936845751cf369b31eee1560b
+pkg mingw-w64-ucrt-x86_64-libtasn1-4.21.0-1-any.pkg.tar.zst d098b27834c3b25142b6f5aa9a0ca5731a8e4334c232786406cb149dd8bde2ba
+pkg mingw-w64-ucrt-x86_64-libthai-0.1.30-1-any.pkg.tar.zst c90ebbca3e7b4c34f4b3ffa501ba8d00cdaf6340cff7db3c46d79d5e01ef207c
+pkg mingw-w64-ucrt-x86_64-libtiff-4.7.2-2-any.pkg.tar.zst 258e08a91e6b1703d41730ffe6080c2a40968fe90896b45716c1b41042775076
+pkg mingw-w64-ucrt-x86_64-libtre-0.9.0-2-any.pkg.tar.zst d50f22545c50d7c0cd584474bba83f0c7a2cd8aab1aed1ad6c1f9c6452f3c4fc
+pkg mingw-w64-ucrt-x86_64-libunistring-1.4.2-1-any.pkg.tar.zst e784273da19bbdcc91cbb510b5e27c3ac021b026140734eefcce5ccbd878bd97
+pkg mingw-w64-ucrt-x86_64-libusb-1.0.30-1-any.pkg.tar.zst 20106e6ff31b4581bb111b28a68b6b79a50dc3e5fc3033944e1c4b3ff8cd812e
+pkg mingw-w64-ucrt-x86_64-libwebp-1.6.0-1-any.pkg.tar.zst 34ff8396c403d484c8777ad49ad0fc06dfb94fadf6f14bcf84d50c45bc6fd17e
+pkg mingw-w64-ucrt-x86_64-libwinpthread-14.0.0.r495.g63ebe6cdb-2-any.pkg.tar.zst 0cee80308aec93607165be8c8655c1c3884389e0c2829b022643de7988d8b1f9
+pkg mingw-w64-ucrt-x86_64-libxml2-2.15.4-2-any.pkg.tar.zst 1678213c8acddcee2a393477c26cafcb7a4e47c2d611638c028853b502c7d662
+pkg mingw-w64-ucrt-x86_64-libyuv-1924.r2921.644251f25-2-any.pkg.tar.zst 3016e0f97bf38313bb336447739f636c8622fc0ca2236fe48e3f6cd662ef56cb
+pkg mingw-w64-ucrt-x86_64-llvm-libs-23.1.3-1-any.pkg.tar.zst 38336a3f9f5e02634624e84ab34adf4108eedf922aaec9a9315f388aed19e77b
+pkg mingw-w64-ucrt-x86_64-lz4-1.10.0-1-any.pkg.tar.zst 00a807df81a4b7e82445178b8625962ed592cf1f0a08a8e04c8b9338c4362638
+pkg mingw-w64-ucrt-x86_64-lzo2-2.10-3-any.pkg.tar.zst 717c8065996bea51543518a0d3ab46837bf9a990c41886348bd2fa9484ea23f3
+pkg mingw-w64-ucrt-x86_64-mesa-26.2.5-1-any.pkg.tar.zst d6857e30acb24ad33d13eddabeb2fabc648c12499c43b3518dd777ca1bff9c21
+pkg mingw-w64-ucrt-x86_64-ncurses-6.6-4-any.pkg.tar.zst 88331fe78470ef2c5e0280652fee5e10b6dcaa35f8037725c359407f2702309c
+pkg mingw-w64-ucrt-x86_64-nettle-4.0-1-any.pkg.tar.zst 47b49f1723ef2c75ff3042b6e463910c47cdffa3342e175b6409fb9d630e64ed
+pkg mingw-w64-ucrt-x86_64-nghttp2-1.70.0-1-any.pkg.tar.zst 39baf792ff3855c1d656514eaef648fab20de80614517fc15f57a57fa103cc20
+pkg mingw-w64-ucrt-x86_64-nghttp3-1.18.0-1-any.pkg.tar.zst 06e51ea288e5fdd511c753038979772ec22ec71504dac61f912c63a6e586ba80
+pkg mingw-w64-ucrt-x86_64-ngtcp2-1.25.0-1-any.pkg.tar.zst cce230d80a05cd0a1ec38fa5d76c0445c9bb725c65c2136be3d23e6dc218a89e
+pkg mingw-w64-ucrt-x86_64-nspr-4.40-1-any.pkg.tar.zst 35f0f60025cb0d20039f3d2c59df744a9308fe264c4606d49685e87efce5984a
+pkg mingw-w64-ucrt-x86_64-nss-3.131-1-any.pkg.tar.zst 01da502b6ccc9ce4dfbd251baa6532328a21aedbf22328f208e76327653047c4
+pkg mingw-w64-ucrt-x86_64-openssl-3.6.5-1-any.pkg.tar.zst 773e021ebad83f14b5c103db467411e8ff064663e1c7e7f730e2be72f4117064
+pkg mingw-w64-ucrt-x86_64-opus-1.6.1-2-any.pkg.tar.zst bb114bcf26225f50f874497ebfd6b8224fff2a20bda3f8ee45cd07ce5f02657b
+pkg mingw-w64-ucrt-x86_64-orc-0.4.44-1-any.pkg.tar.zst f333a8207fbec0178e34d6293e412015c7450e3e73dfa1627279cd922f5d622f
+pkg mingw-w64-ucrt-x86_64-p11-kit-0.26.5-1-any.pkg.tar.zst 6e1645f0afa669f3e3325abb891d79c58dacf0bb5f9bb1ea719d22da1d754e62
+pkg mingw-w64-ucrt-x86_64-pango-1.58.2-1-any.pkg.tar.zst 8d86e4a018ff139b010bf357fa1c9f9030fa32ee195c54ed7e89d8ea701851c8
+pkg mingw-w64-ucrt-x86_64-pcre2-10.49-1-any.pkg.tar.zst 63172179db724ac71e2439a7981134c1bcab8049bdddfd349b32b8f76ed52d1e
+pkg mingw-w64-ucrt-x86_64-pixman-0.46.4-3-any.pkg.tar.zst 4c01b986563d2b5f7ad6fcec2d0ec9915d2f242ddac5eacddc19971964241cc5
+pkg mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst 55f87e3a1448f5cf1cd7d7b9f061846a13b9571eb9b1a1df51eab3d9a9d42429
+pkg mingw-w64-ucrt-x86_64-qemu-image-util-11.1.2-1-any.pkg.tar.zst 2b374c173d36d1071b0cf1be7204d9cf89051af9a492f408180bac642ef70f47
+pkg mingw-w64-ucrt-x86_64-rav1e-0.8.1-1-any.pkg.tar.zst 00a03a734f96f66405ad79bae2ffb1c5cf2b050ef90a4ffa508ddbfdb64c0fb1
+pkg mingw-w64-ucrt-x86_64-snappy-1.3.1-1-any.pkg.tar.zst a4037212ff1e8a4c12af0b7b5443d3abb46ca7e30849a45160db90add74b54c8
+pkg mingw-w64-ucrt-x86_64-spice-0.16.0-4-any.pkg.tar.zst b0de24c3c378b99bf8fcb722201b51fc674dd9c412a4c03bf6cd117217a9a5af
+pkg mingw-w64-ucrt-x86_64-spirv-tools-3~1.4.363.0-1-any.pkg.tar.zst d31d67fe918aeee21d1e930fd96360856a60146d23094e4ae8baf071a4049aaa
+pkg mingw-w64-ucrt-x86_64-svt-av1-4.2.0-1-any.pkg.tar.zst 87c97a68bab7dd67413ea0cae024c3d2e4bdc2f96fccf38365304642b1b44ee5
+pkg mingw-w64-ucrt-x86_64-usbredir-0.15.0-1-any.pkg.tar.zst 4ea6fb15a6902bb86ab0f190789408cffad53ff308eeb70e29dfffe2742ecddf
+pkg mingw-w64-ucrt-x86_64-virglrenderer-1.3.0-1-any.pkg.tar.zst a3fa9f88cb49f769bfc1129276ad2a73bcc2f76972e4bb7e6ad32be2c40eaefb
+pkg mingw-w64-ucrt-x86_64-xz-5.8.4-1-any.pkg.tar.zst a9d771f816d8c0c5bde152ffb27a687ede91079b8e77e5b8297efa3b5a835934
+pkg mingw-w64-ucrt-x86_64-zlib-1.3.2-2-any.pkg.tar.zst 841401182976d2f9e17e5c0ebaac51f2a8014140ea53d67625e91c8fb3c85ea0
+pkg mingw-w64-ucrt-x86_64-zstd-1.5.7-2-any.pkg.tar.zst dbdb8427280046a2b41697780aa4c52983b708082b0da4755951dc3bea96ca89
+file mingw-w64-ucrt-x86_64-SDL2-2.32.10-1-any.pkg.tar.zst ucrt64/bin/SDL2.dll
+file mingw-w64-ucrt-x86_64-SDL2-2.32.10-1-any.pkg.tar.zst ucrt64/share/licenses/SDL2/LICENSE.txt
+file mingw-w64-ucrt-x86_64-SDL2_image-2.8.12-1-any.pkg.tar.zst ucrt64/bin/SDL2_image.dll
+file mingw-w64-ucrt-x86_64-SDL2_image-2.8.12-1-any.pkg.tar.zst ucrt64/share/licenses/SDL2_image/LICENSE.txt
+file mingw-w64-ucrt-x86_64-aom-3.15.2-1-any.pkg.tar.zst ucrt64/bin/libaom.dll
+file mingw-w64-ucrt-x86_64-aom-3.15.2-1-any.pkg.tar.zst ucrt64/share/licenses/aom/LICENSE
+file mingw-w64-ucrt-x86_64-aom-3.15.2-1-any.pkg.tar.zst ucrt64/share/licenses/aom/PATENTS
+file mingw-w64-ucrt-x86_64-atk-2.62.0.1-1-any.pkg.tar.zst ucrt64/bin/libatk-1.0-0.dll
+file mingw-w64-ucrt-x86_64-atk-2.62.0.1-1-any.pkg.tar.zst ucrt64/share/licenses/at-spi2-core/COPYING
+file mingw-w64-ucrt-x86_64-brotli-1.2.0-1-any.pkg.tar.zst ucrt64/bin/libbrotlicommon.dll
+file mingw-w64-ucrt-x86_64-brotli-1.2.0-1-any.pkg.tar.zst ucrt64/bin/libbrotlidec.dll
+file mingw-w64-ucrt-x86_64-brotli-1.2.0-1-any.pkg.tar.zst ucrt64/bin/libbrotlienc.dll
+file mingw-w64-ucrt-x86_64-brotli-1.2.0-1-any.pkg.tar.zst ucrt64/share/licenses/brotli/LICENSE
+file mingw-w64-ucrt-x86_64-bzip2-1.0.8-4-any.pkg.tar.zst ucrt64/bin/libbz2-1.dll
+file mingw-w64-ucrt-x86_64-bzip2-1.0.8-4-any.pkg.tar.zst ucrt64/share/licenses/bzip2/LICENSE
+file mingw-w64-ucrt-x86_64-cairo-1.18.6-2-any.pkg.tar.zst ucrt64/bin/libcairo-2.dll
+file mingw-w64-ucrt-x86_64-cairo-1.18.6-2-any.pkg.tar.zst ucrt64/bin/libcairo-gobject-2.dll
+file mingw-w64-ucrt-x86_64-cairo-1.18.6-2-any.pkg.tar.zst ucrt64/share/licenses/cairo/COPYING
+file mingw-w64-ucrt-x86_64-cairo-1.18.6-2-any.pkg.tar.zst ucrt64/share/licenses/cairo/COPYING-LGPL-2.1
+file mingw-w64-ucrt-x86_64-cairo-1.18.6-2-any.pkg.tar.zst ucrt64/share/licenses/cairo/COPYING-MPL-1.1
+file mingw-w64-ucrt-x86_64-capstone-5.0.9-1-any.pkg.tar.zst ucrt64/bin/libcapstone.dll
+file mingw-w64-ucrt-x86_64-capstone-5.0.9-1-any.pkg.tar.zst ucrt64/share/licenses/capstone/LICENSE.TXT
+file mingw-w64-ucrt-x86_64-curl-8.23.0-1-any.pkg.tar.zst ucrt64/bin/libcurl-4.dll
+file mingw-w64-ucrt-x86_64-curl-8.23.0-1-any.pkg.tar.zst ucrt64/share/licenses/curl/LICENSE
+file mingw-w64-ucrt-x86_64-cyrus-sasl-2.1.28-6-any.pkg.tar.zst ucrt64/bin/libsasl2-3.dll
+file mingw-w64-ucrt-x86_64-cyrus-sasl-2.1.28-6-any.pkg.tar.zst ucrt64/share/licenses/cyrus-sasl/COPYING
+file mingw-w64-ucrt-x86_64-dav1d-1.5.4-1-any.pkg.tar.zst ucrt64/bin/libdav1d-7.dll
+file mingw-w64-ucrt-x86_64-dav1d-1.5.4-1-any.pkg.tar.zst ucrt64/share/licenses/dav1d/COPYING
+file mingw-w64-ucrt-x86_64-dav1d-1.5.4-1-any.pkg.tar.zst ucrt64/share/licenses/dav1d/PATENTS
+file mingw-w64-ucrt-x86_64-db-6.2.32-1-any.pkg.tar.zst ucrt64/bin/libdb-6.2.dll
+file mingw-w64-ucrt-x86_64-db-6.2.32-1-any.pkg.tar.zst ucrt64/share/licenses/db/LICENSE
+file mingw-w64-ucrt-x86_64-dtc-1.8.1-1-any.pkg.tar.zst ucrt64/bin/libfdt-1.dll
+file mingw-w64-ucrt-x86_64-dtc-1.8.1-1-any.pkg.tar.zst ucrt64/share/licenses/dtc/GPL
+file mingw-w64-ucrt-x86_64-expat-2.9.0-1-any.pkg.tar.zst ucrt64/bin/libexpat-1.dll
+file mingw-w64-ucrt-x86_64-expat-2.9.0-1-any.pkg.tar.zst ucrt64/share/licenses/expat/COPYING
+file mingw-w64-ucrt-x86_64-fontconfig-2.18.3-1-any.pkg.tar.zst ucrt64/bin/libfontconfig-1.dll
+file mingw-w64-ucrt-x86_64-fontconfig-2.18.3-1-any.pkg.tar.zst ucrt64/share/licenses/fontconfig/COPYING
+file mingw-w64-ucrt-x86_64-freetype-2.15.0-1-any.pkg.tar.zst ucrt64/bin/libfreetype-6.dll
+file mingw-w64-ucrt-x86_64-freetype-2.15.0-1-any.pkg.tar.zst ucrt64/share/licenses/freetype/FTL.TXT
+file mingw-w64-ucrt-x86_64-freetype-2.15.0-1-any.pkg.tar.zst ucrt64/share/licenses/freetype/GPLv2.TXT
+file mingw-w64-ucrt-x86_64-fribidi-1.0.17-1-any.pkg.tar.zst ucrt64/bin/libfribidi-0.dll
+file mingw-w64-ucrt-x86_64-fribidi-1.0.17-1-any.pkg.tar.zst ucrt64/share/licenses/fribidi/COPYING
+file mingw-w64-ucrt-x86_64-gdk-pixbuf2-2.44.8-1-any.pkg.tar.zst ucrt64/bin/libgdk_pixbuf-2.0-0.dll
+file mingw-w64-ucrt-x86_64-gdk-pixbuf2-2.44.8-1-any.pkg.tar.zst ucrt64/share/licenses/gdk-pixbuf2/COPYING
+file mingw-w64-ucrt-x86_64-gettext-runtime-1.0-1-any.pkg.tar.zst ucrt64/bin/libintl-8.dll
+file mingw-w64-ucrt-x86_64-gettext-runtime-1.0-1-any.pkg.tar.zst ucrt64/share/licenses/gettext-runtime/COPYING
+file mingw-w64-ucrt-x86_64-gettext-runtime-1.0-1-any.pkg.tar.zst ucrt64/share/licenses/gettext-runtime/intl/COPYING.LIB
+file mingw-w64-ucrt-x86_64-gettext-runtime-1.0-1-any.pkg.tar.zst ucrt64/share/licenses/gettext-runtime/libasprintf/COPYING
+file mingw-w64-ucrt-x86_64-gettext-runtime-1.0-1-any.pkg.tar.zst ucrt64/share/licenses/gettext-runtime/libasprintf/COPYING.LIB
+file mingw-w64-ucrt-x86_64-glib2-2.90.1-1-any.pkg.tar.zst ucrt64/bin/libgio-2.0-0.dll
+file mingw-w64-ucrt-x86_64-glib2-2.90.1-1-any.pkg.tar.zst ucrt64/bin/libglib-2.0-0.dll
+file mingw-w64-ucrt-x86_64-glib2-2.90.1-1-any.pkg.tar.zst ucrt64/bin/libgmodule-2.0-0.dll
+file mingw-w64-ucrt-x86_64-glib2-2.90.1-1-any.pkg.tar.zst ucrt64/bin/libgobject-2.0-0.dll
+file mingw-w64-ucrt-x86_64-glib2-2.90.1-1-any.pkg.tar.zst ucrt64/share/licenses/glib2/COPYING
+file mingw-w64-ucrt-x86_64-gmp-6.3.0-2-any.pkg.tar.zst ucrt64/bin/libgmp-10.dll
+file mingw-w64-ucrt-x86_64-gnutls-3.8.13-3-any.pkg.tar.zst ucrt64/bin/libgnutls-30.dll
+file mingw-w64-ucrt-x86_64-graphite2-1.3.15-1-any.pkg.tar.zst ucrt64/bin/libgraphite2.dll
+file mingw-w64-ucrt-x86_64-graphite2-1.3.15-1-any.pkg.tar.zst ucrt64/share/licenses/graphite2/COPYING
+file mingw-w64-ucrt-x86_64-graphite2-1.3.15-1-any.pkg.tar.zst ucrt64/share/licenses/graphite2/LICENSE
+file mingw-w64-ucrt-x86_64-gst-plugins-base-1.28.8-1-any.pkg.tar.zst ucrt64/bin/libgstapp-1.0-0.dll
+file mingw-w64-ucrt-x86_64-gstreamer-1.28.8-1-any.pkg.tar.zst ucrt64/bin/libgstbase-1.0-0.dll
+file mingw-w64-ucrt-x86_64-gstreamer-1.28.8-1-any.pkg.tar.zst ucrt64/bin/libgstreamer-1.0-0.dll
+file mingw-w64-ucrt-x86_64-gtk3-3.24.52-1-any.pkg.tar.zst ucrt64/bin/libgdk-3-0.dll
+file mingw-w64-ucrt-x86_64-gtk3-3.24.52-1-any.pkg.tar.zst ucrt64/bin/libgtk-3-0.dll
+file mingw-w64-ucrt-x86_64-gtk3-3.24.52-1-any.pkg.tar.zst ucrt64/share/licenses/gtk3/COPYING
+file mingw-w64-ucrt-x86_64-harfbuzz-14.6.0-1-any.pkg.tar.zst ucrt64/bin/libharfbuzz-0.dll
+file mingw-w64-ucrt-x86_64-harfbuzz-14.6.0-1-any.pkg.tar.zst ucrt64/share/licenses/harfbuzz/COPYING
+file mingw-w64-ucrt-x86_64-highway-1.4.0-3-any.pkg.tar.zst ucrt64/bin/libhwy.dll
+file mingw-w64-ucrt-x86_64-highway-1.4.0-3-any.pkg.tar.zst ucrt64/share/licenses/highway/LICENSE
+file mingw-w64-ucrt-x86_64-jack2-1.9.22-4-any.pkg.tar.zst ucrt64/bin/libjack64.dll
+file mingw-w64-ucrt-x86_64-jack2-1.9.22-4-any.pkg.tar.zst ucrt64/share/licenses/jack2/COPYING
+file mingw-w64-ucrt-x86_64-jbigkit-2.1-6-any.pkg.tar.zst ucrt64/bin/libjbig-0.dll
+file mingw-w64-ucrt-x86_64-jbigkit-2.1-6-any.pkg.tar.zst ucrt64/share/licenses/jbigkit/COPYING
+file mingw-w64-ucrt-x86_64-lcms2-2.19.1-1-any.pkg.tar.zst ucrt64/bin/liblcms2-2.dll
+file mingw-w64-ucrt-x86_64-lcms2-2.19.1-1-any.pkg.tar.zst ucrt64/share/licenses/lcms2/LICENSE
+file mingw-w64-ucrt-x86_64-lcms2-2.19.1-1-any.pkg.tar.zst ucrt64/share/licenses/lcms2/LICENSE-fast_float
+file mingw-w64-ucrt-x86_64-lerc-4.1.1-1-any.pkg.tar.zst ucrt64/bin/libLerc.dll
+file mingw-w64-ucrt-x86_64-lerc-4.1.1-1-any.pkg.tar.zst ucrt64/share/licenses/lerc/LICENSE
+file mingw-w64-ucrt-x86_64-libavif-1.4.2-1-any.pkg.tar.zst ucrt64/bin/libavif-16.dll
+file mingw-w64-ucrt-x86_64-libavif-1.4.2-1-any.pkg.tar.zst ucrt64/share/licenses/libavif/LICENSE
+file mingw-w64-ucrt-x86_64-libcacard-2.8.1-2-any.pkg.tar.zst ucrt64/bin/libcacard-0.dll
+file mingw-w64-ucrt-x86_64-libcacard-2.8.1-2-any.pkg.tar.zst ucrt64/share/licenses/libcacard/COPYING
+file mingw-w64-ucrt-x86_64-libdatrie-0.2.14-1-any.pkg.tar.zst ucrt64/bin/libdatrie-1.dll
+file mingw-w64-ucrt-x86_64-libdatrie-0.2.14-1-any.pkg.tar.zst ucrt64/share/licenses/libdatrie/COPYING
+file mingw-w64-ucrt-x86_64-libdeflate-1.26-1-any.pkg.tar.zst ucrt64/bin/libdeflate.dll
+file mingw-w64-ucrt-x86_64-libdeflate-1.26-1-any.pkg.tar.zst ucrt64/share/licenses/libdeflate/COPYING
+file mingw-w64-ucrt-x86_64-libepoxy-1.5.10-7-any.pkg.tar.zst ucrt64/bin/libepoxy-0.dll
+file mingw-w64-ucrt-x86_64-libepoxy-1.5.10-7-any.pkg.tar.zst ucrt64/share/licenses/libepoxy/COPYING
+file mingw-w64-ucrt-x86_64-libffi-3.8.0-1-any.pkg.tar.zst ucrt64/bin/libffi-8.dll
+file mingw-w64-ucrt-x86_64-libffi-3.8.0-1-any.pkg.tar.zst ucrt64/share/licenses/libffi/LICENSE
+file mingw-w64-ucrt-x86_64-libgcc-16.2.0-6-any.pkg.tar.zst ucrt64/bin/libgcc_s_seh-1.dll
+file mingw-w64-ucrt-x86_64-libgcc-16.2.0-6-any.pkg.tar.zst ucrt64/share/licenses/libgcc/COPYING.RUNTIME
+file mingw-w64-ucrt-x86_64-libgcc-16.2.0-6-any.pkg.tar.zst ucrt64/share/licenses/libgcc/COPYING3
+file mingw-w64-ucrt-x86_64-libiconv-1.19-1-any.pkg.tar.zst ucrt64/bin/libiconv-2.dll
+file mingw-w64-ucrt-x86_64-libiconv-1.19-1-any.pkg.tar.zst ucrt64/share/licenses/libiconv/COPYING
+file mingw-w64-ucrt-x86_64-libiconv-1.19-1-any.pkg.tar.zst ucrt64/share/licenses/libiconv/COPYING.LIB
+file mingw-w64-ucrt-x86_64-libiconv-1.19-1-any.pkg.tar.zst ucrt64/share/licenses/libiconv/README
+file mingw-w64-ucrt-x86_64-libiconv-1.19-1-any.pkg.tar.zst ucrt64/share/licenses/libiconv/libcharset/COPYING.LIB
+file mingw-w64-ucrt-x86_64-libidn2-2.3.8-4-any.pkg.tar.zst ucrt64/bin/libidn2-0.dll
+file mingw-w64-ucrt-x86_64-libjpeg-turbo-3.2.0-1-any.pkg.tar.zst ucrt64/bin/libjpeg-8.dll
+file mingw-w64-ucrt-x86_64-libjpeg-turbo-3.2.0-1-any.pkg.tar.zst ucrt64/share/licenses/libjpeg-turbo/LICENSE.md
+file mingw-w64-ucrt-x86_64-libjpeg-turbo-3.2.0-1-any.pkg.tar.zst ucrt64/share/licenses/libjpeg-turbo/README.ijg
+file mingw-w64-ucrt-x86_64-libjpeg-turbo-3.2.0-1-any.pkg.tar.zst ucrt64/share/licenses/libjpeg-turbo/README.md
+file mingw-w64-ucrt-x86_64-libjpeg-turbo-3.2.0-1-any.pkg.tar.zst ucrt64/share/licenses/libjpeg-turbo/simd/jsimdext.inc
+file mingw-w64-ucrt-x86_64-libjxl-0.12.0-2-any.pkg.tar.zst ucrt64/bin/libjxl.dll
+file mingw-w64-ucrt-x86_64-libjxl-0.12.0-2-any.pkg.tar.zst ucrt64/bin/libjxl_cms.dll
+file mingw-w64-ucrt-x86_64-libjxl-0.12.0-2-any.pkg.tar.zst ucrt64/share/licenses/libjxl/LICENSE
+file mingw-w64-ucrt-x86_64-libnfs-6.0.2-1-any.pkg.tar.zst ucrt64/bin/libnfs-16.dll
+file mingw-w64-ucrt-x86_64-libnfs-6.0.2-1-any.pkg.tar.zst ucrt64/share/licenses/libnfs/COPYING
+file mingw-w64-ucrt-x86_64-libnfs-6.0.2-1-any.pkg.tar.zst ucrt64/share/licenses/libnfs/LICENCE-BSD.txt
+file mingw-w64-ucrt-x86_64-libnfs-6.0.2-1-any.pkg.tar.zst ucrt64/share/licenses/libnfs/LICENCE-GPL-3.txt
+file mingw-w64-ucrt-x86_64-libnfs-6.0.2-1-any.pkg.tar.zst ucrt64/share/licenses/libnfs/LICENCE-LGPL-2.1.txt
+file mingw-w64-ucrt-x86_64-libpng-1.6.59-1-any.pkg.tar.zst ucrt64/bin/libpng16-16.dll
+file mingw-w64-ucrt-x86_64-libpng-1.6.59-1-any.pkg.tar.zst ucrt64/share/licenses/libpng/LICENSE
+file mingw-w64-ucrt-x86_64-libpsl-0.21.5-3-any.pkg.tar.zst ucrt64/bin/libpsl-5.dll
+file mingw-w64-ucrt-x86_64-libpsl-0.21.5-3-any.pkg.tar.zst ucrt64/share/licenses/libpsl/COPYING
+file mingw-w64-ucrt-x86_64-libslirp-4.9.3-1-any.pkg.tar.zst ucrt64/bin/libslirp-0.dll
+file mingw-w64-ucrt-x86_64-libslirp-4.9.3-1-any.pkg.tar.zst ucrt64/share/licenses/libslirp/COPYRIGHT
+file mingw-w64-ucrt-x86_64-libssh-0.12.2-1-any.pkg.tar.zst ucrt64/bin/libssh.dll
+file mingw-w64-ucrt-x86_64-libssh2-1.11.1-2-any.pkg.tar.zst ucrt64/bin/libssh2-1.dll
+file mingw-w64-ucrt-x86_64-libssh2-1.11.1-2-any.pkg.tar.zst ucrt64/share/licenses/libssh2/LICENSE
+file mingw-w64-ucrt-x86_64-libstdc++-16.2.0-6-any.pkg.tar.zst ucrt64/bin/libstdc++-6.dll
+file mingw-w64-ucrt-x86_64-libstdc++-16.2.0-6-any.pkg.tar.zst ucrt64/share/licenses/libstdc++/COPYING.RUNTIME
+file mingw-w64-ucrt-x86_64-libstdc++-16.2.0-6-any.pkg.tar.zst ucrt64/share/licenses/libstdc++/COPYING3
+file mingw-w64-ucrt-x86_64-libsystre-1.0.2-3-any.pkg.tar.zst ucrt64/bin/libsystre-0.dll
+file mingw-w64-ucrt-x86_64-libsystre-1.0.2-3-any.pkg.tar.zst ucrt64/share/licenses/libsystre/LICENSE
+file mingw-w64-ucrt-x86_64-libtasn1-4.21.0-1-any.pkg.tar.zst ucrt64/bin/libtasn1-6.dll
+file mingw-w64-ucrt-x86_64-libtasn1-4.21.0-1-any.pkg.tar.zst ucrt64/share/licenses/libtasn1/COPYING
+file mingw-w64-ucrt-x86_64-libtasn1-4.21.0-1-any.pkg.tar.zst ucrt64/share/licenses/libtasn1/COPYING.LESSERv2
+file mingw-w64-ucrt-x86_64-libthai-0.1.30-1-any.pkg.tar.zst ucrt64/bin/libthai-0.dll
+file mingw-w64-ucrt-x86_64-libthai-0.1.30-1-any.pkg.tar.zst ucrt64/share/licenses/libthai/COPYING
+file mingw-w64-ucrt-x86_64-libtiff-4.7.2-2-any.pkg.tar.zst ucrt64/bin/libtiff-6.dll
+file mingw-w64-ucrt-x86_64-libtiff-4.7.2-2-any.pkg.tar.zst ucrt64/share/licenses/libtiff/LICENSE.md
+file mingw-w64-ucrt-x86_64-libtre-0.9.0-2-any.pkg.tar.zst ucrt64/bin/libtre-5.dll
+file mingw-w64-ucrt-x86_64-libtre-0.9.0-2-any.pkg.tar.zst ucrt64/share/licenses/libtre/LICENSE
+file mingw-w64-ucrt-x86_64-libunistring-1.4.2-1-any.pkg.tar.zst ucrt64/bin/libunistring-5.dll
+file mingw-w64-ucrt-x86_64-libunistring-1.4.2-1-any.pkg.tar.zst ucrt64/share/licenses/libunistring/LICENSE
+file mingw-w64-ucrt-x86_64-libunistring-1.4.2-1-any.pkg.tar.zst ucrt64/share/licenses/libunistring/LICENSE.LIB
+file mingw-w64-ucrt-x86_64-libusb-1.0.30-1-any.pkg.tar.zst ucrt64/bin/libusb-1.0.dll
+file mingw-w64-ucrt-x86_64-libusb-1.0.30-1-any.pkg.tar.zst ucrt64/share/licenses/libusb/COPYING
+file mingw-w64-ucrt-x86_64-libwebp-1.6.0-1-any.pkg.tar.zst ucrt64/bin/libsharpyuv-0.dll
+file mingw-w64-ucrt-x86_64-libwebp-1.6.0-1-any.pkg.tar.zst ucrt64/bin/libwebp-7.dll
+file mingw-w64-ucrt-x86_64-libwebp-1.6.0-1-any.pkg.tar.zst ucrt64/bin/libwebpdemux-2.dll
+file mingw-w64-ucrt-x86_64-libwebp-1.6.0-1-any.pkg.tar.zst ucrt64/share/licenses/libwebp/COPYING
+file mingw-w64-ucrt-x86_64-libwinpthread-14.0.0.r495.g63ebe6cdb-2-any.pkg.tar.zst ucrt64/bin/libwinpthread-1.dll
+file mingw-w64-ucrt-x86_64-libwinpthread-14.0.0.r495.g63ebe6cdb-2-any.pkg.tar.zst ucrt64/share/licenses/libwinpthread/COPYING
+file mingw-w64-ucrt-x86_64-libxml2-2.15.4-2-any.pkg.tar.zst ucrt64/bin/libxml2-16.dll
+file mingw-w64-ucrt-x86_64-libxml2-2.15.4-2-any.pkg.tar.zst ucrt64/share/licenses/libxml2/COPYING
+file mingw-w64-ucrt-x86_64-libyuv-1924.r2921.644251f25-2-any.pkg.tar.zst ucrt64/bin/libyuv.dll
+file mingw-w64-ucrt-x86_64-libyuv-1924.r2921.644251f25-2-any.pkg.tar.zst ucrt64/share/licenses/libyuv/LICENSE
+file mingw-w64-ucrt-x86_64-llvm-libs-23.1.3-1-any.pkg.tar.zst ucrt64/bin/libLLVM-23.dll
+file mingw-w64-ucrt-x86_64-llvm-libs-23.1.3-1-any.pkg.tar.zst ucrt64/share/licenses/llvm-libs/LICENSE
+file mingw-w64-ucrt-x86_64-lz4-1.10.0-1-any.pkg.tar.zst ucrt64/bin/liblz4.dll
+file mingw-w64-ucrt-x86_64-lzo2-2.10-3-any.pkg.tar.zst ucrt64/bin/liblzo2-2.dll
+file mingw-w64-ucrt-x86_64-lzo2-2.10-3-any.pkg.tar.zst ucrt64/share/licenses/lzo2/LICENSE
+file mingw-w64-ucrt-x86_64-mesa-26.2.5-1-any.pkg.tar.zst ucrt64/bin/libgallium_wgl.dll
+file mingw-w64-ucrt-x86_64-mesa-26.2.5-1-any.pkg.tar.zst ucrt64/bin/opengl32.dll
+file mingw-w64-ucrt-x86_64-mesa-26.2.5-1-any.pkg.tar.zst ucrt64/share/licenses/mesa/Apache-2.0
+file mingw-w64-ucrt-x86_64-mesa-26.2.5-1-any.pkg.tar.zst ucrt64/share/licenses/mesa/BSL-1.0
+file mingw-w64-ucrt-x86_64-mesa-26.2.5-1-any.pkg.tar.zst ucrt64/share/licenses/mesa/GPL-1.0-or-later
+file mingw-w64-ucrt-x86_64-mesa-26.2.5-1-any.pkg.tar.zst ucrt64/share/licenses/mesa/GPL-2.0-only
+file mingw-w64-ucrt-x86_64-mesa-26.2.5-1-any.pkg.tar.zst ucrt64/share/licenses/mesa/MIT
+file mingw-w64-ucrt-x86_64-mesa-26.2.5-1-any.pkg.tar.zst ucrt64/share/licenses/mesa/SGI-B-2.0
+file mingw-w64-ucrt-x86_64-mesa-26.2.5-1-any.pkg.tar.zst ucrt64/share/licenses/mesa/exceptions/Linux-Syscall-Note
+file mingw-w64-ucrt-x86_64-ncurses-6.6-4-any.pkg.tar.zst ucrt64/bin/libncursesw6.dll
+file mingw-w64-ucrt-x86_64-ncurses-6.6-4-any.pkg.tar.zst ucrt64/share/licenses/ncurses/LICENSE
+file mingw-w64-ucrt-x86_64-nettle-4.0-1-any.pkg.tar.zst ucrt64/bin/libhogweed-7.dll
+file mingw-w64-ucrt-x86_64-nettle-4.0-1-any.pkg.tar.zst ucrt64/bin/libnettle-9.dll
+file mingw-w64-ucrt-x86_64-nghttp2-1.70.0-1-any.pkg.tar.zst ucrt64/bin/libnghttp2-14.dll
+file mingw-w64-ucrt-x86_64-nghttp2-1.70.0-1-any.pkg.tar.zst ucrt64/share/licenses/nghttp2/COPYING
+file mingw-w64-ucrt-x86_64-nghttp3-1.18.0-1-any.pkg.tar.zst ucrt64/bin/libnghttp3-9.dll
+file mingw-w64-ucrt-x86_64-nghttp3-1.18.0-1-any.pkg.tar.zst ucrt64/share/licenses/nghttp3/COPYING
+file mingw-w64-ucrt-x86_64-ngtcp2-1.25.0-1-any.pkg.tar.zst ucrt64/bin/libngtcp2-16.dll
+file mingw-w64-ucrt-x86_64-ngtcp2-1.25.0-1-any.pkg.tar.zst ucrt64/bin/libngtcp2_crypto_ossl-0.dll
+file mingw-w64-ucrt-x86_64-ngtcp2-1.25.0-1-any.pkg.tar.zst ucrt64/share/licenses/ngtcp2/COPYING
+file mingw-w64-ucrt-x86_64-nspr-4.40-1-any.pkg.tar.zst ucrt64/bin/libnspr4.dll
+file mingw-w64-ucrt-x86_64-nspr-4.40-1-any.pkg.tar.zst ucrt64/bin/libplc4.dll
+file mingw-w64-ucrt-x86_64-nspr-4.40-1-any.pkg.tar.zst ucrt64/bin/libplds4.dll
+file mingw-w64-ucrt-x86_64-nspr-4.40-1-any.pkg.tar.zst ucrt64/share/licenses/nspr/LICENSE
+file mingw-w64-ucrt-x86_64-nss-3.131-1-any.pkg.tar.zst ucrt64/bin/nss3.dll
+file mingw-w64-ucrt-x86_64-nss-3.131-1-any.pkg.tar.zst ucrt64/bin/nssutil3.dll
+file mingw-w64-ucrt-x86_64-nss-3.131-1-any.pkg.tar.zst ucrt64/share/licenses/nss/COPYING
+file mingw-w64-ucrt-x86_64-openssl-3.6.5-1-any.pkg.tar.zst ucrt64/bin/libcrypto-3-x64.dll
+file mingw-w64-ucrt-x86_64-openssl-3.6.5-1-any.pkg.tar.zst ucrt64/bin/libssl-3-x64.dll
+file mingw-w64-ucrt-x86_64-openssl-3.6.5-1-any.pkg.tar.zst ucrt64/share/licenses/openssl/LICENSE
+file mingw-w64-ucrt-x86_64-opus-1.6.1-2-any.pkg.tar.zst ucrt64/bin/libopus-0.dll
+file mingw-w64-ucrt-x86_64-opus-1.6.1-2-any.pkg.tar.zst ucrt64/share/licenses/opus/COPYING
+file mingw-w64-ucrt-x86_64-orc-0.4.44-1-any.pkg.tar.zst ucrt64/bin/liborc-0.4-0.dll
+file mingw-w64-ucrt-x86_64-orc-0.4.44-1-any.pkg.tar.zst ucrt64/share/licenses/orc/COPYING
+file mingw-w64-ucrt-x86_64-p11-kit-0.26.5-1-any.pkg.tar.zst ucrt64/bin/libp11-kit-0.dll
+file mingw-w64-ucrt-x86_64-pango-1.58.2-1-any.pkg.tar.zst ucrt64/bin/libpango-1.0-0.dll
+file mingw-w64-ucrt-x86_64-pango-1.58.2-1-any.pkg.tar.zst ucrt64/bin/libpangocairo-1.0-0.dll
+file mingw-w64-ucrt-x86_64-pango-1.58.2-1-any.pkg.tar.zst ucrt64/bin/libpangoft2-1.0-0.dll
+file mingw-w64-ucrt-x86_64-pango-1.58.2-1-any.pkg.tar.zst ucrt64/bin/libpangowin32-1.0-0.dll
+file mingw-w64-ucrt-x86_64-pango-1.58.2-1-any.pkg.tar.zst ucrt64/share/licenses/pango/COPYING
+file mingw-w64-ucrt-x86_64-pcre2-10.49-1-any.pkg.tar.zst ucrt64/bin/libpcre2-8-0.dll
+file mingw-w64-ucrt-x86_64-pcre2-10.49-1-any.pkg.tar.zst ucrt64/share/licenses/pcre2/COPYING
+file mingw-w64-ucrt-x86_64-pcre2-10.49-1-any.pkg.tar.zst ucrt64/share/licenses/pcre2/LICENCE.md
+file mingw-w64-ucrt-x86_64-pixman-0.46.4-3-any.pkg.tar.zst ucrt64/bin/libpixman-1-0.dll
+file mingw-w64-ucrt-x86_64-pixman-0.46.4-3-any.pkg.tar.zst ucrt64/share/licenses/pixman/COPYING
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/bin/qemu-system-x86_64.exe
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/bios-256k.bin
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/edk2-i386-vars.fd
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/edk2-licenses.txt
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/edk2-x86_64-code.fd
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/efi-e1000e.rom
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/efi-virtio.rom
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/keymaps/ar
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/keymaps/bepo
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/keymaps/cz
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/keymaps/da
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/keymaps/de
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/keymaps/de-ch
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/keymaps/en-gb
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/keymaps/en-us
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/keymaps/es
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/keymaps/et
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/keymaps/fi
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/keymaps/fo
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/keymaps/fr
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/keymaps/fr-be
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/keymaps/fr-ca
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/keymaps/fr-ch
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/keymaps/hr
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/keymaps/hu
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/keymaps/is
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/keymaps/it
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/keymaps/ja
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/keymaps/lt
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/keymaps/lv
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/keymaps/mk
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/keymaps/nl
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/keymaps/no
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/keymaps/pl
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/keymaps/pt
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/keymaps/pt-br
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/keymaps/ru
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/keymaps/sl
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/keymaps/sv
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/keymaps/th
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/keymaps/tr
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/kvmvapic.bin
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/linuxboot_dma.bin
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/multiboot_dma.bin
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/pvh.bin
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/vgabios-bochs-display.bin
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/vgabios-ramfb.bin
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/vgabios-stdvga.bin
+file mingw-w64-ucrt-x86_64-qemu-11.1.2-1-any.pkg.tar.zst ucrt64/share/qemu/vgabios-virtio.bin
+file mingw-w64-ucrt-x86_64-qemu-image-util-11.1.2-1-any.pkg.tar.zst ucrt64/bin/qemu-img.exe
+file mingw-w64-ucrt-x86_64-rav1e-0.8.1-1-any.pkg.tar.zst ucrt64/bin/librav1e.dll
+file mingw-w64-ucrt-x86_64-rav1e-0.8.1-1-any.pkg.tar.zst ucrt64/share/licenses/rav1e/LICENSE
+file mingw-w64-ucrt-x86_64-rav1e-0.8.1-1-any.pkg.tar.zst ucrt64/share/licenses/rav1e/PATENTS
+file mingw-w64-ucrt-x86_64-snappy-1.3.1-1-any.pkg.tar.zst ucrt64/bin/libsnappy.dll
+file mingw-w64-ucrt-x86_64-spice-0.16.0-4-any.pkg.tar.zst ucrt64/bin/libspice-server-1.dll
+file mingw-w64-ucrt-x86_64-spice-0.16.0-4-any.pkg.tar.zst ucrt64/share/licenses/spice/COPYING
+file mingw-w64-ucrt-x86_64-spirv-tools-3~1.4.363.0-1-any.pkg.tar.zst ucrt64/bin/libSPIRV-Tools.dll
+file mingw-w64-ucrt-x86_64-spirv-tools-3~1.4.363.0-1-any.pkg.tar.zst ucrt64/share/licenses/spirv-tools/LICENSE
+file mingw-w64-ucrt-x86_64-svt-av1-4.2.0-1-any.pkg.tar.zst ucrt64/bin/libSvtAv1Enc-4.dll
+file mingw-w64-ucrt-x86_64-svt-av1-4.2.0-1-any.pkg.tar.zst ucrt64/share/licenses/svt-av1/LICENSE
+file mingw-w64-ucrt-x86_64-svt-av1-4.2.0-1-any.pkg.tar.zst ucrt64/share/licenses/svt-av1/PATENTS.md
+file mingw-w64-ucrt-x86_64-usbredir-0.15.0-1-any.pkg.tar.zst ucrt64/bin/libusbredirparser-1.dll
+file mingw-w64-ucrt-x86_64-usbredir-0.15.0-1-any.pkg.tar.zst ucrt64/share/licenses/usbredir/COPYING
+file mingw-w64-ucrt-x86_64-usbredir-0.15.0-1-any.pkg.tar.zst ucrt64/share/licenses/usbredir/COPYING.LIB
+file mingw-w64-ucrt-x86_64-virglrenderer-1.3.0-1-any.pkg.tar.zst ucrt64/bin/libvirglrenderer-1.dll
+file mingw-w64-ucrt-x86_64-virglrenderer-1.3.0-1-any.pkg.tar.zst ucrt64/share/licenses/virglrenderer/COPYING
+file mingw-w64-ucrt-x86_64-xz-5.8.4-1-any.pkg.tar.zst ucrt64/bin/liblzma-5.dll
+file mingw-w64-ucrt-x86_64-xz-5.8.4-1-any.pkg.tar.zst ucrt64/share/licenses/xz/COPYING
+file mingw-w64-ucrt-x86_64-xz-5.8.4-1-any.pkg.tar.zst ucrt64/share/licenses/xz/COPYING.0BSD
+file mingw-w64-ucrt-x86_64-xz-5.8.4-1-any.pkg.tar.zst ucrt64/share/licenses/xz/COPYING.GPLv2
+file mingw-w64-ucrt-x86_64-xz-5.8.4-1-any.pkg.tar.zst ucrt64/share/licenses/xz/COPYING.GPLv3
+file mingw-w64-ucrt-x86_64-xz-5.8.4-1-any.pkg.tar.zst ucrt64/share/licenses/xz/COPYING.LGPLv2.1
+file mingw-w64-ucrt-x86_64-zlib-1.3.2-2-any.pkg.tar.zst ucrt64/bin/zlib1.dll
+file mingw-w64-ucrt-x86_64-zlib-1.3.2-2-any.pkg.tar.zst ucrt64/share/licenses/zlib/LICENSE
+file mingw-w64-ucrt-x86_64-zstd-1.5.7-2-any.pkg.tar.zst ucrt64/bin/libzstd.dll
+file mingw-w64-ucrt-x86_64-zstd-1.5.7-2-any.pkg.tar.zst ucrt64/share/licenses/zstd/LICENSE
+sysdll advapi32.dll
+sysdll api-ms-win-core-path-l1-1-0.dll
+sysdll api-ms-win-core-synch-l1-2-0.dll
+sysdll api-ms-win-crt-conio-l1-1-0.dll
+sysdll api-ms-win-crt-convert-l1-1-0.dll
+sysdll api-ms-win-crt-environment-l1-1-0.dll
+sysdll api-ms-win-crt-filesystem-l1-1-0.dll
+sysdll api-ms-win-crt-heap-l1-1-0.dll
+sysdll api-ms-win-crt-locale-l1-1-0.dll
+sysdll api-ms-win-crt-math-l1-1-0.dll
+sysdll api-ms-win-crt-multibyte-l1-1-0.dll
+sysdll api-ms-win-crt-private-l1-1-0.dll
+sysdll api-ms-win-crt-process-l1-1-0.dll
+sysdll api-ms-win-crt-runtime-l1-1-0.dll
+sysdll api-ms-win-crt-stdio-l1-1-0.dll
+sysdll api-ms-win-crt-string-l1-1-0.dll
+sysdll api-ms-win-crt-time-l1-1-0.dll
+sysdll api-ms-win-crt-utility-l1-1-0.dll
+sysdll bcrypt.dll
+sysdll comctl32.dll
+sysdll comdlg32.dll
+sysdll crypt32.dll
+sysdll dnsapi.dll
+sysdll dwmapi.dll
+sysdll dwrite.dll
+sysdll gdi32.dll
+sysdll gdiplus.dll
+sysdll hid.dll
+sysdll imm32.dll
+sysdll iphlpapi.dll
+sysdll kernel32.dll
+sysdll msimg32.dll
+sysdll mswsock.dll
+sysdll ncrypt.dll
+sysdll ntdll.dll
+sysdll ole32.dll
+sysdll oleaut32.dll
+sysdll rpcrt4.dll
+sysdll secur32.dll
+sysdll setupapi.dll
+sysdll shell32.dll
+sysdll shlwapi.dll
+sysdll user32.dll
+sysdll usp10.dll
+sysdll version.dll
+sysdll winmm.dll
+sysdll winspool.drv
+sysdll wldap32.dll
+sysdll ws2_32.dll
