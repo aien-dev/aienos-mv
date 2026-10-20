@@ -1332,7 +1332,7 @@ HOST_SRCS := $(KDIR)/core/fmt.c $(KDIR)/core/acpi.c $(KDIR)/core/smmu.c $(KDIR)/
 	$(KDIR)/core/line_rx.c $(KDIR)/core/klog.c $(KDIR)/core/klog_slot.c $(KDIR)/core/cpufeat.c $(KDIR)/core/unlock_req.c $(KDIR)/core/agent_cmd.c $(KDIR)/core/artifact_card.c
 TESTS := test_fmt test_frames test_pt test_acpi test_acpi_dev test_heap test_smmu test_sched test_ipc test_artifact test_osc_unit test_osc_launch test_osc_admit test_osc_receipt test_entropy test_handoff test_fbcon test_osh_op \
 	test_continuity_codec test_continuity_resolve test_continuity_commit test_continuity_recovery test_continuity_geometry \
-	test_continuity_subject test_continuity_subject_provision test_lifecycle test_console_rx test_klog test_klog_slot test_pi5 test_pi5_marker test_pi5_rng test_cpufeat test_dma_window test_pi5_pcie test_pi5_net test_pi5_gem test_unlock_req test_context test_agent_cmd test_artifact_card
+	test_continuity_subject test_continuity_subject_provision test_lifecycle test_console_rx test_klog test_klog_slot test_pi5 test_pi5_marker test_pi5_rng test_cpufeat test_dma_window test_pi5_pcie test_pi5_net test_pi5_gem test_unlock_req test_context test_agent_cmd test_artifact_card test_gb10_gsp_boot
 HCFLAGS := -std=gnu11 -O1 -g -Wall -Wextra -Werror -I$(KDIR)/core -I$(KDIR)/mm -I$(KDIR)/tests -I$(BOOT)
 SANFLAGS := -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer
 
@@ -1484,8 +1484,8 @@ smmu-l2-mutants: $(OUT)/host/test_smmu
 	else echo "mutant flag refused under CK_HARDWARE_STAGING"; fi; \
 	if [ $$fail = 0 ]; then echo "CK_SMMU_L2_MUTANTS: PASS"; else echo "CK_SMMU_L2_MUTANTS: FAIL"; exit 1; fi
 
-test: $(addprefix $(OUT)/host/,$(TESTS)) osc-receipt-mutants osc-receipt-release handoff-mutant acpi-dev-mutant iort-mutants smmu-l2-mutants osh-op-mutant context-mutant agent-cmd-mutant artifact-card-mutant artifact-tier-pi5 artifact-tier-mutant test-continuity-subject-restart gsp-fw-inspect-test gsp-cot-test gsp-bindata-test gsp-bootargs-test gsp-rpc-test slot-test slot-free package-test slot-loader-check
-	@fail=0; for t in $(filter-out osc-receipt-mutants osc-receipt-release handoff-mutant acpi-dev-mutant iort-mutants smmu-l2-mutants osh-op-mutant context-mutant agent-cmd-mutant artifact-card-mutant artifact-tier-pi5 artifact-tier-mutant test-continuity-subject-restart gsp-fw-inspect-test gsp-cot-test gsp-bindata-test gsp-bootargs-test gsp-rpc-test slot-test slot-free package-test slot-loader-check,$^); do $$t || fail=1; done; \
+test: $(addprefix $(OUT)/host/,$(TESTS)) osc-receipt-mutants osc-receipt-release handoff-mutant acpi-dev-mutant iort-mutants smmu-l2-mutants osh-op-mutant context-mutant agent-cmd-mutant artifact-card-mutant artifact-tier-pi5 artifact-tier-mutant test-continuity-subject-restart gsp-fw-inspect-test gsp-cot-test gsp-bindata-test gsp-bootargs-test gsp-rpc-test gb10-gsp-free gb10-gsp-nvhdr-check gb10-gsp-mutants slot-test slot-free package-test slot-loader-check
+	@fail=0; for t in $(filter-out osc-receipt-mutants osc-receipt-release handoff-mutant acpi-dev-mutant iort-mutants smmu-l2-mutants osh-op-mutant context-mutant agent-cmd-mutant artifact-card-mutant artifact-tier-pi5 artifact-tier-mutant test-continuity-subject-restart gsp-fw-inspect-test gsp-cot-test gsp-bindata-test gsp-bootargs-test gsp-rpc-test gb10-gsp-free gb10-gsp-nvhdr-check gb10-gsp-mutants slot-test slot-free package-test slot-loader-check,$^); do $$t || fail=1; done; \
 	if [ $$fail = 0 ]; then echo "CK_CORE_HOST: PASS"; else echo "CK_CORE_HOST: FAIL"; exit 1; fi
 
 sanitize: $(addprefix $(OUT)/host-san/,$(TESTS))
@@ -2036,6 +2036,56 @@ gsp-rpc-encode: $(GSP_RPC_TOOL)
 gsp-rpc-test: $(GSP_RPC_TOOL)
 	$(GSP_RPC_TOOL) selftest | grep -E '^CK_GSP_RPC_ENCODE_SELFTEST: (PASS|FAIL)' | grep -q PASS || { $(GSP_RPC_TOOL) selftest | grep -E 'FAIL|SELFTEST'; exit 1; }
 	@$(GSP_RPC_TOOL) selftest | tail -1
+
+# ---- GB10 GSP boot builder, freestanding (L192, aienos#286 cut C host side) ----
+# dev/gb10_gsp_boot.c composes every block above into one arena plus the SEC2 COT packet and the
+# post-init RPCs (GSP_RM_ALLOC / CONTROL / FREE, GET_GSP_STATIC_INFO). Bytes in memory only: no
+# MMIO, no firmware load. Not linked into any image yet. docs/GB10_FIRMWARE_INVENTORY.md section 14.
+#   test_gb10_gsp_boot (in TESTS): layout, cross-links, ring, refusals, decoded at hand-written offsets
+#   gb10-gsp-free:        compiles with KCFLAGS, no undefined symbols, every frame <= 4 KiB of stack
+#   gb10-gsp-nvhdr-test:  mirrors vs the NVIDIA headers themselves (OGKM_DIR, MIT); FAILS if absent
+#   gb10-gsp-nvhdr-check: same, NOT_RUN when OGKM_DIR is absent (used by make test)
+#   gb10-gsp-mutants:     each test-only mutant must make test_gb10_gsp_boot or the nvhdr test FAIL
+GSPB_SRCS := $(KDIR)/dev/gb10_gsp_boot.c
+GSPB_DEPS := $(KDIR)/tests/test_gb10_gsp_boot.c $(GSPB_SRCS) $(KDIR)/dev/gb10_gsp_boot.h $(KDIR)/tests/ck_test.h
+$(OUT)/host/test_gb10_gsp_boot: $(GSPB_DEPS)
+	@mkdir -p $(dir $@)
+	$(HOSTCC) $(HCFLAGS) -I$(KDIR)/dev -o $@ $< $(GSPB_SRCS)
+$(OUT)/host-san/test_gb10_gsp_boot: $(GSPB_DEPS)
+	@mkdir -p $(dir $@)
+	$(HOSTCC) $(HCFLAGS) $(SANFLAGS) -I$(KDIR)/dev -o $@ $< $(GSPB_SRCS)
+test-gb10-gsp-boot: $(OUT)/host/test_gb10_gsp_boot
+	$<
+gb10-gsp-free: $(GSPB_SRCS) $(KDIR)/dev/gb10_gsp_boot.h
+	@mkdir -p $(OUT)/free
+	$(KCC) $(KCFLAGS) -Wstack-usage=4096 -c $(GSPB_SRCS) -o $(OUT)/free/gb10_gsp_boot.o
+	@bad=$$($(CROSS)nm -u $(OUT)/free/gb10_gsp_boot.o | awk '{print $$2}' | grep -vxF -e _GLOBAL_OFFSET_TABLE_ || true); \
+	if [ -n "$$bad" ]; then echo "GB10_GSP_FREE: FAIL unexpected undefined symbols: $$bad"; exit 1; fi; \
+	echo "GB10_GSP_FREE: PASS (no undefined symbols, stack <= 4096 per function)"
+OGKM_DIR ?= $(HOME)/workspace/_ext/open-gpu-kernel-modules-580.173.02
+OGKM_SRC := $(OGKM_DIR)/src
+OGKM_INC := -I$(OGKM_SRC)/common/sdk/nvidia/inc -I$(OGKM_SRC)/nvidia/arch/nvalloc/common/inc \
+	-I$(OGKM_SRC)/common/uproc/os/common/include -I$(OGKM_SRC)/nvidia/inc/kernel -I$(OGKM_SRC)/nvidia/inc \
+	-I$(OGKM_SRC)/nvidia/generated -I$(OGKM_SRC)/common/shared/msgq/inc -I$(OGKM_SRC)/nvidia/interface \
+	-I$(OGKM_SRC)/common/inc
+GSPB_NV_DEPS := $(KDIR)/tests/test_gb10_gsp_nvhdr.c $(GSPB_SRCS) $(KDIR)/dev/gb10_gsp_boot.h $(KDIR)/tests/ck_test.h
+gb10-gsp-nvhdr-test: $(GSPB_NV_DEPS)
+	@test -r $(OGKM_SRC)/nvidia/arch/nvalloc/common/inc/gsp/gsp_fw_wpr_meta.h || \
+	  { echo "GB10_GSP_NVHDR: FAIL (no open-gpu-kernel-modules 580.173.02 tree at OGKM_DIR=$(OGKM_DIR))"; exit 1; }
+	@mkdir -p $(OUT)/host-san
+	$(HOSTCC) $(HCFLAGS) $(SANFLAGS) -I$(KDIR)/dev $(OGKM_INC) -o $(OUT)/host-san/test_gb10_gsp_nvhdr $< $(GSPB_SRCS)
+	$(OUT)/host-san/test_gb10_gsp_nvhdr
+gb10-gsp-nvhdr-check:
+	@if [ -r $(OGKM_SRC)/nvidia/arch/nvalloc/common/inc/gsp/gsp_fw_wpr_meta.h ]; then $(MAKE) --no-print-directory gb10-gsp-nvhdr-test; \
+	else echo "GB10_GSP_NVHDR: NOT_RUN (no open-gpu-kernel-modules 580.173.02 tree at OGKM_DIR=$(OGKM_DIR))"; fi
+GSPB_MUTANTS := SWAPRX CKSUM RADIX ALLOCLEN
+gb10-gsp-mutants: $(GSPB_DEPS) $(GSPB_NV_DEPS)
+	@mkdir -p $(OUT)/host
+	@fail=0; for m in $(GSPB_MUTANTS); do \
+	  $(HOSTCC) $(HCFLAGS) -DGSP_MUTANT_HOST -DGSP_MUTANT_$$m -I$(KDIR)/dev -o $(OUT)/host/test_gb10_gsp_boot_mut_$$m $(KDIR)/tests/test_gb10_gsp_boot.c $(GSPB_SRCS) || exit 1; \
+	  if $(OUT)/host/test_gb10_gsp_boot_mut_$$m >/dev/null; then echo "MUTANT SURVIVED: $$m"; fail=1; else echo "mutant killed: $$m"; fi; \
+	done; test $$fail -eq 0
+.PHONY: test-gb10-gsp-boot gb10-gsp-free gb10-gsp-nvhdr-test gb10-gsp-nvhdr-check gb10-gsp-mutants
 
 # ---- native image slots: host tool + freestanding check (native v1 plan P11 cut 1, gate N7) ----
 # native/boot/slot_format.h + slot_select.c: the A/B slot manifest, control record and the
