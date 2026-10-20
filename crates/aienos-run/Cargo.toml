@@ -1,0 +1,20 @@
+[package]
+name = "aienos-run"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "aienos-run: boot AienOS in a VM on Linux, Windows and macOS (shared core + per-host backends)"
+
+[[bin]]
+name = "aienos-run"
+path = "src/main.rs"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+aienos-crypto = { path = "../aienos-crypto" }
+ed25519-dalek = { version = "=2.2.0", default-features = false, features = ["fast", "std"] }
+libc = "=0.2.189"
