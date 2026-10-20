@@ -1,0 +1,22 @@
+# tests/gates/aienos-wallclock-qemu.gate
+# L200: wall-clock read through UEFI GetTime in the booted aarch64 kernel: bash scripts/qemu_ck_wallclock_test.sh, AIENOS_WALLCLOCK_QEMU: PASS required
+gate: AIENOS-WALLCLOCK-QEMU
+manifest_version: 2
+owner: aienos
+requires:
+  - qemu
+inputs:
+  - native/kernel/
+  - native/boot/
+  - scripts/qemu_ck_wallclock_test.sh
+  - scripts/lib_gate_hold.sh
+  - tests/gates/
+run:
+  exec: tests/gates/run.sh
+  args: ["wallclock-qemu"]
+expects:
+  exit: 0
+  verdict: PASS
+timeout: 30m
+exactness: EXACT
+cache_scope: machine

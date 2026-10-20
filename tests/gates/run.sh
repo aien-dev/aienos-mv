@@ -99,6 +99,22 @@ case "$step" in
     # The script exits 0 on NOT_RUN; only an explicit PASS counts.
     grep -qx 'AIENOS_STORE_NVME_QEMU: PASS' "$TMP/qemu.log"
     ;;
+  # L200: TPM 2.0 CRB driver and wall-clock gates. Only an explicit PASS counts (the scripts exit 0/2/3 on NOT_RUN).
+  tpm-crb-swtpm)
+    set -o pipefail
+    bash scripts/tpm_crb_swtpm_test.sh 2>&1 | tee "$TMP/g.log"
+    grep -qx 'AIENOS_TPM_CRB_SWTPM: PASS' "$TMP/g.log"
+    ;;
+  tpm-crb-qemu)
+    set -o pipefail
+    bash scripts/qemu_ck_tpm_crb_test.sh 2>&1 | tee "$TMP/g.log"
+    grep -qx 'AIENOS_TPM_CRB_QEMU: PASS' "$TMP/g.log"
+    ;;
+  wallclock-qemu)
+    set -o pipefail
+    bash scripts/qemu_ck_wallclock_test.sh 2>&1 | tee "$TMP/g.log"
+    grep -qx 'AIENOS_WALLCLOCK_QEMU: PASS' "$TMP/g.log"
+    ;;
   # crypto-boundary.yml (one job, four commands)
   crypto-boundary)
     cargo test --locked --offline -p aienos-crypto

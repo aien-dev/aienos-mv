@@ -143,6 +143,18 @@ of them:
   host tools) are still present as data in every image, including hardware
   staging; the ordinary loader trusts no anchor.
 
+## TPM 2.0 over CRB and the wall clock (L200, gaps D9 and D10)
+
+What a reader can now do, and where it has been shown:
+
+- **Talk to a TPM 2.0 through the CRB register interface** (`dev/tpm_crb.c`): TPM2_Startup, GetRandom, PCR_Read (SHA-256) and NV_Read, with the TPM's own refusal codes passed through as positive numbers, never mistaken for a driver fault, and a bounded resubmit on `TPM_RC_RETRY`. The same file runs in the host tests, behind a real `swtpm`, and inside the booted x86_64 kernel.
+- **Name the date.** The UEFI stub reads the firmware clock once through GetTime before ExitBootServices (`native/boot/efi_time.c`); the kernel never calls a runtime service. `core/wallclock.c` converts it to Unix time and advances it with the generic counter. The kernel prints `wallclock:` lines.
+- Gates (all emulator or simulator only; **nothing was run against the Spark's real TPM or clock**):
+  `scripts/tpm_crb_swtpm_test.sh` (AIENOS_TPM_CRB_SWTPM, real swtpm 0.7.3 behind a simulated CRB window),
+  `scripts/qemu_ck_tpm_crb_test.sh` (AIENOS_TPM_CRB_QEMU, x86_64 q35 with `tpm-crb` + swtpm; the aarch64 virt machine has no CRB device, so the CRB driver cannot be booted there),
+  `scripts/qemu_ck_wallclock_test.sh` (AIENOS_WALLCLOCK_QEMU, aarch64, two `-rtc base=` dates), plus host tests `test_tpm_crb` and `test_wallclock`. Expected output is pinned in `tests/fixtures/{tpm_crb_swtpm_fresh,tpm_crb_swtpm_started,tpm_crb_qemu,wallclock_qemu}_expected.txt`.
+- Limits, stated plainly: the CRB offsets come from the edk2 copy of the TCG PTP register map (the TCG PDF was not readable when this was written); the Spark's ACPI TPM2 table (start method, CRB address) is UNKNOWN because it is root-only on the box and no capture is in the repo, and the driver refuses any start method other than 7; the Spark's clock is Linux's `rtc-efi` (the same GetTime service), but GetTime on the Spark firmware was not exercised; an unspecified time zone is read as UTC; locality 0 only; no interrupt, cancel or session support beyond one empty-password session for NV_Read; `tpm_crb.c` is compiled into the aarch64 image but not yet called from its boot path, and no PCR policy or sealed-Store hookup exists yet.
+
 ## 2017 iMac image (AIENOS-IMAC-KERNEL-0, x86_64)
 
     make -C native/kernel imac-kernel        # target/native-kernel/IMACKERN.EFI

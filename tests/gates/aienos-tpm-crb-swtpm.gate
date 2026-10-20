@@ -1,0 +1,22 @@
+# tests/gates/aienos-tpm-crb-swtpm.gate
+# L200: TPM 2.0 CRB driver against a real swtpm: bash scripts/tpm_crb_swtpm_test.sh, AIENOS_TPM_CRB_SWTPM: PASS required
+gate: AIENOS-TPM-CRB-SWTPM
+manifest_version: 2
+owner: aienos
+requires:
+  - host
+inputs:
+  - native/kernel/
+  - native/boot/
+  - scripts/tpm_crb_swtpm_test.sh
+  - scripts/lib_gate_hold.sh
+  - tests/gates/
+run:
+  exec: tests/gates/run.sh
+  args: ["tpm-crb-swtpm"]
+expects:
+  exit: 0
+  verdict: PASS
+timeout: 20m
+exactness: EXACT
+cache_scope: machine

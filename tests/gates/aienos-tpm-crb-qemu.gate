@@ -1,0 +1,22 @@
+# tests/gates/aienos-tpm-crb-qemu.gate
+# L200: TPM 2.0 CRB driver in the booted x86_64 kernel (q35 tpm-crb + swtpm): bash scripts/qemu_ck_tpm_crb_test.sh, AIENOS_TPM_CRB_QEMU: PASS required
+gate: AIENOS-TPM-CRB-QEMU
+manifest_version: 2
+owner: aienos
+requires:
+  - qemu
+inputs:
+  - native/kernel/
+  - native/boot/
+  - scripts/qemu_ck_tpm_crb_test.sh
+  - scripts/lib_gate_hold.sh
+  - tests/gates/
+run:
+  exec: tests/gates/run.sh
+  args: ["tpm-crb-qemu"]
+expects:
+  exit: 0
+  verdict: PASS
+timeout: 30m
+exactness: EXACT
+cache_scope: machine

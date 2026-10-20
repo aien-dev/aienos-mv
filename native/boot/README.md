@@ -79,3 +79,7 @@ physical.
 The handoff record (`handoff.h`, magic `CHANDOF1`) is specified, with what is
 frozen, what the kernel must refuse and how rollback works without A/B slots,
 in `docs/BOOT_HANDOFF_CONTRACT.md` (SPEC, NOT_RUN; ADR 0024 Q3).
+
+## Wall clock (`efi_time.c`, L200)
+
+`ck_boot_wallclock_read` calls the UEFI runtime service GetTime once, after the GOP lookup and before ExitBootServices, and stores the reading (validated, with the counter value at that instant) in the static `ck_wallclock_boot` (`native/kernel/core/wallclock.c`). The handoff record is unchanged (still CHANDOF3); the kernel is the only consumer and never calls a runtime service. Shown in QEMU only (gate `scripts/qemu_ck_wallclock_test.sh`); not exercised on the Spark's firmware.
