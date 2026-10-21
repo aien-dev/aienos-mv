@@ -25,6 +25,7 @@ void ck_boot_gop_find(EFI_SYSTEM_TABLE *st, struct ck_handoff *h);
 
 static uint64_t map_buf[MAP_BYTES / 8];
 static struct ck_handoff handoff;
+int ck_x86_swapped_in;
 static struct nb_pass pass; /* from the network loader, when it started this kernel */
 static int pass_state;      /* 0 none, 1 taken, 2 taken but its object was not in loader memory (dropped) */
 
@@ -75,6 +76,19 @@ static void night_ground(const struct ck_handoff *h)
 
 EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE *st)
 {
+#if defined(CK_X86_SWAP) && CK_X86_SWAP
+    /* A live swap, not the firmware: the running kernel already left UEFI and hands over its
+     * CHANDOF3 record (swap_x86.c). The console is this image's own state, so probe it again;
+     * ck_x86_kernel_entry checks the record. The record sits in the old kernel's trampoline page
+     * below 1 MiB: copied into this image, that page is free again for the secondary-core
+     * trampoline (kmain_x86.c mm_build takes the lowest free page). */
+    if ((uint64_t)(uintptr_t)image == CK_X86_SWAP_ENTRY_MAGIC) {
+        memcpy(&handoff, (const void *)st, sizeof handoff);
+        ck_x86_swapped_in = 1;
+        ck_x86_com1_probe();
+        ck_x86_kernel_entry(&handoff);
+    }
+#endif
     struct ck_handoff *h = &handoff;
     uint16_t cs;
     __asm__ volatile("mov %%cs, %0" : "=r"(cs));

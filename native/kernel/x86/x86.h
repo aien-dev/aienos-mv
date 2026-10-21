@@ -128,6 +128,9 @@ const disk_dev *ck_x86_ahci_dev(unsigned index, const char **model);
 int ck_x86_ahci_allow(unsigned index, uint64_t first, uint64_t last);
 /* Closes every write range of the disk. */
 void ck_x86_ahci_allow_none(unsigned index);
+#ifdef CK_X86_SWAP_TEST_DISK
+int ck_x86_ahci_read_lba(unsigned ctrl, unsigned disk, uint64_t lba, unsigned count, uint8_t *buf);
+#endif
 
 /* efi_x86.c: what the network loader handed this kernel (boot/netboot_proto.h),
  * or 0 when it was not started by the loader (the firmware started it from a
@@ -238,6 +241,26 @@ const struct ck_courier *ck_x86_courier_udp(uint64_t tsc_hz);
  * lines as unauthenticated UDP broadcasts every 2 s while the link is up;
  * returns the rounds sent. */
 unsigned ck_x86_report_hold(uint64_t tsc_hz, unsigned seconds);
+/* The GPU bench's receive (lab only): 0 with *len the UDP payload of a datagram for port 47035 (headers
+ * stripped) and src_mac its sender, 0 with *len 0 when none waits, -1 when the chip is not up. Frames for
+ * the other reader (ck_x86_tg3_recv) are kept for it, and the other way round. */
+int  ck_x86_tg3_recv_bench(uint8_t *pkt, size_t cap, size_t *len, uint8_t src_mac[6]);
+/* UDP broadcast send helper. */
+void ck_x86_udp_send(const uint8_t dst_mac[6], const uint8_t *pkt, size_t len,
+                      uint16_t src_port, uint16_t dst_port);
+/* Live swap entry: the trampoline (swap_tramp.S) calls the new image's PE entry, _start, with this
+ * value where UEFI puts the ImageHandle (RCX) and the handoff where it puts the SystemTable (RDX).
+ * It is not a canonical address, so no firmware handle can equal it; efi_main then skips the
+ * firmware and enters the kernel (efi_x86.c). */
+#define CK_X86_SWAP_ENTRY_MAGIC 0x5357415041454E49ull /* "INEAPAWS" */
+/* Set by efi_main when this kernel was entered by a live swap, not by the firmware. */
+extern int ck_x86_swapped_in;
+/* Swap helpers (swap_x86.c, exposed to kmain_x86.c). */
+void ck_x86_swap_stop_aps(void);
+uint64_t ck_x86_tsc_hz(void);
+void ck_x86_xhci_stop_all(void);
+void ck_x86_tg3_stop(void);
+void ck_x86_hda_stop(void);
 #endif
 
 /* smp_x86.S: the secondary-core trampoline, copied below 1 MiB and patched. */

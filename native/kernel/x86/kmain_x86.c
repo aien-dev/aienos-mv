@@ -42,6 +42,8 @@
 #include "../ui/allen_ui.h"
 #include "x86.h"
 #include "../../boot/netboot_proto.h"
+#include "swap_x86.h"
+#include "bench_x86.h"
 
 #ifndef AIENOS_COMMIT
 #define AIENOS_COMMIT "unknown"
@@ -152,6 +154,7 @@ static void tables_load(void)
 
 /* ---- power ---- */
 static uint64_t tsc_hz;
+uint64_t ck_x86_tsc_hz(void) { return tsc_hz; }
 
 static void delay_ms(uint64_t ms)
 {
@@ -769,6 +772,12 @@ static void allen_window(void)
     }
     ck_allen_ui_named(ck_allen_self(&allen_mind)); /* the bar says who to speak to */
     ck_x86_kbd_sink(0, allen_line);
+#ifdef CK_X86_SWAP_TEST_DISK
+    /* QEMU swap test only (never in a lab image that reaches the iMac): teach Allen
+     * one fact through the real line path so kernel A writes Allen's memory to disk
+     * before the swap, and the swapped-in kernel must load it back. */
+    allen_line("my name is Ada");
+#endif
     if (ck_x86_console_fb_get(&px, &w, &h, &pitch, &format)) {
         ck_puts("screen: text only (no framebuffer for Allen's window)\n");
         return;
@@ -953,6 +962,10 @@ void ck_x86_hold_step(uint64_t *end)
         ck_x86_kbd_hold_poll(end);
         courier_step(); /* before the window too: the wire's FIFO is 16 bytes, the far side's hello 14 */
     }
+    /* The lab receivers (swap, bench) run whether or not Allen's window is up: a lab
+     * iMac with no keyboard must still take a swap or a bench command. */
+    ck_x86_swap_step(hand, tramp_pa);
+    ck_x86_bench_step(tsc_hz);
     if (!allen_on)
         return;
     if (!__atomic_load_n(&draw_on, __ATOMIC_ACQUIRE) && !__atomic_test_and_set(&draw_lock, __ATOMIC_ACQUIRE)) {
@@ -1229,6 +1242,34 @@ static void wx_retire_trampoline(void)
     __asm__ volatile("invlpg (%0)" ::"r"(tramp_pa) : "memory");
 }
 
+/* Lab swap only, called once after a verified payload and before the jump: the
+ * trampoline page becomes writable and executable again, and so does the running image,
+ * which the trampoline overwrites with the new kernel's sections (text is read-only and
+ * data no-execute under W^X; the new kernel runs on these tables until its own mm_build).
+ * The application processors are halted by then (quiesce_aps), so the BSP's CR3 reload
+ * is the only TLB flush needed. */
+void ck_x86_swap_tramp_open(void)
+{
+    uint64_t *e = tramp_pa ? pte4k(tramp_pa) : 0;
+    if (e)
+        *e = (*e | PTE_W) & ~PTE_NX;
+    for (uint64_t a = (uint64_t)(uintptr_t)__image_base; a < (uint64_t)(uintptr_t)__image_end; a += CK_PAGE) {
+        uint64_t *pd = &pds[a >> 30][(a >> 21) & 511];
+        if (!(*pd & PTE_P))
+            continue;
+        if (*pd & PTE_PS) {
+            *pd = (*pd | PTE_W) & ~PTE_NX;
+            continue;
+        }
+        /* The stack guard (kstack's first page) is unmapped: it is image memory the copy
+         * writes too, mapped back identity, write-back, like the image pages around it. */
+        uint64_t *pte = pte4k(a);
+        if (pte)
+            *pte = (*pte & PTE_P) ? (*pte | PTE_W) & ~PTE_NX : a | PTE_P | PTE_W;
+    }
+    ck_wr_cr3(ck_rd_cr3());
+}
+
 /* Every present leaf of the identity map: writable+executable ones, and
  * executable 4 KiB units (must equal the code pages). */
 static void wx_audit(uint64_t *wx, uint64_t *exec4k)
@@ -1255,6 +1296,44 @@ static void wx_audit(uint64_t *wx, uint64_t *exec4k)
         }
 }
 
+/* Memory this kernel is standing on when it starts, kept out of the frame pool. After the
+ * firmware it all sits outside conventional memory and the reserves change nothing. After a live
+ * swap (swap_x86.c) the old kernel's frames hold it: the handoff record (in the old kernel's
+ * trampoline page), the memory map copy, the stack this code runs on, and the page tables CR3
+ * still points at. A frame handed out from any of them would be overwritten while in use. */
+#define LIVE_STACK_BELOW (16u << 10) /* stack mm_build may still grow into below the current rsp */
+#define LIVE_STACK_ABOVE (64u << 10) /* the callers' frames above it (the swap stack is 64 KiB) */
+static void reserve_live(const struct ck_handoff *h)
+{
+    uint64_t hp = (uint64_t)(uintptr_t)h, rsp;
+    ck_frames_reserve(&frames, hp, hp + sizeof *h);
+    ck_frames_reserve(&frames, h->memory_map, h->memory_map + h->map_size);
+    __asm__ volatile("mov %%rsp, %0" : "=r"(rsp));
+    ck_frames_reserve(&frames, rsp > LIVE_STACK_BELOW ? rsp - LIVE_STACK_BELOW : 0, rsp + LIVE_STACK_ABOVE);
+    /* The firmware's tables are its own memory; any other CR3 is a previous kernel's, built from
+     * frames: keep every table it reaches (leaves of 1 GiB and 2 MiB are not tables). */
+    uint64_t cr3 = ck_rd_cr3() & PTE_ADDR;
+    if (cr3 == (h->firmware_ttbr0 & PTE_ADDR))
+        return;
+    ck_frames_reserve(&frames, cr3, cr3 + CK_PAGE);
+    const uint64_t *l4 = (const uint64_t *)(uintptr_t)cr3;
+    for (unsigned a = 0; a < 512; a++) {
+        if (!(l4[a] & PTE_P))
+            continue;
+        const uint64_t *l3 = (const uint64_t *)(uintptr_t)(l4[a] & PTE_ADDR);
+        ck_frames_reserve(&frames, (uint64_t)(uintptr_t)l3, (uint64_t)(uintptr_t)l3 + CK_PAGE);
+        for (unsigned b = 0; b < 512; b++) {
+            if (!(l3[b] & PTE_P) || (l3[b] & PTE_PS))
+                continue;
+            const uint64_t *l2 = (const uint64_t *)(uintptr_t)(l3[b] & PTE_ADDR);
+            ck_frames_reserve(&frames, (uint64_t)(uintptr_t)l2, (uint64_t)(uintptr_t)l2 + CK_PAGE);
+            for (unsigned c = 0; c < 512; c++)
+                if ((l2[c] & PTE_P) && !(l2[c] & PTE_PS))
+                    ck_frames_reserve(&frames, l2[c] & PTE_ADDR, (l2[c] & PTE_ADDR) + CK_PAGE);
+        }
+    }
+}
+
 static void mm_build(void)
 {
     const struct ck_handoff *h = hand;
@@ -1263,6 +1342,11 @@ static void mm_build(void)
         ck_panic("memory: bad UEFI memory map");
     /* Page 0 stays out: a null pointer must never be a usable frame. */
     ck_frames_reserve(&frames, 0, CK_PAGE);
+    /* The running kernel's own image is never a frame. Its pages can be typed conventional in the
+     * map, and then a frame taken from them (the swap stack did) is inside the image that a live
+     * swap copies over. Reserving it keeps every frame the kernel hands out outside its image. */
+    ck_frames_reserve(&frames, (uint64_t)(uintptr_t)__image_base, (uint64_t)(uintptr_t)__image_end);
+    reserve_live(h);
     /* The secondary-core trampoline needs a page below 1 MiB; take the
      * lowest free page before anything else does. */
     if (ck_frames_alloc(&frames, 1, CK_PAGE, &tramp_pa) || tramp_pa >= 0x100000)
@@ -1606,6 +1690,20 @@ static int icr_send(uint32_t id, uint32_t lo)
         delay_us(1);
     }
     return -1;
+}
+
+/* Lab swap only (swap_x86.c), before the trampoline overwrites this image: every other core
+ * gets INIT, all excluding self (SDM vol.3 13.4.7.3, broadcast 000C4500H as in 11.4.4.1), and
+ * waits for a start-up IPI with no code of ours running. A drawing core left in draw_loop would
+ * run the new kernel's bytes mid-copy. The new kernel starts them again with INIT, SIPI, SIPI. */
+void ck_x86_swap_stop_aps(void)
+{
+    if (!ap_up)
+        return;
+    if (icr_send(0, 0xc4500))
+        ck_puts("swap: INIT to the other cores not accepted by the local APIC\n");
+    delay_ms(10);
+    ck_printf("swap: %u other cores stopped (INIT, waiting for start-up)\n", (unsigned)ap_up);
 }
 
 static void tramp_put32(const char *sym, uint32_t v)
@@ -1960,9 +2058,11 @@ static __attribute__((noreturn)) void kernel_main(void *arg)
         else
             ck_x86_display(0, 0, &frames, tsc_hz);
     }
+    ck_x86_swap_init(&frames);
     allen_facts.cores = sr.started + 1;
     allen_facts.sata_disks = st->ahci_disks;
     allen_facts.nvme_disks = st->nvme_disks;
+    ck_printf("AIENOS-KERNEL-0 commit=%s\n", ck_commit());
     ck_puts("kernel: alive\n");
     ck_printf("summary: cores=%u/%u timer=ok sata_disks=%u nvme_disks=%u gpt_valid=%u writes=none net=%s\n",
               sr.started + 1, sr.listed, st->ahci_disks, st->nvme_disks, st->gpt_valid,

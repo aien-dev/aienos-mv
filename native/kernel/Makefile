@@ -2259,6 +2259,11 @@ imac-diag: $(IMACDIAG_EFI)
 # tools/ck_imac_report_listen.c. The default image, and any resident or service (ALLEN) build,
 # must not contain it: the link step below fails a default image that has a report symbol.
 CK_X86_REPORT ?= 0
+# QEMU test switches (lab builds only; refused otherwise, see below): CK_X86_SWAP_TEST_DISK=1 stages
+# a swap image from a raw disk (scripts/qemu_ck_imac_swap_test.sh); CK_X86_BENCH_TEST=1 replaces the
+# GPU BARs with RAM stand-ins and moves the bench packets to COM1 (scripts/qemu_ck_gpu_bench_test.sh).
+CK_X86_SWAP_TEST_DISK ?= 0
+CK_X86_BENCH_TEST ?= 0
 X86K := $(KDIR)/x86
 ifeq ($(CK_X86_REPORT),1)
 IMACKERN_DIR := $(OUT)/imackern-lab
@@ -2283,15 +2288,38 @@ IMACKERN_OBJS := $(IMACKERN_DIR)/efi_entry_x86_64.o $(IMACKERN_DIR)/efi_x86.o $(
 	$(IMACKERN_DIR)/paint.o $(IMACKERN_DIR)/night.o $(IMACKERN_DIR)/sky_real.o $(IMACKERN_DIR)/sky_data.o $(IMACKERN_DIR)/mind.o $(IMACKERN_DIR)/flow.o $(IMACKERN_DIR)/chirp.o \
 	$(IMACKERN_DIR)/allen_memory.o $(IMACKERN_DIR)/allen_notes.o $(IMACKERN_DIR)/gpt_add.o $(IMACKERN_DIR)/memory_x86.o \
 	$(IMACKERN_DIR)/fat_boot.o $(IMACKERN_DIR)/sha512.o $(IMACKERN_DIR)/ct.o $(IMACKERN_DIR)/panel_x86.o \
-	$(IMACKERN_DIR)/gpu_x86.o
-IMACKERN_REPORT_OBJS := $(IMACKERN_DIR)/report_x86.o $(IMACKERN_DIR)/aienos_net.o $(IMACKERN_DIR)/courier_udp_x86.o
+	$(IMACKERN_DIR)/gpu_x86.o $(IMACKERN_DIR)/swap_x86.o $(IMACKERN_DIR)/bench_x86.o
+# Lab-only objects: the report and Allen's Ethernet courier, the swap receiver's trampoline, the owner key
+# table it verifies with (generated below), and the verifier itself (slot_select.c, ed25519.c). A default
+# image links none of them.
+IMACKERN_REPORT_OBJS := $(IMACKERN_DIR)/report_x86.o $(IMACKERN_DIR)/aienos_net.o $(IMACKERN_DIR)/courier_udp_x86.o \
+	$(IMACKERN_DIR)/slot_select.o $(IMACKERN_DIR)/ed25519.o \
+	$(IMACKERN_DIR)/swap_tramp.o $(IMACKERN_DIR)/imac_slot_keys.o
 # The far side of Allen's Ethernet courier (x86/courier_udp.h): broadcast by default, a lab address overrides.
 CK_COURIER_PEER ?= 255.255.255.255
 # Symbols only the lab image may contain; the default image is checked for them after linking.
 IMACKERN_REPORT_SYMS := ck_x86_report_hold|ck_x86_report_frame|ck_x86_report_filter|ck_x86_report_parts|ck_x86_tg3_send|ck_x86_tg3_drain|ck_x86_tg3_recv|ck_courier_udp_init|net_udp_build
 ifeq ($(CK_X86_REPORT),1)
 IMACKERN_OBJS += $(IMACKERN_REPORT_OBJS)
-IMACKERN_CFLAGS += -DCK_X86_REPORT=1 -DCK_COURIER_PEER_STR=\"$(CK_COURIER_PEER)\"
+IMACKERN_CFLAGS += -DCK_X86_REPORT=1 -DCK_COURIER_PEER_STR=\"$(CK_COURIER_PEER)\" -DCK_X86_SWAP=1 -DCK_X86_BENCH=1 -I$(NATIVE)/sig -I$(BOOT)
+ifeq ($(CK_X86_SWAP_TEST_DISK),1)
+IMACKERN_CFLAGS += -DCK_X86_SWAP_TEST_DISK=1
+endif
+ifeq ($(CK_X86_BENCH_TEST),1)
+IMACKERN_CFLAGS += -DCK_X86_BENCH_TEST=1
+endif
+# The lab kernel's swap owner keys: the same table NETLDR.EFI verifies with (ck_slot_tool keys-c).
+# CK_SLOT_KEYS=<owner public keys file>, or CK_TEST_SLOT_KEY=1 (RFC 8032 TEST key: QEMU tests only).
+IMACKERN_SLOT_KEYS_C := $(IMACKERN_DIR)/imac_slot_keys.c
+IMACKERN_KEY_SRC := $(if $(strip $(CK_TEST_SLOT_KEY)),--test-key,$(if $(strip $(CK_SLOT_KEYS)),--keys $(abspath $(CK_SLOT_KEYS)),))
+ifeq ($(strip $(IMACKERN_KEY_SRC)),)
+$(error the lab kernel (CK_X86_REPORT=1) needs swap owner keys: give CK_SLOT_KEYS=<owner public keys file>, or CK_TEST_SLOT_KEY=1 (TEST key, QEMU tests only))
+endif
+endif
+ifneq ($(CK_X86_REPORT),1)
+ifneq ($(filter 1,$(CK_X86_SWAP_TEST_DISK) $(CK_X86_BENCH_TEST)),)
+$(error CK_X86_SWAP_TEST_DISK and CK_X86_BENCH_TEST are QEMU lab test switches: they need CK_X86_REPORT=1)
+endif
 endif
 IMACKERN_HDRS := $(X86K)/x86.h $(BOOT)/handoff.h $(BOOT)/efi.h $(KDIR)/core/ck_internal.h $(KDIR)/include/ck.h
 GPU_DIR := $(KDIR)/gpu
@@ -2345,6 +2373,17 @@ $(IMACKERN_DIR)/amd_smu.o:     $(GPU_DIR)/amd_smu.c     $(IMACKERN_HDRS) $(GPU_D
 $(IMACKERN_DIR)/amd_ucode.o:   $(GPU_DIR)/amd_ucode.c   $(IMACKERN_HDRS) $(GPU_DIR)/amd_gpu.h $(GPU_DIR)/amd_gpu_regs.h $(if $(filter 1,$(CK_X86_GPU_UCODE)),$(REPO)/target/native-kernel/gpu_ucode.inc)
 $(IMACKERN_DIR)/amd_sdma.o:    $(GPU_DIR)/amd_sdma.c    $(IMACKERN_HDRS) $(GPU_DIR)/amd_gpu.h $(GPU_DIR)/amd_gpu_regs.h
 $(IMACKERN_DIR)/amd_compute.o: $(GPU_DIR)/amd_compute.c $(IMACKERN_HDRS) $(GPU_DIR)/amd_gpu.h $(GPU_DIR)/amd_gpu_regs.h
+$(IMACKERN_DIR)/swap_x86.o: $(X86K)/swap_x86.c $(X86K)/x86.h $(X86K)/swap_proto.h $(X86K)/swap_x86.h $(BOOT)/slot_format.h
+$(IMACKERN_DIR)/swap_tramp.o: $(X86K)/swap_tramp.S
+	@mkdir -p $(dir $@)
+	$(X86CC) -c $(ASFLAGS) -o $@ $<
+$(IMACKERN_SLOT_KEYS_C): $(SLOT_TOOL) FORCE
+	@mkdir -p $(dir $@)
+	@$(SLOT_TOOL) keys-c $(IMACKERN_KEY_SRC) --out $@
+$(IMACKERN_DIR)/imac_slot_keys.o: $(IMACKERN_SLOT_KEYS_C)
+$(IMACKERN_DIR)/bench_x86.o: $(X86K)/bench_x86.c $(X86K)/x86.h $(X86K)/bench_proto.h $(X86K)/bench_x86.h $(NATIVE)/argus/sha256.h
+$(IMACKERN_DIR)/slot_select.o: $(BOOT)/slot_select.c $(BOOT)/slot_format.h
+$(IMACKERN_DIR)/ed25519.o: $(NATIVE)/sig/ed25519.c $(NATIVE)/sig/aienos_sig.h
 $(IMACKERN_DIR)/smp_x86.o: $(X86K)/smp_x86.S
 $(IMACKERN_DIR)/disk_nvme.o: $(NATIVE)/disk/disk_nvme.c $(NATIVE)/disk/disk_nvme.h $(NATIVE)/disk/disk.h
 $(IMACKERN_DIR)/tg3_x86.o: $(X86K)/tg3_x86.c $(IMACKERN_HDRS) $(KDIR)/mm/frames.h
@@ -2379,7 +2418,7 @@ $(IMACKERN_DIR)/ct.o: $(NATIVE)/sig/ct.c $(NATIVE)/sig/aienos_sig.h
 $(IMACKERN_DIR)/report_x86.o: $(X86K)/report_x86.c $(X86K)/report_x86.h $(IMACKERN_HDRS) $(NATIVE)/net/aienos_net.h
 $(IMACKERN_DIR)/courier_udp_x86.o: $(X86K)/courier_udp_x86.c $(X86K)/courier_udp.h $(IMACKERN_HDRS) $(NATIVE)/net/aienos_net.h $(KDIR)/svc/courier.h
 $(IMACKERN_DIR)/aienos_net.o: $(NATIVE)/net/aienos_net.c $(NATIVE)/net/aienos_net.h
-$(sort $(IMACKERN_OBJS) $(IMACKERN_REPORT_OBJS)):
+$(sort $(filter-out %/swap_tramp.o,$(IMACKERN_OBJS) $(IMACKERN_REPORT_OBJS))):
 	@mkdir -p $(dir $@)
 	$(X86CC) $(IMACKERN_CFLAGS) -DAIENOS_COMMIT='"$(AIENOS_COMMIT)"' -c -o $@ $<
 $(IMACKERN_ELF): $(IMACKERN_OBJS) $(BOOT)/image_x86_64.ld
@@ -2409,6 +2448,8 @@ $(IMACKERN_ELF): $(IMACKERN_OBJS) $(BOOT)/image_x86_64.ld
 	  echo "$$r"; rm -f $@; exit 1; fi
 	@if [ "$(CK_X86_REPORT)" != 1 ] && grep -aq "AIENOS-REPORT" $@; then \
 	  echo "default iMac image carries the report header string"; rm -f $@; exit 1; fi
+	@if [ "$(CK_X86_REPORT)" != 1 ]; then s=$$($(X86NM) $@ | grep -E ' [TtDdBbRr] (ck_slot_verify|aienos_ed25519_verify|ck_x86_swap_tramp|ck_x86_swap_read_inbox)$$' || true); \
+	  if [ -n "$$s" ]; then echo "default iMac image links the swap receiver (lab builds only):"; echo "$$s"; rm -f $@; exit 1; fi; fi
 $(IMACKERN_EFI): $(IMACKERN_ELF)
 	$(X86OBJCOPY) -O binary $< $@
 	@sz=$$(stat -c %s $@); pad=$$(( (4096 - sz % 4096) % 4096 )); \
@@ -2433,6 +2474,18 @@ $(OUT)/host/test_amd_gpu_ring: $(GPU_RING_TEST_SRC) $(GPU_DIR)/amd_ucode.c $(KDI
 	@mkdir -p $(OUT)/host
 	$(CC) -std=c11 -Wall -pthread -DAMD_GPU_TEST_HOST=1 -I$(KDIR) -I$(KDIR)/include -I$(KDIR)/mm -I$(BOOT) -I$(GPU_DIR) -I$(X86K) -o $@ $(GPU_RING_TEST_SRC) $(GPU_DIR)/amd_ucode.c $(KDIR)/mm/frames.c
 	@echo "host test: running test_amd_gpu_ring"; $@
+# Host tools for the lab bench/swap (C only, no third-party libraries). Built with cc, not into the image.
+GPU_BENCH_TOOL := $(OUT)/host/ck_gpu_bench
+IMAC_SWAP_TOOL := $(OUT)/host/ck_imac_swap
+$(GPU_BENCH_TOOL): $(KDIR)/tools/ck_gpu_bench.c $(X86K)/bench_proto.h
+	@mkdir -p $(dir $@)
+	cc -O2 -std=c11 -Wall -Wextra -o $@ $<
+$(IMAC_SWAP_TOOL): $(KDIR)/tools/ck_imac_swap.c $(X86K)/swap_proto.h
+	@mkdir -p $(dir $@)
+	cc -O2 -std=c11 -Wall -Wextra -o $@ $<
+.PHONY: ck-gpu-bench ck-imac-swap
+ck-gpu-bench: $(GPU_BENCH_TOOL)
+ck-imac-swap: $(IMAC_SWAP_TOOL)
 # Negative test builds for W^X (#409), QEMU only and never deployed: CK_X86_WX_MUTATE=1 leaves RAM
 # executable, =2 leaves the kernel's code writable, and the kernel's W^X probes must then panic
 # (scripts/qemu_ck_imac_kernel_test.sh). Build them into their own OUT directory.
