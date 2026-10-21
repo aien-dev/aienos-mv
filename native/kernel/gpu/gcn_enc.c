@@ -99,12 +99,24 @@ int gcn_emit_smem(uint8_t *buf, size_t *pos, size_t max,
                   uint32_t offset, int glc)
 {
     uint32_t w0 = (0x30u << 26)
-                | ((glc ? 1u : 0u) << 25)
-                | ((uint32_t)(op & 0x3f) << 18)
+                | ((uint32_t)(op & 0xff) << 18)
+                | ((glc ? 1u : 0u) << 16)        /* VI: GLC is bit 16 */
                 | (1u << 17)                     /* IMM=1 */
                 | ((uint32_t)(sdst & 0x7f) << 6)
                 |  (uint32_t)(sbase_div2 & 0x3f);
     return emit64(buf, pos, max, w0, offset);
+}
+
+int gcn_emit_smem_soff(uint8_t *buf, size_t *pos, size_t max,
+                       GcnSmemOp op, uint8_t sdst, uint8_t sbase_div2,
+                       uint8_t soff, int glc)
+{
+    uint32_t w0 = (0x30u << 26)
+                | ((uint32_t)(op & 0xff) << 18)
+                | ((glc ? 1u : 0u) << 16)        /* IMM=0 */
+                | ((uint32_t)(sdst & 0x7f) << 6)
+                |  (uint32_t)(sbase_div2 & 0x3f);
+    return emit64(buf, pos, max, w0, (uint32_t)soff);
 }
 
 /* ---- VOP1 (32-bit) ---- */
@@ -143,26 +155,46 @@ int gcn_emit_vopc(uint8_t *buf, size_t *pos, size_t max,
     return emit32(buf, pos, max, w);
 }
 
-/* ---- VOP3 (64-bit) ---- */
-/* Word 0: [31:26]=110100  [25:16]=OP  [15]=CLAMP  [14:11]=? [10:9]=OMOD
- *          [8:0]=VDST (VGPR) or [14:8]=SDST (SGPR) for VOPC-in-VOP3
- * Word 1: [31:29]=NEG  [28:26]=ABS  [26:18]=SRC2  [17:9]=SRC1  [8:0]=SRC0 */
+/* ---- VOP3a (64-bit) ---- */
+/* Word 0: [31:26]=110100  [25:16]=OP  [15]=CLAMP  [10:8]=ABS  [7:0]=VDST
+ *         (VOPC-in-VOP3: [7:0] = SDST)
+ * Word 1: [31:29]=NEG  [28:27]=OMOD  [26:18]=SRC2  [17:9]=SRC1  [8:0]=SRC0
+ * Checked with llvm-mc-18 -mcpu=gfx803: v_cmp_gt_u32_e64 s[4:5], s2, v1 =
+ * d0cc0004 00020202; v_mul_f32_e64 ... mul:2 sets word1 bit 27. */
 int gcn_emit_vop3(uint8_t *buf, size_t *pos, size_t max,
                   uint16_t op, uint8_t vdst, int vdst_is_vgpr,
                   uint32_t src0, uint32_t src1, uint32_t src2,
                   uint8_t neg, uint8_t abs_mask, int clamp, uint8_t omod)
 {
+    (void)vdst_is_vgpr; /* VGPR and SGPR destinations share [7:0] */
     uint32_t w0 = (0x34u << 26)
                 | ((uint32_t)(op & 0x3ffu) << 16)
                 | ((clamp ? 1u : 0u) << 15)
-                | ((uint32_t)(omod & 0x3u) << 8)  /* omod at [9:8] for VGPR dst */
-                | (vdst_is_vgpr
-                   ? (uint32_t)(vdst & 0xffu)
-                   : ((uint32_t)(vdst & 0x7fu) << 8)); /* SDST uses [14:8] */
-    /* omod actually at bits [9:8] of word0 when vdst_is_vgpr; for SDST form skip */
-    /* For now keep the simple layout: omod only valid for VGPR-dst ops */
-    uint32_t w1 = ((uint32_t)(neg    & 0x7u) << 29)
-                | ((uint32_t)(abs_mask & 0x7u) << 26)
+                | ((uint32_t)(abs_mask & 0x7u) << 8)
+                |  (uint32_t)(vdst & 0xffu);
+    uint32_t w1 = ((uint32_t)(neg  & 0x7u) << 29)
+                | ((uint32_t)(omod & 0x3u) << 27)
+                | ((src2 & 0x1ffu) << 18)
+                | ((src1 & 0x1ffu) << 9)
+                |  (src0 & 0x1ffu);
+    return emit64(buf, pos, max, w0, w1);
+}
+
+/* ---- VOP3b (64-bit) ---- */
+/* Word 0: [31:26]=110100  [25:16]=OP  [15]=CLAMP  [14:8]=SDST  [7:0]=VDST
+ * Word 1: as VOP3a. llvm-mc: v_add_u32_e64 v1, s[4:5], v2, v3 = d1190401 00020702 */
+int gcn_emit_vop3b(uint8_t *buf, size_t *pos, size_t max,
+                   uint16_t op, uint8_t vdst, uint8_t sdst,
+                   uint32_t src0, uint32_t src1, uint32_t src2,
+                   uint8_t neg, int clamp, uint8_t omod)
+{
+    uint32_t w0 = (0x34u << 26)
+                | ((uint32_t)(op & 0x3ffu) << 16)
+                | ((clamp ? 1u : 0u) << 15)
+                | ((uint32_t)(sdst & 0x7fu) << 8)
+                |  (uint32_t)vdst;
+    uint32_t w1 = ((uint32_t)(neg  & 0x7u) << 29)
+                | ((uint32_t)(omod & 0x3u) << 27)
                 | ((src2 & 0x1ffu) << 18)
                 | ((src1 & 0x1ffu) << 9)
                 |  (src0 & 0x1ffu);
@@ -191,7 +223,7 @@ int gcn_emit_ds(uint8_t *buf, size_t *pos, size_t max,
 }
 
 /* ---- MUBUF (64-bit) ---- */
-/* Word 0: [31:26]=111000  [25:18]=OP  [17]=LDS  [16]=TFE  [15]=SLC
+/* Word 0 (VI): [31:26]=111000  [24:18]=OP  [17]=SLC  [16]=LDS
  *          [14]=GLC  [13]=IDXEN  [12]=OFFEN  [11:0]=OFFSET
  * Word 1: [31:24]=SOFFSET  [23:16]=SRSRC(/4)  [15:8]=VDATA  [7:0]=VADDR */
 int gcn_emit_mubuf(uint8_t *buf, size_t *pos, size_t max,
@@ -205,7 +237,7 @@ int gcn_emit_mubuf(uint8_t *buf, size_t *pos, size_t max,
 {
     uint32_t w0 = (0x38u << 26)
                 | ((uint32_t)(op & 0xffu) << 18)
-                | ((slc   ? 1u : 0u) << 15)
+                | ((slc   ? 1u : 0u) << 17)   /* VI: SLC is bit 17 */
                 | ((glc   ? 1u : 0u) << 14)
                 | ((idxen ? 1u : 0u) << 13)
                 | ((offen ? 1u : 0u) << 12)

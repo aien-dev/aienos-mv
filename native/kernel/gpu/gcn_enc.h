@@ -307,12 +307,16 @@ typedef enum {
     GCN_VOP2_V_OR_B32          = 20,
     GCN_VOP2_V_XOR_B32         = 21,
     GCN_VOP2_V_MAC_F32         = 22,
-    GCN_VOP2_V_ADD_U32         = 37,   /* GFX8 */
-    GCN_VOP2_V_SUB_U32         = 38,   /* GFX8 */
-    GCN_VOP2_V_SUBREV_U32      = 39,   /* GFX8 */
-    GCN_VOP2_V_ADDC_U32        = 40,   /* GFX8, result in VCC */
-    GCN_VOP2_V_SUBB_U32        = 41,   /* GFX8 */
-    GCN_VOP2_V_SUBBREV_U32     = 42,   /* GFX8 */
+    GCN_VOP2_V_MADMK_F32       = 23,   /* D = S0 * K + S1 (K literal follows) */
+    GCN_VOP2_V_MADAK_F32       = 24,   /* D = S0 * S1 + K */
+    /* gfx8 (VI) numbers, checked with llvm-mc-18 -mcpu=gfx803:
+     * v_add_u32 v1, vcc, s5, v0 = 0x32020005 (op 25). gfx6/7 used 37..42. */
+    GCN_VOP2_V_ADD_U32         = 25,   /* carry out in VCC */
+    GCN_VOP2_V_SUB_U32         = 26,
+    GCN_VOP2_V_SUBREV_U32      = 27,
+    GCN_VOP2_V_ADDC_U32        = 28,   /* carry in and out in VCC */
+    GCN_VOP2_V_SUBB_U32        = 29,
+    GCN_VOP2_V_SUBBREV_U32     = 30,
 } GcnVop2Op;
 
 /* ---- VOPC: vector comparison (result in VCC or SDST via VOP3) ---- */
@@ -364,9 +368,12 @@ typedef enum {
     GCN_SMEM_S_BUFFER_LOAD_DWORD  = 0x08,
     GCN_SMEM_S_BUFFER_LOAD_DWORDX2= 0x09,
     GCN_SMEM_S_BUFFER_LOAD_DWORDX4= 0x0A,
+    GCN_SMEM_S_BUFFER_LOAD_DWORDX8= 0x0B,
+    GCN_SMEM_S_BUFFER_LOAD_DWORDX16=0x0C,
     GCN_SMEM_S_STORE_DWORD        = 0x10,
     GCN_SMEM_S_STORE_DWORDX2      = 0x11,
     GCN_SMEM_S_STORE_DWORDX4      = 0x12,
+    GCN_SMEM_S_DCACHE_INV         = 0x20,
 } GcnSmemOp;
 
 /* ---- MUBUF opcodes ---- */
@@ -425,6 +432,8 @@ typedef enum {
     GCN_DS_DS_READ_I16       = 0x3B,
     GCN_DS_DS_READ_U16       = 0x3C,
     GCN_DS_DS_SWIZZLE_B32    = 0x3D,
+    GCN_DS_DS_WRITE_B64      = 0x4D,
+    GCN_DS_DS_READ_B64       = 0x76,
 } GcnDsOp;
 
 /* ---- FLAT opcodes ---- */
@@ -467,6 +476,10 @@ int gcn_emit_sopp(uint8_t *buf, size_t *pos, size_t max,
 int gcn_emit_smem(uint8_t *buf, size_t *pos, size_t max,
                   GcnSmemOp op, uint8_t sdst, uint8_t sbase_div2,
                   uint32_t offset, int glc);
+/* Same, byte offset taken from SGPR soff (IMM=0, soff in word 1 [7:0]) */
+int gcn_emit_smem_soff(uint8_t *buf, size_t *pos, size_t max,
+                       GcnSmemOp op, uint8_t sdst, uint8_t sbase_div2,
+                       uint8_t soff, int glc);
 
 /* VOP1: 1-src vector */
 int gcn_emit_vop1(uint8_t *buf, size_t *pos, size_t max,
@@ -486,6 +499,12 @@ int gcn_emit_vop3(uint8_t *buf, size_t *pos, size_t max,
                   uint16_t op, uint8_t vdst, int vdst_is_vgpr,
                   uint32_t src0, uint32_t src1, uint32_t src2,
                   uint8_t neg, uint8_t abs, int clamp, uint8_t omod);
+/* VOP3b: carry ops (v_add_u32_e64 etc., 0x119..0x11E) and v_div_scale.
+ * sdst = carry-out SGPR pair (or VCC), src2 = carry-in mask for addc/subb. */
+int gcn_emit_vop3b(uint8_t *buf, size_t *pos, size_t max,
+                   uint16_t op, uint8_t vdst, uint8_t sdst,
+                   uint32_t src0, uint32_t src1, uint32_t src2,
+                   uint8_t neg, int clamp, uint8_t omod);
 
 /* DS: local data share (64-bit) */
 int gcn_emit_ds(uint8_t *buf, size_t *pos, size_t max,
