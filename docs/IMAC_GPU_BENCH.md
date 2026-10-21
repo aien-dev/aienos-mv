@@ -62,6 +62,11 @@ Authentication key: 32-byte HMAC-SHA256 key, `bench_proto.h` `BENCH_TEST_KEY_INI
 by default (16 zero bytes followed by 0x01..0x10). A production build sets it with
 `CK_X86_BENCH_KEY=<32 bytes as C initialiser values>`. The Spark tool uses the built-in
 test key unless `--key <file>` gives a 32-byte binary key file.
+`make imac-kernel CK_X86_BENCH_KEY_FILE=<that file>` binds the same file into the
+image without the key ever appearing in a command line or build log (the generated
+header is mode 600 inside the build directory); the ready line then says `this
+image's own key` instead of `the TEST key`. The lab image of bundle 1 uses
+`~/.config/aienos/imac-bench.key` on the Spark.
 
 Replay protection: a 64-bit counter. The kernel refuses any request whose counter is
 not above the last one it accepted (the kernel keeps this until it reboots).

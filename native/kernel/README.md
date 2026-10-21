@@ -463,6 +463,33 @@ Spark), `scripts/ck_allen_ui_test.sh` (panel pictures `wizard-*.png`) and
 `scripts/qemu_ck_allen_wizard_test.sh` (QEMU end to end: power-cut resume, the
 three model sources, the key in no log, relay file or disk; screenshots in
 `target/native-kernel-allen-wizard/`).
+The wizard opens on its own only when Allen's memory section can keep its record
+(the first start on that computer); with nowhere to keep it the start says
+`wizard: not shown, nowhere to keep it this start` and Allen's window is left
+alone, so it never takes over the window at every start.
+
+**Code from the Spark.** Any coding request in Allen's chat ("make me a
+calculator", "write a snake game in python") is answered at once with "I need to
+code that. Let me send it off to the Spark." and goes over the courier as job
+`code` (a follow-up such as "now add a square-root key" while code is on the
+screen goes as `code-more` with the code before). Allen keeps thinking while he
+waits, says plainly at 20 s that longer code takes a while, and gives up out loud
+after 30 s without a word from the relay (which says it is still working every
+2 s). The relay (`../../crates/allen-courier`, prompt `code_prompt.txt`) asks the
+model once, not streamed, waits exactly Retry-After on a busy answer, and sends
+the code in numbered pieces of 128 bytes with the whole length and a CRC-32
+(`CODE <job> <i>/<n> <bytes> <crc32> <language> <piece>`, then `SAY <job> 1/1
+<sentence>`); a missing or spoiled piece makes the kernel ask once more (`AGAIN
+<job>`). Limits: 32768 bytes, 800 lines. The code shows beside Allen's words in
+fixed-width text with line numbers; long lines wrap; Up, Down, Page Up, Page
+Down, Home and End move it and Escape puts it away (`svc/allen_code.c`,
+`ck_allen_ui_code` in `ui/allen_ui.c`). Report lines: `allen-code: asked the
+Spark (N chars)`, `allen-code: code shown, M lines in S ms`. Tests:
+`scripts/ck_allen_code_test.sh` (host: parser, short and long recorded answers,
+a lost piece, a spoiled piece, the wait clock), `scripts/qemu_ck_allen_code_test.sh`
+(QEMU keystrokes with recorded answers, the code read back over serial, the relay
+stopped part way; `ALLEN_CODE_LIVE=1` asks the real model for a Python and a C
+calculator and prints the times).
 
 **Starting from its own disk.** When the network loader (`../boot/net_loader.c`)
 starts a kernel it hands it a `struct nb_pass` (`../boot/netboot_proto.h`) as
