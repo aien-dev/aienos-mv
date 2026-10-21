@@ -148,8 +148,8 @@ fn parse_step(w: &[String], ln: usize, block: &str) -> Result<Step, Error> {
     let list = |from: usize, to: usize| w[from..to].to_vec();
     let st = match (block, w[0].as_str()) {
         ("create", "refuse") if n == 6 => Step::Refuse { arg: at(1), op: at(2), rhs: at(3), err: else_err(w, 4, ln)? },
-        ("create", "refuse-entries") if n == 7 && w[1] == "pow2" => {
-            Step::RefuseEntries { min: at(2), max: at(3), err: else_err(w, 5, ln)? }
+        ("create", "refuse-entries") if n == 6 && w[1] == "pow2" => {
+            Step::RefuseEntries { min: at(2), max: at(3), err: else_err(w, 4, ln)? }
         }
         ("create", "alloc") if n >= 4 => Step::Alloc { bufs: list(1, n - 2), err: else_err(w, n - 2, ln)? },
         ("create", "zero") if n >= 2 => Step::Zero(list(1, n)),
@@ -399,6 +399,27 @@ pub fn check(g: &Gpu) -> Result<(), Error> {
         if let Some(x) = er {
             if !API_ERRORS.contains(&x.as_str()) {
                 return e(format!("error `{x}` is not one of the API's {API_ERRORS:?}"));
+            }
+        }
+    }
+    // verbs that must appear exactly once in their block (a second bind or doorbell would run before its fence)
+    for (blk, v) in [("create", &g.create), ("submit", &g.submit), ("teardown", &g.teardown)] {
+        let once: &[fn(&Step) -> bool] = &[
+            |s| matches!(s, Step::Bind { .. }),
+            |s| matches!(s, Step::Token { .. }),
+            |s| matches!(s, Step::RunlistUserd { .. }),
+            |s| matches!(s, Step::RingWrite { .. }),
+            |s| matches!(s, Step::Publish { .. }),
+            |s| matches!(s, Step::Doorbell { .. }),
+            |s| matches!(s, Step::RequireOpen(_)),
+            |s| matches!(s, Step::Disable),
+            |s| matches!(s, Step::PollIdle),
+            |s| matches!(s, Step::Release(_)),
+            |s| matches!(s, Step::StorePdb { .. }),
+        ];
+        for f in once {
+            if v.iter().filter(|s| f(s)).count() > 1 {
+                return e(format!("{blk}: a step that must appear once appears twice"));
             }
         }
     }
@@ -674,7 +695,7 @@ fn call(f: &Format, sets: &[(String, String)], rest: &dyn Fn(&Field) -> String) 
         .fields
         .iter()
         .map(|x| match sets.iter().find(|(k, _)| *k == x.name) {
-            Some((_, v)) if is_ident(v) && v.chars().next().unwrap().is_ascii_uppercase() => format!("CK_GPU_{v}"),
+            Some((_, v)) if is_ident(v) && v.chars().next().unwrap().is_ascii_uppercase() => format!("GCH_{v}"),
             Some((_, v)) => v.clone(),
             None => rest(x),
         })
@@ -688,7 +709,7 @@ fn buf_field(b: &str) -> String {
 
 fn size_expr(b: &Buffer) -> String {
     match &b.size {
-        Ok(k) => format!("CK_GPU_{k}"),
+        Ok(k) => format!("GCH_{k}"),
         Err(per) => format!("(uint64_t)entries * {per}u"),
     }
 }
@@ -714,13 +735,13 @@ pub fn source(g: &Gpu, digest: &str) -> String {
     );
     o += "#include \"gpu_chan.h\"\n\n";
     for (k, v) in &g.consts {
-        o += &format!("#define CK_GPU_{k} {v:#x}ull\n");
+        o += &format!("#define GCH_{k} {v:#x}ull\n");
     }
     for w in &g.windows {
-        o += &format!("#define CK_GPU_WIN_{} {:#x}u /* bar {} */\n", up(&w.name), w.base, w.bar);
+        o += &format!("#define GCH_WIN_{} {:#x}u /* bar {} */\n", up(&w.name), w.base, w.bar);
     }
     for r in &g.regs {
-        o += &format!("#define CK_GPU_REG_{}_OFF (CK_GPU_WIN_{} + {:#x}u)\n", r.name, up(&r.win), r.off);
+        o += &format!("#define GCH_REG_{}_OFF (GCH_WIN_{} + {:#x}u)\n", r.name, up(&r.win), r.off);
     }
     o += "\n";
     for f in &g.formats {
@@ -759,10 +780,10 @@ pub fn source(g: &Gpu, digest: &str) -> String {
     for s in &g.create {
         match s {
             Step::Refuse { arg, op, rhs, err } => {
-                o += &format!("    if ({arg} {op} CK_GPU_{rhs})\n        return CK_GCHAN_{err};\n")
+                o += &format!("    if ({arg} {op} GCH_{rhs})\n        return CK_GCHAN_{err};\n")
             }
             Step::RefuseEntries { min, max, err } => {
-                o += &format!("    if (entries < CK_GPU_{min} || entries > CK_GPU_{max} || (entries & (entries - 1u)))\n        return CK_GCHAN_{err};\n")
+                o += &format!("    if (entries < GCH_{min} || entries > GCH_{max} || (entries & (entries - 1u)))\n        return CK_GCHAN_{err};\n")
             }
             Step::Alloc { bufs, .. } => {
                 if !inited {
@@ -787,7 +808,7 @@ pub fn source(g: &Gpu, digest: &str) -> String {
                 let f = g.format(fmt).unwrap();
                 let e = call(f, sets, &|x| if x.place { "mem->as->root_pa".into() } else { "0".into() });
                 o += &format!(
-                    "    {{\n        volatile uint32_t *w = (volatile uint32_t *)c->{}->cpu;\n        uint64_t v = {e};\n        w[CK_GPU_{word}] = (uint32_t)v;\n        w[CK_GPU_{word} + 1u] = (uint32_t)(v >> 32);\n    }}\n",
+                    "    {{\n        volatile uint32_t *w = (volatile uint32_t *)c->{}->cpu;\n        uint64_t v = {e};\n        w[GCH_{word}] = (uint32_t)v;\n        w[GCH_{word} + 1u] = (uint32_t)(v >> 32);\n    }}\n",
                     buf_field(buf)
                 );
             }
@@ -826,10 +847,10 @@ pub fn source(g: &Gpu, digest: &str) -> String {
             Step::RequireOpen(e) => o += &format!("    if (!c || !c->open)\n        return CK_GCHAN_{e};\n"),
             Step::RequireBuffer(e) => o += &format!("    if (!buf_of(c->mem, pb))\n        return CK_GCHAN_{e};\n"),
             Step::RequireSpan { max, err } => {
-                o += &format!("    if ((off & 3u) || nwords == 0 || nwords > CK_GPU_{max})\n        return CK_GCHAN_{err};\n    uint64_t span = (uint64_t)nwords * 4u;\n    if ((uint64_t)off > pb->size || span > pb->size - off)\n        return CK_GCHAN_{err};\n    uint64_t va = pb->gpu_va + off;\n")
+                o += &format!("    if ((off & 3u) || nwords == 0 || nwords > GCH_{max})\n        return CK_GCHAN_{err};\n    uint64_t span = (uint64_t)nwords * 4u;\n    if ((uint64_t)off > pb->size || span > pb->size - off)\n        return CK_GCHAN_{err};\n    uint64_t va = pb->gpu_va + off;\n")
             }
             Step::RequireVa { bits, err } => {
-                o += &format!("    if (va >= (1ull << CK_GPU_{bits}) || span > (1ull << CK_GPU_{bits}) - va)\n        return CK_GCHAN_{err};\n")
+                o += &format!("    if (va >= (1ull << GCH_{bits}) || span > (1ull << GCH_{bits}) - va)\n        return CK_GCHAN_{err};\n")
             }
             Step::RequireRoom(e) => o += &format!("    if (c->put - c->retired >= c->d.entries - 1u)\n        return CK_GCHAN_{e};\n"),
             Step::RingWrite { fmt, sets } => {
@@ -841,10 +862,10 @@ pub fn source(g: &Gpu, digest: &str) -> String {
             }
             Step::Fence => o += "    fence();\n",
             Step::Publish { buf, off } => {
-                o += &format!("    *(volatile uint32_t *)(c->{}->cpu + CK_GPU_{off}) = c->put % c->d.entries;\n", buf_field(buf))
+                o += &format!("    *(volatile uint32_t *)(c->{}->cpu + GCH_{off}) = c->put % c->d.entries;\n", buf_field(buf))
             }
             Step::Doorbell { reg, .. } => {
-                o += &format!("    c->regs->wr(c->regs->ctx, CK_GPU_REG_{reg}_OFF, c->d.token);\n    return CK_GCHAN_OK;\n}}\n\n")
+                o += &format!("    c->regs->wr(c->regs->ctx, GCH_REG_{reg}_OFF, c->d.token);\n    return CK_GCHAN_OK;\n}}\n\n")
             }
             _ => {}
         }
@@ -948,6 +969,7 @@ mod tests {
             ("  release INST USERD GPFIFO\n", "  release INST USERD\n"),
             ("  disable\n  poll-idle\n", "  poll-idle\n  disable\n"),
             ("  refuse-entries pow2 ENTRIES_MIN ENTRIES_MAX else EINVAL\n", ""),
+            ("  fence\n  bind else EBIND\n", "  bind else EBIND\n  fence\n  bind else EBIND\n"),
             ("format RL_USERD 64 PTR_LO 31:8 place PTR_HI 51:32 place", "format RL_USERD 64 PTR_LO 31:8 place PTR_HI 51:33 place"),
             ("format TOKEN 32 RUNLIST_ID 22:16 VECTOR 11:0", "format TOKEN 32 RUNLIST_ID 22:16 VECTOR 11:2"),
         ];
