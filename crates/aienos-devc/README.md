@@ -9,6 +9,11 @@ Classes:
   native/kernel/gpu/contract/gb10_chan.devc (L332, on branch feat/own-gpu-driver), compiled to C with the API of
   native/kernel/gpu/gpu_chan.h. The checker refuses unsafe orders (doorbell before publish, missing fences, no ring-room
   check, GPU-cached memory the CPU writes or polls, a bound wider than its hardware field, teardown before idle).
+- `gpu-boot` (pci-bar): a GPU firmware start-up over BAR0; src/gpuboot.rs. First contract:
+  native/kernel/gpu/contract/gb10_gsp.devc (L332/L346, branch feat/own-gpu-driver), the GB10B GSP start-up through
+  SEC2, compiled to C with the API of native/kernel/gpu/gsp_mmio.h using its own offsets and bits. The checker refuses
+  an EMEM write before the channel is empty, the doorbell before TAIL, a SEC2 write after the doorbell, any GSP access
+  before the target mask is released, FALCON_OS before the FMC error check, and waits without a budget.
 
 Usage: `aienos-devc gen|check CONTRACT OUTDIR`, `stats CONTRACT`, `infer TRACE DEVICE`, `covers CONTRACT TRACE`.
-Tests: `cargo test -p aienos-devc` (tests/gb10_chan.devc is a copy of the GB10 contract used by the gpu-chan tests).
+Tests: `cargo test -p aienos-devc` (tests/gb10_chan.devc and tests/gb10_gsp.devc are copies of the GB10 contracts used by the gpu-chan and gpu-boot tests).

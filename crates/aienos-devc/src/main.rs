@@ -14,6 +14,7 @@ mod doc;
 mod driver;
 mod fuzz;
 mod gpu;
+mod gpuboot;
 mod infer;
 mod model;
 
@@ -33,6 +34,14 @@ fn outputs(src: &str, name: &str) -> Result<(Vec<(String, String)>, String), Str
         let md = gpu::markdown(&g, &digest, c.lines().count());
         let stem = g.device.replace('-', "_");
         return Ok((vec![("gch_contract.c".into(), c), (format!("{stem}.md"), md)], digest));
+    }
+    if gpuboot::is_gpu_boot(src) {
+        let g = gpuboot::parse(src, name).map_err(|e| e.to_string())?;
+        let digest = hex(&aienos_crypto::sha256::hash(src.as_bytes()));
+        let c = gpuboot::source(&g, &digest);
+        let md = gpuboot::markdown(&g, &digest, c.lines().count());
+        let stem = g.device.replace('-', "_");
+        return Ok((vec![("gsb_contract.c".into(), c), (format!("{stem}.md"), md)], digest));
     }
     let c = contract::parse(src, name).map_err(|e| e.to_string())?;
     let digest = hex(&aienos_crypto::sha256::hash(src.as_bytes()));
