@@ -2504,6 +2504,27 @@ gpu-contract-freestanding:
 	echo "gpu-contract-freestanding: PASS (gch_contract.c with KCC/KCFLAGS, needs only the ck_gmem allocator)"
 .PHONY: test-gpu-contract gpu-contract-trace gpu-contract-freestanding
 
+# L332 / L346: the GB10B GSP start-up on BAR0 (gpu/gsp_mmio.c, steps and driver-source lines in gsp_mmio.h) against a
+# simulated SEC2 + GSP falcon (gpu/gsp_sim.c). Host only. gsp-mmio-freestanding: gsp_mmio.c with KCC/KCFLAGS, no symbol needed.
+GSP_MMIO_SRCS := $(KDIR)/gpu/gsp_mmio.c $(KDIR)/gpu/gsp_sim.c
+GSP_MMIO_DEPS := $(KDIR)/tests/test_gsp_mmio.c $(GSP_MMIO_SRCS) $(KDIR)/gpu/gsp_mmio.h $(KDIR)/gpu/gsp_sim.h $(KDIR)/gpu/gmmu.h $(KDIR)/tests/ck_test.h
+$(OUT)/host/test_gsp_mmio: $(GSP_MMIO_DEPS)
+	@mkdir -p $(dir $@)
+	$(HOSTCC) $(HCFLAGS) -I$(KDIR)/gpu -o $@ $< $(GSP_MMIO_SRCS)
+$(OUT)/host-san/test_gsp_mmio: $(GSP_MMIO_DEPS)
+	@mkdir -p $(dir $@)
+	$(HOSTCC) $(HCFLAGS) $(SANFLAGS) -I$(KDIR)/gpu -o $@ $< $(GSP_MMIO_SRCS)
+test-gsp-mmio: $(OUT)/host/test_gsp_mmio $(OUT)/host-san/test_gsp_mmio
+	$(OUT)/host/test_gsp_mmio
+	$(OUT)/host-san/test_gsp_mmio
+gsp-mmio-freestanding:
+	@mkdir -p $(OUT)/host/gpu-fs
+	@$(KCC) $(KCFLAGS) -I$(KDIR)/gpu -c -o $(OUT)/host/gpu-fs/gsp_mmio.o $(KDIR)/gpu/gsp_mmio.c || exit 1; \
+	if nm -u $(OUT)/host/gpu-fs/gsp_mmio.o | grep -v " _GLOBAL_OFFSET_TABLE_$$" | grep -q .; then \
+	  nm -u $(OUT)/host/gpu-fs/gsp_mmio.o; echo "gsp-mmio-freestanding: FAIL"; exit 1; fi; \
+	echo "gsp-mmio-freestanding: PASS (gsp_mmio.c with KCC/KCFLAGS, no undefined symbol)"
+.PHONY: test-gsp-mmio gsp-mmio-freestanding
+
 # AIENOS-PI5 PCIe root complex / RP1 enumerator logic over a fake register file. Not the hardware.
 PI5PCIE_SRCS := $(KDIR)/dev/pi5_pcie.c
 PI5PCIE_DEPS := $(KDIR)/tests/test_pi5_pcie.c $(PI5PCIE_SRCS) $(KDIR)/tests/ck_test.h $(KDIR)/dev/pi5_pcie.h
