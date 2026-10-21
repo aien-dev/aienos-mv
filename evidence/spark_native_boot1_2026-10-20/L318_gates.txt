@@ -1,0 +1,14 @@
+# L318 gates at 6d78682c6bd5afe4e3e9ee7d17dcd98f8f03d8f9, 2026-10-21T00:25:51Z: AIENOS_STRICT=1 quiet-build ./scripts/verify_all.sh (full log ~/handoffs/L318/verify_all.log on the Spark)
+COLLECT_BOOT_REPORT_TEST: PASS
+M0_NATIVE_ROLLBACK_QEMU: PASS
+NATIVE_PREFLIGHT_SELF_TEST: PASS
+NATIVE_ROLLBACK_BOOTNEXT_CONSUMED: PASS
+NATIVE_ROLLBACK_DEFAULT_UNCHANGED: PASS
+NATIVE_ROLLBACK_FAULT: PASS
+NATIVE_ROLLBACK_NORMAL: PASS
+NATIVE_ROLLBACK_REJECTED: PASS
+NATIVE_ROLLBACK_TIMEOUT: PASS
+rc=0
+VERIFY_ALL: PASS (every step ran; QEMU steps are emulator evidence only, hardware NOT_RUN)
+# stage_one_time_boot.sh --dry-run on spark-b87b (nothing written):
+PASS  recovery stick: Boot0004 AIENOSRECOV listed by the firmware; plugged in now; NATIVE_PREFLIGHT: READY; boot entry: Boot0A1E
