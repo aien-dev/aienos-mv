@@ -44,7 +44,7 @@ int main(void)
     sha256_init(&dig);
     aienos_aes256_key k;
 
-    BEST("sha256 4MiB", "MB/s(inv: us)", 1e6, 4, sha256_hash(big, sizeof big, d));
+    BEST("sha256 4 MiB", "us", 1e6, 4, sha256_hash(big, sizeof big, d));
     sha256_update(&dig, d, 32);
     BEST("aes256 key schedule", "ns", 1e9, 20000, aienos_aes256_init(&k, key));
     BEST("aes256 block", "ns", 1e9, 20000, aienos_aes256_encrypt_block(&k, blk));
