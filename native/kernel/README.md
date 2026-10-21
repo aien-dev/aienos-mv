@@ -651,3 +651,22 @@ and flags). What this shows: the code follows the driver's layouts and
 refuses what it should, on a simulator. What it does not show: anything on
 the real chip. Which register sequences still need the chip is listed in the
 `gpu_chan.h` and `gmmu.h` header comments (UNKNOWN / UNVERIFIED).
+
+### The channel as a device contract (L332)
+
+`gpu/contract/gb10_chan.devc` is the same compute channel written as a device
+contract (ADR 0021, class `gpu-chan`): constants, the doorbell register, the
+packed formats (doorbell token, GPFIFO entry, runlist USERD pointer, instance
+block page directory), the three buffers with their cache policy, and the
+steps of create, submit and teardown. Each number cites a line of NVIDIA's
+driver source. `crates/aienos-devc` (branch feat/devc-gpu) compiles it into
+`gpu/contract/gen/gch_contract.c`, which has the API of `gpu_chan.h`. The
+compiler refuses unsafe contracts (doorbell before publish, no fence between
+them, no ring-room check, GPU-cached memory the CPU writes or polls, a
+channel id bound wider than its token field, teardown that frees before idle).
+
+Run: `make -C native/kernel test-gpu-contract` (test_gpu_sim against the
+generated twin, plain and sanitized), `gpu-contract-trace` (every register
+access and a hash of all simulated memory after each of ~390 operations,
+hand vs generated, must be byte-identical), `gpu-contract-freestanding`.
+Mutants of the contract itself: `evidence/own-gpu-driver/rung1/contract_mutants.sh`.

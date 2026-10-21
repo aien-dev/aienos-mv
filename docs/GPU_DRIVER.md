@@ -1,0 +1,81 @@
+# Our own GPU driver for the Spark (GB10)
+
+Written for Drake. Ledger L332. Status at the bottom; every number has its source next to it.
+
+## What a GPU driver does here
+
+The GB10 graphics chip is a separate computer inside the Spark. It has its own small processor (NVIDIA calls it GSP)
+that runs NVIDIA's own program, and it has job queues our code fills with work. A driver is the software on the main
+processor that:
+
+1. wakes the chip up and starts the chip's small processor with NVIDIA's program,
+2. sets up memory so the chip and the main processor see the same model weights,
+3. opens a job queue (a "channel") and tells the chip where it is,
+4. after that, stays out of the way while our code puts work in the queue and rings a doorbell.
+
+Today NVIDIA's open-source Linux driver (two main pieces, `nvidia.ko` and `nvidia-uvm.ko`, plus two display pieces,
+`nvidia_modeset` and `nvidia_drm`) does steps 1 to 3. Omega and physics already do step 4 themselves: they write the
+work into the queue and ring the doorbell straight from our own program, with no call into the driver at all
+(physics nvrm/nvrm.c: the doorbell is a single memory write to a page the driver handed us once).
+
+## What NVIDIA's driver costs us today
+
+Rung 0 measures it. Results go in evidence/own-gpu-driver/rung0/ with the table below filled from them.
+
+| What | Today with NVIDIA | Source |
+|---|---|---|
+| Driver calls per generated word | expected zero (work submit never calls the driver) | rung 0 cell (a), pending the window |
+| Processor time the driver burns while idle | the display piece spins one core forever on this headless box | L158; rung 0 idle cells |
+| Start-up calls before the first job | pending | rung 0 strace cell |
+| Time to load the driver and wake the chip | not measured (never reloaded since boot) | rung 2 window 0, step 6 |
+
+## What ours does instead
+
+The driver core is written as device contracts: short, checked descriptions of the chip (registers, job queues, the
+order things must happen in) that our compiler (`crates/aienos-devc`, ADR 0021) turns into C code. The first one is the
+job queue: `native/kernel/gpu/contract/gb10_chan.devc`. Every number in it is tied to a quoted line of NVIDIA's own
+source. The compiler refuses a contract that would be unsafe on the chip, for example one that rings the doorbell before
+the work is published, forgets the memory barrier between the two, lets the queue overflow, or keeps memory in the
+chip's cache that the main processor writes while the chip reads it (the mistake that cost two days in October).
+
+The generated code has to behave exactly like the hand-written version from L193: same 225 checks, and a side-by-side
+trace of every register write and the whole simulated memory after each of about 330 operations must match byte for byte.
+
+On Linux, a small add-on module `aien-gpu` (native/linux/aien-gpu) will host that core in place of NVIDIA's driver.
+Its first version only reads the chip's identity, loads NVIDIA's firmware file and sets up one big shared memory area;
+it binds to the chip only when told to, after NVIDIA's driver is gone.
+
+## What stays on loan from NVIDIA, and why
+
+The chip's small processor only runs a program signed by NVIDIA. A security block on the chip (FSP) checks the signature
+before it lets that program start, and we do not have NVIDIA's signing key. So these files stay NVIDIA's, loaded the way
+we load model weights, named here:
+
+1. `gsp_ga10x.bin` (75,012,080 bytes, /lib/firmware/nvidia/580.173.02/), the chip's operating program.
+2. The GSP boot loader and the signed first-stage loader (FMC) for GB10B, which ship inside nvidia.ko as embedded data
+   (g_bindata_kgspGetBinArchiveGspRmBoot_GB10B.c, GspRmFmcGfwProdSigned_GB10B.c in the open driver source), together with
+   the hash, signature and public key the driver hands to FSP (kern_fsp_gh100.c around lines 1023 to 1070).
+
+Everything on the main processor side becomes ours. If evidence ever shows the signature check can be satisfied another
+way, it goes in as an open question with an experiment, and nothing is tried that could damage the chip.
+
+## The rungs
+
+0. Measure what NVIDIA's driver costs (above).
+1. The driver core in our contract language, proven on the simulator (job queue done first; the chip start-up sequence
+   (GSP boot) is the next contract, L192's hand code is its reference twin).
+2. Run it on the real chip under Linux, in a window the coordinator schedules, because it takes the GPU away from
+   everything else for a while. Window 0 only reads the chip and gives it back (evidence/own-gpu-driver/rung2/RUNBOOK.md).
+3. The same core inside our own operating system on the Spark, once that boots natively (L318).
+
+## Known unknowns (tested on the chip, never assumed)
+
+- How the GB10 makes a channel runnable without NVIDIA's chip program: today the chip program does it on request.
+- The doorbell's address on the chip when NVIDIA's driver is not there to hand us the page.
+- Whether the main processor may write the address-translation flush register directly.
+- GB10B keeps some cache lines "sticky" until flushed (uvm_gpu.h:1135, NVIDIA bug 4577236, fixed only in later chips):
+  memory the main processor polls must be set up uncached; the contract compiler enforces that rule.
+
+## Status
+
+See the handoff ~/handoffs/2026-10-21-own-gpu-driver.md and the ledger line L332 for the live state.
