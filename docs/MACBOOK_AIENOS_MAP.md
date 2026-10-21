@@ -4,6 +4,8 @@ Status: read-only inventory plus documentation and source reading. No reboot, no
 
 Pins: this repo at `18e2765` (origin/main, 2026-10-19). Machine: MacBook Air (13-inch, 2022), `Mac14,2`, board `J413AP`, chip Apple M2 (`T8112`), macOS 26.6.2 (build 25G83), read on 2026-10-20. Raw dumps: `~/handoffs/macbook-inventory-2026-10-20/` (`system_profiler.txt`, `ioreg-devicetree.txt` = the Apple Device Tree, `ioreg.txt`, `sysctl-hw.txt`, `sw_vers.txt`, `csrutil.txt`, `bputil.txt`).
 
+Corrections (L372, 2026-10-21): section 4.3 firmware question resolved, licence dates added, GPU trace plan corrected (G3 step 3, step 14, section 7 rows); each is marked "L372" in place. Family-wide view: `docs/APPLE_SILICON_FAMILY_MAP.md`.
+
 Names (Drake, 2026-10-20): Aienux is the kernel, AienOS is the system. Older files still say AIENOS for both. Sibling maps: `docs/SPARK_REPLACE_LINUX.md` (L191, the Spark, on branch `feat/spark-replace-linux-map`, `bb2399f`); the iMac, Pi and PC maps are in flight and not on main yet.
 
 ## 1. Plain-English summary
@@ -84,10 +86,10 @@ Every Linux-side address above was cross-checked against the open `t8112.dtsi` (
 
 ### 4.3 Honest limits of this section
 
-- UNKNOWN: whether Asahi's m1n1 and its firmware-specific data support **macOS 26.6.2 / system firmware 18000.161.10**. Asahi's installer pins supported versions; this was not resolved (the installer data file URL I tried returned 404). Experiment (read-only, no Mac needed): read `asahi-installer`'s supported-OS list and the m1n1 `ADT` version table at the current release, compare with `18000.161.10` and `25G83`. If unsupported, the choice is to wait for Asahi or to change the Mac's firmware version, and the second is Drake's decision (not undoable by AienOS).
+- RESOLVED (L372, 2026-10-21, OBSERVED in source): **macOS 26.6.2 / system firmware 18000.161.10 is known to m1n1.** m1n1's firmware table has `{V26_6_2, "26.6.2", {26, 6, 2}, 3, "mBoot-18000.161.10"}` (`src/firmware.c`, added in commit `3e354a2` on 2026-09-30, contained in tags v1.9.9 and v2.0.0; read at m1n1 `7cde7d1`). The Asahi installer (`src/main.py` at `e93743d`) checks only **minimum** versions (`MIN_MACOS_VERSION = "13.5"`, chip minimum `0x8112: "12.4"`, and per-IPSW minimum iBoot/SFR); it has no maximum, so a newer system firmware is accepted. The new container gets its **own** boot firmware from the installer's IPSW list (macOS 13.5 for the M2; 14.8.3 is for M3 boards only), separate from the 26.6.2 that the main macOS keeps. No firmware change on the Mac is needed. Details: `docs/APPLE_SILICON_FAMILY_MAP.md` section 4.
 - UNKNOWN: the Mac's current policy (not read; needs root). Experiment: `bputil -d` from the Mac's recovery or an administrator shell, read-only.
 - OBSERVED risk: this Mac holds **Activation Lock** and is the machine Drake chose for the owner-key ceremony (`docs/OWNER_KEY_CEREMONY.md`, "MacBook, Wi-Fi off"; mind map note 2026-10-12). Adding a Permissive container does not change the macOS container's policy according to Source B, but it is the kind of change that belongs on a spare Mac, not the key machine. Section 10 puts this to Drake.
-- Brief corrections (OBSERVED): (a) the brief lists keyboard/trackpad as SPI; on this M2 they are on the MTP helper (section 3), no SPI HID node exists. (b) The brief says m1n1 is MIT. The m1n1 README says "m1n1 was made available under the terms of the MIT license until version 1.9.9. Starting from version 2.0.0, m1n1 is licensed under the terms of the GNU General Public License version 2 (or later)" (github.com/AsahiLinux/m1n1). Current m1n1 is GPL-2.0-or-later with MIT, BSD, zlib and CC0 third-party parts. AienOS **runs** m1n1 as a separate program (nothing is linked or copied), so the licence does not touch our kernel, but its source is read-only reference, never copied into Aienux.
+- Brief corrections (OBSERVED): (a) the brief lists keyboard/trackpad as SPI; on this M2 they are on the MTP helper (section 3), no SPI HID node exists. (b) The brief says m1n1 is MIT. The m1n1 README says "m1n1 was made available under the terms of the MIT license until version 1.9.9. Starting from version 2.0.0, m1n1 is licensed under the terms of the GNU General Public License version 2 (or later)" (github.com/AsahiLinux/m1n1). Current m1n1 is GPL-2.0-or-later with MIT, BSD, zlib and CC0 third-party parts. AienOS **runs** m1n1 as a separate program (nothing is linked or copied), so the licence does not touch our kernel, but its source is read-only reference, never copied into Aienux. Dates (L372, OBSERVED with `git log` on the tags): v1.9.9, the last MIT release, and v2.0.0, the first GPL release, were both tagged on 2026-10-02, and v1.9.9 already contains the macOS 26.6.2 firmware entry.
 
 ## 5. What AienOS already has for aarch64, and what changes (OBSERVED, repo at `18e2765`)
 
@@ -167,7 +169,7 @@ Honest limit (OBSERVED and INFERRED): there are no public Apple GPU documents. A
 
 1. A kernel that owns the GPU's MMIO, its DART (D6) and its helper (RTKit, D5), with the helper's firmware already running (iBoot starts it; OBSERVED: `gfx-asc` is a node and the OS driver in macOS talks to it).
 2. The GPU MMU (UAT, G2): create a context, map a command buffer and a data buffer, invalidate.
-3. The firmware init message and the shared structures (G3) copied from Asahi's `initdata.rs` facts: the exact layouts are firmware-version-specific, so the first experiment is a **record, do not send** step: capture the layouts macOS uses with m1n1's hypervisor under Asahi's tooling (Asahi documents "m1n1 Hypervisor" tracing), before any write of our own.
+3. The firmware init message and the shared structures (G3) copied from Asahi's `initdata.rs` facts: the exact layouts are firmware-version-specific. Corrected by L372 (2026-10-21): the published Asahi GPU driver already carries the layouts for the macOS 12.3 and 13.5 firmware interfaces (`V12_3` ... `V13_5`, `drivers/gpu/drm/asahi`), and the Asahi container on this M2 runs the 13.5 boot firmware (section 4.3), so the first step is **host-only**: read those 13.5 layouts. A **record, do not send** trace is a second, optional step, and it cannot run against this Mac's own macOS 26.6.2: the m1n1 hypervisor supports only pinned guests, "macOS 13.5 (M1 and M2 series)" and "macOS 14.8.3 (M1-M3 series)", installed as a second copy of macOS on its own volume (Asahi `docs/sw/m1n1-hypervisor.md`). Newer guests need SPTM, whose hypervisor support exists only on m1n1's main branch after v2.0.0 (commits 2026-10-11 to 10-18, untagged).
 4. A work queue and one compute job: the smallest useful one is an integer vector add. The shader binary needs the AGX instruction encoding (Asahi userspace work).
 5. A completion path: event stamps and an interrupt through AIC (D3).
 6. Teardown and a second run, to prove the state is clean.
@@ -195,7 +197,7 @@ Not published as a document, only as Asahi's driver source or notes marked unfin
 
 | UNKNOWN | Resolving experiment (all read-only, host side) |
 | --- | --- |
-| Is `macOS 26.6.2` / firmware `18000.161.10` supported by the current m1n1 | Compare Asahi's supported-version data to `25G83` (no Mac access) |
+| ~~Is `macOS 26.6.2` / firmware `18000.161.10` supported by the current m1n1~~ RESOLVED (L372): yes, m1n1 `src/firmware.c` lists `mBoot-18000.161.10` (since `3e354a2`, in v1.9.9 and v2.0.0); the container uses its own 13.5 boot firmware | Done, section 4.3 |
 | M2 EL1 4 KiB granule support | Read `ID_AA64MMFR0_EL1` through m1n1 proxy |
 | RNDR present | Read `ID_AA64ISAR0_EL1` through m1n1 proxy |
 | AIC2 info registers (die count, strides) | Read through m1n1 proxy; compare with `irq-apple-aic.c` |
@@ -203,8 +205,8 @@ Not published as a document, only as Asahi's driver source or notes marked unfin
 | `random-seed` value (zeros in the dump, INFERRED redacted by the collection script) | Re-collect without redaction, or read `/chosen` from m1n1 |
 | Internal panel framebuffer address and stride | m1n1 proxy: read `/chosen/framebuffer` from the ADT m1n1 hands over |
 | ANS firmware tags and TCB layout on T8112 vs T8103 | Compare `apple.c` constants with `ans@77400000` reg ranges (OBSERVED: five MMIO ranges) |
-| GPU compute channel and instruction set | Run Asahi's `m1n1` hypervisor tracing on a macOS Metal compute workload (a Drake-attended session on a spare Mac) and read Asahi's compiler notes |
-| MTP protocol details | Same hypervisor trace of keyboard and trackpad |
+| GPU compute channel and instruction set | Corrected by L372: first read the 13.5 layouts in the Asahi GPU driver (host only). Trace only as a second step, with m1n1's hypervisor running a **second macOS install pinned at 13.5** (the hypervisor doc's procedure: a new APFS volume, macOS 13.5, its kernelcache under `run_guest.py`) on a spare M1/M2 Mac, Drake attended; never Drake's 26.6.2 install. Plus Asahi's compiler notes |
+| MTP protocol details | Read Asahi's `dockchannel-hid` driver first (host only); if a trace is still needed, the same pinned-13.5 hypervisor session (m1n1 ships `proxyclient/hv/trace_keyboard.py`) |
 | Safe sound output | Asahi's speaker protection model; **no sound** until read in full |
 
 ## 8. Where it fits in the fleet (Drake, 2026-10-20: "across the network: iMac, Raspberry Pi, MacBook ... the Spark")
@@ -243,7 +245,7 @@ Notation as in the Spark map: **[H]** host or QEMU only, a builder can do it now
 11. [T] Network through USB Ethernet (D10 host mode, D7), then a UDP report as on the iMac.
 12. [H][T] Store on a USB disk, then crash tests on it; internal-disk writes only after Drake says so.
 13. [H] Wi-Fi/Bluetooth path (D11, D12, D13) only after the firmware-blob decision (F4).
-14. [H][C] GPU: record-only trace session, then the UAT and the firmware init layouts, then one integer vector add (section 6, G1 to G4). Reports measured speed against the chip's published memory bandwidth, which is **not measured here**.
+14. [H][C] GPU: read the 13.5 firmware layouts from the Asahi GPU driver first (host only); an optional record-only trace needs a second macOS install pinned at 13.5 under the m1n1 hypervisor (not this Mac's 26.6.2, which is not a supported guest; L372 correction, see G3 step 3); then the UAT and the firmware init layouts, then one integer vector add (section 6, G1 to G4). Reports measured speed against the chip's published memory bandwidth, which is **not measured here**.
 15. [O] A standalone boot (Path U) and any permanent change, only after a soak of tethered boots.
 
 ## 10. Operator steps (Drake only)
