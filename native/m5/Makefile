@@ -27,7 +27,7 @@ LIB = $(OUT)/libaienos_m5.a
 TEST = $(OUT)/m5_test
 SIGTEST = $(OUT)/m5_migsig_test
 TOOL = $(OUT)/m5_migsig
-HDRS = m5.h m5_internal.h ../crypto/aienos_crypto.h ../crypto/crypto_internal.h ../argus/sha256.h ../sig/aienos_sig.h ../sig/sig_internal.h
+HDRS = m5.h m5_internal.h ../crypto/aienos_crypto.h ../crypto/crypto_internal.h ../argus/sha256.h ../sig/aienos_sig.h ../sig/sig_internal.h ../sig/fe25519.h ../argus/isa_arm64.h
 SANFLAGS = -fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all -g
 
 all: $(LIB)

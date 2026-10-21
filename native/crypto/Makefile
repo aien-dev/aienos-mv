@@ -18,7 +18,7 @@ SRCS = aes.c polyval.c gcm_siv.c hmac.c ct.c
 OBJS = $(SRCS:%.c=$(OUT)/%.o)
 LIB = $(OUT)/libaienos_crypto.a
 TEST = $(OUT)/crypto_test
-HDRS = aienos_crypto.h crypto_internal.h ../argus/sha256.h
+HDRS = aienos_crypto.h crypto_internal.h ../argus/sha256.h ../argus/isa_arm64.h
 SANFLAGS = -fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all -g
 
 all: $(LIB)

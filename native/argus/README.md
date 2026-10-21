@@ -14,3 +14,11 @@ integration and determinism tests. Design: aien-architecture ADR 0017.
 Rule enforced by test: the authority secret-word and its length macro never
 appear under `native/argus/` (see lane B secret-negative test), and no event
 field is secret-sized except digests.
+
+## SHA-256 speed (L339)
+
+`sha256.c` uses the ARMv8 SHA-256 instructions when the CPU has them (the
+Spark: 186 -> 1349 MB/s on one core, `../crypto/bench/isa_probe.c`) and the C
+transform otherwise; `sha256_isa_enable(0)` forces C. Detection and kernel
+rules (IRQ masked, vector registers zeroed): `isa_arm64.h`. The digests are
+identical on both paths (`../crypto` `make test`).

@@ -52,7 +52,19 @@ RFC 4231 HMAC cases 1 and 2, and every vector in the Rust crate's unit tests.
   spot-checking AArch64 `-O2` disassembly. Not measured with timing tools and
   not independently reviewed for side channels. Another compiler or flag set
   could still introduce branches.
-- Slow: no hardware AES (ARMv8 AESE/AESMC) or PMULL POLYVAL yet.
+- Instruction paths (L339): on CPUs with the ARMv8 AES, PMULL and SHA-2
+  instructions (the Spark; read from ID_AA64ISAR0_EL1 at run time, see
+  `../argus/isa_arm64.h`) AES-256 runs as AESE/AESMC, POLYVAL as PMULL and
+  SHA-256 as SHA256H/H2. Same bytes as the C paths: `make test` runs every
+  vector on both paths plus 300 random path-against-path checks. Measured on
+  the Spark (hosted, one X925 core, `bench/isa_probe.c`): AES-256 block
+  4.9 us -> 8.5 ns, POLYVAL multiply 195 ns -> 12.7 ns, SHA-256 186 -> 1349 MB/s;
+  before/after through the public API: `bench/receipt.sh`. CPUs without them
+  (Pi 5, the x86 iMac) keep the C paths, which stay slow (computed S-box).
+  In the kernel each instruction section runs with IRQ and FIQ masked for a
+  bounded number of blocks and zeroes the vector registers it used, because
+  the kernel does not save v0-v31. Host-tested here; not yet run in a kernel
+  image under QEMU or on bare metal.
 - AES decryption is not implemented (GCM-SIV does not need it).
 - Mutants that remove a length limit are killed by a crash (the test then
   reads past a small buffer), not by a clean assertion.

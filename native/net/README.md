@@ -10,7 +10,7 @@ control-transport stub. No Rust, no Python, no heap, no outside library.
 | `aienos_virtio_pci.{h,c}` | virtio 1.x PCI vendor-capability walk over a config image (no device access). Accepts the real QEMU virtio-net-pci layout (see Lane 26 below). |
 | `aienos_virtio_net.{h,c}` | Lane 26: virtio-net driver core, split virtqueues, polled. New C written from the virtio 1.x spec (the Rust reference has no queue code). Device access only through a small ops struct. |
 | `aienos_ctl.{h,c}` | Control-transport stub: authenticated frames, ordered exactly-once delivery, retransmit, link-down. **TEST identity only.** The frame format is specified in the header. |
-| `x25519.{h,c}` | M6-B: X25519 (RFC 7748), constant-time ladder, small-order outputs refused. |
+| `x25519.{h,c}` | M6-B: X25519 (RFC 7748), constant-time ladder, small-order outputs refused. Field from `../sig/fe25519.h` (five 51-bit limbs, shared with Ed25519; L339): 455 -> 44 us per call on the Spark, same output on 20000 random inputs. |
 | `aienos_sec.{h,c}` | M6-B: mutually authenticated secure control transport over the M6-A UDP framing. **TEST identities only.** The wire format is specified in the header. |
 
 ## Tests (`make test`, `make sanitize`)

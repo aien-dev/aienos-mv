@@ -17,7 +17,7 @@ SRCS = sha512.c ed25519.c ct.c
 OBJS = $(SRCS:%.c=$(OUT)/%.o)
 LIB = $(OUT)/libaienos_sig.a
 TEST = $(OUT)/sig_test
-HDRS = aienos_sig.h sig_internal.h
+HDRS = aienos_sig.h sig_internal.h fe25519.h
 TEST_HDRS = tests/rfc8032_vectors.h
 SANFLAGS = -fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all -g
 

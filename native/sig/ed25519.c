@@ -9,7 +9,8 @@
  * and adds and keeps the sum with a masked select; there is no branch and
  * no memory index that depends on a secret. Exponents used in inversion and
  * square roots are public constants. Verification and point decoding take
- * only public input and use ordinary branches.
+ * only public input and use ordinary branches; verification uses a
+ * variable-time joint double-scalar multiplication (ge_double_scalarmult_vartime).
  *
  * Lines tagged GUARD:<name> are removed one at a time by `make mutants`.
  */
@@ -17,9 +18,8 @@
 
 #include "aienos_sig.h"
 #include "sig_internal.h"
+#include "fe25519.h"
 
-typedef unsigned __int128 u128;
-typedef uint64_t fe[5];
 typedef struct {
     fe X, Y, Z, T;
 } ge;
@@ -27,133 +27,6 @@ typedef struct {
     fe d, d2, sqrtm1;
     ge B;
 } consts;
-
-#define MASK51 ((uint64_t)0x7ffffffffffff)
-
-/* ---------------------------------------------------------------- field */
-
-static void fe_0(fe h) { h[0] = h[1] = h[2] = h[3] = h[4] = 0; }
-static void fe_1(fe h) { fe_0(h); h[0] = 1; }
-static void fe_copy(fe h, const fe f) { for (int i = 0; i < 5; i++) h[i] = f[i]; }
-
-/* Weak reduction: afterwards h1..h4 < 2^51 and h0 < 2^51 + 2^18. */
-static void fe_carry(fe h)
-{
-    uint64_t c;
-    c = h[0] >> 51; h[0] &= MASK51; h[1] += c;
-    c = h[1] >> 51; h[1] &= MASK51; h[2] += c;
-    c = h[2] >> 51; h[2] &= MASK51; h[3] += c;
-    c = h[3] >> 51; h[3] &= MASK51; h[4] += c;
-    c = h[4] >> 51; h[4] &= MASK51; h[0] += 19 * c;
-}
-
-static void fe_add(fe h, const fe f, const fe g)
-{
-    for (int i = 0; i < 5; i++) h[i] = f[i] + g[i];
-    fe_carry(h);
-}
-
-/* h = f - g computed as f + 4p - g (g limbs are below 2^53 - 76). */
-static void fe_sub(fe h, const fe f, const fe g)
-{
-    h[0] = f[0] + 0x1fffffffffffb4 - g[0];
-    h[1] = f[1] + 0x1ffffffffffffc - g[1];
-    h[2] = f[2] + 0x1ffffffffffffc - g[2];
-    h[3] = f[3] + 0x1ffffffffffffc - g[3];
-    h[4] = f[4] + 0x1ffffffffffffc - g[4];
-    fe_carry(h);
-}
-
-static void fe_neg(fe h, const fe f)
-{
-    fe z;
-    fe_0(z);
-    fe_sub(h, z, f);
-}
-
-static void fe_mul(fe h, const fe f, const fe g)
-{
-    uint64_t f0 = f[0], f1 = f[1], f2 = f[2], f3 = f[3], f4 = f[4];
-    uint64_t g0 = g[0], g1 = g[1], g2 = g[2], g3 = g[3], g4 = g[4];
-    uint64_t g1_19 = 19 * g1, g2_19 = 19 * g2, g3_19 = 19 * g3, g4_19 = 19 * g4;
-    u128 r0 = (u128)f0 * g0 + (u128)f1 * g4_19 + (u128)f2 * g3_19 + (u128)f3 * g2_19 + (u128)f4 * g1_19;
-    u128 r1 = (u128)f0 * g1 + (u128)f1 * g0 + (u128)f2 * g4_19 + (u128)f3 * g3_19 + (u128)f4 * g2_19;
-    u128 r2 = (u128)f0 * g2 + (u128)f1 * g1 + (u128)f2 * g0 + (u128)f3 * g4_19 + (u128)f4 * g3_19;
-    u128 r3 = (u128)f0 * g3 + (u128)f1 * g2 + (u128)f2 * g1 + (u128)f3 * g0 + (u128)f4 * g4_19;
-    u128 r4 = (u128)f0 * g4 + (u128)f1 * g3 + (u128)f2 * g2 + (u128)f3 * g1 + (u128)f4 * g0;
-    r1 += r0 >> 51;
-    r2 += r1 >> 51;
-    r3 += r2 >> 51;
-    r4 += r3 >> 51;
-    u128 c = r4 >> 51;
-    uint64_t h0 = (uint64_t)r0 & MASK51, h1 = (uint64_t)r1 & MASK51, h2 = (uint64_t)r2 & MASK51;
-    uint64_t h3 = (uint64_t)r3 & MASK51, h4 = (uint64_t)r4 & MASK51;
-    u128 t = (u128)h0 + c * 19;
-    h0 = (uint64_t)t & MASK51;
-    h1 += (uint64_t)(t >> 51);
-    h[0] = h0; h[1] = h1; h[2] = h2; h[3] = h3; h[4] = h4;
-}
-
-static void fe_sq(fe h, const fe f) { fe_mul(h, f, f); }
-
-static uint64_t load_le64(const uint8_t *p)
-{
-    uint64_t v = 0;
-    for (int i = 7; i >= 0; i--)
-        v = (v << 8) | p[i];
-    return v;
-}
-
-static void store_le64(uint8_t *p, uint64_t v)
-{
-    for (int i = 0; i < 8; i++) {
-        p[i] = (uint8_t)v;
-        v >>= 8;
-    }
-}
-
-/* Reads 255 bits (bit 255 ignored); the value may be >= p. */
-static void fe_frombytes(fe h, const uint8_t s[32])
-{
-    h[0] = load_le64(s) & MASK51;
-    h[1] = (load_le64(s + 6) >> 3) & MASK51;
-    h[2] = (load_le64(s + 12) >> 6) & MASK51;
-    h[3] = (load_le64(s + 19) >> 1) & MASK51;
-    h[4] = (load_le64(s + 24) >> 12) & MASK51;
-}
-
-/* Canonical encoding (fully reduced mod p), branch free. */
-static void fe_tobytes(uint8_t s[32], const fe f)
-{
-    fe t;
-    fe_copy(t, f);
-    fe_carry(t);
-    fe_carry(t); /* now t < 2^255 + 19 < 2p */
-    uint64_t q = (t[0] + 19) >> 51;
-    q = (t[1] + q) >> 51;
-    q = (t[2] + q) >> 51;
-    q = (t[3] + q) >> 51;
-    q = (t[4] + q) >> 51; /* q = 1 iff t >= p */
-    t[0] += 19 * q;
-    t[1] += t[0] >> 51; t[0] &= MASK51;
-    t[2] += t[1] >> 51; t[1] &= MASK51;
-    t[3] += t[2] >> 51; t[2] &= MASK51;
-    t[4] += t[3] >> 51; t[3] &= MASK51;
-    t[4] &= MASK51; /* drop q * 2^255 */
-    store_le64(s, t[0] | (t[1] << 51));
-    store_le64(s + 8, (t[1] >> 13) | (t[2] << 38));
-    store_le64(s + 16, (t[2] >> 26) | (t[3] << 25));
-    store_le64(s + 24, (t[3] >> 39) | (t[4] << 12));
-}
-
-/* f = g if b == 1, unchanged if b == 0; b must be 0 or 1. */
-static void fe_cmov(fe f, const fe g, uint64_t b)
-{
-    uint64_t m = 0 - b;
-    AIENOS_SIG_BARRIER(m);
-    for (int i = 0; i < 5; i++)
-        f[i] ^= m & (f[i] ^ g[i]);
-}
 
 /* Low bit of the canonical value (the RFC 8032 "sign" of x). */
 static uint64_t fe_isneg(const fe f)
@@ -180,32 +53,13 @@ static int fe_eq(const fe f, const fe g)
     return aienos_sig_ct_equal(a, b, 32);
 }
 
-/* out = z^e, e a PUBLIC little-endian 256-bit exponent. */
-static void fe_pow(fe out, const fe z, const uint8_t e[32])
-{
-    fe r, b;
-    fe_1(r);
-    fe_copy(b, z);
-    for (int i = 255; i >= 0; i--) {
-        fe_sq(r, r);
-        if ((e[i >> 3] >> (i & 7)) & 1)
-            fe_mul(r, r, b);
-    }
-    fe_copy(out, r);
-}
-
 /* p - 2 = 2^255 - 21, (p - 5) / 8 = 2^252 - 3, (p - 1) / 4 = 2^253 - 5 */
-static const uint8_t EXP_INV[32] = {
-    0xeb, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x7f};
 static const uint8_t EXP_P58[32] = {
     0xfd, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
     0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x0f};
 static const uint8_t EXP_SQRTM1[32] = {
     0xfb, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
     0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x1f};
-
-static void fe_invert(fe out, const fe z) { fe_pow(out, z, EXP_INV); }
 
 /* ---------------------------------------------------------------- points */
 
@@ -260,6 +114,35 @@ static void ge_scalarmult(ge *r, const ge *p, const uint8_t s[32], const consts 
     *r = q;
     aienos_sig_wipe(&q, sizeof q);
     aienos_sig_wipe(&t, sizeof t);
+}
+
+/* r = [s]B + [n]P for PUBLIC scalars s and n: verification only (L339 G4-os-7).
+ * One shared doubling chain (Straus/Shamir) from the top set bit, and an
+ * addition only where a bit of s or n is set, with B + P precomputed.
+ * VARIABLE TIME BY DESIGN: the branches and the start depend on the scalars,
+ * which is allowed only because verification inputs (signature, public key,
+ * message hash) are public. Never call it with a secret scalar; signing and
+ * key derivation use the constant-time ge_scalarmult above. */
+static void ge_double_scalarmult_vartime(ge *r, const uint8_t s[32], const ge *p, const uint8_t n[32],
+                                         const consts *k)
+{
+    ge q, bp;
+    int i = 255;
+    ge_add(&bp, &k->B, p, k);
+    ge_identity(&q);
+    while (i >= 0 && !(((s[i >> 3] | n[i >> 3]) >> (i & 7)) & 1))
+        i--;
+    for (; i >= 0; i--) {
+        int bs = (s[i >> 3] >> (i & 7)) & 1, bn = (n[i >> 3] >> (i & 7)) & 1;
+        ge_dbl(&q, &q);
+        if (bs && bn)
+            ge_add(&q, &q, &bp, k);
+        else if (bs)
+            ge_add(&q, &q, &k->B, k);
+        else if (bn)
+            ge_add(&q, &q, p, k);
+    }
+    *r = q;
 }
 
 static void ge_tobytes(uint8_t s[32], const ge *p)
@@ -525,7 +408,7 @@ int aienos_ed25519_verify(const uint8_t sig[64], const uint8_t *msg, size_t msg_
 {
     if (!sig || !pk || (!msg && msg_len)) return AIENOS_SIG_ERR_ARG;
     consts k;
-    ge A, R, sB, kA, chk;
+    ge A, R, negA, chk;
     uint8_t kh[64], ks[32], enc[32];
     aienos_sha512_ctx c;
     consts_init(&k);
@@ -542,10 +425,8 @@ int aienos_ed25519_verify(const uint8_t sig[64], const uint8_t *msg, size_t msg_
     aienos_sha512_final(&c, kh);
     aienos_sig_sc_reduce(ks, kh);
 
-    ge_scalarmult(&sB, &k.B, sig + 32, &k);
-    ge_scalarmult(&kA, &A, ks, &k);
-    ge_neg(&kA, &kA);
-    ge_add(&chk, &sB, &kA, &k); /* [S]B - [k]A, must equal R */
+    ge_neg(&negA, &A);
+    ge_double_scalarmult_vartime(&chk, sig + 32, &negA, ks, &k); /* [S]B - [k]A, must equal R */
     ge_tobytes(enc, &chk);
     if (!aienos_sig_ct_equal(enc, sig, 32)) return AIENOS_SIG_ERR_INVALID; /* GUARD:r-check */
     return AIENOS_SIG_OK;

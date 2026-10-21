@@ -28,7 +28,7 @@ TEST = $(OUT)/torn_slot_test
 SANFLAGS = -fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all -g
 
 STORE_SRCS = store_v1.c store_engine.c store_disk.c store_sealed.c
-STORE_HDRS = store_v1.h store_engine.h store_sealed.h torn_slot.h ../disk/disk.h ../m5/m5.h ../argus/sha256.h
+STORE_HDRS = store_v1.h store_engine.h store_sealed.h torn_slot.h ../disk/disk.h ../m5/m5.h ../argus/sha256.h ../argus/isa_arm64.h
 DEP_SRCS = ../argus/sha256.c ../disk/disk.c ../m5/m5_keys.c ../m5/m5_envelope.c ../m5/m5_state.c \
            ../crypto/aes.c ../crypto/polyval.c ../crypto/gcm_siv.c ../crypto/hmac.c ../crypto/ct.c
 STORE_OBJS = $(STORE_SRCS:%.c=$(OUT)/%.o)
