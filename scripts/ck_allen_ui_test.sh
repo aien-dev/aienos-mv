@@ -33,7 +33,8 @@ CC=${HOSTCC:-cc}
 mkdir -p "$OUT"
 $CC -std=gnu11 -O2 -Wall -Wextra -Werror -pthread -o "$W/test" $K/ui/tests/allen_ui_test.c $K/ui/allen_ui.c \
     $K/ui/paint.c $K/ui/night.c $K/ui/sky_real.c $K/ui/sky_data.c $K/ui/mind.c $K/ui/flow.c \
-    $K/ui/allen_font.c $K/ui/canvas.c $K/svc/allen_scene.c $K/svc/allen_reply.c $K/svc/allen_notes.c $K/svc/allen_intent.c || fail "test does not build"
+    $K/ui/allen_font.c $K/ui/canvas.c $K/svc/allen_scene.c $K/svc/allen_reply.c $K/svc/allen_notes.c $K/svc/allen_intent.c \
+    $K/svc/setup_wizard.c $K/svc/setup_inv.c || fail "test does not build"
 "$W/test" "$OUT" || fail "window checks"
 echo "pictures: $OUT"
 # 5. Coordinates typed to Allen ("35 north 90 west", "35.1, -90.0") become his place; lines that are no place

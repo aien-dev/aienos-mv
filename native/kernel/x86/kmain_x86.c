@@ -509,6 +509,8 @@ static uint64_t job_last;         /* TSC of the last word from the far side abou
 static char job_buf[CK_COURIER_JOB_MAX];
 static char job_asked[96];        /* the line the job was about, for Allen's note of the exchange */
 static ck_allen_notes allen_notes; /* loaded from disk at the window, or empty */
+static struct ck_x86_setup_facts setup_facts; /* what the setup wizard is told at the window */
+static uint64_t ram_bytes;                     /* RAM in the memory map */
 
 static void allen_edit(const char *buf, unsigned len)
 {
@@ -548,6 +550,34 @@ static void allen_map(void)
     ck_allen_ui_map(n, ea, eb, ne, lit, lit >= 0 ? allen_notes.note[idx[lit]].text : 0, total, links);
 }
 
+/* Keys while the setup wizard is up go to it whole (never echoed or logged). */
+static int wizard_key(int kind, char c)
+{
+    if (!ck_x86_setup_on())
+        return 0;
+    allen_key = ck_rdtsc();
+    if (allen_asleep) { /* the key only wakes him */
+        allen_sleep(0);
+        return 1;
+    }
+    return ck_x86_setup_key(kind, c);
+}
+
+/* a is b (lower case), whatever a's letter case and the spaces around them */
+static int same_words(const char *a, const char *b)
+{
+    while (*a == ' ')
+        a++;
+    for (; *b; a++, b++) {
+        char x = *a >= 'A' && *a <= 'Z' ? (char)(*a + 32) : *a;
+        if (!*a || x != *b)
+            return 0;
+    }
+    while (*a == ' ')
+        a++;
+    return *a == 0;
+}
+
 static void allen_line(const char *text)
 {
     allen_key = ck_rdtsc();
@@ -555,6 +585,8 @@ static void allen_line(const char *text)
         allen_sleep(0);
         return;
     }
+    if (allen_on && same_words(text, "set up again") && ck_x86_setup_open(&setup_facts, courier, tsc_hz, 1))
+        return; /* the setup wizard from its first screen; it says hello itself */
     /* A far-off worker that has said hello answers first (svc/allen_reply.h far). */
     allen_mind.far = courier && courier->ready();
     const char *reply = ck_allen_answer(&allen_mind, text, ck_rdtsc() / tsc_hz);
@@ -833,6 +865,10 @@ static void allen_window(void)
     boot_times();
     night_stats("before Allen woke");
     allen_map(); /* the notes loaded from disk, before the first word */
+    setup_facts = (struct ck_x86_setup_facts){hand->rsdp, ram_bytes, allen_facts.cores, w, h};
+    ck_x86_kbd_keys(wizard_key);
+    if (ck_x86_setup_open(&setup_facts, courier, tsc_hz, 0))
+        return; /* the setup wizard says hello in its own words */
     const char *hello = ck_allen_welcome(&allen_mind);
     if (hello) {
         ck_printf("allen: %s\n", hello);
@@ -893,6 +929,8 @@ static void courier_step(void)
         ck_printf("courier: ready, the far side said hello\n");
     }
     while (courier->take(line, sizeof line)) {
+        if (ck_x86_setup_line(line))
+            continue; /* the setup wizard's key test answered */
         if (!ck_allen_say_line(line, &seq, &part, &total, text, sizeof text) || !job_t || seq != job_seq)
             continue;
         job_last = ck_rdtsc() | 1;
@@ -968,6 +1006,7 @@ void ck_x86_hold_step(uint64_t *end)
     ck_x86_bench_step(tsc_hz);
     if (!allen_on)
         return;
+    ck_x86_setup_step();
     if (!__atomic_load_n(&draw_on, __ATOMIC_ACQUIRE) && !__atomic_test_and_set(&draw_lock, __ATOMIC_ACQUIRE)) {
         ck_allen_ui_tick(ck_rdtsc()); /* no secondary core draws: this one does */
         __atomic_clear(&draw_lock, __ATOMIC_RELEASE);
@@ -1972,6 +2011,7 @@ static __attribute__((noreturn)) void kernel_main(void *arg)
         if (efi_ram(d->type))
             ram += d->pages * CK_PAGE;
     }
+    ram_bytes = ram;
     /* the firmware keeps a little for itself, so whole GiB rounded up is what is fitted */
     ck_printf("ram: %llu MiB in the memory map, about %llu GiB fitted\n", (unsigned long long)(ram >> 20),
               (unsigned long long)((ram + (1ull << 30) - 1) >> 30));

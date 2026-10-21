@@ -37,6 +37,9 @@ int ck_allen_ui_started(void);
  * short line shown under the empty bar. */
 void ck_allen_ui_wake(const char *footer, uint64_t now);
 int ck_allen_ui_on(void);
+/* 1 once Allen has gathered out of the night and can speak (his first words
+ * wait for it): what waits on his words, like the setup wizard, starts then. */
+int ck_allen_ui_formed(uint64_t now);
 /* The line being typed changed (buf holds len characters). */
 void ck_allen_ui_input(const char *buf, unsigned len, uint64_t now);
 /* A line was entered and Allen answered: the line rises from the bar into
@@ -90,4 +93,26 @@ void ck_allen_ui_scene(const char *scene, unsigned len, uint64_t now);
 /* ---- sky view and real-time sky ---- */
 void ck_allen_ui_set_unix_time(int64_t unix_s, uint64_t tsc_at_read);
 void ck_allen_ui_sky_mode(uint8_t mode, uint8_t region, int32_t lat_udeg, int32_t lon_udeg);
+
+/* The setup wizard's panel (svc/setup_wizard.h): up to CK_ALLEN_UI_PANEL_LINES
+ * lines under Allen's words, each easing in a moment after the one before
+ * (a line already shown stays as it is when the panel is set again), and up
+ * to CK_ALLEN_UI_CHOICES choices in a row where the bar sits, the lit one
+ * bright, with hint under the row and aside small under that. A prompt
+ * (not NULL or "") puts the bar back for typing instead of the choices, with
+ * the prompt as its hint. While the panel is up Allen's words stay until he
+ * says something else. NULL: the panel fades and the window is as before.
+ * Strings are copied. */
+#define CK_ALLEN_UI_PANEL_LINES 8u
+#define CK_ALLEN_UI_CHOICES 5u
+typedef struct {
+    const char *line[CK_ALLEN_UI_PANEL_LINES];
+    unsigned nline;
+    const char *choice[CK_ALLEN_UI_CHOICES];
+    unsigned nchoice;
+    int lit;
+    const char *hint, *aside, *prompt;
+} ck_allen_ui_panel_view;
+void ck_allen_ui_panel(const ck_allen_ui_panel_view *p, uint64_t now);
+
 #endif

@@ -753,6 +753,9 @@ int ck_x86_kbd_ready(void) { return x.kbd && !x.stopped; }
 
 static void (*sink_edit)(const char *buf, unsigned len);
 static void (*sink_line)(const char *text);
+static int (*sink_key)(int kind, char c);
+
+void ck_x86_kbd_keys(int (*key)(int kind, char c)) { sink_key = key; }
 
 void ck_x86_kbd_sink(void (*edit)(const char *buf, unsigned len), void (*line)(const char *text))
 {
@@ -826,6 +829,8 @@ static int poll_keys(void)
         unsigned k = ck_hid_decode(&g_dec, rep, sizeof rep, keys);
         for (unsigned i = 0; i < k; i++) {
             got = 1;
+            if (sink_key && sink_key(keys[i].kind, keys[i].c))
+                continue; /* taken whole (the setup wizard): never echoed, never a line */
             if (g_line.len == 0 && g_line.typed == 0 && keys[i].kind == CK_KEY_CHAR) /* a new line */
                 ck_puts("> ");
             int r = ck_line_feed(&g_line, keys[i], echo);

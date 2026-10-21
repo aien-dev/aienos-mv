@@ -29,6 +29,11 @@ ck_key_event ck_hid_usage(uint8_t usage, int shift)
         ev.kind = CK_KEY_ESCAPE;
     } else if (usage == USAGE_BACKSPACE) {
         ev.kind = CK_KEY_BACKSPACE;
+    } else if (usage >= 0x4f && usage <= 0x52) { /* Right, Left, Down, Up arrow */
+        static const uint8_t arrow[4] = {CK_KEY_RIGHT, CK_KEY_LEFT, CK_KEY_DOWN, CK_KEY_UP};
+        ev.kind = arrow[usage - 0x4f];
+    } else if (usage == 0x2b) { /* Tab */
+        ev.kind = CK_KEY_TAB;
     } else if (usage == USAGE_SPACE) {
         ev.kind = CK_KEY_CHAR;
         ev.c = ' ';

@@ -8,6 +8,8 @@
  * same picture as drawing everything, runs 1280 x 800 RGBX with and without
  * three helper threads (the frames must match exactly), and writes PNG
  * pictures to the directory given as argv[1] (if any) for a person to look at.
+ * Then the setup wizard (svc/setup_wizard.c) at 1920 x 1080: its choices,
+ * the lit one moving, the scan lines easing in, words held with a question.
  * Final line: ALLEN_UI_TEST: PASS|FAIL (N checks). */
 #include <pthread.h>
 #include <stdint.h>
@@ -21,6 +23,7 @@
 #include "../allen_font.h"
 #include "../allen_ui.h"
 #include "../night.h"
+#include "../setup_view.h"
 
 static int checks, fails;
 #define CHECK(cond, what)                                                                                     \
@@ -249,6 +252,147 @@ static void *helper(void *arg)
     while (helpers_run)
         ck_allen_ui_help();
     return 0;
+}
+
+/* ---- the setup wizard on the screen (svc/setup_wizard.c through ui/setup_view.h), 1920 x 1080 ---- */
+#define CHECKF(cond, ...)                                                                                      \
+    do {                                                                                                       \
+        checks++;                                                                                              \
+        if (!(cond)) {                                                                                         \
+            fails++;                                                                                           \
+            printf("FAIL  ");                                                                                  \
+            printf(__VA_ARGS__);                                                                               \
+            printf("\n");                                                                                     \
+        }                                                                                                      \
+    } while (0)
+static sw_wizard wiz;
+static unsigned wiz_said;
+static void wiz_show(void) { ck_setup_show(sw_view_of(&wiz), &wiz_said, sw_step_of(&wiz) == SW_DONE, now_us); }
+static void wiz_key(int k, char c)
+{
+    sw_key(&wiz, k, c, (uint32_t)(now_us / 1000));
+    wiz_show();
+}
+static void wiz_run(uint32_t ms) /* the wizard's clock and the screen's together */
+{
+    uint32_t end = (uint32_t)(now_us / 1000) + ms;
+    while (now_us / 1000 < end) { /* as run_to: the last frame is 16 ms before now_us */
+        if (sw_tick(&wiz, (uint32_t)(now_us / 1000)))
+            wiz_show();
+        ck_allen_ui_tick(now_us);
+        now_us += 16000;
+    }
+}
+
+static void wizard_screens(const char *dir)
+{
+    char path[512];
+    static char text[4096];
+    FILE *f = fopen("native/kernel/svc/tests/fixtures/setup/games-pc.txt", "rb");
+    CHECKF(f != 0, "wizard: the games PC fixture opens (run from the repository root)");
+    if (!f)
+        return;
+    unsigned n = (unsigned)fread(text, 1, sizeof text, f);
+    fclose(f);
+    static si_inv inv;
+    si_init(&inv);
+    si_parse(&inv, text, n);
+    uint32_t W = 1920, H = 1080;
+    uint32_t *fb = calloc((size_t)W * H, 4), *copy = malloc((size_t)W * H * 4);
+    size_t need = ck_allen_ui_mem_bytes(W, H);
+    void *mem = malloc(need);
+    struct pic P = {fb, W, 1};
+    now_us = 0;
+    CHECKF(ck_allen_ui_start(fb, W, H, W, 1, mem, need, 1000000, 0, 0) == 0, "wizard: the window starts at 1920x1080");
+    run_to(9000);
+    ck_allen_ui_wake(0, now_us);
+    wiz_said = ~0u;
+    sw_start(&wiz, &inv, 1, 0, 0, (uint32_t)(now_us / 1000));
+    wiz_show();
+    wiz_run(7000);
+    CHECKF(sw_step_of(&wiz) == SW_INTENT, "wizard: hello, then the one question");
+    wiz_run(5000);
+    /* the row of choices sits where the bar is: three pills, the first lit */
+    uint32_t ry = H - 150 - 4, rh = 62;
+    unsigned row = count(&P, 0, ry, W, rh, BRIGHT);
+    CHECKF(row > 400, "wizard: the choices are drawn where the bar sits (%u bright)", row);
+    unsigned left = count(&P, 0, ry, W / 2 - 200, rh, LIT), right = count(&P, W / 2 + 200, ry, W / 2 - 200, rh, LIT);
+    CHECKF(left > right, "wizard: the first choice is the lit one (%u against %u)", left, right);
+    unsigned hint = count(&P, 400, H - 150 + 54 + 6, W - 800, 40, LIT);
+    CHECKF(hint > 50, "wizard: the lit choice's line is under the row (%u)", hint);
+    unsigned st = stale(fb, copy, W, W, H);
+    CHECKF(st < 40, "wizard: the question drawn by changed parts is the whole picture (%u differ)", st);
+    if (dir) {
+        snprintf(path, sizeof path, "%s/wizard-1-intent.png", dir);
+        png(path, fb, W, 1, 0, 0, W, H, 1);
+    }
+    wiz_key(SW_K_RIGHT, 0);
+    wiz_run(600);
+    unsigned left2 = count(&P, 0, ry, W / 2 - 200, rh, LIT), mid = count(&P, W / 2 - 200, ry, 400, rh, LIT);
+    CHECKF(left2 < left && mid > 0, "wizard: the light moves to the next choice (%u -> %u)", left, left2);
+    wiz_key(SW_K_LEFT, 0);
+    wiz_key(SW_K_ENTER, 0);
+    /* getting to know the computer: the lines come one after another */
+    wiz_run(1200);
+    uint32_t py = (uint32_t)(H * 40 / 100 + 250 + 40), ph = 220;
+    unsigned early = count(&P, 200, py, W - 400, ph, BRIGHT);
+    wiz_run(3000);
+    unsigned later = count(&P, 200, py, W - 400, ph, BRIGHT);
+    CHECKF(later > early + 200, "wizard: the scan's lines ease in one at a time (%u then %u)", early, later);
+    if (dir) {
+        snprintf(path, sizeof path, "%s/wizard-2-scan.png", dir);
+        png(path, fb, W, 1, 0, 0, W, H, 1);
+    }
+    wiz_run(4000);
+    CHECKF(sw_step_of(&wiz) == SW_CONSENT, "wizard: the consent comes by itself");
+    wiz_run(4000);
+    st = stale(fb, copy, W, W, H);
+    CHECKF(st < 40, "wizard: the consent drawn by changed parts is the whole picture (%u differ)", st);
+    if (dir) {
+        snprintf(path, sizeof path, "%s/wizard-3-consent.png", dir);
+        png(path, fb, W, 1, 0, 0, W, H, 1);
+    }
+    wiz_key(SW_K_ENTER, 0);
+    wiz_run(5000);
+    if (dir) {
+        snprintf(path, sizeof path, "%s/wizard-4-games.png", dir);
+        png(path, fb, W, 1, 0, 0, W, H, 1);
+    }
+    /* his words stay while the question is up, however long they wait */
+    unsigned words = count(&P, 300, (uint32_t)(H * 40 / 100 + 200), W - 600, 70, BRIGHT);
+    wiz_run(20000);
+    unsigned words_later = count(&P, 300, (uint32_t)(H * 40 / 100 + 200), W - 600, 70, BRIGHT);
+    CHECKF(words > 100 && words_later * 10 > words * 9, "wizard: Allen's words stay with the question (%u, %u)", words,
+          words_later);
+    wiz_key(SW_K_ENTER, 0);
+    wiz_key(SW_K_CHAR, '2'); /* choose another */
+    wiz_key(SW_K_CHAR, '2'); /* connect my own */
+    wiz_key(SW_K_CHAR, '1'); /* Claude */
+    for (const char *k = "sk-not-a-real-key"; *k; k++)
+        wiz_key(SW_K_CHAR, *k);
+    wiz_run(3000);
+    CHECKF(sw_step_of(&wiz) == SW_KEY, "wizard: at the key");
+    unsigned bar = count(&P, W / 2 - 360, H - 150, 720, 54, BRIGHT);
+    CHECKF(bar > 30, "wizard: the bar is back for typing, the key as dots (%u)", bar);
+    if (dir) {
+        snprintf(path, sizeof path, "%s/wizard-5-key.png", dir);
+        png(path, fb, W, 1, 0, 0, W, H, 1);
+    }
+    wiz_key(SW_K_ESC, 0);
+    wiz_key(SW_K_ESC, 0);
+    wiz_key(SW_K_ESC, 0);
+    wiz_run(4000);
+    CHECKF(sw_step_of(&wiz) == SW_READY, "wizard: ready");
+    if (dir) {
+        snprintf(path, sizeof path, "%s/wizard-6-ready.png", dir);
+        png(path, fb, W, 1, 0, 0, W, H, 1);
+    }
+    wiz_key(SW_K_ENTER, 0);
+    wiz_run(3000);
+    CHECKF(count(&P, 0, ry, W, rh, BRIGHT) < row / 4, "wizard: done, the choices have gone");
+    st = stale(fb, copy, W, W, H);
+    CHECKF(st < 40, "wizard: after the panel went, changed parts are the whole picture (%u differ)", st);
+    free(fb), free(copy), free(mem);
 }
 
 int main(int argc, char **argv)
@@ -754,6 +898,7 @@ int main(int argc, char **argv)
         free(tmp);
     }
     free(fb), free(copy), free(sky), free(mem), free(fb2[0]), free(fb2[1]), free(mem2);
+    wizard_screens(dir);
     printf("ALLEN_UI_TEST: %s (%d checks%s)\n", fails ? "FAIL" : "PASS", checks, fails ? ", some failed" : "");
     return fails ? 1 : 0;
 }
