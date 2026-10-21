@@ -49,6 +49,8 @@ The emulator gates need `qemu-system-aarch64` and the AAVMF firmware (Ubuntu pac
 ```bash
 bash scripts/ck_gates.sh          # runs the C gates, writes a content-addressed receipt; refuses a dirty tree; its child scripts take a gate lock and report NOT_RUN while another gate run holds it or the machine quiet flag is set
 bash scripts/ck_pi5_build_check.sh  # builds the Raspberry Pi 5 image and checks the default image carries none of it (build only; the Pi image cannot boot in QEMU)
+bash scripts/qemu_ck_apple_boot_test.sh  # Apple Silicon (M1 to M4) platform layer: boots the CK_APPLE=1 raw Image in QEMU from a device tree (emulator only; never run on a Mac yet)
+bash scripts/ck_apple_flag_check.sh      # proves the default and Pi 5 images are byte-identical with and without CK_APPLE=1
 ```
 
 The legacy Rust workspace is still checked by `bash scripts/verify_all.sh` (needs a Rust toolchain with the `aarch64-unknown-uefi` and `aarch64-unknown-none` targets) until it is retired. Anything that needs the real DGX Spark is labelled `needs-hardware` and is run by maintainers.

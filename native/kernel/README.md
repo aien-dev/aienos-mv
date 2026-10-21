@@ -1,3 +1,4 @@
+| `apple/` | Apple Silicon platform layer, M1 to M4 (L250, `docs/APPLE_SILICON_PLATFORM.md`): device-tree reader, family table (14 SoCs; an unknown chip is refused, never guessed), raw arm64 `Image` entry with the device-tree handoff and the EL2 to EL1 drop Apple CPUs need (HCR_EL2.E2H stuck at 1), AIC1/AIC2/AICv3 and FIQ path and spin-table core start (host chip-model tests in progress). Built only with `CK_APPLE=1`; host-tested and booted in QEMU only, never on a Mac. |
 # native/kernel: AIENOS C kernel core (Lane 18)
 
 The first AIENOS kernel written in C for AArch64. It boots in QEMU through
@@ -29,6 +30,10 @@ QEMU qualifies nothing physical: a PASS here says nothing about real hardware.
                                      # CK_QEMU_UNSAFE_DMA=1 build), ends AIENOS_CK_M4_NVME,
                                      # AIENOS_CK_M4_STORE, AIENOS_CK_ARGUS1_REVOKE
     scripts/qemu_ck_disk_layout_test.sh # QEMU GPT / AIENOS partition gate, ends AIENOS_CK_DISK_LAYOUT
+    make -C native/kernel apple-test  # Apple layer host tests and mutants, ends CK_APPLE_HOST: PASS
+    make -C native/kernel CK_APPLE=1  # also builds target/native-kernel/apple/Image (raw arm64 Image)
+    scripts/qemu_ck_apple_boot_test.sh  # QEMU boot of that Image from a device tree, ends AIENOS_CK_APPLE_BOOT
+    scripts/ck_apple_flag_check.sh  # default and Pi 5 images byte-identical with CK_APPLE unset and =1
 
 Toolchain: gcc, binutils (ld, objcopy, nm, readelf), make, shell. On a
 non-aarch64 host the Makefile uses the `aarch64-linux-gnu-` prefix.

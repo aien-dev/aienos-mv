@@ -222,3 +222,9 @@ int ck_apple_report(const struct ck_apple_platform *p, char *buf, size_t n)
                        (unsigned long long)p->aic_event, ck_apple_idle_name(s->idle), p->ncpus, released,
                        s->dart_page, ck_apple_usbc_name(p->usbc), unexpected ? "(unexpected)" : "");
 }
+
+uint8_t ck_apple_idle_effective(const struct ck_apple_soc *soc, int retention_ready)
+{
+    if (soc && soc->idle == CK_APPLE_IDLE_WFI_RETAINED && retention_ready) return CK_APPLE_IDLE_WFI_RETAINED;
+    return CK_APPLE_IDLE_SPIN;
+}

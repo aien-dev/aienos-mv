@@ -93,6 +93,9 @@ int ck_apple_probe(const struct ck_fdt *f, struct ck_apple_platform *p);
  * "apple: REFUSED ...; Apple drivers not started". Returns ck_snprintf's count. */
 int ck_apple_report(const struct ck_apple_platform *p, char *buf, size_t n);
 
+/* Idle policy in force: SPIN unless the row allows WFI AND our own
+ * state-retention setup has run (retention_ready). soc NULL: SPIN. */
+uint8_t ck_apple_idle_effective(const struct ck_apple_soc *soc, int retention_ready);
 const char *ck_apple_idle_name(uint8_t idle);
 const char *ck_apple_usbc_name(uint8_t usbc);
 
