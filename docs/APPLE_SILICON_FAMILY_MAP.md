@@ -57,6 +57,70 @@ Notes on the table:
 - **Asahi docs say M5 Pro and M5 Max are both T6050**; m1n1 defines T6051 for the Max with its own core parts (OBSERVED). The table follows m1n1 (code that runs on the hardware beats the codename page).
 - **The ADT is the ground truth on the machine; the Linux-style tree is what Aienux receives.** m1n1 builds the tree it hands over from a device-tree source plus values it copies from the ADT (m1n1 `src/kboot.c`). On the tethered path that source is the Asahi `.dts` for the board, so Aienux must key on the Linux-DT compatibles above, not on ADT names like `aic,2`.
 
+## 2. Every D and G row of the M2 map, per family
+
+Meaning of the words: **same** = the M2 driver works unchanged (different addresses come from the tree); **variant** = same idea, different registers or set-up steps, a second code path; **new** = a different block or chip, new driver; **UNKNOWN** = nobody has published it yet. Columns group chips that behave alike: "M1" = T8103; "M1 P/M/U" = T6000-T6002; "M2 P/M/U" = T6020-T6022; "M3" = T8122; "M3 P/M/U" = T6030-T6034; "M4-class" = M4, M4 Pro/Max, A18 Pro (Asahi has started on these); "M5/M6" = M5, M5 Pro/Max, M6 (chip ids only). Sources are the files and pages of section 8, cited by short name.
+
+| Row | M1 | M1 P/M/U | M2 P/M/U | M3 | M3 P/M/U | M4-class | M5 / M6 | Source |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| D1 boot handoff (m1n1, DT) | same | same | same | same, plus 1 GHz counter redirect set by m1n1 (read `CNTFRQ_EL0`) | same | **variant**: reserve the secondary-core CTRR range; no WFI/WFIT in idle and delay (m1n1 adds `idle=nop arm64.nowfxt` for Linux) | as M4-class (INFERRED: same m1n1 feature entry) | m1n1 `kboot.c`, `chickens.c` |
+| D2 CPU bring-up, spin-table | same; start offset 0x54000 (data) | same; offset 0x54000; Ultra: 2 dies | same; offset 0x28000 | same; offset 0x34000 | Pro 0x34000; Max/Ultra 0x88000 | same mechanism (offset 0x34000 / 0x88000); m1n1 has no chicken-bit init for these cores (`init = NULL`) | same mechanism; M5 Pro/Max add a third core type flag (`MPIDR_CORE_TYPE_M`, bit 18); M5 offset tested on hardware | m1n1 `smp.c`, `midr.h`, commit `b72e664` |
+| D3 interrupts: AIC + FIQ timer + fast IPI | **variant: AIC1** | same as M2 (AIC2), multi-die on Ultra | same (AIC2) | **variant: AIC3** | AIC3 | AIC3 (M4, A18 Pro in linux-asahi 7.4; M4 Pro/Max WIP); fast IPI yes | UNKNOWN (INFERRED AIC3) | m1n1 `aic.c`, `chickens.c` (`fast_ipi`), Linux `irq-apple-aic.c`, feature pages |
+| D4 disk: ANS2 NVMe | same (`t8103-nvme-ans2` base) | same | same | same | Pro: `nvme-ans3` with ANS2 fallback (treat as same until a difference is read); Max: same | **variant**: `nvme-secure-bar`, register window 9, extra I/O queue writes; controller firmware changed in the macOS 15.x bundle; SARTv4 | M5: as M4-class ("working NVMe on M4 and M5"); M6: WIP | m1n1 `nvme.c`, `sart.c`, commits `53f8ee9`, `543667f`, `9bfdf8a`; progress report 7.2 |
+| D5 helper processors, RTKit | same | same | same | same (M3 blocks run on it in linux-asahi) | same | INFERRED same: m1n1 drives the M4 ANS through RTKit for working NVMe; per-endpoint versions UNKNOWN | UNKNOWN | m1n1 `rtkit.c`, `nvme.c` |
+| D6 DART and SART | **variant**: `t8103-dart` (T8020 register family) | `t6000-dart` (T8020 family, own PTE layout) plus `t8110-dart` on some blocks | same (`t6020-dart` → `t8110-dart`) | same (`t8122-dart` → `t8110-dart`) | same | DART UNKNOWN (no node in DT 7.4, feature page "TBA"); SART **variant** v4 | UNKNOWN | m1n1 `dart.c`, `sart.c`; Linux `apple-dart.c`; DT files |
+| D7 wired network | USB Ethernet (same); desktops add built-in Ethernet on PCIe | same | same | same | same | same | same | feature pages (Ethernet rows per Mac) |
+| D8 keyboard and trackpad | **new**: SPI HID (`apple,spi-hid-transport`), no MTP | **new**: SPI HID on the 2021 MacBook Pro | same (MTP, dockchannel) | same (MTP on j504, j613) | same (MTP on j514/j516) | UNKNOWN (keyboard "TBA"; keyboard backlight in 7.4) | UNKNOWN | DT files `t8103-j293/j313`, `t600x-j314-j316`, `t8122-j504/j613`, `t603x-j514-j516` |
+| D9 SMC | same | same | same | same ("linux-asahi") | same | UNKNOWN ("TBA") | UNKNOWN | feature pages |
+| D10 USB-C / USB4 | same (CD3217 I2C) | same | same | **split by board**: CD3217 I2C on iMac and MacBook Pro 14", **new ACE3 on SPMI** on MacBook Air; ATCPHY **variant** (N3 tunables); DWC3 same | **new**: ACE3 on SPMI; ATCPHY as M3 | ATCPHY as M3 (m1n1 reuses the T8122 tunables); PD controller UNKNOWN; USB "TBA" | UNKNOWN | DT files, progress report 7.2, m1n1 `kboot_atc.c` |
+| D11 Wi-Fi | Broadcom over PCIe (same driver family) | same | same | same ("linux-asahi") | same | UNKNOWN ("TBA"; chip not read) | UNKNOWN | feature pages |
+| D12 PCIe | same | same | same; Mac Pro adds a second PCIe ("GE") controller | same | same | **variant**: m1n1 adds T8132/T6040 PCIe set-up; devices enumerate in Linux | UNKNOWN | m1n1 commit `0f221fc`; DT `t6020-pcie-ge`; progress report 7.2 |
+| D13 Bluetooth | same | same | same | same | same | UNKNOWN | UNKNOWN | feature pages |
+| D14 boot framebuffer | same | same | same | same ("Boot framebuffer - linux-asahi") | same | same (M4, A18 Pro: "Boot framebuffer - linux-asahi") | UNKNOWN ("TBA") | feature pages |
+| D15 display controller (DCP) | same protocol, macOS 12.3 or 13.5 firmware ABI | same | same (13.5) | **variant**: ABI of macOS 14.8.3, WIP | same as M3 | UNKNOWN, no ABI pinned | UNKNOWN | Linux `drivers/gpu/drm/apple` (`DCP_FIRMWARE_V_12_3`, `_13_5`), progress report 7.2 |
+| D16 audio | same family (MCA) | same | same | same (speakers and microphones on laptops) | same | UNKNOWN ("TBA") | UNKNOWN | feature pages |
+| D17 power, clocks, SPMI | same mechanism; PMGR tables are per-SoC data (`tNNNN-pmgr.dtsi`) | same | same | same; cpufreq and cpuidle "linux-asahi" | same | PMGR data added in m1n1 (M4 Pro/Max, A18 Pro, M5); cpufreq/cpuidle "TBA" | M6 PMGR in m1n1 (`2307774`) | DT files, m1n1 commits `fcaf476`, `2307774` |
+| D18 serial console | same Samsung-style UART | same | same | same (7.2) | same (7.3) | same driver, early UART address from the ADT (`0eeca15`); UART "TBA" in Linux | UNKNOWN | m1n1 commits, feature pages |
+| D19 RTC, watchdog, entropy | same (`wdt-version` from the ADT) | same | same | same | same | **variant**: m1n1 disarms a secondary watchdog (`wdt_version` 2) on these chips; watchdog in linux-asahi 7.4 | as M4-class (INFERRED) | m1n1 commits `0e88df7`, `ffe667d`, `src/wdt.c` |
+| D20 Touch ID, camera, Neural Engine, codecs | not needed | not needed | not needed | camera "linux-asahi" | camera "linux-asahi" | not needed | not needed | feature pages |
+| G1 GPU discovery and helper boot | G13G | G13S / G13C / G13D | G14S / G14C / G14D | **new** generation, GPU WIP | new generation, "TBA" | UNKNOWN, "TBA" | UNKNOWN | Linux `drivers/gpu/drm/asahi/hw/mod.rs` (G13, G14 only), feature pages |
+| G2 GPU MMU (UAT) | same idea (G13) | same | same | INFERRED same idea; not published | UNKNOWN | UNKNOWN | UNKNOWN | Asahi GPU driver |
+| G3 firmware structures | macOS 12.3 or 13.5 layouts | 13.5 | 13.5 | **variant**: 14.8.3 layouts, not in the published GPU driver | 14.8.3 | none pinned | none | GPU driver (`V12_3` ... `V13_5`), hypervisor doc, progress report 7.2 |
+| G4 compute dispatch | DOCS SILENT, as on M2 | as M2 | as M2 | as M2 | as M2 | as M2 | as M2 | M2 map G4 |
+
+What the table says in one line: from the M2, the M2 Pro/Max/Ultra cost nothing new; the M3 adds the AIC3 and ACE3 variants and a new GPU; the M4-class adds a disk variant, the idle rule and the CTRR hole, and loses most published references; the M5 and M6 are known only by chip id, core parts and a working disk.
+
+## 3. The boot-path question: can M4 and M5 still start a non-XNU payload?
+
+**Answer: yes, on the evidence available today (2026-10-21), with two named gaps.** Aienux would start on an M4 or M5 the same way as on the M2: iBoot (now called mBoot) starts m1n1 as a "raw" boot object in a Permissive-Security container, and m1n1 starts Aienux. SPTM does not stand in the way of a non-XNU payload, because SPTM is something macOS's kernel needs, not something mBoot imposes on a raw boot object.
+
+The evidence chain:
+
+1. **How m1n1 is registered (OBSERVED).** The Asahi installer registers m1n1 with `kmutil configure-boot -c boot.bin --raw --entry-point 2048 --lowest-virtual-address 0` (asahi-installer `src/step2/step2.sh:125`). There is one boot-object mechanism for m1n1 on every chip; neither tree has code that packages m1n1 any other way (OBSERVED: `grep -i fileset` finds nothing in m1n1 `src/`, `proxyclient/` or the installer `src/`).
+2. **m1n1 runs on M4 and M5 hardware (SOURCED).** Progress report 7.2 (2026-08-26): "mBoot (formerly iBoot) starts it in EL2, it does its job, then jumps to whatever payload is attached to it"; "we now have working NVMe on M4 and M5"; they "fixed an issue that caused Linux to crash shortly after boot when more than one CPU core is enabled". m1n1 commit `b72e664` (2026-07-19, "Initial support for T8142", the M5): "midr part numbers and smp_start_offset were confirmed/tested ... on IRC", i.e. run on a real M5.
+3. **m1n1 boots Linux on M4-class chips (OBSERVED).** m1n1 `src/kboot.c` has M4-class-only code "to prevent Linux from crashing" (the CTRR reservation) and the idle arguments; commit `00b8814` "kboot: Fix M4* boot under hypervisor".
+4. **SPTM is XNU's requirement (SOURCED, INFERRED for the conclusion).** Progress report 7.2: "SPTM is mandatory for XNU on M4 and above", "SPTM _must_ be run inside GL2 with SPRR enabled", and "the hypervisor was rendered entirely nonfunctional on these machines" (the hypervisor runs macOS; macOS needs SPTM). The m1n1 hypervisor now loads SPTM itself into a macOS guest (`load_macos_sptm(xnu_path, sptm_path, txm_path)`, `proxyclient/m1n1/hv/__init__.py`; `run_guest.py --sptm --txm --sptm-mode`), which it could not do if mBoot had already started SPTM in GL2 above m1n1. INFERRED: for a raw boot object, mBoot does not start SPTM, and the payload owns EL2 as on the M2.
+5. **The contrary claim.** The third-party `antiapplefox/m5-linux` README says "iBoot's `load_kernelcache` rejects the image (panics) if it isn't `MH_FILESET`" and that m1n1 "must be packaged as an SPTM-aware BootKC". That project states "No hardware bring-up yet." Points 2 and 3 are hardware results that contradict it for raw objects; the claim may describe the kernelcache (non-raw) load path. Verdict: not adopted; recorded here.
+
+What SPTM requires, for the record (SOURCED, progress report 7.2; OBSERVED, m1n1 `src/hv/hv_sprr.c` comments and `proxyclient/m1n1/hv/__init__.py`): SPTM runs in GL2 under Apple's Guarded Execution Framework (GXF) with SPRR page permissions enabled; it "expects CTRR to be enabled and locked" and "either panics or gets stuck in a polling loop" if expected bits are missing; on M4 it needs a dummy page "when no Secure Kernel is present". None of this is needed by Aienux, which never runs XNU. It matters only for the macOS-under-hypervisor tracing tool (section 4).
+
+The two gaps (UNKNOWN, with read-only experiments):
+
+| UNKNOWN | Why it matters | Experiment that settles it (no Mac touched) |
+| --- | --- | --- |
+| Which macOS / firmware versions the Asahi M4 and M5 developer machines ran when m1n1 worked | Apple could close the raw path in a later mBoot; the sources do not state the version | Read the m1n1 boot logs posted with the M4/M5 work (m1n1 prints `System FW version` and `OS FW version` at start, `src/firmware.c`), in the m1n1 pull requests and Asahi issue threads for `b72e664`, `53f8ee9`, `543667f`; record the versions. If no log is public, the first attended proxy-only boot on any M4/M5 (an L251-style step, Drake attended) prints them |
+| Whether mBoot 27.x keeps the raw-object path | m1n1 already lists `mBoot-20457.1.29` as macOS 27.0 (`src/firmware.c`) but nothing says a raw boot was tried on it | Same log search for any `mBoot-20457` line; or compare the `kmutil configure-boot --raw` behaviour notes in the macOS 27 release IPSW's `BuildManifest.plist` (the `RestoreKernelCache` / `KernelCache` entries per board) against 26.x |
+
+For the M6 (T8152): m1n1 names the chip, starts its PMGR and gives it the M4 feature set (`a281ff3`, `2307774`); feature page shows NVMe WIP. That implies m1n1 has run on one (INFERRED, not stated).
+
+## 4. Corrections made to the M2 map
+
+Made in `docs/MACBOOK_AIENOS_MAP.md` in a separate commit on this branch (see its git log). In short:
+
+- The **macOS 26.6.2 / firmware 18000.161.10 question is answered**: m1n1 knows that firmware (`"26.6.2", ... "mBoot-18000.161.10"`, `src/firmware.c`, added `3e354a2` on 2026-09-30, included in v1.9.9 and v2.0.0). The Asahi installer only checks minimum versions and gives the new container its own macOS 13.5 boot firmware on an M2, separate from the 26.6.2 that the main macOS runs.
+- The **hypervisor tracing plan (G3, step 14, section 7)** is corrected: the m1n1 hypervisor supports only pinned guest versions, macOS 13.5 for M1 and M2 and 14.8.3 for M1 to M3, installed as a second copy of macOS; Drake's 26.6.2 is not a supported guest. SPTM-aware hypervisor modes exist only on m1n1's main branch after v2.0.0 (2026-10-11 to 10-18), untagged. Replacement experiment stated there.
+- The **licence line** gains its date: v1.9.9 (last MIT) and v2.0.0 (first GPL) were both tagged on 2026-10-02, and v1.9.9 already contains the 26.6.2 firmware entry.
+
 ## 5. Platform-layer design rule for L250 (short spec)
 
 Goal: one Apple platform layer for every row of section 1. A newer Mac must cost a table row, and a driver variant only when its registers really changed.
