@@ -2470,6 +2470,40 @@ gpu-sim-mutants:
 	done; test $$fail -eq 0
 .PHONY: test-gpu-sim gpu-freestanding gpu-sim-mutants
 
+# L332 rung 1: the same channel as a device contract (gpu/contract/gb10_chan.devc, ADR 0021 class gpu-chan), compiled by
+# crates/aienos-devc into gpu/contract/gen/gch_contract.c (committed; the kernel build never runs cargo). The generated twin
+# must pass test_gpu_sim like the hand one, and the differential trace (every register access and a hash of all simulated
+# memory after each of ~330 operations) must be byte-identical between the two.
+GPU_CONTRACT_C := $(KDIR)/gpu/contract/gen/gch_contract.c
+GPU_SIM_SRCS_CONTRACT := $(filter-out $(KDIR)/gpu/gpu_chan.c,$(GPU_SIM_SRCS)) $(GPU_CONTRACT_C)
+$(OUT)/host/test_gpu_sim_contract: $(KDIR)/tests/test_gpu_sim.c $(GPU_SIM_SRCS_CONTRACT) $(GPU_SIM_HDRS) $(KDIR)/tests/ck_test.h
+	@mkdir -p $(dir $@)
+	$(HOSTCC) $(HCFLAGS) -I$(KDIR)/gpu -o $@ $< $(GPU_SIM_SRCS_CONTRACT)
+$(OUT)/host-san/test_gpu_sim_contract: $(KDIR)/tests/test_gpu_sim.c $(GPU_SIM_SRCS_CONTRACT) $(GPU_SIM_HDRS) $(KDIR)/tests/ck_test.h
+	@mkdir -p $(dir $@)
+	$(HOSTCC) $(HCFLAGS) $(SANFLAGS) -I$(KDIR)/gpu -o $@ $< $(GPU_SIM_SRCS_CONTRACT)
+$(OUT)/host/gpu_chan_trace_hand: $(KDIR)/tests/gpu_chan_trace.c $(GPU_SIM_SRCS) $(GPU_SIM_HDRS)
+	@mkdir -p $(dir $@)
+	$(HOSTCC) $(HCFLAGS) $(SANFLAGS) -I$(KDIR)/gpu -o $@ $< $(GPU_SIM_SRCS)
+$(OUT)/host/gpu_chan_trace_contract: $(KDIR)/tests/gpu_chan_trace.c $(GPU_SIM_SRCS_CONTRACT) $(GPU_SIM_HDRS)
+	@mkdir -p $(dir $@)
+	$(HOSTCC) $(HCFLAGS) $(SANFLAGS) -I$(KDIR)/gpu -o $@ $< $(GPU_SIM_SRCS_CONTRACT)
+test-gpu-contract: $(OUT)/host/test_gpu_sim_contract $(OUT)/host-san/test_gpu_sim_contract
+	$(OUT)/host/test_gpu_sim_contract
+	$(OUT)/host-san/test_gpu_sim_contract
+gpu-contract-trace: $(OUT)/host/gpu_chan_trace_hand $(OUT)/host/gpu_chan_trace_contract
+	@$(OUT)/host/gpu_chan_trace_hand > $(OUT)/host/gpu_chan_trace_hand.txt
+	@$(OUT)/host/gpu_chan_trace_contract > $(OUT)/host/gpu_chan_trace_contract.txt
+	@cmp $(OUT)/host/gpu_chan_trace_hand.txt $(OUT)/host/gpu_chan_trace_contract.txt \
+	  && echo "gpu-contract-trace: PASS ($$(wc -l < $(OUT)/host/gpu_chan_trace_hand.txt) lines identical, hand vs contract)"
+gpu-contract-freestanding:
+	@mkdir -p $(OUT)/host/gpu-fs
+	@$(KCC) $(KCFLAGS) -I$(KDIR)/gpu -c -o $(OUT)/host/gpu-fs/gch_contract.o $(GPU_CONTRACT_C) || exit 1; \
+	if nm -u $(OUT)/host/gpu-fs/gch_contract.o | grep -v " _GLOBAL_OFFSET_TABLE_$$" | grep -vE " ck_gmem_(alloc|free|quarantine)$$" | grep -q .; then \
+	  nm -u $(OUT)/host/gpu-fs/gch_contract.o; echo "gpu-contract-freestanding: FAIL"; exit 1; fi; \
+	echo "gpu-contract-freestanding: PASS (gch_contract.c with KCC/KCFLAGS, needs only the ck_gmem allocator)"
+.PHONY: test-gpu-contract gpu-contract-trace gpu-contract-freestanding
+
 # AIENOS-PI5 PCIe root complex / RP1 enumerator logic over a fake register file. Not the hardware.
 PI5PCIE_SRCS := $(KDIR)/dev/pi5_pcie.c
 PI5PCIE_DEPS := $(KDIR)/tests/test_pi5_pcie.c $(PI5PCIE_SRCS) $(KDIR)/tests/ck_test.h $(KDIR)/dev/pi5_pcie.h
