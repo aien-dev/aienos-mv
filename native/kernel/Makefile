@@ -2282,7 +2282,8 @@ IMACKERN_OBJS := $(IMACKERN_DIR)/efi_entry_x86_64.o $(IMACKERN_DIR)/efi_x86.o $(
 	$(IMACKERN_DIR)/allen_ui.o $(IMACKERN_DIR)/allen_font.o $(IMACKERN_DIR)/allen_reply.o $(IMACKERN_DIR)/allen_intent.o $(IMACKERN_DIR)/courier_x86.o \
 	$(IMACKERN_DIR)/paint.o $(IMACKERN_DIR)/night.o $(IMACKERN_DIR)/sky_real.o $(IMACKERN_DIR)/sky_data.o $(IMACKERN_DIR)/mind.o $(IMACKERN_DIR)/flow.o $(IMACKERN_DIR)/chirp.o \
 	$(IMACKERN_DIR)/allen_memory.o $(IMACKERN_DIR)/allen_notes.o $(IMACKERN_DIR)/gpt_add.o $(IMACKERN_DIR)/memory_x86.o \
-	$(IMACKERN_DIR)/fat_boot.o $(IMACKERN_DIR)/sha512.o $(IMACKERN_DIR)/ct.o $(IMACKERN_DIR)/panel_x86.o
+	$(IMACKERN_DIR)/fat_boot.o $(IMACKERN_DIR)/sha512.o $(IMACKERN_DIR)/ct.o $(IMACKERN_DIR)/panel_x86.o \
+	$(IMACKERN_DIR)/gpu_x86.o
 IMACKERN_REPORT_OBJS := $(IMACKERN_DIR)/report_x86.o $(IMACKERN_DIR)/aienos_net.o $(IMACKERN_DIR)/courier_udp_x86.o
 # The far side of Allen's Ethernet courier (x86/courier_udp.h): broadcast by default, a lab address overrides.
 CK_COURIER_PEER ?= 255.255.255.255
@@ -2293,6 +2294,32 @@ IMACKERN_OBJS += $(IMACKERN_REPORT_OBJS)
 IMACKERN_CFLAGS += -DCK_X86_REPORT=1 -DCK_COURIER_PEER_STR=\"$(CK_COURIER_PEER)\"
 endif
 IMACKERN_HDRS := $(X86K)/x86.h $(BOOT)/handoff.h $(BOOT)/efi.h $(KDIR)/core/ck_internal.h $(KDIR)/include/ck.h
+GPU_DIR := $(KDIR)/gpu
+# CK_X86_GPU: drive the AMD GPU (DCE 11.2 page flip, GMC, SMU, gfx/SDMA/compute rings).
+# Default 0 (stubs) until each bring-up step has run on the real iMac through
+# the bench (feat/imac-gpu-bench): a wrong GPU register write can wedge the
+# PCIe link, and only a 4 s power hold (a firmware boot) recovers it. Lab
+# builds opt in with CK_X86_GPU=1. The chip is not present in QEMU (says so once). CK_X86_GPU_UCODE=1 additionally embeds the polaris11
+# firmware blobs fetched by scripts/fetch_gpu_ucode.sh (never committed).
+CK_X86_GPU ?= 0
+ifeq ($(CK_X86_GPU),1)
+IMACKERN_CFLAGS += -DCK_X86_GPU=1
+# The driver itself is linked only when it is on; with it off, gpu_x86.c
+# supplies the stubs (linking both defined every ck_gpu_* entry twice).
+IMACKERN_OBJS += $(IMACKERN_DIR)/amd_display.o $(IMACKERN_DIR)/amd_mc.o $(IMACKERN_DIR)/amd_smu.o \
+	$(IMACKERN_DIR)/amd_ucode.o $(IMACKERN_DIR)/amd_sdma.o $(IMACKERN_DIR)/amd_compute.o
+CK_X86_GPU_UCODE ?= 0
+ifeq ($(CK_X86_GPU_UCODE),1)
+ifeq ($(wildcard $(REPO)/target/native-kernel/gpu_ucode.inc),)
+$(error CK_X86_GPU_UCODE=1 needs $(REPO)/target/native-kernel/gpu_ucode.inc: run sh scripts/fetch_gpu_ucode.sh first)
+endif
+IMACKERN_CFLAGS += -DCK_X86_GPU_UCODE=1 -I$(REPO)/target/native-kernel
+endif
+else ifeq ($(CK_X86_GPU),0)
+IMACKERN_CFLAGS += -DCK_X86_GPU=0
+else
+$(error CK_X86_GPU must be 1 (GPU driver, lab) or 0 (default: stubs))
+endif
 $(IMACKERN_DIR)/efi_entry_x86_64.o: $(BOOT)/efi_entry_x86_64.S
 $(IMACKERN_DIR)/efi_x86.o: $(X86K)/efi_x86.c $(IMACKERN_HDRS) $(BOOT)/netboot_proto.h
 $(IMACKERN_DIR)/efi_gop.o: $(BOOT)/efi_gop.c $(IMACKERN_HDRS)
@@ -2311,6 +2338,13 @@ $(IMACKERN_DIR)/disk_part.o: $(KDIR)/dev/disk_part.c $(KDIR)/dev/disk_part.h $(N
 $(IMACKERN_DIR)/disk.o: $(NATIVE)/disk/disk.c $(NATIVE)/disk/disk.h
 $(IMACKERN_DIR)/pci_x86.o: $(X86K)/pci_x86.c $(IMACKERN_HDRS) $(KDIR)/mm/frames.h $(KDIR)/dev/disk_part.h $(NATIVE)/disk/disk.h $(NATIVE)/disk/disk_nvme.h
 $(IMACKERN_DIR)/panel_x86.o: $(X86K)/panel_x86.c $(IMACKERN_HDRS)
+$(IMACKERN_DIR)/gpu_x86.o: $(GPU_DIR)/gpu_x86.c $(IMACKERN_HDRS) $(GPU_DIR)/amd_ring.h $(GPU_DIR)/amd_gpu.h $(GPU_DIR)/amd_gpu_regs.h $(KDIR)/mm/frames.h
+$(IMACKERN_DIR)/amd_display.o: $(GPU_DIR)/amd_display.c $(IMACKERN_HDRS) $(GPU_DIR)/amd_gpu.h $(GPU_DIR)/amd_gpu_regs.h
+$(IMACKERN_DIR)/amd_mc.o:      $(GPU_DIR)/amd_mc.c      $(IMACKERN_HDRS) $(GPU_DIR)/amd_gpu.h $(GPU_DIR)/amd_gpu_regs.h
+$(IMACKERN_DIR)/amd_smu.o:     $(GPU_DIR)/amd_smu.c     $(IMACKERN_HDRS) $(GPU_DIR)/amd_gpu.h $(GPU_DIR)/amd_gpu_regs.h
+$(IMACKERN_DIR)/amd_ucode.o:   $(GPU_DIR)/amd_ucode.c   $(IMACKERN_HDRS) $(GPU_DIR)/amd_gpu.h $(GPU_DIR)/amd_gpu_regs.h $(if $(filter 1,$(CK_X86_GPU_UCODE)),$(REPO)/target/native-kernel/gpu_ucode.inc)
+$(IMACKERN_DIR)/amd_sdma.o:    $(GPU_DIR)/amd_sdma.c    $(IMACKERN_HDRS) $(GPU_DIR)/amd_gpu.h $(GPU_DIR)/amd_gpu_regs.h
+$(IMACKERN_DIR)/amd_compute.o: $(GPU_DIR)/amd_compute.c $(IMACKERN_HDRS) $(GPU_DIR)/amd_gpu.h $(GPU_DIR)/amd_gpu_regs.h
 $(IMACKERN_DIR)/smp_x86.o: $(X86K)/smp_x86.S
 $(IMACKERN_DIR)/disk_nvme.o: $(NATIVE)/disk/disk_nvme.c $(NATIVE)/disk/disk_nvme.h $(NATIVE)/disk/disk.h
 $(IMACKERN_DIR)/tg3_x86.o: $(X86K)/tg3_x86.c $(IMACKERN_HDRS) $(KDIR)/mm/frames.h
@@ -2383,6 +2417,22 @@ $(IMACKERN_EFI): $(IMACKERN_ELF)
 	@[ "$$(od -An -tx1 -j68 -N2 $@ | tr -d ' ')" = "6486" ] || { echo "PE Machine is not x86_64 (0x8664)"; rm -f $@; exit 1; }
 	@echo "built $@ (commit $(AIENOS_COMMIT))"
 imac-kernel: $(IMACKERN_EFI)
+
+# ---- AMD GPU driver host test (mock MMIO, no hardware needed) ----
+# Checks register access sequences for display flip, MC, SMU, ring submit
+# and fence against Linux dce_v11_0.c / gmc_v8_0.c / gfx_v8_0.c source paths.
+GPU_TEST_SRC := $(KDIR)/tests/test_amd_gpu.c
+$(OUT)/host/test_amd_gpu: $(GPU_TEST_SRC) $(GPU_DIR)/amd_gpu_regs.h $(GPU_DIR)/amd_ring.h
+	@mkdir -p $(OUT)/host
+	$(CC) -std=c11 -Wall -DAMD_GPU_TEST_HOST=1 -I$(KDIR) -I$(GPU_DIR) -I$(X86K) -o $@ $<
+	@echo "host test: running test_amd_gpu"; $@
+imac-gpu-test: $(OUT)/host/test_amd_gpu $(OUT)/host/test_amd_gpu_ring
+# Ring code under test: the driver's own amd_ucode.c and frames.c; the GPU is a model thread (tests/test_amd_gpu_ring.c).
+GPU_RING_TEST_SRC := $(KDIR)/tests/test_amd_gpu_ring.c
+$(OUT)/host/test_amd_gpu_ring: $(GPU_RING_TEST_SRC) $(GPU_DIR)/amd_ucode.c $(KDIR)/mm/frames.c $(GPU_DIR)/amd_gpu.h $(GPU_DIR)/amd_host_shim.h $(GPU_DIR)/amd_gpu_regs.h $(GPU_DIR)/amd_ring.h $(KDIR)/mm/frames.h
+	@mkdir -p $(OUT)/host
+	$(CC) -std=c11 -Wall -pthread -DAMD_GPU_TEST_HOST=1 -I$(KDIR) -I$(KDIR)/include -I$(KDIR)/mm -I$(BOOT) -I$(GPU_DIR) -I$(X86K) -o $@ $(GPU_RING_TEST_SRC) $(GPU_DIR)/amd_ucode.c $(KDIR)/mm/frames.c
+	@echo "host test: running test_amd_gpu_ring"; $@
 # Negative test builds for W^X (#409), QEMU only and never deployed: CK_X86_WX_MUTATE=1 leaves RAM
 # executable, =2 leaves the kernel's code writable, and the kernel's W^X probes must then panic
 # (scripts/qemu_ck_imac_kernel_test.sh). Build them into their own OUT directory.

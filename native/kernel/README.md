@@ -298,7 +298,7 @@ Painting the screen black leaves the backlight lit, so while Allen rests the pan
 switched off through the display chip's panel power sequencer, the way its firmware does at
 power-off, and switched on again at wake before the picture returns. Only on the chip it was
 written for: an AMD VGA controller (vendor 0x1002, class 0x0300) with a Polaris device id
-(DCE 11.2; the 2017 iMac's Radeon Pro 555/560 is 1002:67ef at 01:00.0), whose VRAM aperture
+(DCE 11.2; the 2017 iMac's Radeon Pro 570/575/580 is 1002:67df rev c5 at 01:00.0; which of the three is not yet decided), whose VRAM aperture
 (BAR0) holds the firmware's framebuffer and whose 256 KiB register aperture (BAR5) answers.
 Registers (Linux `dce_11_2_d.h` / `dce_11_2_sh_mask.h`, MIT, index times 4 from BAR5):
 `LVTMA_PWRSEQ_CNTL` 0x481b (`LVTMA_PWRSEQ_TARGET_STATE` 0x10, `LVTMA_DIGON` 0x10000,

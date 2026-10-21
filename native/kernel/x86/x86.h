@@ -172,7 +172,18 @@ void ck_x86_hda_step(void);
 /* pci_x86.c: hands the display chip the walk found (the one whose VRAM holds
  * the framebuffer at fb_pa, fb_bytes long) to panel_x86.c; with none, says so.
  * Call after ck_x86_storage. */
-void ck_x86_display(uint64_t fb_pa, uint64_t fb_bytes, uint64_t tsc_hz);
+void ck_x86_display(uint64_t fb_pa, uint64_t fb_bytes, struct ck_frames *fr, uint64_t tsc_hz);
+
+/* gpu/gpu_x86.c: AMD Polaris GPU driver entry point (CK_X86_GPU=1).
+ * Called from pci_x86.c when a Polaris display chip is found.
+ * bar0_pa = VRAM aperture PA; bar5_pa = register aperture PA (already mapped
+ * by panel_x86.c).  fb_pa, fb_w, fb_h, fb_pitch describe the GOP framebuffer.
+ * Stubs out to a log line when CK_X86_GPU=0. */
+void ck_x86_gpu_start(volatile uint8_t *cfg, unsigned bus, unsigned dev, unsigned fn,
+                      uint16_t vendor, uint16_t device,
+                      uint64_t bar0_pa, uint64_t bar5_pa,
+                      uint64_t fb_pa, uint32_t fb_w, uint32_t fb_h, uint32_t fb_pitch,
+                      struct ck_frames *fr, uint64_t tsc_hz);
 /* panel_x86.c: the built-in display panel, switched off for real while Allen
  * rests and on again when he wakes (built in with CK_X86_PANEL_OFF=1; otherwise,
  * or on a machine without the AMD chip it knows, every call says so once and

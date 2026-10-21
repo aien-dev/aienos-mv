@@ -336,8 +336,9 @@ void ck_x86_sound(struct ck_frames *fr, uint64_t tsc_hz, uint64_t night_t0)
  * The first display controller (class 0x03) whose VRAM aperture (BAR0) holds
  * the framebuffer goes to panel_x86.c, which decides whether it knows the
  * chip well enough to switch the panel; the others are only listed. */
-void ck_x86_display(uint64_t fb_pa, uint64_t fb_bytes, uint64_t tsc_hz)
+void ck_x86_display(uint64_t fb_pa, uint64_t fb_bytes, struct ck_frames *fr, uint64_t tsc_hz)
 {
+    (void)fr; /* used only by the GPU driver (CK_X86_GPU=1) */
     const struct pfn *own = 0;
     for (unsigned i = 0; i < nfound; i++) {
         const struct pfn *f = &found[i];
@@ -356,6 +357,24 @@ void ck_x86_display(uint64_t fb_pa, uint64_t fb_bytes, uint64_t tsc_hz)
                            tsc_hz);
     else
         ck_x86_panel_start(0, 0, 0, 0, 0, 0, 0, fb_pa, fb_bytes, tsc_hz);
+#if CK_X86_GPU
+    /* GPU driver entry: called only when a Polaris display chip was found.
+     * ck_x86_panel_start has already mapped BAR5; pass both BARs and the
+     * framebuffer geometry obtained from the GOP. */
+    if (own) {
+        uint32_t lo0 = cr32(own->cfg, 0x10), hi0 = (lo0 & 6) == 4 ? cr32(own->cfg, 0x14) : 0;
+        uint64_t bar0 = ((uint64_t)hi0 << 32 | lo0) & ~0xfull;
+        uint32_t lo5  = cr32(own->cfg, 0x24);
+        uint64_t bar5 = lo5 & ~0xfu;
+        /* Recover fb_w, fb_h, fb_pitch from the console framebuffer. */
+        volatile uint32_t *px; uint32_t fw, fh, fp, fmt;
+        if (ck_x86_console_fb_get(&px, &fw, &fh, &fp, &fmt) != 0) {
+            fw = 3840; fh = 2160; fp = 3840; /* defaults for 2017 iMac 5K GOP */
+        }
+        ck_x86_gpu_start(own->cfg, own->bus, own->dev, own->fn, own->vendor, own->device,
+                         bar0, bar5, fb_pa, fw, fh, fp, fr, g_tsc_hz);
+    }
+#endif /* CK_X86_GPU */
 }
 
 const struct ck_x86_storage_result *ck_x86_storage(uint64_t rsdp, struct ck_frames *fr, uint64_t tsc_hz,

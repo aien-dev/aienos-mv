@@ -13,7 +13,7 @@
  *
  * Only on the chip it was written for: an AMD display controller (PCI vendor
  * 0x1002, class 0x0300) whose device id is a Polaris part (DCE 11.2, the
- * 2017 iMac's Radeon Pro 555/560 among them), whose VRAM aperture (BAR0)
+ * 2017 iMac's Radeon Pro 570/575/580 among them), whose VRAM aperture (BAR0)
  * holds the firmware's framebuffer, and whose 256 KiB register aperture
  * (BAR5) answers. Register indices and bit masks are from Linux
  * drivers/gpu/drm/amd/include/asic_reg/dce/dce_11_2_d.h and
@@ -162,7 +162,7 @@ static int bl_duty(const char *when, uint32_t cntl)
 
 static int polaris(uint16_t device)
 {
-    /* Polaris 10: 67c0..67df; Polaris 11 and 21 (Radeon Pro 555/560: 67ef): 67e0..67ff; Polaris 12: 6980..699f */
+    /* Polaris 10 (the iMac18,3: 67df rev c5): 67c0..67df; Polaris 11 and 21: 67e0..67ff; Polaris 12: 6980..699f */
     return (device >= 0x67c0 && device <= 0x67ff) || (device >= 0x6980 && device <= 0x699f);
 }
 
