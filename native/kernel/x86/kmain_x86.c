@@ -572,6 +572,11 @@ static void allen_line(const char *text)
     if (allen_mind.changed)
         ck_allen_ui_named(ck_allen_self(&allen_mind));
     allen_mind.changed = 0;
+    if (allen_mind.sky_changed) {
+        ck_allen_ui_sky_mode(allen_mind.mem.sky_mode, allen_mind.mem.sky_region,
+                             allen_mind.mem.sky_lat_udeg, allen_mind.mem.sky_lon_udeg);
+        allen_mind.sky_changed = 0;
+    }
     if (allen_mind.map_changed || allen_mind.note_dirty)
         allen_map();
     allen_mind.map_changed = 0;
@@ -733,6 +738,7 @@ static void boot_times(void)
               night_t0 ? (unsigned long long)(night_t0 / per_ms + night_ms) : 0ull);
 }
 
+static int64_t rtc_unix(void); /* forward declaration; defined below */
 static void allen_window(void)
 {
     static char footer[64];
@@ -790,6 +796,16 @@ static void allen_window(void)
     ck_x86_console_fb_off();
     ck_allen_ui_refresh(); /* whatever else was on the screen goes */
     ck_allen_ui_wake(footer, ck_rdtsc());
+    /* Read the real-time clock (CMOS ports 0x70/0x71) for sidereal sky calculations */
+    {
+        int64_t rtc_s = rtc_unix();
+        if (rtc_s > 0)
+            ck_allen_ui_set_unix_time(rtc_s, ck_rdtsc());
+    }
+    /* Apply sky mode saved in Allen's memory */
+    if (allen_mind.mem.sky_mode)
+        ck_allen_ui_sky_mode(allen_mind.mem.sky_mode, allen_mind.mem.sky_region,
+                             allen_mind.mem.sky_lat_udeg, allen_mind.mem.sky_lon_udeg);
     ck_x86_kbd_sink(allen_edit, allen_line);
     allen_on = 1;
     allen_woke = allen_key = ck_rdtsc();
@@ -1750,6 +1766,44 @@ static void cpu_line(void)
 /* The night begins before anything is said on the screen; the text stays
  * off it (still in the RAM copy and on COM1) until Allen's window takes
  * over, or comes back if anything goes wrong. */
+/* ---- real-time clock (CMOS RTC, I/O ports 0x70/0x71) ----
+ * Port 0x70: write the register index (bit 7 set disables NMI during read);
+ * port 0x71: read the value. Reference: Intel 82801 ICH7 datasheet, section 5.7;
+ * PC/AT BIOS Technical Reference, IBM 1984. */
+static uint8_t cmos_read(uint8_t reg)
+{
+    ck_outb(0x70, (uint8_t)(0x80u | reg));
+    return ck_inb(0x71);
+}
+static uint8_t bcd2bin(uint8_t v) { return (uint8_t)((v >> 4) * 10 + (v & 0xf)); }
+/* Read the CMOS RTC and return seconds since 1970-01-01 00:00:00 UTC.
+ * The iMac's EFI sets the RTC to UTC. Returns 0 if the RTC is unreadable. */
+static int64_t rtc_unix(void)
+{
+    for (int n = 0; n < 100000; n++) /* wait for UIP bit (reg 0x0A bit 7) to clear */
+        if (!(cmos_read(0x0a) & 0x80))
+            break;
+    uint8_t s  = cmos_read(0x00); uint8_t mi = cmos_read(0x02); uint8_t hr = cmos_read(0x04);
+    uint8_t dm = cmos_read(0x07); uint8_t mo = cmos_read(0x08); uint8_t yr = cmos_read(0x09);
+    uint8_t sb = cmos_read(0x0b); uint8_t ce = cmos_read(0x32);
+    if (s == 0xff && mi == 0xff && hr == 0xff) return 0;
+    if (!(sb & 0x04)) { /* BCD mode */
+        s=bcd2bin(s); mi=bcd2bin(mi); hr=bcd2bin(hr);
+        dm=bcd2bin(dm); mo=bcd2bin(mo); yr=bcd2bin(yr); ce=bcd2bin(ce);
+    }
+    if (!(sb & 0x02) && (hr & 0x80)) { hr = (uint8_t)((hr & 0x7f) + 12); if (hr >= 24) hr -= 12; }
+    uint32_t year = yr + ((ce >= 19 && ce <= 22) ? (uint32_t)ce * 100u : 2000u);
+    if (year < 2000) year += 2000;
+    ck_printf("rtc: %04u-%02u-%02u %02u:%02u:%02u UTC\n",
+              (unsigned)year, (unsigned)mo, (unsigned)dm, (unsigned)hr, (unsigned)mi, (unsigned)s);
+    static const uint32_t dbm[13] = {0,0,31,59,90,120,151,181,212,243,273,304,334};
+    int leap = (year%4==0 && (year%100!=0 || year%400==0));
+    uint32_t doy = dbm[mo] + (uint32_t)dm - 1u + (mo > 2 && leap ? 1u : 0u);
+    uint32_t y = year - 1;
+    uint32_t de = (year-1970)*365u + y/4 - y/100 + y/400 - (1969/4 - 1969/100 + 1969/400) + doy;
+    return (int64_t)de * 86400ll + hr*3600 + mi*60 + s;
+}
+
 static void night_start(const struct ck_handoff *h)
 {
     if (h->fb_status != CK_HANDOFF_FB_PRESENT || !mm.fb_ok || !tsc_hz)

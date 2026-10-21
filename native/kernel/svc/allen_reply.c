@@ -768,6 +768,9 @@ const char *ck_allen_welcome(ck_allen_mind *m)
             put(&s, "Hello. I'm ");
             put(&s, m->mem.self);
             put(&s, ".");
+            if (!m->mem.sky_mode) {
+                put(&s, " The sky behind me can be the real sky above you right now, or a different part of the universe each time. Tell me which you'd like.");
+            }
             return m->out;
         }
         m->naming = 1;
@@ -786,6 +789,140 @@ const char *ck_allen_welcome(ck_allen_mind *m)
     if (notes)
         put_count(&s, notes, "note.", "notes.");
     return m->out;
+}
+
+/* A place given as coordinates, read from the raw line (the folded one has lost the points and
+ * minus signs): "35 north 90 west", "35.1 n, 90.0 w", "35.1, -90.0", "lat 35.1 lon -90", "-33.87 151.21"
+ * (the last one needs a comma or a sign, so that a bare "35 90" is not taken for a place). Two
+ * numbers only, latitude first; words other than the direction and filler words make it no place.
+ * Integer arithmetic: the results are millionths of a degree. Returns 1 when it is a place. */
+int ck_allen_parse_place(const char *s, int32_t *lat_udeg, int32_t *lon_udeg)
+{
+    struct item {
+        int64_t udeg; /* magnitude, millionths of a degree */
+        int dir;      /* +1 north or east, -1 south or west, 0 none given */
+        int minus;    /* a minus sign */
+    } it[2] = {{0, 0, 0}, {0, 0, 0}};
+    int n = 0, after_num = 0, comma = 0, pend = 0, any_dir = 0;
+    const char *p = s ? s : "";
+    while (*p) {
+        char c = *p;
+        if (c == ',') {
+            comma = 1;
+            p++;
+            after_num = 0;
+            continue;
+        }
+        if (c == ' ' || c == '\t' || c == '.' || c == '\'' || c == '"' || c == '?' || c == '!' || c == ';' || c == ':') {
+            p++;
+            continue;
+        }
+        if (c == '-' && p[1] >= '0' && p[1] <= '9') {
+            /* a sign: the number after it */
+            if (n >= 2)
+                return 0;
+            p++;
+            it[n].minus = 1;
+            continue;
+        }
+        if (c >= '0' && c <= '9') {
+            if (n >= 2)
+                return 0;
+            int64_t ip = 0, fp = 0;
+            int nf = 0;
+            while (*p >= '0' && *p <= '9') {
+                ip = ip * 10 + (*p - '0');
+                if (ip > 1000)
+                    return 0;
+                p++;
+            }
+            if (*p == '.') {
+                p++;
+                while (*p >= '0' && *p <= '9') {
+                    if (nf < 6) {
+                        fp = fp * 10 + (*p - '0');
+                        nf++;
+                    }
+                    p++;
+                }
+            }
+            while (nf < 6) {
+                fp *= 10;
+                nf++;
+            }
+            it[n].udeg = ip * 1000000 + fp;
+            it[n].dir = pend;
+            pend = 0;
+            n++;
+            after_num = 1;
+            continue;
+        }
+        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) {
+            char w[16];
+            int wl = 0;
+            while (((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')) && wl < 15) {
+                char l = *p;
+                w[wl++] = (char)((l >= 'A' && l <= 'Z') ? l - 'A' + 'a' : l);
+                p++;
+            }
+            w[wl] = 0;
+            int d = 0;
+            if (eq(w, "north") || eq(w, "n") || eq(w, "east") || eq(w, "e"))
+                d = 1;
+            else if (eq(w, "south") || eq(w, "s") || eq(w, "west") || eq(w, "w"))
+                d = -1;
+            if (d) {
+                any_dir = 1;
+                if (after_num && n > 0 && !it[n - 1].dir)
+                    it[n - 1].dir = d;
+                else
+                    pend = d;
+                after_num = 0;
+                continue;
+            }
+            static const char *const filler[] = {"lat", "latitude", "lon", "long", "longitude", "deg", "degrees",
+                                                 "degree", "at", "in", "is", "my", "location", "coordinates",
+                                                 "i", "m", "am", "im", "of", "the", "at", 0};
+            int ok = 0;
+            for (int k = 0; filler[k]; k++)
+                if (eq(w, filler[k]))
+                    ok = 1;
+            if (!ok)
+                return 0;
+            after_num = 0;
+            continue;
+        }
+        return 0; /* anything else, such as an operator, makes it no place */
+    }
+    if (n != 2 || (!any_dir && !comma && !it[0].minus && !it[1].minus))
+        return 0;
+    int64_t v[2];
+    for (int k = 0; k < 2; k++) {
+        if (it[k].dir && it[k].minus)
+            return 0; /* "-35 north": say one or the other */
+        v[k] = it[k].dir ? it[k].udeg * it[k].dir : it[k].minus ? -it[k].udeg : it[k].udeg;
+    }
+    if (v[0] > 90000000 || v[0] < -90000000 || v[1] > 180000000 || v[1] < -180000000)
+        return 0;
+    *lat_udeg = (int32_t)v[0];
+    *lon_udeg = (int32_t)v[1];
+    return 1;
+}
+
+/* the place as a line: "35.000 north, 90.000 west" */
+static void put_place(struct say *s, int32_t udeg, const char *pos, const char *neg)
+{
+    int64_t a = udeg < 0 ? -(int64_t)udeg : udeg;
+    putu(s, (uint64_t)(a / 1000000));
+    put(s, ".");
+    uint64_t f = (uint64_t)(a % 1000000) / 1000;
+    if (f < 100)
+        put(s, "0");
+    if (f < 10)
+        put(s, "0");
+    putu(s, f);
+    put(s, " ");
+    put(s, udeg < 0 ? neg : pos);
 }
 
 const char *ck_allen_answer(ck_allen_mind *m, const char *line, uint64_t awake_s)
@@ -860,6 +997,132 @@ const char *ck_allen_answer(ck_allen_mind *m, const char *line, uint64_t awake_s
         list_memory(m, &s);
         return m->out;
     }
+    /* Sky mode: "sky above me", "somewhere new", "where am I looking",
+     * location setting, and the first-boot offer when no mode is set. */
+    static const char *const sky_above_words[] = {"sky above me", "sky above", "real sky", "show me the sky",
+                                                   "above me", "live sky", "sky above you", 0};
+    static const char *const sky_new_words[] = {"somewhere new", "take me somewhere new", "new place",
+                                                 "new view", "different sky", "explore", "somewhere else", 0};
+    static const char *const sky_where_words[] = {"where am i looking", "what am i looking at",
+                                                   "what sky", "where are we looking", "which way", 0};
+    static const char *const loc_words[] = {"my location is", "i am in", "i m in", "im in", "i live in",
+                                            "i m at", "im at", "location is", "i am at", 0};
+
+    /* city table: name, lat udeg, lon udeg (east) */
+    static const struct { const char *name; int32_t lat, lon; } cities[] = {
+        {"memphis",        35145000, -90048000},
+        {"nashville",      36175000, -86781000},
+        {"chicago",        41851000, -87651000},
+        {"new york",       40713000, -74006000},
+        {"los angeles",    34052000, -118244000},
+        {"san francisco",  37775000, -122419000},
+        {"seattle",        47606000, -122332000},
+        {"houston",        29763000, -95363000},
+        {"miami",          25774000, -80194000},
+        {"denver",         39739000, -104984000},
+        {"dallas",         32776000, -96797000},
+        {"boston",         42360000, -71058000},
+        {"london",         51508000, -127000},
+        {"paris",          48853000,   2350000},
+        {"berlin",         52520000,  13405000},
+        {"sydney",        -33869000, 151209000},
+        {"tokyo",          35690000, 139692000},
+        {"new delhi",      28614000,  77209000},
+        {"toronto",        43653000, -79383000},
+        {"austin",         30267000, -97743000},
+        {0, 0, 0}
+    };
+
+    if (any(f, sky_above_words)) {
+        m->mem.sky_mode = 1;
+        m->sky_changed = 1;
+        m->changed = 1;
+        if (!m->mem.sky_have_loc) {
+            put(&s, "The sky will show what's above you. Where are you? A town is enough.");
+            return m->out;
+        }
+        return "The sky is now the real sky above you, turning at Earth's own rate.";
+    }
+    if (any(f, sky_new_words)) {
+        m->mem.sky_mode = 2;
+        m->mem.sky_region = (uint8_t)((m->mem.sky_region + 1) % 12);
+        m->sky_changed = 1;
+        m->changed = 1;
+        return "Each start I'll open on a different part of the sky and drift through it slowly.";
+    }
+    if (any(f, sky_where_words)) {
+        if (!m->mem.sky_mode) {
+            return "I haven't been told where to look. Say: sky above me, or: somewhere new.";
+        } else if (m->mem.sky_mode == 1) {
+            if (m->mem.sky_have_loc) {
+                put(&s, "Straight up from your location: the sky turning above you.");
+            } else {
+                put(&s, "The sky above you, but I don't know where you are yet.");
+            }
+        } else {
+            static const char *const region_names[] = {
+                "the galactic centre", "Orion and the great nebula", "the Carina Nebula",
+                "the Pleiades", "Andromeda", "the Large Magellanic Cloud",
+                "the merger at GW150914", "Cygnus and the Northern Cross",
+                "Sagittarius and the star clouds", "Scorpius and Antares",
+                "the Small Magellanic Cloud", "the north celestial pole",
+            };
+            put(&s, "We're looking at ");
+            put(&s, region_names[m->mem.sky_region % 12]);
+            put(&s, ".");
+        }
+        return m->out;
+    }
+    /* a place as coordinates: "35 north 90 west", "35.1, -90.0" (before the town names) */
+    {
+        int32_t la = 0, lo = 0;
+        if (line && ck_allen_parse_place(line, &la, &lo)) {
+            m->mem.sky_lat_udeg = la;
+            m->mem.sky_lon_udeg = lo;
+            m->mem.sky_have_loc = 1;
+            m->sky_changed = 1;
+            m->changed = 1;
+            put(&s, "Got it: ");
+            put_place(&s, la, "north", "south");
+            put(&s, ", ");
+            put_place(&s, lo, "east", "west");
+            put(&s, ". Say sky above me, and the sky turning above that place is shown.");
+            return m->out;
+        }
+    }
+    /* location: "I'm in Memphis" / "my location is Chicago" */
+    for (const char *lead = 0, **ll = (const char **)loc_words; *ll && !lead; ll++)
+        if ((lead = after(f, *ll)) || (find(f, *ll) && (lead = f))) {
+            /* try to match a city name */
+            for (int ci = 0; cities[ci].name; ci++) {
+                if (find(lead, cities[ci].name)) {
+                    m->mem.sky_lat_udeg = cities[ci].lat;
+                    m->mem.sky_lon_udeg = cities[ci].lon;
+                    m->mem.sky_have_loc = 1;
+                    m->sky_changed = 1;
+                    m->changed = 1;
+                    put(&s, "Got it. The sky will be the one above ");
+                    /* capitalise first letter */
+                    const char *cn = cities[ci].name;
+                    char buf[2] = {(char)(cn[0] >= 'a' && cn[0] <= 'z' ? cn[0] - 32 : cn[0]), 0};
+                    put(&s, buf);
+                    put(&s, cn + 1);
+                    put(&s, ".");
+                    return m->out;
+                }
+            }
+            /* not found */
+            put(&s, "I don't know that place. You can give me coordinates: 35 north 90 west.");
+            return m->out;
+        }
+
+    /* first boot with no sky choice: offer it */
+    if (!m->mem.sky_mode && !any(f, (const char *const[]){"help", 0}) &&
+        m->turns == 0 && !m->mem.starts) {
+        /* (not on repeated starts; only fresh first conversation) */
+        (void)0;
+    }
+
     if (arithmetic(&s, f))
         return m->out;
 

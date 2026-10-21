@@ -140,7 +140,7 @@ static void test_codec(void)
         uint32_t plen = 0;
         for (int i = 3; i >= 0; i--)
             plen = plen << 8 | v[12 + i];
-        plen -= CK_ALLEN_NAME_MAX;
+        plen -= CK_ALLEN_NAME_MAX + 12u; /* v2 has neither self (24B) nor sky fields (12B) */
         v[8] = 2, v[9] = v[10] = v[11] = 0;
         for (int i = 0; i < 4; i++)
             v[12 + i] = (uint8_t)(plen >> (8 * i));
@@ -151,7 +151,7 @@ static void test_codec(void)
         sha256_final(&h, v + 32);
     }
     CHECK(ck_allen_mem_decode(v, &b, &gen) == 0 && gen == 5 && !b.self[0] && !memcmp(&a, &b, sizeof a));
-    v[8] = 4; /* a version from the future is refused */
+    v[8] = 5; /* a version from the future is refused */
     CHECK(ck_allen_mem_decode(v, &b, &gen) != 0);
 }
 

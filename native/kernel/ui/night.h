@@ -1,11 +1,14 @@
 /* night.h -- the night sky AIENOS opens on, and the two black holes that
  * merge in it.
  *
- * The sky is made once, into RAM: a near-black field, a faint Milky Way with
- * dust lanes across the middle, faint coloured nebulae, some ten thousand
- * stars and six galaxies. Each galaxy also keeps, per pixel, how bright it is
- * and where along its spiral that pixel sits, so a band of light can later
- * sweep along its arms (while Allen answers) without the galaxy itself
+ * The sky is made once, into RAM, and it is the real sky (ui/sky_real.h):
+ * by default the piece of it GW150914, the first black-hole merger ever
+ * heard, came from; the Milky Way from a photograph, the catalogue's stars
+ * to the naked-eye limit at their true places, brightness and colour, and
+ * the galaxies in the view the eye can see (there: the Large and Small
+ * Magellanic Clouds). Each galaxy also keeps, per pixel, how bright it is
+ * and where along its long axis that pixel sits, so a band of light can
+ * later sweep along it (while Allen answers) without the galaxy itself
  * changing.
  *
  * The startup, on the clock from ck_night_init (ms):
@@ -46,6 +49,7 @@
 #include <stdint.h>
 
 #include "paint.h"
+#include "sky_data.h"
 
 #define CK_NIGHT_FADE_END_MS 6800u
 #define CK_NIGHT_HOLES_MS 2600u
@@ -114,6 +118,7 @@ typedef struct {
     uint8_t disk_a[1024];   /* the disk's light by distance from the hole, 0..255 */
     uint32_t disk_c[1024];  /* and its colour there */
     int32_t disk_far;       /* the disk reaches this far, 16ths of a pixel */
+    ck_sky_view view;     /* the current sky view (set by ck_night_init, updated by ck_night_view) */
 } ck_night;
 
 /* The picture kept for the dusk: the screen as it was, with smaller copies of it and of the bare sky.
@@ -135,6 +140,9 @@ size_t ck_night_mem_bytes(uint32_t w, uint32_t h, uint32_t k);
  * memory, overwritten. (cx, cy): where the holes merge. 0, or -1. */
 int ck_night_init(ck_night *n, uint32_t w, uint32_t h, uint32_t k, int32_t cx, int32_t cy, void *mem, size_t len,
                   void *scratch);
+/* Rebuilds the sky for a new view (changing sky mode or location).
+ * scratch: at least w * h * 4 bytes (same buffer as ck_night_init). */
+void ck_night_view(ck_night *n, const ck_sky_view *v, void *scratch);
 /* Moves the night to t ms: the holes, the lens region, the ripple. Ends any dusk. */
 void ck_night_at(ck_night *n, uint32_t t);
 /* The dusk, after ck_night_at: one black hole at (cx, cy) with everything falling into it as d says.

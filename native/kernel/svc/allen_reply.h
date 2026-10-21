@@ -42,6 +42,13 @@ typedef struct {
     uint32_t nfacts;
     uint32_t nnotes; /* notes saved, deleted ones included (svc/allen_notes.h) */
     ck_allen_fact fact[CK_ALLEN_FACTS_MAX];
+    /* sky mode (persisted across restarts) */
+    uint8_t sky_mode;     /* 0=unset, 1=above_me, 2=somewhere_new */
+    uint8_t sky_region;   /* next region index for somewhere_new mode */
+    uint8_t sky_have_loc; /* 1 if sky_lat_udeg/sky_lon_udeg were set */
+    uint8_t sky_pad;      /* reserved, must be zero */
+    int32_t sky_lat_udeg; /* latitude, millionths of a degree */
+    int32_t sky_lon_udeg; /* east longitude, millionths of a degree */
 } ck_allen_memory;
 
 /* One conversation: the memory plus what only this session needs. */
@@ -59,6 +66,7 @@ typedef struct {
     int note_dirty; /* index + 1 of a note to write to disk (the kernel writes, then clears) */
     int lit;        /* index + 1 of the note just saved or handed back, 0: none */
     int map_changed; /* the notes or the lit one changed: redraw the map */
+    int sky_changed; /* sky_mode, location, or sky_region changed: rebuild the sky view */
     char out[160];  /* the last composed answer */
 } ck_allen_mind;
 
@@ -66,6 +74,9 @@ void ck_allen_mind_init(ck_allen_mind *m, const ck_allen_facts *facts);
 /* Allen's answer to one typed line (never NULL; valid until the next call).
  * awake_s: seconds since the machine started. */
 const char *ck_allen_answer(ck_allen_mind *m, const char *line, uint64_t awake_s);
+/* A place given as coordinates ("35 north 90 west", "35.1, -90.0"): 1 and the latitude and
+ * longitude in millionths of a degree (east positive), or 0 when the line is no place. */
+int ck_allen_parse_place(const char *s, int32_t *lat_udeg, int32_t *lon_udeg);
 /* What Allen says first when the window opens: a welcome back by name when
  * it remembers someone; on a first meeting (nothing remembered, no name of
  * his own yet) he asks what to call him, and the next single word typed

@@ -81,8 +81,8 @@
           "purpose": "Directory native/kernel/mm. Purpose not yet described by a human."
         },
         {
-          "digest": "ad0755e56ad09a4571164a1f2d38fc47fffdda1514e16eedbdb31a86809b7cc0",
-          "last_commit": "f913a63",
+          "digest": "eb3e31649254b6892f2faa9a1962fac5c08abc1408cbb83f5eda76a06705fc64",
+          "last_commit": "f00b815",
           "name": "svc",
           "purpose": "Directory native/kernel/svc. Purpose not yet described by a human."
         },
@@ -93,21 +93,21 @@
           "purpose": "Directory native/kernel/tests. Purpose not yet described by a human."
         },
         {
-          "digest": "e86cf77a02347c4d7888f0bfe05223b350a4c4fc6d72931c778d7f6a0acc06ec",
-          "last_commit": "2fd82ce",
+          "digest": "f725253e53006e1ab3d7293b82c413b448c6de7439faca9d3e8743bded823d8e",
+          "last_commit": "176bc51",
           "name": "tools",
           "purpose": "Hosted (Linux-built) checkers for the native kernel, run by `make -C native/kernel test`; nothin"
         }
       ],
-      "children_root": "sha256:302fc7e17ad3f4c1a41f43ed280eff202da7ff0db48714d693aec5507dd725db",
-      "compiled_at": "2026-10-19T17:13:58Z",
+      "children_root": "sha256:e33dad23d7cfe53bb491f31d4e34d34fe10daa6501b62eb3150424439ddf7956",
+      "compiled_at": "2026-10-20T15:37:58Z",
       "compiler": "crumb-compile/1",
-      "digest": "sha256:2a98beda9728e8f6054bb3f215823b6eb4ed2d6c7120184ec84c31000f183329",
+      "digest": "sha256:356c99f854fb2bbe3f514af92dba7d1ae9b5050fb560812e2f7805f814401eb4",
       "evidence_files": 0,
       "evidence_root": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "files": 459,
-      "generated_at_commit": "b1936e21f3b24341468d4792c09d92382412289d",
-      "source_tree": "sha256:4eaba139d950f3d17f843d7109ece542806ea2cd83ada91f4be776006cc3b6d3"
+      "files": 468,
+      "generated_at_commit": "176bc51f8283dcf1621cfb9d1f76edf088d2eb18",
+      "source_tree": "sha256:a8364e7c6130d376488f1b0af7aabd71a70d48f96e176ef511505958c4f7d106"
     },
     "owner_lane": "",
     "provenance": {

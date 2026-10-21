@@ -2280,7 +2280,7 @@ IMACKERN_OBJS := $(IMACKERN_DIR)/efi_entry_x86_64.o $(IMACKERN_DIR)/efi_x86.o $(
 	$(IMACKERN_DIR)/pci_x86.o $(IMACKERN_DIR)/smp_x86.o $(IMACKERN_DIR)/disk_nvme.o \
 	$(IMACKERN_DIR)/tg3_x86.o $(IMACKERN_DIR)/xhci_x86.o $(IMACKERN_DIR)/hda_x86.o $(IMACKERN_DIR)/usb_hid.o $(IMACKERN_DIR)/sha256.o \
 	$(IMACKERN_DIR)/allen_ui.o $(IMACKERN_DIR)/allen_font.o $(IMACKERN_DIR)/allen_reply.o $(IMACKERN_DIR)/allen_intent.o $(IMACKERN_DIR)/courier_x86.o \
-	$(IMACKERN_DIR)/paint.o $(IMACKERN_DIR)/night.o $(IMACKERN_DIR)/mind.o $(IMACKERN_DIR)/flow.o $(IMACKERN_DIR)/chirp.o \
+	$(IMACKERN_DIR)/paint.o $(IMACKERN_DIR)/night.o $(IMACKERN_DIR)/sky_real.o $(IMACKERN_DIR)/sky_data.o $(IMACKERN_DIR)/mind.o $(IMACKERN_DIR)/flow.o $(IMACKERN_DIR)/chirp.o \
 	$(IMACKERN_DIR)/allen_memory.o $(IMACKERN_DIR)/allen_notes.o $(IMACKERN_DIR)/gpt_add.o $(IMACKERN_DIR)/memory_x86.o \
 	$(IMACKERN_DIR)/fat_boot.o $(IMACKERN_DIR)/sha512.o $(IMACKERN_DIR)/ct.o $(IMACKERN_DIR)/panel_x86.o
 IMACKERN_REPORT_OBJS := $(IMACKERN_DIR)/report_x86.o $(IMACKERN_DIR)/aienos_net.o $(IMACKERN_DIR)/courier_udp_x86.o
@@ -2321,7 +2321,9 @@ $(IMACKERN_DIR)/sha256.o: $(NATIVE)/argus/sha256.c $(NATIVE)/argus/sha256.h
 $(IMACKERN_DIR)/allen_ui.o: $(KDIR)/ui/allen_ui.c $(KDIR)/ui/allen_ui.h $(KDIR)/ui/allen_font.h $(KDIR)/ui/night.h $(KDIR)/ui/mind.h $(KDIR)/ui/flow.h $(KDIR)/ui/paint.h $(KDIR)/ui/canvas.h
 $(IMACKERN_DIR)/allen_font.o: $(KDIR)/ui/allen_font.c $(KDIR)/ui/allen_font.h
 $(IMACKERN_DIR)/paint.o: $(KDIR)/ui/paint.c $(KDIR)/ui/paint.h $(KDIR)/ui/allen_font.h
-$(IMACKERN_DIR)/night.o: $(KDIR)/ui/night.c $(KDIR)/ui/night.h $(KDIR)/ui/paint.h
+$(IMACKERN_DIR)/night.o: $(KDIR)/ui/night.c $(KDIR)/ui/night.h $(KDIR)/ui/paint.h $(KDIR)/ui/sky_real.h $(KDIR)/ui/sky_data.h
+$(IMACKERN_DIR)/sky_real.o: $(KDIR)/ui/sky_real.c $(KDIR)/ui/sky_real.h $(KDIR)/ui/sky_data.h $(KDIR)/ui/night.h $(KDIR)/ui/paint.h
+$(IMACKERN_DIR)/sky_data.o: $(KDIR)/ui/sky_data.c $(KDIR)/ui/sky_data.h
 $(IMACKERN_DIR)/chirp.o: $(KDIR)/ui/chirp.c $(KDIR)/ui/chirp.h $(KDIR)/ui/night.h
 $(IMACKERN_DIR)/mind.o: $(KDIR)/ui/mind.c $(KDIR)/ui/mind.h $(KDIR)/ui/paint.h
 $(IMACKERN_DIR)/flow.o: $(KDIR)/ui/flow.c $(KDIR)/ui/flow.h $(KDIR)/ui/paint.h
