@@ -47,6 +47,17 @@ grep -q "function=0x1001" "$T/init/messages.txt" && ok "INIT_DONE recorded in me
 [[ $(stat -c %s "$T/init/cot_packet.bin") -eq 868 ]] && ok "COT packet 868 bytes" || bad "COT packet size"
 grep -q "verdict=INIT-DONE" "$T/init/result.txt" && ok "result.txt carries the verdict" || bad "result.txt verdict"
 
+# notify page: a package value is sent as is; a zero field gets the first arena page (sim arena pa 0x4000000000)
+q64() { od -An -tx8 -j48 -N8 "$1" | tr -d ' '; }
+[[ $(q64 "$T/init/system_info.sent.bin") == 0808080808080808 ]] && ok "package notify address sent unchanged" || bad "notify field changed: $(q64 "$T/init/system_info.sent.bin")"
+cp -r "$P" "$T/pkg3"; printf '\0\0\0\0\0\0\0\0' | dd of="$T/pkg3/system_info.bin" bs=1 seek=48 conv=notrunc status=none
+"$BIN" --pkg "$T/pkg3" --app-version 7 --out "$T/notify" --plan-only > /dev/null 2>&1
+[[ $(q64 "$T/notify/system_info.sent.bin") == 0000004000000000 ]] && grep -q "notify_page pa=0x4000000000" "$T/notify/plan.txt" \
+    && ok "zero notify field filled with the zeroed first arena page" || bad "notify page: $(q64 "$T/notify/system_info.sent.bin")"
+cmp -s <(head -c 48 "$T/pkg3/system_info.bin") <(head -c 48 "$T/notify/system_info.sent.bin") \
+    && cmp -s <(tail -c +57 "$T/pkg3/system_info.bin") <(tail -c +57 "$T/notify/system_info.sent.bin") \
+    && ok "no other GspSystemInfo byte changed" || bad "notify patch touched other bytes"
+
 # refusal before any register access: a 935-byte GspSystemInfo
 cp -r "$P" "$T/pkg2"; head -c 935 "$P/system_info.bin" > "$T/pkg2/system_info.bin"
 out=$("$BIN" --pkg "$T/pkg2" --app-version 7 --out "$T/short" 2>/dev/null); rc=$?

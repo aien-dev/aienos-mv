@@ -330,8 +330,30 @@ int main(int argc, char **argv)
     in.sysmem_heap_size = heap_bytes;
     in.dma_bits = dma_bits;
 
+    /* The first arena page is the zeroed 4 KiB "notify op" surface NVIDIA's driver allocates before
+       GSP_SET_SYSTEM_INFO (kernel_gsp.c:3489-3526 _kgspAllocNotifyOpSharedSurface); its address goes into
+       GspSystemInfo.notifyOpSharedSurfacePhysAddr (offset 48, gsp_static_config.h:180) unless the package set one. */
+    if (arena_bytes <= GSP_PAGE)
+        die("BUILD-REFUSED", "arena too small for the notify page");
+    memset(base, 0, GSP_PAGE);
+    static uint8_t si_sent[GSP_SYSTEM_INFO_SIZE];
+    memcpy(si_sent, in.system_info, GSP_SYSTEM_INFO_SIZE);
+    uint64_t notify_pa = 0;
+    for (int i = 0; i < 8; i++)
+        notify_pa |= (uint64_t)si_sent[48 + i] << (8 * i);
+    if (!notify_pa) {
+        notify_pa = arena_pa;
+        for (int i = 0; i < 8; i++)
+            si_sent[48 + i] = (uint8_t)(notify_pa >> (8 * i));
+    }
+    in.system_info = si_sent;
+    FILE *fs = out_file("system_info.sent.bin", "wb");
+    if (fwrite(si_sent, 1, sizeof si_sent, fs) != sizeof si_sent)
+        die("TOOL-ERROR", "write system_info.sent.bin");
+    fclose(fs);
+
     gsp_arena arena;
-    if (gsp_arena_init(&arena, base, arena_pa, arena_bytes))
+    if (gsp_arena_init(&arena, base + GSP_PAGE, arena_pa + GSP_PAGE, arena_bytes - GSP_PAGE))
         die("BUILD-REFUSED", "arena not 4 KiB aligned");
     static gsp_boot_plan plan;
     const char *why = 0;
@@ -341,6 +363,7 @@ int main(int argc, char **argv)
     fprintf(fp, "arena pa=%#llx cap=%#llx used=%#llx heap pa=%#llx size=%#llx dma_bits=%u app_version=%u\n",
             (unsigned long long)arena.pa, (unsigned long long)arena.cap, (unsigned long long)arena.used,
             (unsigned long long)heap_pa, (unsigned long long)heap_bytes, dma_bits, app_version);
+    fprintf(fp, "notify_page pa=%#llx\n", (unsigned long long)notify_pa);
     region(fp, "wpr_meta", plan.wpr_meta);
     region(fp, "libos_args", plan.libos_args);
     for (unsigned i = 0; i < GSP_GB10B_LOG_COUNT; i++)

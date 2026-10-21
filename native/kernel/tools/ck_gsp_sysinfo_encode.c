@@ -97,7 +97,8 @@ static const struct field { const char *name; uint32_t off, size; } fields[] = {
     FN(FHBBusInfo, revisionID),
     FN(chipsetIDInfo, deviceID), FN(chipsetIDInfo, vendorID), FN(chipsetIDInfo, subdeviceID),
     FN(chipsetIDInfo, subvendorID), FN(chipsetIDInfo, revisionID),
-    FN(acpiMethodData, bValid),
+    FN(acpiMethodData, bValid), FN(acpiMethodData, dodMethodData.status), FN(acpiMethodData, dodMethodData.acpiIdListLen),
+    FN(acpiMethodData, jtMethodData.status), FN(acpiMethodData, capsMethodData.status),
     F(hypervisorType), F(virtualConfigBits), F(bIsPassthru), F(sysTimerOffsetNs),
     FN(gspVFInfo, totalVFs), FN(gspVFInfo, firstVFOffset), FN(gspVFInfo, FirstVFBar0Address),
     FN(gspVFInfo, FirstVFBar1Address), FN(gspVFInfo, FirstVFBar2Address), FN(gspVFInfo, b64bitBar0),
@@ -208,6 +209,11 @@ static int selftest(void)
         for (size_t j = i + 1; j < NFIELDS; j++)
             if (fields[i].off < fields[j].off + fields[j].size && fields[j].off < fields[i].off + fields[i].size) overlap = 1;
     CHECK(!overlap, "no two fields overlap");
+    /* ACPI statuses: dod at 160+4, jt after dod's 16-entry list, caps right before hypervisorType (836) */
+    CHECK(encode("acpiMethodData.dodMethodData.status 0xffff\nacpiMethodData.jtMethodData.status 0x56\n"
+                 "acpiMethodData.capsMethodData.status 0x56\n", out, why, sizeof why, NULL) == 0 &&
+              out[164] == 0xff && out[165] == 0xff && out[236] == 0x56 && out[828] == 0x56,
+          "ACPI status fields land at 164, 236 and 828");
     printf("CK_GSP_SYSINFO_ENCODE_SELFTEST: %s (%d checks, %zu fields)\n", fail ? "FAIL" : "PASS", n, NFIELDS);
     return fail;
 }
@@ -233,6 +239,8 @@ static int nvhdr(void)
     S(upstreamAddressValid); S(FHBBusInfo); S(FHBBusInfo.deviceID); S(FHBBusInfo.vendorID); S(FHBBusInfo.subdeviceID);
     S(FHBBusInfo.subvendorID); S(FHBBusInfo.revisionID); S(chipsetIDInfo); S(chipsetIDInfo.revisionID);
     S(acpiMethodData); S(acpiMethodData.bValid); S(acpiMethodData.muxMethodData); S(acpiMethodData.capsMethodData);
+    S(acpiMethodData.dodMethodData.status); S(acpiMethodData.dodMethodData.acpiIdListLen);
+    S(acpiMethodData.jtMethodData.status); S(acpiMethodData.capsMethodData.status);
     S(hypervisorType); S(virtualConfigBits); S(bIsPassthru); S(sysTimerOffsetNs); S(gspVFInfo);
     S(gspVFInfo.FirstVFBar2Address); S(gspVFInfo.b64bitBar2); S(bIsPrimary); S(bIsUnixHdmiFrlComplianceEnabled);
     S(isGridBuild); S(pcieConfigReg); S(pcieConfigReg.linkCap); S(gridBuildCsp); S(bPreserveVideoMemoryAllocations);
