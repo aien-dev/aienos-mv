@@ -317,3 +317,89 @@ int ck_allen_say_line(const char *in, uint32_t *seq, unsigned *part, unsigned *t
         *total = b;
     return 1;
 }
+
+/* ---- code: asked of the Spark (svc/allen_code.h) ---- */
+
+/* the line after a polite head ("please", "can you", "allen") */
+static const char *polite(const char *f)
+{
+    static const char *const heads[] = {"please", "can you", "could you", "would you", "will you", "i d like you to",
+                                        "i want you to", "i need you to", "allen", "hey allen", "ok", "okay", 0};
+    for (int again = 1; again;) {
+        again = 0;
+        for (const char *const *h = heads; *h; h++) {
+            unsigned n = 0;
+            while ((*h)[n])
+                n++;
+            if (starts(f, *h) && f[n] == ' ') {
+                f += n + 1;
+                again = 1;
+                break;
+            }
+        }
+    }
+    return f;
+}
+
+/* something only code can be: a program, a game, a language */
+static const char *const code_things[] = {
+    "code", "program", "programs", "script", "scripts", "function", "functions", "app", "apps", "application",
+    "game", "games", "website", "web page", "webpage", "calculator", "converter", "parser", "compiler",
+    "interpreter", "algorithm", "class", "api", "server", "bot", "regex", "unit test", "unit tests", "cli",
+    "command line tool", "snake", "tetris", "pong", "todo app", "to do app", "to do list app", "timer app",
+    "stopwatch", "python", "javascript", "typescript", "rust", "golang", "java", "kotlin", "swift", "ruby",
+    "php", "html", "css", "sql", "bash", "shell script", "c program", "c code", "in c", "c plus plus", "cpp",
+    "mojo", "zig", "haskell", "lua", "perl", 0};
+/* words, not code: "write a poem about python" is not a program */
+static const char *const prose_things[] = {"poem", "poems", "haiku", "story", "stories", "song", "songs", "letter",
+                                           "email", "essay", "joke", "jokes", "limerick", "speech", 0};
+static const char *const code_plain[] = {"code", "program", "script", 0};
+/* the verbs that make something */
+static const char *const code_verbs[] = {"write", "make", "build", "create", "code", "program", "generate",
+                                         "implement", "develop", "give me a", "i need a", "i want a", 0};
+/* a line that goes on with the code just shown */
+static const char *const code_more_first[] = {
+    "now", "add", "also", "and", "change", "make it", "make the", "rename", "remove", "delete", "replace", "use",
+    "fix", "put", "give it", "let it", "instead", "then", "next", "can it", "could it", "it should", "the", "move",
+    "turn", "show", "split", "convert it", "rewrite", "port it", "translate it", "explain it", 0};
+
+int ck_allen_wants_code(const char *folded)
+{
+    if (!folded || !*folded)
+        return 0;
+    const char *f = polite(folded);
+    if (starts(f, "code") || starts(f, "program"))
+        return 1; /* "code me a ...", "program a ..." */
+    if (any(f, prose_things, has) && !any(f, code_plain, has))
+        return 0;
+    return any(f, code_verbs, starts) && any(f, code_things, has);
+}
+
+int ck_allen_code_more(const char *folded)
+{
+    if (!folded || !*folded)
+        return 0;
+    const char *f = polite(folded);
+    return any(f, code_more_first, starts);
+}
+
+unsigned ck_allen_code_job(const ck_allen_mind *m, uint32_t seq, const char *line, int more, char *out, unsigned cap)
+{
+    if (!out || cap < 2)
+        return 0;
+    const char *self = ck_allen_self(m), *who = m->mem.name[0] ? m->mem.name : "the person";
+    struct say s = {out, 0, cap, 0};
+    put(&s, "JOB ");
+    putu(&s, seq);
+    put(&s, more ? " code-more " : " code ");
+    put(&s, who);
+    put(&s, " asked ");
+    put(&s, self);
+    put(&s, more ? " to change the code just shown." : " for code.");
+    put(&s, "\t");
+    for (const char *p = line ? line : ""; *p; p++) {
+        unsigned char c = (unsigned char)*p;
+        put(&s, (char[]){c < 32 || c == 127 ? ' ' : (char)c, 0});
+    }
+    return s.full ? 0 : s.n;
+}

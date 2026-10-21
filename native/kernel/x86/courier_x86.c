@@ -54,10 +54,12 @@ static int send(const char *s, unsigned n)
 
 static int ready(void) { return on && hello; }
 
-/* Reads what waits in the FIFO; a complete line is kept for take(). */
+/* Reads what waits in the FIFO; a complete line is kept for take(). Reading
+ * stops while a line waits, so the next one stays in the port (the far side
+ * waits for room) rather than being dropped behind it. */
 static void pump(void)
 {
-    while (ck_inb(COM2 + 5) & 0x01) {
+    while (!line_ready && (ck_inb(COM2 + 5) & 0x01)) {
         char c = (char)ck_inb(COM2);
         if (c == '\r')
             continue;
@@ -81,7 +83,7 @@ static void pump(void)
                     line[i] = in[i];
                 line_n = in_n;
                 line_ready = 1;
-            } /* else: a second line before the first was taken; dropped, said in take() */
+            }
         }
         in_n = 0;
         in_drop = 0;

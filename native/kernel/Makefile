@@ -2309,7 +2309,7 @@ IMACKERN_OBJS := $(IMACKERN_DIR)/efi_entry_x86_64.o $(IMACKERN_DIR)/efi_x86.o $(
 	$(IMACKERN_DIR)/ahci_x86.o $(IMACKERN_DIR)/disk_part.o $(IMACKERN_DIR)/disk.o \
 	$(IMACKERN_DIR)/pci_x86.o $(IMACKERN_DIR)/smp_x86.o $(IMACKERN_DIR)/disk_nvme.o \
 	$(IMACKERN_DIR)/tg3_x86.o $(IMACKERN_DIR)/xhci_x86.o $(IMACKERN_DIR)/hda_x86.o $(IMACKERN_DIR)/usb_hid.o $(IMACKERN_DIR)/sha256.o \
-	$(IMACKERN_DIR)/allen_ui.o $(IMACKERN_DIR)/allen_font.o $(IMACKERN_DIR)/allen_reply.o $(IMACKERN_DIR)/allen_intent.o $(IMACKERN_DIR)/courier_x86.o \
+	$(IMACKERN_DIR)/allen_ui.o $(IMACKERN_DIR)/allen_font.o $(IMACKERN_DIR)/allen_reply.o $(IMACKERN_DIR)/allen_intent.o $(IMACKERN_DIR)/allen_code.o $(IMACKERN_DIR)/courier_x86.o \
 	$(IMACKERN_DIR)/paint.o $(IMACKERN_DIR)/night.o $(IMACKERN_DIR)/sky_real.o $(IMACKERN_DIR)/sky_data.o $(IMACKERN_DIR)/mind.o $(IMACKERN_DIR)/flow.o $(IMACKERN_DIR)/chirp.o \
 	$(IMACKERN_DIR)/allen_memory.o $(IMACKERN_DIR)/allen_notes.o $(IMACKERN_DIR)/gpt_add.o $(IMACKERN_DIR)/memory_x86.o \
 	$(IMACKERN_DIR)/fat_boot.o $(IMACKERN_DIR)/sha512.o $(IMACKERN_DIR)/ct.o $(IMACKERN_DIR)/panel_x86.o \
@@ -2381,7 +2381,7 @@ endif
 $(IMACKERN_DIR)/efi_entry_x86_64.o: $(BOOT)/efi_entry_x86_64.S
 $(IMACKERN_DIR)/efi_x86.o: $(X86K)/efi_x86.c $(IMACKERN_HDRS) $(BOOT)/netboot_proto.h
 $(IMACKERN_DIR)/efi_gop.o: $(BOOT)/efi_gop.c $(IMACKERN_HDRS)
-$(IMACKERN_DIR)/kmain_x86.o: $(X86K)/kmain_x86.c $(IMACKERN_HDRS) $(KDIR)/core/handoff_check.h $(KDIR)/mm/frames.h $(KDIR)/mm/heap.h $(KDIR)/ui/allen_ui.h $(KDIR)/svc/allen_reply.h $(KDIR)/svc/allen_intent.h $(KDIR)/svc/courier.h $(X86K)/courier_udp.h $(KDIR)/svc/setup_wizard.h $(OUT)/commit.stamp
+$(IMACKERN_DIR)/kmain_x86.o: $(X86K)/kmain_x86.c $(IMACKERN_HDRS) $(KDIR)/core/handoff_check.h $(KDIR)/mm/frames.h $(KDIR)/mm/heap.h $(KDIR)/ui/allen_ui.h $(KDIR)/svc/allen_reply.h $(KDIR)/svc/allen_intent.h $(KDIR)/svc/allen_code.h $(KDIR)/dev/usb_hid.h $(KDIR)/svc/courier.h $(X86K)/courier_udp.h $(KDIR)/svc/setup_wizard.h $(OUT)/commit.stamp
 $(IMACKERN_DIR)/console_x86.o: $(X86K)/console_x86.c $(IMACKERN_HDRS) $(KDIR)/core/fbcon.h
 $(IMACKERN_DIR)/trap.o: $(X86K)/trap.S
 $(IMACKERN_DIR)/fbcon.o: $(KDIR)/core/fbcon.c $(KDIR)/core/fbcon.h $(KDIR)/core/font8x8.h
@@ -2412,6 +2412,17 @@ $(IMACKERN_SLOT_KEYS_C): $(SLOT_TOOL) FORCE
 	@$(SLOT_TOOL) keys-c $(IMACKERN_KEY_SRC) --out $@
 $(IMACKERN_DIR)/imac_slot_keys.o: $(IMACKERN_SLOT_KEYS_C)
 $(IMACKERN_DIR)/bench_x86.o: $(X86K)/bench_x86.c $(X86K)/x86.h $(X86K)/bench_proto.h $(X86K)/bench_x86.h $(NATIVE)/argus/sha256.h
+# CK_X86_BENCH_KEY_FILE: a 32-byte key file (on the Spark ~/.config/aienos/imac-bench.key; the Spark tool
+# takes the same file with --key) bound in as the bench console's HMAC key through a header made in the
+# build dir, mode 0600, so the key is never on a command line or in the build output.
+ifdef CK_X86_BENCH_KEY_FILE
+IMACKERN_CFLAGS += -DCK_X86_BENCH_KEY_H='"$(IMACKERN_DIR)/bench_key.h"'
+$(IMACKERN_DIR)/bench_key.h: $(CK_X86_BENCH_KEY_FILE)
+	@mkdir -p $(@D)
+	@test "$$(wc -c < '$<')" -eq 32 || { echo "CK_X86_BENCH_KEY_FILE: $< is not 32 bytes" >&2; exit 1; }
+	@umask 077; { printf '#define CK_X86_BENCH_KEY '; od -An -v -tu1 '$<' | tr -s ' \n' ' ' | sed 's/^ //; s/ $$//; s/ /,/g'; echo; } > $@
+$(IMACKERN_DIR)/bench_x86.o: $(IMACKERN_DIR)/bench_key.h
+endif
 $(IMACKERN_DIR)/slot_select.o: $(BOOT)/slot_select.c $(BOOT)/slot_format.h
 $(IMACKERN_DIR)/ed25519.o: $(NATIVE)/sig/ed25519.c $(NATIVE)/sig/aienos_sig.h
 $(IMACKERN_DIR)/smp_x86.o: $(X86K)/smp_x86.S
@@ -2421,7 +2432,7 @@ $(IMACKERN_DIR)/xhci_x86.o: $(X86K)/xhci_x86.c $(IMACKERN_HDRS) $(KDIR)/mm/frame
 $(IMACKERN_DIR)/hda_x86.o: $(X86K)/hda_x86.c $(IMACKERN_HDRS) $(KDIR)/mm/frames.h $(KDIR)/ui/chirp.h $(KDIR)/ui/night.h
 $(IMACKERN_DIR)/usb_hid.o: $(KDIR)/dev/usb_hid.c $(KDIR)/dev/usb_hid.h $(NATIVE)/argus/sha256.h
 $(IMACKERN_DIR)/sha256.o: $(NATIVE)/argus/sha256.c $(NATIVE)/argus/sha256.h
-$(IMACKERN_DIR)/allen_ui.o: $(KDIR)/ui/allen_ui.c $(KDIR)/ui/allen_ui.h $(KDIR)/ui/allen_font.h $(KDIR)/ui/night.h $(KDIR)/ui/mind.h $(KDIR)/ui/flow.h $(KDIR)/ui/paint.h $(KDIR)/ui/canvas.h
+$(IMACKERN_DIR)/allen_ui.o: $(KDIR)/ui/allen_ui.c $(KDIR)/ui/allen_ui.h $(KDIR)/ui/allen_font.h $(KDIR)/ui/night.h $(KDIR)/ui/mind.h $(KDIR)/ui/flow.h $(KDIR)/ui/paint.h $(KDIR)/ui/canvas.h $(KDIR)/svc/allen_code.h
 $(IMACKERN_DIR)/allen_font.o: $(KDIR)/ui/allen_font.c $(KDIR)/ui/allen_font.h
 $(IMACKERN_DIR)/paint.o: $(KDIR)/ui/paint.c $(KDIR)/ui/paint.h $(KDIR)/ui/allen_font.h
 $(IMACKERN_DIR)/night.o: $(KDIR)/ui/night.c $(KDIR)/ui/night.h $(KDIR)/ui/paint.h $(KDIR)/ui/sky_real.h $(KDIR)/ui/sky_data.h
@@ -2436,6 +2447,7 @@ $(IMACKERN_DIR)/canvas.o: $(KDIR)/ui/canvas.c $(KDIR)/ui/canvas.h $(KDIR)/ui/pai
 $(IMACKERN_DIR)/allen_scene.o: $(KDIR)/svc/allen_scene.c $(KDIR)/svc/allen_scene.h
 $(IMACKERN_DIR)/allen_reply.o: $(KDIR)/svc/allen_reply.c $(KDIR)/svc/allen_reply.h $(KDIR)/svc/allen_notes.h
 $(IMACKERN_DIR)/allen_intent.o: $(KDIR)/svc/allen_intent.c $(KDIR)/svc/allen_intent.h $(KDIR)/svc/allen_reply.h
+$(IMACKERN_DIR)/allen_code.o: $(KDIR)/svc/allen_code.c $(KDIR)/svc/allen_code.h
 $(IMACKERN_DIR)/courier_x86.o: $(X86K)/courier_x86.c $(IMACKERN_HDRS) $(KDIR)/svc/courier.h
 $(IMACKERN_DIR)/allen_notes.o: $(KDIR)/svc/allen_notes.c $(KDIR)/svc/allen_notes.h
 $(IMACKERN_DIR)/allen_memory.o: $(KDIR)/svc/allen_memory.c $(KDIR)/svc/allen_memory.h $(KDIR)/svc/allen_reply.h $(KDIR)/svc/allen_notes.h $(NATIVE)/disk/disk.h $(NATIVE)/argus/sha256.h

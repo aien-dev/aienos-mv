@@ -35,6 +35,8 @@
 #include "../core/handoff_check.h"
 #include "../mm/frames.h"
 #include "../mm/heap.h"
+#include "../svc/allen_code.h"
+#include "../dev/usb_hid.h"
 #include "../svc/allen_intent.h"
 #include "../svc/allen_reply.h"
 #include "../svc/courier.h"
@@ -508,6 +510,14 @@ static uint64_t job_t;            /* TSC when that job went (0: nothing out) */
 static uint64_t job_last;         /* TSC of the last word from the far side about it (the silence clock) */
 static char job_buf[CK_COURIER_JOB_MAX];
 static char job_asked[96];        /* the line the job was about, for Allen's note of the exchange */
+/* Code asked of the Spark (svc/allen_code.h): one code job at a time, beside
+ * no other job. The pieces gather in code_rx; the wait is on the TSC in ms. */
+static ck_code_rx code_rx;
+static ck_code_wait code_wait;
+static uint32_t code_job;   /* the code job out (0: none) */
+static uint64_t code_t;     /* TSC when it went */
+static int code_again;      /* asked again once already */
+static int code_lines_shown; /* lines of the code on the screen (0: none yet) */
 static ck_allen_notes allen_notes; /* loaded from disk at the window, or empty */
 static struct ck_x86_setup_facts setup_facts; /* what the setup wizard is told at the window */
 static uint64_t ram_bytes;                     /* RAM in the memory map */
@@ -563,6 +573,132 @@ static int wizard_key(int kind, char c)
     return ck_x86_setup_key(kind, c);
 }
 
+/* Keys while code is on the screen: Up, Down, Page Up, Page Down, Home and End
+ * move it (taken whole), Escape puts it away; anything else goes to the line. */
+static int code_key(int kind, char c)
+{
+    (void)c;
+    if (!ck_allen_ui_code_on())
+        return 0;
+    if (kind == CK_KEY_ESCAPE) {
+        ck_allen_ui_code(0, 0, 0, ck_rdtsc());
+        ck_printf("allen-code: code put away\n");
+        return 1;
+    }
+    int d = kind == CK_KEY_UP     ? -1
+            : kind == CK_KEY_DOWN ? 1
+            : kind == CK_KEY_PGUP ? -CK_ALLEN_UI_CODE_PAGE
+            : kind == CK_KEY_PGDN ? CK_ALLEN_UI_CODE_PAGE
+            : kind == CK_KEY_HOME ? -(int)CK_CODE_MAX
+            : kind == CK_KEY_END  ? (int)CK_CODE_MAX
+                                  : 0;
+    if (!d)
+        return 0;
+    allen_key = ck_rdtsc();
+    unsigned top = 0, rows = 0, page = 0;
+    if (ck_allen_ui_code_scroll(d, &top, &rows, &page) >= 0)
+        ck_printf("allen-code: rows %u to %u of %u shown\n", top + 1, top + page < rows ? top + page : rows, rows);
+    return 1;
+}
+
+static int line_key(int kind, char c) { return wizard_key(kind, c) || code_key(kind, c); }
+
+static uint64_t now_ms(void) { return ck_rdtsc() / (tsc_hz / 1000 ? tsc_hz / 1000 : 1); }
+
+/* A coding request: Allen says at once that he needs to code it and sends it
+ * to the Spark (courier job "code", or "code-more" for a change to the code
+ * on the screen), then goes on thinking until the code comes (courier_step).
+ * With no Spark he says so plainly. 0: not a coding request. */
+static int code_request(const char *text)
+{
+    char folded[CK_COURIER_LINE_MAX];
+    ck_allen_fold(text, folded, sizeof folded);
+    int more = ck_allen_ui_code_on() && ck_allen_code_more(folded);
+    if (!more && !ck_allen_wants_code(folded))
+        return 0;
+    uint64_t t0 = allen_key;
+    const char *say;
+    unsigned n = 0;
+    int sent = 0;
+    if (!courier || !courier->ready())
+        say = "I'd need to code that on the Spark, and I can't reach it right now. Is it switched on?";
+    else if (code_job || job_t)
+        say = "Give me a moment, the Spark is still on your last request.";
+    else if (!(n = ck_allen_code_job(&allen_mind, job_seq + 1, text, more, job_buf, sizeof job_buf)) ||
+             courier->send(job_buf, n) != 0)
+        say = "I couldn't send that to the Spark. Try it once more?";
+    else {
+        code_job = ++job_seq;
+        code_t = ck_rdtsc() | 1;
+        code_again = 0;
+        ck_code_begin(&code_rx, code_job);
+        ck_code_wait_begin(&code_wait, now_ms());
+        sent = 1;
+        say = more ? "Let me take that change to the Spark." : "I need to code that. Let me send it off to the Spark.";
+    }
+    ck_printf("allen: %s\n", say);
+    ck_allen_ui_said(text, say, ck_rdtsc());
+    if (sent) {
+        ck_allen_ui_working(1);
+        ck_printf("allen-code: asked the Spark (%u chars)\n", (unsigned)strlen(text));
+        ck_printf("allen-code: acknowledged in %llu ms (job %u, %s)\n",
+                  (unsigned long long)((ck_rdtsc() - t0) * 1000 / tsc_hz), (unsigned)code_job, more ? "a change" : "new code");
+    } else {
+        ck_printf("allen-code: not asked (%s)\n", !courier || !courier->ready() ? "the Spark is not reachable" : "busy or not sent");
+    }
+    return 1;
+}
+
+/* The end of a code job: the code shown, asked again once, or given up out loud. */
+static void code_done(const char *sentence)
+{
+    int st = ck_code_state(&code_rx);
+    uint64_t now = ck_rdtsc();
+    if ((st == CK_CODE_PART || st == CK_CODE_BAD) && !code_again && courier) {
+        char again[32];
+        unsigned n = (unsigned)ck_snprintf(again, sizeof again, "AGAIN %u", (unsigned)code_job);
+        ck_printf("allen-code: %s, asked again\n", st == CK_CODE_BAD ? "the checksum did not match" : "a piece went missing");
+        code_again = 1;
+        ck_code_begin(&code_rx, code_job);
+        ck_code_wait_heard(&code_wait, now_ms());
+        if (courier->send(again, n) == 0)
+            return;
+    }
+    const char *say = sentence && sentence[0] ? sentence : "Here it is.";
+    if (st == CK_CODE_WHOLE) {
+        ck_allen_ui_code(code_rx.text, code_rx.bytes, code_rx.lang, now);
+        code_lines_shown = (int)ck_code_lines(code_rx.text, code_rx.bytes);
+        ck_printf("allen-code: code shown, %u lines in %llu ms\n", (unsigned)code_lines_shown,
+                  (unsigned long long)((now - code_t) * 1000 / tsc_hz));
+        ck_printf("allen-code: %u bytes, crc32 %08x, %u pieces, language %s\n", (unsigned)code_rx.bytes,
+                  (unsigned)code_rx.crc, (unsigned)code_rx.n, code_rx.lang[0] ? code_rx.lang : "none");
+        /* the first lines on COM1 (the QEMU gate reads them back; never in the lab report) */
+        unsigned line = 0;
+        for (uint32_t i = 0, s = 0; i <= code_rx.bytes && line < 40; i++)
+            if (i == code_rx.bytes || code_rx.text[i] == '\n') {
+                if (i > s || i < code_rx.bytes) {
+                    char row[200]; /* a longer line is echoed cut (the checksum covers the whole) */
+                    uint32_t k = 0;
+                    for (; k < i - s && k + 1 < sizeof row; k++)
+                        row[k] = code_rx.text[s + k];
+                    row[k] = 0;
+                    ck_printf("code|%s\n", row);
+                }
+                s = i + 1;
+                line++;
+            }
+    } else if (st != CK_CODE_NONE) {
+        say = "The code got lost on the way from the Spark. Ask me again?";
+        ck_printf("allen-code: lost (%u of %u pieces, %u refused)\n", (unsigned)code_rx.got, (unsigned)code_rx.n,
+                  (unsigned)code_rx.refused);
+    } else {
+        ck_printf("allen-code: the Spark answered without code\n");
+    }
+    ck_printf("allen: %s\n", say);
+    ck_allen_ui_said(0, say, now);
+    ck_allen_ui_working(0);
+    code_job = 0;
+}
 /* a is b (lower case), whatever a's letter case and the spaces around them */
 static int same_words(const char *a, const char *b)
 {
@@ -587,6 +723,8 @@ static void allen_line(const char *text)
     }
     if (allen_on && same_words(text, "set up again") && ck_x86_setup_open(&setup_facts, courier, tsc_hz, 1))
         return; /* the setup wizard from its first screen; it says hello itself */
+    if (allen_on && code_request(text))
+        return;
     /* A far-off worker that has said hello answers first (svc/allen_reply.h far). */
     allen_mind.far = courier && courier->ready();
     const char *reply = ck_allen_answer(&allen_mind, text, ck_rdtsc() / tsc_hz);
@@ -618,7 +756,7 @@ static void allen_line(const char *text)
     allen_mind.note_dirty = 0;
     /* Nothing here could answer: when a courier is ready, Allen writes the job
      * himself and keeps thinking until the far side answers (courier_step). */
-    if (reply == ck_allen_not_yet && courier && courier->ready() && !job_t) {
+    if (reply == ck_allen_not_yet && courier && courier->ready() && !job_t && !code_job) {
         unsigned n = ck_allen_job(&allen_mind, job_seq + 1, text, job_buf, sizeof job_buf);
         if (n) /* his memory rides along: his name, the person's, the facts, the newest notes */
             n += ck_allen_job_memory(&allen_mind, 6, job_buf + n, sizeof job_buf - n);
@@ -633,7 +771,7 @@ static void allen_line(const char *text)
         }
     }
     if (reply == ck_allen_not_yet && allen_mind.far) /* the far side is there but could not take it, or is still on the last line */
-        reply = job_t ? "Give me a moment, I'm still on your last line." : ck_allen_lost_thread;
+        reply = job_t || code_job ? "Give me a moment, I'm still on your last line." : ck_allen_lost_thread;
     ck_printf("allen: %s\n", reply);
     /* the only line about it the lab report may carry: lengths, no words */
     ck_printf("screen: Allen answered (%u characters in, %u out)\n", (unsigned)strlen(text), (unsigned)strlen(reply));
@@ -866,7 +1004,7 @@ static void allen_window(void)
     night_stats("before Allen woke");
     allen_map(); /* the notes loaded from disk, before the first word */
     setup_facts = (struct ck_x86_setup_facts){hand->rsdp, ram_bytes, allen_facts.cores, w, h};
-    ck_x86_kbd_keys(wizard_key);
+    ck_x86_kbd_keys(line_key);
     if (ck_x86_setup_open(&setup_facts, courier, tsc_hz, 0))
         return; /* the setup wizard says hello in its own words */
     const char *hello = ck_allen_welcome(&allen_mind);
@@ -931,6 +1069,19 @@ static void courier_step(void)
     while (courier->take(line, sizeof line)) {
         if (ck_x86_setup_line(line))
             continue; /* the setup wizard's key test answered */
+        if (code_job) {
+            int k = ck_code_take(&code_rx, line);
+            if (k > 0)
+                ck_code_wait_heard(&code_wait, now_ms());
+            if (k)
+                continue;
+            if (ck_allen_say_line(line, &seq, &part, &total, text, sizeof text) && seq == code_job) {
+                ck_code_wait_heard(&code_wait, now_ms());
+                if (part && total && part >= total)
+                    code_done(text);
+                continue;
+            }
+        }
         if (!ck_allen_say_line(line, &seq, &part, &total, text, sizeof text) || !job_t || seq != job_seq)
             continue;
         job_last = ck_rdtsc() | 1;
@@ -968,6 +1119,23 @@ static void courier_step(void)
             job_t = 0;
             if (!same_text(said, ck_allen_lost_thread)) /* no note of an exchange that got no answer */
                 allen_note_exchange(said);
+        }
+    }
+    if (code_job) {
+        int w = ck_code_wait_tick(&code_wait, now_ms());
+        if (w == CK_CODE_WAIT_SLOW) {
+            const char *say = "The Spark is still writing it. Longer code takes a little while.";
+            ck_printf("allen: %s\n", say);
+            ck_printf("allen-code: the Spark is slow (%u s so far)\n", CK_CODE_SLOW_MS / 1000u);
+            ck_allen_ui_said(0, say, ck_rdtsc());
+        } else if (w == CK_CODE_WAIT_GONE) {
+            const char *say = "The Spark stopped answering, so I couldn't get the code. Try again in a minute.";
+            ck_printf("allen: %s\n", say);
+            ck_printf("allen-code: the Spark stopped answering job %u (%u s of silence)\n", (unsigned)code_job,
+                      CK_CODE_GONE_MS / 1000u);
+            ck_allen_ui_said(0, say, ck_rdtsc());
+            ck_allen_ui_working(0);
+            code_job = 0;
         }
     }
     if (job_t && ck_rdtsc() - job_last > 30 * tsc_hz) {

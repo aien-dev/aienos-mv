@@ -189,6 +189,10 @@ int ck_x86_setup_open(const struct ck_x86_setup_facts *f, const struct ck_courie
     } else {
         ck_puts("wizard: no room on Allen's disk section this start; setup is not kept\n");
     }
+    if (!part && !again) { /* it could not remember being finished: it would come back every start */
+        ck_puts("wizard: not shown, nowhere to keep it this start (\"set up again\" opens it)\n");
+        return 0;
+    }
     if (rc == 0 && !again && sw_saved_done(text, n)) {
         ck_printf("wizard: setup finished on an earlier start (generation %llu); not shown\n",
                   (unsigned long long)store.gen);

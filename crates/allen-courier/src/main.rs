@@ -20,13 +20,23 @@
 //!                   A kernel with no address sends from 0.0.0.0: its answers go to --udp-answer
 //!                   (the LAN broadcast address); anyone else is answered where they came from.
 //!
+//! A coding request ("JOB <seq> code ..." fresh, "JOB <seq> code-more ..." a change to the code
+//! just sent) is asked with crates/allen-courier/code_prompt.txt and the requests and answers of
+//! the code so far, not streamed (WAIT every 2 s while the model writes), and answered as numbered
+//! CODE pieces with the length and checksum and one closing SAY (src/code.rs). "AGAIN <seq>" sends
+//! a code answer's lines once more. On a busy server (503) a code job waits exactly the
+//! Retry-After the server names (the server is shared). --code-reply DIR answers code jobs from
+//! DIR/<k>.txt (k counts code jobs from 1, else DIR/default.txt) instead of the model, for tests:
+//! DIR/<k>.drop names a piece left off the first time, DIR/<k>.delay seconds to wait first.
+//! --split FILE prints the wire lines for a reply in FILE (job 1) and exits.
+//!
 //! A key test for the setup wizard ("KEYTEST <seq> <kind> <base_url> <key>")
 //! makes one request to the service and answers "KEYOK <seq> <model>" or
 //! "KEYBAD <seq> <why>"; the key is used in that request and kept nowhere.
 //!
 //! Every exchange is appended to <log dir>/<date>.jsonl (prompt, memory, reply, timings, run id):
 //! this is Allen's learning corpus, the data pipeline, not training. Standard library only.
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{SocketAddr, TcpStream, UdpSocket};
 use std::os::unix::net::UnixStream;
@@ -35,11 +45,20 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+mod code;
+
 const PORT: u16 = 47033; // x86/courier_udp.h CK_COURIER_PORT
 const HEAD: &str = "ALLEN-COURIER v=1 run=";
 /// What Allen says when the model cannot be reached or says nothing (the kernel compares it
 /// with ck_allen_lost_thread and keeps no note of such an exchange).
 const LOST: &str = "I lost my thread there. Ask me again in a moment.";
+
+/// The coding prompt (crates/allen-courier/code_prompt.txt).
+const CODE_PROMPT: &str = include_str!("../code_prompt.txt");
+/// What Allen says over code that came without a sentence.
+const HERE: &str = "Here it is.";
+/// Answer lines in flight on the Ethernet wire at once (the kernel holds 8, x86/courier_udp_x86.c LINES).
+const WINDOW: usize = 6;
 
 /// Allen's rules for the worker, from docs/ALLEN_PRESENCE_RESEARCH.md section 5
 /// (Austin: say who speaks to whom; Gollwitzer: the shape of the act; Weiser and
@@ -61,12 +80,16 @@ struct Args {
     max_tokens: u32,
     say_max: usize,
     busy_wait: u64, // seconds to keep asking a busy (503) model
+    code_max_tokens: u32,
+    code_reply: Option<PathBuf>,
+    split: Option<PathBuf>,
 }
 
 fn usage() -> ! {
     eprintln!(
         "usage: allen-courier [--socket PATH] [--udp PORT] [--udp-answer IP:PORT] [--model HOST:PORT] \
-         [--work DIR] [--log-dir DIR] [--max-tokens N] [--say-max N] [--busy-wait SECONDS]   (one wire at least)"
+         [--work DIR] [--log-dir DIR] [--max-tokens N] [--say-max N] [--busy-wait SECONDS] \
+         [--code-max-tokens N] [--code-reply DIR]   (one wire at least)\n       allen-courier --split FILE"
     );
     std::process::exit(2)
 }
@@ -83,6 +106,9 @@ fn parse_args() -> Args {
         max_tokens: 220,
         say_max: 150,
         busy_wait: 900,
+        code_max_tokens: 8192,
+        code_reply: None,
+        split: None,
     };
     let mut it = std::env::args().skip(1);
     while let Some(k) = it.next() {
@@ -97,10 +123,13 @@ fn parse_args() -> Args {
             "--max-tokens" => a.max_tokens = v.parse().unwrap_or_else(|_| usage()),
             "--say-max" => a.say_max = v.parse().unwrap_or_else(|_| usage()),
             "--busy-wait" => a.busy_wait = v.parse().unwrap_or_else(|_| usage()),
+            "--code-max-tokens" => a.code_max_tokens = v.parse().unwrap_or_else(|_| usage()),
+            "--code-reply" => a.code_reply = Some(PathBuf::from(v)),
+            "--split" => a.split = Some(PathBuf::from(v)),
             _ => usage(),
         }
     }
-    if a.socket.is_none() && a.udp.is_none() {
+    if a.socket.is_none() && a.udp.is_none() && a.split.is_none() {
         usage()
     }
     a
@@ -325,7 +354,6 @@ fn for_allen_keep(text: &str, max: usize, keep: usize) -> String {
     format!("{}...", room[..cut].trim_end())
 }
 
-#[cfg(test)]
 fn for_allen(text: &str, max: usize) -> String {
     for_allen_keep(text, max, 0)
 }
@@ -352,6 +380,52 @@ fn backoff(n: u32, head: &str) -> Duration {
         .map(|s| s.min(4) * 1000)
         .unwrap_or(0);
     Duration::from_millis(own.max(named).min(4000))
+}
+
+/// The Retry-After a busy server names, in whole seconds (the HTTP-date form is not used here).
+fn retry_after(head: &str) -> Option<u64> {
+    head.lines().find_map(|l| {
+        let (k, v) = l.split_once(':')?;
+        k.trim()
+            .eq_ignore_ascii_case("retry-after")
+            .then(|| v.trim().parse::<u64>().ok())?
+    })
+}
+
+/// A code answer on the wire: the CODE pieces and the closing SAY, Allen's
+/// sentence, and the code as read (None when the reply held no code).
+fn code_lines(seq: u32, reply: &str, say_max: usize) -> (Vec<String>, String, Option<code::Reply>) {
+    // a model that thinks aloud first: only what follows its thinking is the reply
+    let reply = match reply.rfind("</think>") {
+        Some(e) => &reply[e + 8..],
+        None => reply,
+    };
+    match code::read_reply(reply) {
+        Some(r) => {
+            let mut lines = code::pieces(seq, &r.code, &r.lang);
+            let mut s = for_allen(&r.sentence, say_max.min(110));
+            if s.is_empty() {
+                s = HERE.to_string();
+            }
+            if r.cut_lines > 0 {
+                s = format!(
+                    "{} It was long, so I kept the first {} lines.",
+                    s,
+                    r.code.lines().count()
+                );
+            }
+            lines.push(format!("SAY {} 1/1 {}", seq, s));
+            (lines, s, Some(r))
+        }
+        None => {
+            let s = if reply.trim().is_empty() {
+                LOST.to_string()
+            } else {
+                for_allen(reply, say_max)
+            };
+            (vec![format!("SAY {} 1/1 {}", seq, s)], s, None)
+        }
+    }
 }
 
 fn utc_now() -> (u64, String) {
@@ -473,6 +547,11 @@ struct Brain {
     work: PathBuf,
     log_dir: PathBuf,
     lock: Mutex<()>,
+    code_max_tokens: u32,
+    code_reply: Option<PathBuf>,
+    code_n: Mutex<u32>,                          // code jobs so far (for --code-reply)
+    code_history: Mutex<Vec<(String, String)>>,  // the code's requests and answers, for code-more
+    code_sent: Mutex<HashMap<u32, Vec<String>>>, // the last code answers' lines, for AGAIN
 }
 
 impl Brain {
@@ -485,6 +564,11 @@ impl Brain {
             json_str(user),
             self.max_tokens
         );
+        self.post(&body)
+    }
+
+    /// Posts a chat request body: the status, the head, and the stream after it.
+    fn post(&self, body: &str) -> std::io::Result<(u16, String, TcpStream)> {
         let mut s = TcpStream::connect(&self.model)?;
         // a server that takes the request but starts it late (another job holds the GPU) may
         // keep us waiting for its head as long as we are willing to wait for a busy one
@@ -730,6 +814,157 @@ impl Brain {
         out
     }
 
+    /// A code job: asked whole (not streamed) while a "WAIT" goes out every 2 s (first after
+    /// 1 s), then the CODE pieces and the closing SAY. The lines are kept for AGAIN.
+    fn answer_code(&self, job: &Job, emit: impl FnMut(String) + Send) -> Outcome {
+        let _one = self.lock.lock().unwrap_or_else(|e| e.into_inner());
+        let done = AtomicBool::new(false);
+        let wire = Mutex::new(emit);
+        std::thread::scope(|sc| {
+            sc.spawn(|| {
+                let mut tick = 0u32;
+                while !done.load(Ordering::Relaxed) {
+                    std::thread::sleep(Duration::from_millis(20));
+                    tick += 1;
+                    if tick % 100 == 50 && !done.load(Ordering::Relaxed) {
+                        let mut w = wire.lock().unwrap_or_else(|e| e.into_inner());
+                        (*w)(format!("WAIT {}", job.seq));
+                    }
+                }
+            });
+            let (out, lines) = self.code_answer(job);
+            done.store(true, Ordering::Relaxed);
+            let mut w = wire.lock().unwrap_or_else(|e| e.into_inner());
+            for l in lines {
+                (*w)(l);
+            }
+            out
+        })
+    }
+
+    /// The model's reply to a code job (or the recorded one), read into wire lines: the lines
+    /// to send now (a recorded drop leaves a piece off) and the outcome.
+    fn code_answer(&self, job: &Job) -> (Outcome, Vec<String>) {
+        let t0 = Instant::now();
+        let mut hist = self.code_history.lock().unwrap_or_else(|e| e.into_inner());
+        if job.want != "code-more" {
+            hist.clear();
+        }
+        let mut drop_piece = 0u32;
+        let (reply, status, waits) = match &self.code_reply {
+            Some(dir) => {
+                let mut n = self.code_n.lock().unwrap_or_else(|e| e.into_inner());
+                *n += 1;
+                let k = *n;
+                let read = |name: String| std::fs::read_to_string(dir.join(name)).ok();
+                if let Some(d) = read(format!("{}.delay", k)).and_then(|s| s.trim().parse::<u64>().ok()) {
+                    std::thread::sleep(Duration::from_secs(d));
+                }
+                drop_piece = read(format!("{}.drop", k))
+                    .and_then(|s| s.trim().parse().ok())
+                    .unwrap_or(0);
+                let r = read(format!("{}.txt", k))
+                    .or_else(|| read("default.txt".into()))
+                    .unwrap_or_default();
+                (r, 200, 0)
+            }
+            None => self.ask_code(&hist, &job.ask),
+        };
+        let (lines, sentence, r) = code_lines(job.seq, &reply, self.say_max);
+        if r.is_some() {
+            hist.push((job.ask.clone(), reply.clone()));
+            let over = hist.len().saturating_sub(3);
+            hist.drain(..over);
+        }
+        let ms = t0.elapsed().as_millis();
+        if let Some(r) = &r {
+            println!(
+                "courier: code job {}: {} bytes, {} lines, {} pieces, language {}{}",
+                job.seq,
+                r.code.len(),
+                r.code.lines().count(),
+                lines.len() - 1,
+                if r.lang.is_empty() { "none" } else { r.lang.as_str() },
+                if r.cut_lines > 0 { format!(", {} lines left off", r.cut_lines) } else { String::new() }
+            );
+        }
+        {
+            let mut sent = self.code_sent.lock().unwrap_or_else(|e| e.into_inner());
+            sent.retain(|&s, _| s + 4 > job.seq);
+            sent.insert(job.seq, lines.clone());
+        }
+        let now: Vec<String> = if drop_piece > 0 {
+            let gone = format!("CODE {} {}/", job.seq, drop_piece);
+            println!("courier: code job {}: piece {} left off (recorded drop)", job.seq, drop_piece);
+            lines.iter().filter(|l| !l.starts_with(&gone)).cloned().collect()
+        } else {
+            lines
+        };
+        let _ = std::fs::write(self.work.join(format!("{}.txt", job.seq)), &reply);
+        (
+            Outcome {
+                reply,
+                said: vec![sentence],
+                status,
+                waits,
+                ms_first: ms,
+                ms_total: ms,
+            },
+            now,
+        )
+    }
+
+    /// Asks the model for code: the coding prompt, the code's requests and answers so far, the
+    /// request. A busy server (503) is asked again after exactly the Retry-After it names (1 s
+    /// when it names none), for as long as --busy-wait allows. Returns the reply, the status and
+    /// the waits.
+    fn ask_code(&self, hist: &[(String, String)], ask: &str) -> (String, u16, u32) {
+        let mut msgs = format!("{{\"role\":\"system\",\"content\":{}}}", json_str(CODE_PROMPT.trim()));
+        for (u, a) in hist {
+            msgs.push_str(&format!(
+                ",{{\"role\":\"user\",\"content\":{}}},{{\"role\":\"assistant\",\"content\":{}}}",
+                json_str(u),
+                json_str(a)
+            ));
+        }
+        msgs.push_str(&format!(",{{\"role\":\"user\",\"content\":{}}}", json_str(ask)));
+        let body = format!(
+            "{{\"messages\":[{}],\"max_tokens\":{},\"temperature\":0.2,\"stream\":false}}",
+            msgs, self.code_max_tokens
+        );
+        let t0 = Instant::now();
+        let mut waits = 0u32;
+        loop {
+            match self.post(&body) {
+                Ok((503, head, _)) if t0.elapsed() < self.busy_wait => {
+                    waits += 1;
+                    let s = retry_after(&head).unwrap_or(1);
+                    println!("courier: the model is busy (503); waiting the {} s it asked", s);
+                    std::thread::sleep(Duration::from_secs(s));
+                }
+                Ok((200, head, mut stream)) => {
+                    let mut b = Vec::new();
+                    stream.read_to_end(&mut b).ok();
+                    if head.to_ascii_lowercase().contains("transfer-encoding: chunked") {
+                        b = dechunk(&b);
+                    }
+                    return (content_of(&b).unwrap_or_default(), 200, waits);
+                }
+                Ok((code, _, _)) => return (String::new(), code, waits),
+                Err(_) => return (String::new(), 0, waits),
+            }
+        }
+    }
+
+    /// A code answer's lines once more (AGAIN), or None when they are no longer kept.
+    fn again(&self, seq: u32) -> Option<Vec<String>> {
+        self.code_sent
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&seq)
+            .cloned()
+    }
+
     /// One line of the learning corpus.
     fn log(&self, wire: &str, run: &str, job: &Job, o: &Outcome) {
         let (_, when) = utc_now();
@@ -945,6 +1180,16 @@ fn serial_wire(path: PathBuf, brain: Arc<Brain>) {
             );
             continue;
         }
+        if let Some(seq) = text.strip_prefix("AGAIN ").and_then(|v| v.trim().parse::<u32>().ok()) {
+            let lines = brain
+                .again(seq)
+                .unwrap_or_else(|| vec![format!("SAY {} 1/1 {}", seq, LOST)]);
+            println!("courier: serial: code job {} sent again ({} lines)", seq, lines.len());
+            for l in lines {
+                let _ = tx.write_all(format!("{}\n", l).as_bytes());
+            }
+            continue;
+        }
         let Some(job) = Job::parse(&text) else {
             if text.starts_with("JOB") {
                 println!("courier: a job line without its parts was dropped");
@@ -952,9 +1197,14 @@ fn serial_wire(path: PathBuf, brain: Arc<Brain>) {
             continue;
         };
         let mut tx2 = tx.try_clone().expect("wire clone");
-        let o = brain.answer(&job, |l| {
+        let send = |l: String| {
             let _ = tx2.write_all(format!("{}\n", l).as_bytes());
-        });
+        };
+        let o = if job.want.starts_with("code") {
+            brain.answer_code(&job, send)
+        } else {
+            brain.answer(&job, send)
+        };
         brain.log("serial", "serial", &job, &o);
     }
 }
@@ -977,7 +1227,35 @@ struct Session {
     job_parts: HashMap<u32, (u32, u32, Vec<Option<String>>)>, // seq -> (parts, bytes, bodies)
     done_seq: u32,                                            // the last job answered (or taken)
     pending: Vec<Pending>,
-    line_no: u32, // LINE numbers within the current job's answer
+    queue: VecDeque<(u32, String)>, // answer lines waiting for room in the window
+    line_no: u32,                   // LINE numbers within the current job's answer
+}
+
+/// Moves waiting lines into flight while fewer than WINDOW wait for their GOT.
+fn fill(sock: &UdpSocket, run: &str, s: &mut Session) {
+    while s.pending.len() < WINDOW {
+        let Some((seq, body)) = s.queue.pop_front() else {
+            return;
+        };
+        s.line_no += 1;
+        let part = s.line_no;
+        let _ = sock.send_to(&datagram(run, "LINE", seq, part, 0, &body), s.answer_to);
+        s.pending.push(Pending {
+            run: run.to_string(),
+            seq,
+            part,
+            body,
+            sent: Instant::now(),
+            tries: 1,
+        });
+    }
+}
+
+/// Work for the Ethernet wire's worker: a job, or a code answer to send again
+/// (the job's seq, and the seq of the datagram that asked: the lines go under it).
+enum Work {
+    Job(String, Job),
+    Again(String, u32, u32),
 }
 
 struct Udp {
@@ -1024,35 +1302,42 @@ fn udp_wire(port: u16, answer: SocketAddr, brain: Arc<Brain>) {
         sock: sock.try_clone().expect("socket clone"),
         sessions: HashMap::new(),
     }));
-    let (job_tx, job_rx) = mpsc::channel::<(String, Job)>();
-    // the worker: one job at a time, answers as LINEs kept until GOT
+    let (job_tx, job_rx) = mpsc::channel::<Work>();
+    // the worker: one job at a time, answers as LINEs kept until GOT, at most WINDOW in flight
     {
         let state = Arc::clone(&state);
         let brain = Arc::clone(&brain);
         std::thread::spawn(move || {
-            for (run, job) in job_rx {
-                let o = brain.answer(&job, |body| {
-                    let mut st = state.lock().unwrap_or_else(|e| e.into_inner());
-                    let Udp { sock, sessions } = &mut *st;
-                    let Some(s) = sessions.get_mut(&run) else {
-                        return;
-                    };
-                    s.line_no += 1;
-                    let part = s.line_no;
-                    let _ = sock.send_to(
-                        &datagram(&run, "LINE", job.seq, part, 0, &body),
-                        s.answer_to,
-                    );
-                    s.pending.push(Pending {
-                        run: run.clone(),
-                        seq: job.seq,
-                        part,
-                        body,
-                        sent: Instant::now(),
-                        tries: 1,
-                    });
-                });
-                brain.log("udp", &run, &job, &o);
+            let line_out = |run: &str, seq: u32, body: String| {
+                let mut st = state.lock().unwrap_or_else(|e| e.into_inner());
+                let Udp { sock, sessions } = &mut *st;
+                let Some(s) = sessions.get_mut(run) else {
+                    return;
+                };
+                s.queue.push_back((seq, body));
+                fill(sock, run, s);
+            };
+            for w in job_rx {
+                match w {
+                    Work::Job(run, job) => {
+                        let send = |body: String| line_out(&run, job.seq, body);
+                        let o = if job.want.starts_with("code") {
+                            brain.answer_code(&job, send)
+                        } else {
+                            brain.answer(&job, send)
+                        };
+                        brain.log("udp", &run, &job, &o);
+                    }
+                    Work::Again(run, seq, under) => {
+                        let lines = brain
+                            .again(seq)
+                            .unwrap_or_else(|| vec![format!("SAY {} 1/1 {}", seq, LOST)]);
+                        println!("courier: udp: code job {} sent again ({} lines)", seq, lines.len());
+                        for l in lines {
+                            line_out(&run, under, l);
+                        }
+                    }
+                }
             }
         });
     }
@@ -1063,7 +1348,7 @@ fn udp_wire(port: u16, answer: SocketAddr, brain: Arc<Brain>) {
         // resend LINEs not yet GOT (300 ms), give up on one after 10 s
         {
             let Udp { sock, sessions } = &mut *st;
-            for s in sessions.values_mut() {
+            for (run, s) in sessions.iter_mut() {
                 for p in s.pending.iter_mut() {
                     if p.sent.elapsed() >= Duration::from_millis(300) {
                         let _ = sock.send_to(
@@ -1079,6 +1364,7 @@ fn udp_wire(port: u16, answer: SocketAddr, brain: Arc<Brain>) {
                 if s.pending.len() != before {
                     println!("courier: udp: a line was never heard back after 10 s; dropped");
                 }
+                fill(sock, run, s);
             }
         }
         let Ok((n, from)) = got else {
@@ -1120,6 +1406,7 @@ fn udp_wire(port: u16, answer: SocketAddr, brain: Arc<Brain>) {
             job_parts: HashMap::new(),
             done_seq: 0,
             pending: Vec::new(),
+            queue: VecDeque::new(),
             line_no: 0,
         });
         s.answer_to = answer_to;
@@ -1135,6 +1422,7 @@ fn udp_wire(port: u16, answer: SocketAddr, brain: Arc<Brain>) {
             }
             "GOT" => {
                 s.pending.retain(|p| !(p.seq == seq && p.part == part));
+                fill(sock, &run, s);
             }
             "JOB" => {
                 if seq <= s.done_seq || total == 0 || part == 0 || part > total || total > 8 {
@@ -1154,10 +1442,17 @@ fn udp_wire(port: u16, answer: SocketAddr, brain: Arc<Brain>) {
                             let _ = sock.send_to(&datagram(&run, "ACK", seq, 0, 0, ""), answer_to);
                             s.done_seq = seq;
                             s.pending.clear();
+                            s.queue.clear();
                             s.line_no = 0;
+                            let again = line
+                                .strip_prefix("AGAIN ")
+                                .and_then(|v| v.trim().parse::<u32>().ok());
                             match Job::parse(&line) {
+                                _ if again.is_some() => {
+                                    let _ = job_tx.send(Work::Again(run.clone(), again.unwrap_or(0), seq));
+                                }
                                 Some(job) => {
-                                    let _ = job_tx.send((run.clone(), job));
+                                    let _ = job_tx.send(Work::Job(run.clone(), job));
                                 }
                                 None => println!(
                                     "courier: udp: a job line without its parts was dropped"
@@ -1176,6 +1471,16 @@ fn udp_wire(port: u16, answer: SocketAddr, brain: Arc<Brain>) {
 
 fn main() {
     let a = parse_args();
+    if let Some(f) = &a.split {
+        let reply = std::fs::read_to_string(f).unwrap_or_else(|e| {
+            eprintln!("allen-courier: {}: {}", f.display(), e);
+            std::process::exit(1)
+        });
+        for l in code_lines(1, &reply, a.say_max).0 {
+            println!("{}", l);
+        }
+        return;
+    }
     std::fs::create_dir_all(&a.work).unwrap_or_else(|e| {
         eprintln!("allen-courier: work dir {}: {}", a.work.display(), e);
         std::process::exit(1)
@@ -1188,6 +1493,11 @@ fn main() {
         work: a.work.clone(),
         log_dir: a.log_dir.clone(),
         lock: Mutex::new(()),
+        code_max_tokens: a.code_max_tokens,
+        code_reply: a.code_reply.clone(),
+        code_n: Mutex::new(0),
+        code_history: Mutex::new(Vec::new()),
+        code_sent: Mutex::new(HashMap::new()),
     });
     println!(
         "courier: model at {}, learning corpus in {}",
@@ -1334,6 +1644,30 @@ mod tests {
             backoff(1, "HTTP/1.1 503\r\nretry-after: 30\r\n\r\n").as_millis(),
             4000
         );
+    }
+
+    #[test]
+    fn a_code_reply_becomes_pieces_and_a_closing_sentence() {
+        let (l, s, r) = code_lines(3, "<think>hmm</think>Here is your calculator.\n```python\nprint(2+2)\n```", 150);
+        assert_eq!(s, "Here is your calculator.");
+        assert_eq!(r.unwrap().lang, "python");
+        assert_eq!(l.len(), 2);
+        assert!(l[0].starts_with("CODE 3 1/1 11 "));
+        assert_eq!(l[1], "SAY 3 1/1 Here is your calculator.");
+        let (l, s, r) = code_lines(4, "No code today.", 150);
+        assert!(r.is_none());
+        assert_eq!(l, vec!["SAY 4 1/1 No code today.".to_string()]);
+        assert_eq!(s, "No code today.");
+        let (l, _, _) = code_lines(5, "", 150);
+        assert_eq!(l, vec![format!("SAY 5 1/1 {}", LOST)]);
+        let (_, s, _) = code_lines(6, "```c\nint x;\n```", 150);
+        assert_eq!(s, HERE);
+    }
+
+    #[test]
+    fn a_busy_server_names_its_wait_exactly() {
+        assert_eq!(retry_after("HTTP/1.1 503 x\r\nRetry-After: 17\r\n\r\n"), Some(17));
+        assert_eq!(retry_after("HTTP/1.1 503 x\r\n\r\n"), None);
     }
 
     #[test]

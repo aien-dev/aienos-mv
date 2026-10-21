@@ -59,6 +59,7 @@ static const int32_t sky_region_dec_udeg[SKY_NREGIONS] = {
 #include "mind.h"
 #include "night.h"
 #include "paint.h"
+#include "../svc/allen_code.h"
 
 #define TEXT_MAX 160
 #define LINES_MAX 5
@@ -122,7 +123,13 @@ static struct {
     unsigned scene_gen;
     struct panel panel;
     unsigned panel_gen;
+    /* code from the Spark */
+    unsigned code_gen, code_len;
+    int code_on, working;
+    uint32_t code_top, code_rows, code_page; /* top row set by the keys; rows and page told back by the frame */
+    char code_lang[16];
 } note;
+static char note_code[CK_ALLEN_UI_CODE_MAX + 1]; /* written under the lock, copied by the frame */
 
 static struct {
     int started, on;
@@ -193,6 +200,14 @@ static struct {
     uint32_t pan_a, pan_was, lit_t;
     int lit_was;
     ck_rect pan_box, row_box;
+    /* code from the Spark */
+    unsigned seen_code;
+    int code_on, working;
+    uint32_t code_a, code_was, code_len, code_rows, code_top, code_page, code_cols, code_lines;
+    int32_t code_cw;  /* one letter's width, 1/256 px */
+    int32_t code_x, code_y, code_lh, code_w, code_h; /* the text area */
+    ck_rect code_box;
+    char code_lang[16];
     /* the frame */
     uint8_t tiles[TILES_MAX];
     int32_t tx, ty;
@@ -204,6 +219,12 @@ static struct {
     int32_t ripple_was;
     uint32_t frames, slowest, total_ticks;
 } ui;
+
+/* the code shown and its rows (svc/allen_code.h ck_code_rows) */
+#define CODE_ROWS_MAX 4096u
+static char code_txt[CK_ALLEN_UI_CODE_MAX + 1];
+static uint32_t code_st[CODE_ROWS_MAX];
+static uint16_t code_ln[CODE_ROWS_MAX], code_no[CODE_ROWS_MAX];
 
 /* Allen's canvas: the things the model asks to be shown round him (ui/canvas.c) */
 static ck_allen_canvas stage;
@@ -291,7 +312,7 @@ static int32_t words_top(void) { return ui.cy + S(250); }
 
 static void lay_out(struct words *w)
 {
-    w->lines = wrap(&ui.voice, w->text, w->len, S(900), w->st, w->ln);
+    w->lines = wrap(&ui.voice, w->text, w->len, ui.code_on ? S(520) : S(900), w->st, w->ln);
     int32_t top = words_top(), x0 = ui.w, x1 = 0;
     for (unsigned i = 0; i < w->lines; i++) {
         int32_t lw = (int32_t)ck_af_measure(&ui.voice, w->text + w->st[i], w->ln[i]);
@@ -488,6 +509,107 @@ static void draw_panel(const ck_rect *r, uint32_t t)
         text(&ui.cv, r, &ui.small, (ui.w - aw) / 2, ui.bar.y + ui.bar.h + S(64), ui.pan.aside, n, CK_RGB(130, 140, 176),
              222 * A >> 8);
     }
+}
+
+/* ---- code from the Spark ---- */
+
+/* one letter centred in its cell, so every letter takes one width */
+static void code_letters(const ck_rect *r, int32_t x, int32_t y, const char *s, unsigned n, uint32_t color, uint32_t a)
+{
+    for (unsigned i = 0; i < n; i++) {
+        char ch = s[i];
+        if (ch == ' ')
+            continue;
+        int64_t cell = (int64_t)x * 256 + (int64_t)i * ui.code_cw;
+        int64_t pen = cell + (ui.code_cw - (int32_t)ck_af_advance(&ui.small, ch)) / 2;
+        (void)ck_letter(&ui.cv, r, &ui.small, (uint64_t)(pen < 0 ? 0 : pen), y, ch, color, a, 0);
+    }
+}
+
+static void draw_code(const ck_rect *r)
+{
+    uint32_t A = ui.code_a;
+    if (!A || !ck_meets(ui.code_box, r))
+        return;
+    /* a soft pool of shade under the text, fading out over the margin: no edge, no box */
+    ck_rect in = {ui.code_x - S(36), ui.code_y - S(56), ui.code_w + S(56), ui.code_h + S(100)};
+    int32_t m = S(48);
+    ck_rect d = ck_grow(in, m);
+    if (ck_clip(&d, r))
+        for (int32_t y = d.y; y < d.y + d.h; y++) {
+            uint32_t *row = ui.back + (size_t)y * (size_t)ui.w;
+            int32_t dy = y < in.y ? in.y - y : y >= in.y + in.h ? y - (in.y + in.h - 1) : 0;
+            for (int32_t x = d.x; x < d.x + d.w; x++) {
+                int32_t dx = x < in.x ? in.x - x : x >= in.x + in.w ? x - (in.x + in.w - 1) : 0;
+                int32_t far = dx > dy ? dx + dy / 2 : dy + dx / 2;
+                if (far >= m)
+                    continue;
+                uint32_t k = 256 - ck_smooth(ck_prog(far, 0, m));
+                row[x] = ck_mix(row[x], CK_RGB(6, 8, 18), (k * 212 >> 8) * A >> 8);
+            }
+        }
+    /* the head: the language and the size, in the hint colour */
+    char head[64];
+    unsigned hn = 0;
+    const char *lang = ui.code_lang[0] ? ui.code_lang : "code";
+    for (unsigned i = 0; lang[i] && hn < 20; i++)
+        head[hn++] = lang[i];
+    const char *mid = ", ";
+    for (unsigned i = 0; mid[i]; i++)
+        head[hn++] = mid[i];
+    char num[12];
+    unsigned nn = 0;
+    uint32_t v = ui.code_lines;
+    do
+        num[nn++] = (char)('0' + v % 10);
+    while ((v /= 10) && nn < sizeof num);
+    while (nn)
+        head[hn++] = num[--nn];
+    const char *tail = ui.code_lines == 1 ? " line" : " lines";
+    for (unsigned i = 0; tail[i]; i++)
+        head[hn++] = tail[i];
+    text(&ui.cv, r, &ui.small, ui.code_x, ui.code_y - S(22), head, hn, CK_RGB(150, 160, 196), 192 * A >> 8);
+    /* the rows: the line number at the left of each line's first row, the code after it */
+    int32_t num_w = 5 * ui.code_cw / 256;
+    for (uint32_t i = 0; i < ui.code_page && ui.code_top + i < ui.code_rows; i++) {
+        uint32_t k = ui.code_top + i;
+        int32_t base = ui.code_y + (int32_t)i * ui.code_lh + ui.code_lh - S(5);
+        ck_rect line_box = {ui.code_x - S(4), base - ui.code_lh, ui.code_w + S(8), ui.code_lh + S(6)};
+        if (!ck_meets(line_box, r))
+            continue;
+        if (code_no[k]) {
+            char ln[6];
+            unsigned n = 0;
+            uint32_t no = code_no[k];
+            do
+                ln[n++] = (char)('0' + no % 10);
+            while ((no /= 10) && n < 5);
+            char rev[6];
+            for (unsigned j = 0; j < n; j++)
+                rev[j] = ln[n - 1 - j];
+            code_letters(r, ui.code_x + (int32_t)(4 - n) * ui.code_cw / 256, base, rev, n, CK_RGB(130, 140, 176),
+                         222 * A >> 8);
+        }
+        code_letters(r, ui.code_x + num_w, base, code_txt + code_st[k], code_ln[k], CK_RGB(236, 240, 252),
+                     236 * A >> 8);
+    }
+    /* where the page sits in the whole: one thread of light down the left side, brighter for the rows shown */
+    int32_t tx = ui.code_x - S(22), th = ui.code_h;
+    uint32_t rows = ui.code_rows ? ui.code_rows : 1;
+    int32_t y0 = ui.code_y + (int32_t)((int64_t)th * ui.code_top / rows);
+    int32_t y1 = ui.code_y + (int32_t)((int64_t)th * ck_min((int32_t)(ui.code_top + ui.code_page), (int32_t)rows) / rows);
+    ck_rect tr = {tx - S(1), ui.code_y, ck_max(S(2), 2), th};
+    if (ck_clip(&tr, r))
+        for (int32_t y = tr.y; y < tr.y + tr.h; y++) {
+            uint32_t *row = ui.back + (size_t)y * (size_t)ui.w;
+            uint32_t a = y >= y0 && y < y1 ? 150u : 40u;
+            for (int32_t x = tr.x; x < tr.x + tr.w; x++)
+                row[x] = ck_add(row[x], CK_RGB(150, 170, 255), a * A >> 8);
+        }
+    /* how to read it, quietly under it */
+    static const char help[] = "Up, Down, Page Up, Page Down to read. Escape puts it away.";
+    text(&ui.cv, r, &ui.small, ui.code_x, ui.code_y + ui.code_h + S(30), help, sizeof help - 1, CK_RGB(130, 140, 176),
+         222 * A >> 8);
 }
 
 /* ---- the guest's line rising into Allen, and the thoughts it becomes ---- */
@@ -759,6 +881,7 @@ static void compose(const ck_rect *r)
     }
     draw_map(r, t);
     ck_allen_canvas_draw(&stage, &ui.cv, r);
+    draw_code(r);
     ck_mind_draw(&ui.mind, &ui.cv, r);
     draw_guest(r, t);
     draw_words(&ui.now, r, t);
@@ -885,6 +1008,28 @@ static void take_notes(uint32_t t)
         for (unsigned i = 0; i < ui.input_len; i++)
             ui.input[i] = note.input[i];
         ui.key_t = t, ui.quiet_t = t, ui.input_moved = 1;
+    }
+    ui.working = note.working;
+    if (note.code_gen != ui.seen_code) {
+        ui.seen_code = note.code_gen;
+        if (note.code_on) {
+            for (unsigned i = 0; i < note.code_len; i++)
+                code_txt[i] = note_code[i];
+            code_txt[note.code_len] = 0;
+            ui.code_len = note.code_len;
+            copy(ui.code_lang, note.code_lang, sizeof ui.code_lang);
+            ui.code_rows = ck_code_rows(code_txt, ui.code_len, ui.code_cols, code_st, code_ln, code_no, CODE_ROWS_MAX);
+            ui.code_lines = ck_code_lines(code_txt, ui.code_len);
+            note.code_top = 0;
+            note.code_rows = ui.code_rows;
+            note.code_page = ui.code_page;
+        }
+        ui.code_on = note.code_on;
+        mark(ui.code_box);
+    }
+    if (note.code_top != ui.code_top) {
+        ui.code_top = note.code_top;
+        mark(ui.code_box);
     }
     if (note.said_gen != ui.seen_said) {
         ui.seen_said = note.said_gen;
@@ -1078,11 +1223,13 @@ static void advance(uint32_t t)
     int speaking = w->len && t >= w->from && t < last_letter + 300;
     ui.level = speaking ? ck_exp_neg((t - ui.word_t) * 256 / 200) >> 8 : 0;
     ck_mind_voice(&ui.mind, ui.level);
-    if (!speaking && !ui.speak_t && (ui.mind.mode == CK_MIND_SPEAK || ui.mind.mode == CK_MIND_THINK) &&
+    if (!speaking && !ui.speak_t && !ui.working && (ui.mind.mode == CK_MIND_SPEAK || ui.mind.mode == CK_MIND_THINK) &&
         w->len && t >= w->from) {
         ck_mind_mode(&ui.mind, CK_MIND_IDLE, t);
         ui.quiet_t = t;
     }
+    if (ui.working && !speaking && !ui.speak_t && ui.mind.mode != CK_MIND_THINK)
+        ck_mind_mode(&ui.mind, CK_MIND_THINK, t); /* far off, still at it: he goes on thinking */
     if (ui.mind.mode != CK_MIND_THINK && ui.mind.mode != CK_MIND_SPEAK)
         ck_mind_mode(&ui.mind, ui.input_len && t - ui.key_t < 4000 ? CK_MIND_LISTEN : CK_MIND_IDLE, t);
     uint32_t rise = w->len ? ck_smooth(ck_prog(t, w->from, w->from + 600)) : 0;
@@ -1117,6 +1264,12 @@ static void advance(uint32_t t)
         if (t - ui.guest_t > 2400)
             ui.guest_t = 0;
     }
+
+    /* the code: in over 0.6 s, out over 0.9 s */
+    ui.code_a = toward(ui.code_a, ui.code_on ? 256 : 0, dt, ui.code_on ? 600 : 900);
+    if (ui.code_a != ui.code_was)
+        mark(ui.code_box);
+    ui.code_was = ui.code_a;
 
     /* the setup wizard's panel: in and out, its lines easing in, the lit choice moving */
     ui.pan_a = toward(ui.pan_a, ui.pan.on ? 256 : 0, dt, ui.pan.on ? 600 : 900);
@@ -1288,6 +1441,23 @@ int ck_allen_ui_start(volatile uint32_t *fb, uint32_t w, uint32_t h, uint32_t pi
     ui.map_box = (ck_rect){ui.mx - S(190), ui.my - ui.mr - S(64), S(380), 2 * ui.mr + S(150)};
     ui.pan_box = (ck_rect){ui.w / 2 - S(640), pan_line_y(0) - S(34), S(1280), (int32_t)CK_ALLEN_UI_PANEL_LINES * S(31) + S(30)};
     ui.row_box = (ck_rect){ui.w / 2 - S(900), ui.bar.y - S(24), S(1800), ui.h - ui.bar.y + S(24)};
+    /* the code: left of Allen, from near the top to above the bar, one width per letter */
+    {
+        static const char wide[] = "MWmw0@#%";
+        uint32_t cw = 0;
+        for (unsigned i = 0; i + 1 < sizeof wide; i++)
+            cw = cw > ck_af_advance(&ui.small, wide[i]) ? cw : ck_af_advance(&ui.small, wide[i]);
+        ui.code_cw = (int32_t)cw;
+        ui.code_lh = S(21);
+        ui.code_x = S(84);
+        ui.code_y = S(92);
+        ui.code_w = ui.w / 2 - S(300) - ui.code_x;
+        ui.code_h = ui.bar.y - S(70) - ui.code_y;
+        ui.code_page = ui.code_lh > 0 ? (uint32_t)(ui.code_h / ui.code_lh) : 1;
+        int32_t cols = cw ? (int32_t)((int64_t)ui.code_w * 256 / cw) - 5 : 40;
+        ui.code_cols = cols > 20 ? (uint32_t)cols : 20;
+        ui.code_box = ck_grow((ck_rect){ui.code_x - S(36), ui.code_y - S(56), ui.code_w + S(56), ui.code_h + S(100)}, S(50));
+    }
     ui.lit_was = -1;
     ui.lit = -1;
     ui.ripple_was = -1;
@@ -1443,5 +1613,55 @@ void ck_allen_ui_panel(const ck_allen_ui_panel_view *p, uint64_t now)
         copy(d->prompt, p->prompt, sizeof d->prompt);
     }
     note.panel_gen++;
+    unlock();
+}
+
+void ck_allen_ui_code(const char *text, unsigned bytes, const char *lang, uint64_t now)
+{
+    (void)now;
+    lock();
+    note.code_on = text != 0;
+    if (text) {
+        unsigned n = bytes < CK_ALLEN_UI_CODE_MAX ? bytes : CK_ALLEN_UI_CODE_MAX;
+        for (unsigned i = 0; i < n; i++) {
+            char ch = text[i];
+            note_code[i] = ch == '\n' || (ch >= 32 && ch <= 126) ? ch : '?';
+        }
+        note_code[n] = 0;
+        note.code_len = n;
+        note.code_top = note.code_rows = note.code_page = 0;
+        copy(note.code_lang, lang ? lang : "", sizeof note.code_lang);
+    }
+    note.code_gen++;
+    unlock();
+}
+
+int ck_allen_ui_code_scroll(int rows, unsigned *top, unsigned *total, unsigned *page)
+{
+    /* the keys move the top row; the frame takes it with its next notes */
+    lock();
+    int on = note.code_on && note.code_page;
+    if (on) {
+        int32_t pg = (int32_t)note.code_page > 1 ? (int32_t)note.code_page - 1 : 1;
+        int32_t d = rows == CK_ALLEN_UI_CODE_PAGE ? pg : rows == -CK_ALLEN_UI_CODE_PAGE ? -pg : rows;
+        note.code_top = ck_code_scroll(note.code_top, d, note.code_rows, note.code_page);
+        if (top)
+            *top = note.code_top;
+        if (total)
+            *total = note.code_rows;
+        if (page)
+            *page = note.code_page;
+    }
+    int r = on ? (int)note.code_top : -1;
+    unlock();
+    return r;
+}
+
+int ck_allen_ui_code_on(void) { return note.code_on; }
+
+void ck_allen_ui_working(int on)
+{
+    lock();
+    note.working = on;
     unlock();
 }

@@ -14,7 +14,7 @@ trap 'rm -rf "$W"' EXIT
 fail() { echo "AIENOS_BOOT_SHOW: FAIL $*"; exit 1; }
 CC=${HOSTCC:-cc}
 $CC -std=gnu11 -O2 -Wall -Wextra -Werror -pthread -o "$W/test" $K/ui/tests/boot_show_test.c $K/ui/boot_show.c \
-    $K/ui/allen_ui.c $K/ui/paint.c $K/ui/night.c $K/ui/sky_real.c $K/ui/sky_data.c $K/ui/mind.c $K/ui/flow.c \
+    $K/ui/allen_ui.c $K/svc/allen_code.c $K/ui/paint.c $K/ui/night.c $K/ui/sky_real.c $K/ui/sky_data.c $K/ui/mind.c $K/ui/flow.c \
     $K/ui/allen_font.c $K/ui/canvas.c $K/svc/allen_scene.c || fail "test does not build"
 "$W/test" || fail "receipt checks"
 for s in ${BOOT_SHOW_SIZES:-}; do

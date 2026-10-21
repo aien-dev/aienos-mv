@@ -38,4 +38,16 @@ unsigned ck_allen_job_memory(const ck_allen_mind *m, unsigned notes_max, char *o
  * model) is 1 with part 0, total 0 and an empty text. */
 int ck_allen_say_line(const char *in, uint32_t *seq, unsigned *part, unsigned *total, char *text, unsigned cap);
 
+/* Code asked of the Spark (svc/allen_code.h). folded as ck_allen_want_of's.
+ * 1 when the line asks for code to be written ("make me a calculator",
+ * "write a snake game in python"); 0 for anything else, prose included. */
+int ck_allen_wants_code(const char *folded);
+/* 1 when the line reads as a change to code just shown ("now add a square
+ * root key"); the caller asks only while code is fresh. */
+int ck_allen_code_more(const char *folded);
+/* The courier job for a code request: "JOB <seq> code|code-more <instruction>\t<line>"
+ * (want "code" starts afresh, "code-more" goes on with the code before).
+ * Returns its length, 0 when it does not fit in cap. */
+unsigned ck_allen_code_job(const ck_allen_mind *m, uint32_t seq, const char *line, int more, char *out, unsigned cap);
+
 #endif

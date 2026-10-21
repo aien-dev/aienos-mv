@@ -50,8 +50,8 @@ for f in svc/allen_scene ui/canvas; do
 done
 echo "kernel rules: allen_scene.c and canvas.c build freestanding, no floating point, no outside calls"
 
-SRC="$K/ui/tests/canvas_test.c $K/ui/canvas.c $K/svc/allen_scene.c $K/ui/allen_ui.c $K/ui/paint.c $K/ui/night.c \
-    $K/ui/mind.c $K/ui/flow.c $K/ui/allen_font.c"
+SRC="$K/ui/tests/canvas_test.c $K/ui/canvas.c $K/svc/allen_scene.c $K/ui/allen_ui.c $K/svc/allen_code.c $K/ui/paint.c $K/ui/night.c \
+    $K/ui/mind.c $K/ui/flow.c $K/ui/allen_font.c $K/ui/sky_real.c $K/ui/sky_data.c"
 
 # 2. parser and fuzz under the sanitizers
 $CC -std=gnu11 -O1 -g -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -Wall -Wextra \

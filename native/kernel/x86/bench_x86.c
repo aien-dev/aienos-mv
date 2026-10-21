@@ -43,9 +43,19 @@
 
 #if CK_X86_BENCH
 
-/* HMAC-SHA256 key bound into the signed image. */
+/* HMAC-SHA256 key bound into the signed image: the build's own key from a
+ * header made in the build dir (make CK_X86_BENCH_KEY_FILE=..., never on a
+ * command line), else the test key. */
+#ifdef CK_X86_BENCH_KEY_H
+#include CK_X86_BENCH_KEY_H
+#define BENCH_KEY_KIND "this image's own key"
+#endif
 #ifndef CK_X86_BENCH_KEY
 #define CK_X86_BENCH_KEY BENCH_TEST_KEY_INIT
+#define BENCH_KEY_KIND "the TEST key"
+#endif
+#ifndef BENCH_KEY_KIND
+#define BENCH_KEY_KIND "a key set at build time"
 #endif
 static const uint8_t bench_key[32] = { CK_X86_BENCH_KEY };
 
@@ -350,8 +360,8 @@ static void announce_ready(void)
     if (said || !bench_dev_ready)
         return;
     said = 1;
-    ck_printf("bench: GPU bench console ready port=%u (HMAC-SHA256, key bound in image)\n",
-              (unsigned)CK_X86_BENCH_PORT);
+    ck_printf("bench: GPU bench console ready port=%u (HMAC-SHA256, %s bound in image)\n",
+              (unsigned)CK_X86_BENCH_PORT, BENCH_KEY_KIND);
 }
 
 void ck_x86_bench_init(volatile uint8_t *gpu_cfg, volatile uint32_t *gpu_bar5,

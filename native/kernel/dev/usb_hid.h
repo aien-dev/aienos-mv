@@ -22,7 +22,8 @@
 #define CK_HID_REPORT_LEN 8u
 #define CK_HID_MAX_KEYS 6u
 enum ck_key_kind { CK_KEY_NONE = 0, CK_KEY_CHAR, CK_KEY_ENTER, CK_KEY_BACKSPACE, CK_KEY_ESCAPE,
-                   CK_KEY_UP, CK_KEY_DOWN, CK_KEY_LEFT, CK_KEY_RIGHT, CK_KEY_TAB }; /* moves: the line editor ignores them */
+                   CK_KEY_UP, CK_KEY_DOWN, CK_KEY_LEFT, CK_KEY_RIGHT, CK_KEY_TAB, /* moves: the line editor ignores them */
+                   CK_KEY_PGUP, CK_KEY_PGDN, CK_KEY_HOME, CK_KEY_END }; /* reading keys (code on the screen): ignored too */
 typedef struct {
     uint8_t kind; /* enum ck_key_kind */
     char c;       /* CK_KEY_CHAR only */

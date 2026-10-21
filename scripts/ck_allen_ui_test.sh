@@ -31,7 +31,7 @@ trap 'rm -rf "$W"' EXIT
 fail() { echo "AIENOS_ALLEN_UI: FAIL $*"; exit 1; }
 CC=${HOSTCC:-cc}
 mkdir -p "$OUT"
-$CC -std=gnu11 -O2 -Wall -Wextra -Werror -pthread -o "$W/test" $K/ui/tests/allen_ui_test.c $K/ui/allen_ui.c \
+$CC -std=gnu11 -O2 -Wall -Wextra -Werror -pthread -o "$W/test" $K/ui/tests/allen_ui_test.c $K/ui/allen_ui.c $K/svc/allen_code.c \
     $K/ui/paint.c $K/ui/night.c $K/ui/sky_real.c $K/ui/sky_data.c $K/ui/mind.c $K/ui/flow.c \
     $K/ui/allen_font.c $K/ui/canvas.c $K/svc/allen_scene.c $K/svc/allen_reply.c $K/svc/allen_notes.c $K/svc/allen_intent.c \
     $K/svc/setup_wizard.c $K/svc/setup_inv.c || fail "test does not build"

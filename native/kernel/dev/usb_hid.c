@@ -32,6 +32,8 @@ ck_key_event ck_hid_usage(uint8_t usage, int shift)
     } else if (usage >= 0x4f && usage <= 0x52) { /* Right, Left, Down, Up arrow */
         static const uint8_t arrow[4] = {CK_KEY_RIGHT, CK_KEY_LEFT, CK_KEY_DOWN, CK_KEY_UP};
         ev.kind = arrow[usage - 0x4f];
+    } else if (usage == 0x4a || usage == 0x4b || usage == 0x4d || usage == 0x4e) { /* Home, Page Up, End, Page Down */
+        ev.kind = usage == 0x4a ? CK_KEY_HOME : usage == 0x4b ? CK_KEY_PGUP : usage == 0x4d ? CK_KEY_END : CK_KEY_PGDN;
     } else if (usage == 0x2b) { /* Tab */
         ev.kind = CK_KEY_TAB;
     } else if (usage == USAGE_SPACE) {

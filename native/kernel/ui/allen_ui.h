@@ -115,4 +115,23 @@ typedef struct {
 } ck_allen_ui_panel_view;
 void ck_allen_ui_panel(const ck_allen_ui_panel_view *p, uint64_t now);
 
+/* Code from the Spark (svc/allen_code.h): text (bytes long, printable ASCII
+ * and newlines; at most CK_ALLEN_UI_CODE_MAX bytes are kept) shown to the left
+ * of Allen in his own type set at one width per letter, numbered by line,
+ * long lines going on in the next row, on a soft pool of shade (no window,
+ * no edge). lang names the language ("" for none). While it is up Allen's
+ * words keep to a narrower column. NULL text: the code fades away. */
+#define CK_ALLEN_UI_CODE_MAX 32768u
+void ck_allen_ui_code(const char *text, unsigned bytes, const char *lang, uint64_t now);
+/* Scrolls the code by rows (negative: up) or by pages (rows a screenful:
+ * CK_ALLEN_UI_CODE_PAGE). Returns the top row after it, or -1 with no code up.
+ * The first row shown and the rows in all are given back for the record. */
+#define CK_ALLEN_UI_CODE_PAGE 100000
+int ck_allen_ui_code_scroll(int rows, unsigned *top, unsigned *total, unsigned *page);
+/* 1 while code is shown. */
+int ck_allen_ui_code_on(void);
+/* Allen is working on something far off: after his words he goes on
+ * thinking (the water turns) until this is 0 again. */
+void ck_allen_ui_working(int on);
+
 #endif
