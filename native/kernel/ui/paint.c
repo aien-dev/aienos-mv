@@ -73,7 +73,7 @@ uint32_t ck_atan2(int32_t y, int32_t x)
     }
     int64_t m = X > (Y < 0 ? -Y : Y) ? X : (Y < 0 ? -Y : Y);
     while (m < (1 << 20))
-        X <<= 1, Y <<= 1, m <<= 1;
+        X *= 2, Y *= 2, m *= 2; /* not a shift: Y may be negative */
     while (m >= (1 << 22))
         X >>= 1, Y >>= 1, m >>= 1;
     int32_t z = 0;

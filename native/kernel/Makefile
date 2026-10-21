@@ -2318,13 +2318,17 @@ $(IMACKERN_DIR)/xhci_x86.o: $(X86K)/xhci_x86.c $(IMACKERN_HDRS) $(KDIR)/mm/frame
 $(IMACKERN_DIR)/hda_x86.o: $(X86K)/hda_x86.c $(IMACKERN_HDRS) $(KDIR)/mm/frames.h $(KDIR)/ui/chirp.h $(KDIR)/ui/night.h
 $(IMACKERN_DIR)/usb_hid.o: $(KDIR)/dev/usb_hid.c $(KDIR)/dev/usb_hid.h $(NATIVE)/argus/sha256.h
 $(IMACKERN_DIR)/sha256.o: $(NATIVE)/argus/sha256.c $(NATIVE)/argus/sha256.h
-$(IMACKERN_DIR)/allen_ui.o: $(KDIR)/ui/allen_ui.c $(KDIR)/ui/allen_ui.h $(KDIR)/ui/allen_font.h $(KDIR)/ui/night.h $(KDIR)/ui/mind.h $(KDIR)/ui/flow.h $(KDIR)/ui/paint.h
+$(IMACKERN_DIR)/allen_ui.o: $(KDIR)/ui/allen_ui.c $(KDIR)/ui/allen_ui.h $(KDIR)/ui/allen_font.h $(KDIR)/ui/night.h $(KDIR)/ui/mind.h $(KDIR)/ui/flow.h $(KDIR)/ui/paint.h $(KDIR)/ui/canvas.h
 $(IMACKERN_DIR)/allen_font.o: $(KDIR)/ui/allen_font.c $(KDIR)/ui/allen_font.h
 $(IMACKERN_DIR)/paint.o: $(KDIR)/ui/paint.c $(KDIR)/ui/paint.h $(KDIR)/ui/allen_font.h
 $(IMACKERN_DIR)/night.o: $(KDIR)/ui/night.c $(KDIR)/ui/night.h $(KDIR)/ui/paint.h
 $(IMACKERN_DIR)/chirp.o: $(KDIR)/ui/chirp.c $(KDIR)/ui/chirp.h $(KDIR)/ui/night.h
 $(IMACKERN_DIR)/mind.o: $(KDIR)/ui/mind.c $(KDIR)/ui/mind.h $(KDIR)/ui/paint.h
 $(IMACKERN_DIR)/flow.o: $(KDIR)/ui/flow.c $(KDIR)/ui/flow.h $(KDIR)/ui/paint.h
+# Allen's canvas: the scene the model writes (svc/allen_scene.c) and how it is painted (ui/canvas.c).
+IMACKERN_OBJS += $(IMACKERN_DIR)/canvas.o $(IMACKERN_DIR)/allen_scene.o
+$(IMACKERN_DIR)/canvas.o: $(KDIR)/ui/canvas.c $(KDIR)/ui/canvas.h $(KDIR)/ui/paint.h $(KDIR)/ui/flow.h $(KDIR)/ui/allen_font.h $(KDIR)/svc/allen_scene.h
+$(IMACKERN_DIR)/allen_scene.o: $(KDIR)/svc/allen_scene.c $(KDIR)/svc/allen_scene.h
 $(IMACKERN_DIR)/allen_reply.o: $(KDIR)/svc/allen_reply.c $(KDIR)/svc/allen_reply.h $(KDIR)/svc/allen_notes.h
 $(IMACKERN_DIR)/allen_intent.o: $(KDIR)/svc/allen_intent.c $(KDIR)/svc/allen_intent.h $(KDIR)/svc/allen_reply.h
 $(IMACKERN_DIR)/courier_x86.o: $(X86K)/courier_x86.c $(IMACKERN_HDRS) $(KDIR)/svc/courier.h

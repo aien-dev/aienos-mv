@@ -18,6 +18,7 @@
  * a 1920 x 1080 grid and scaled to the screen (k, 1/256). */
 #include "allen_ui.h"
 #include "allen_font.h"
+#include "canvas.h"
 #include "flow.h"
 #include "mind.h"
 #include "night.h"
@@ -66,6 +67,8 @@ static struct {
     int lit;
     uint8_t ea[CK_ALLEN_UI_MAP_LINKS], eb[CK_ALLEN_UI_MAP_LINKS];
     char label[TEXT_MAX];
+    ck_scene scene; /* what the model painted with its answer (svc/allen_scene.h) */
+    unsigned scene_gen;
 } note;
 
 static struct {
@@ -132,6 +135,10 @@ static struct {
     int32_t ripple_was;
     uint32_t frames, slowest, total_ticks;
 } ui;
+
+/* Allen's canvas: the things the model asks to be shown round him (ui/canvas.c) */
+static ck_allen_canvas stage;
+static unsigned seen_scene;
 
 #define S(v) ((int32_t)(((int64_t)(v) * (int64_t)ui.k + 128) / 256))
 #define DIM_FULL (256u << 8)
@@ -589,6 +596,7 @@ static void compose(const ck_rect *r)
         unflash(r, t);
     }
     draw_map(r, t);
+    ck_allen_canvas_draw(&stage, &ui.cv, r);
     ck_mind_draw(&ui.mind, &ui.cv, r);
     draw_guest(r, t);
     draw_words(&ui.now, r, t);
@@ -720,6 +728,7 @@ static void take_notes(uint32_t t)
             ui.guest_len = copy(ui.guest, note.line, TEXT_MAX);
             ui.guest_x = ui.bar.x + S(30);
             ui.guest_t = t;
+            ck_allen_canvas_clear(&stage, t); /* a new line: what was shown for the last one goes */
         }
         /* what is on screen fades; Allen thinks, then speaks. With no reply
          * yet he keeps thinking (the water turns) until it comes. */
@@ -749,6 +758,10 @@ static void take_notes(uint32_t t)
         if (ui.lit >= 0 && ui.n)
             ui.map_t = t ? t : 1;
         mark(ui.map_box);
+    }
+    if (note.scene_gen != seen_scene) { /* the things come as he starts to speak */
+        seen_scene = note.scene_gen;
+        ck_allen_canvas_show(&stage, &note.scene, ui.speak_t ? ui.speak_t : t);
     }
     unlock();
 }
@@ -899,6 +912,7 @@ static void advance(uint32_t t)
     ui.map_was = ui.map_a;
     if (ui.lit >= 0 && ui.map_t && t - ui.map_t < 1200) /* the spark's path, Allen to the star */
         mark(ck_union(ck_mind_dirty(&ui.mind), ui.map_box));
+    ck_allen_canvas_at(&stage, t, ui.mind.hx, ui.mind.hy, &ui.flow, mark);
 }
 
 int ck_allen_ui_tick(uint64_t now)
@@ -1035,6 +1049,9 @@ int ck_allen_ui_start(volatile uint32_t *fb, uint32_t w, uint32_t h, uint32_t pi
     ui.ripple_was = -1;
     /* the typed line's ink leaves from just above the bar, so the hint under it stays clear */
     ck_flow_init(&ui.flow, ui.w, ui.h, ui.cx, ui.cy, ui.mind.R, ui.bar.x + ui.bar.w / 2, ui.bar.y - ui.bar.h / 2, 0);
+    if (ck_allen_canvas_init(&stage, ui.w, ui.h, ui.k, ui.cx, ui.cy, &ui.voice, &ui.body, &ui.small))
+        return -1;
+    seen_scene = note.scene_gen;
     ui.seen_input = note.input_gen, ui.seen_said = note.said_gen, ui.seen_wake = note.wake_gen;
     ui.seen_map = note.map_gen - 1; /* the map kept from before is taken by the first frame */
     ui.started = 1;
@@ -1126,4 +1143,19 @@ void ck_allen_ui_named(const char *name)
     ui.hint_len = n;
     if (ui.started)
         mark(ui.bar);
+}
+
+void ck_allen_ui_scene(const char *scene, unsigned len, uint64_t now)
+{
+    static ck_scene s; /* read outside the lock; one caller at a time, as for the others */
+    (void)now;
+    ck_scene_parse(scene, len, &s, 0);
+    lock();
+    note.has_line = 0;
+    note.think = 0;
+    copy(note.reply, ck_scene_say(&s), TEXT_MAX);
+    note.said_gen++;
+    note.scene = s;
+    note.scene_gen++;
+    unlock();
 }
