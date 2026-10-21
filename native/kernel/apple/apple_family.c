@@ -1,7 +1,8 @@
 /* apple_family.c -- Apple Silicon family table and platform probe (see
  * apple_family.h). Row facts: AsahiLinux/linux 94fb2334 device trees
  * (root compatible, interrupt controller compatible, cpu node count);
- * idle policy per docs/APPLE_SILICON_PLATFORM.md section "Family table". */
+ * idle policy, WFIT/WFET and the CTRR hole per docs/APPLE_SILICON_FAMILY_MAP.md
+ * (L372) section 5; see docs/APPLE_SILICON_PLATFORM.md section "Family table". */
 #include "apple_family.h"
 #include "fmt.h"
 
@@ -15,24 +16,28 @@
 #define WFI CK_APPLE_IDLE_WFI_RETAINED
 #define SPIN CK_APPLE_IDLE_SPIN
 #define ST CK_APPLE_START_SPIN_TABLE
-#define P16K 16384u
+/* M1 to M3: WFIT/WFET allowed, no CTRR hole. M4-class (L372 family map
+ * section 5, m1n1 kboot.c and chickens.c, OBSERVED there): no WFIT/WFET, and
+ * a CTRR range left enabled on the secondary cores only. */
+#define WFXT 1, 0
+#define M4CLASS 0, 1
 
 static const struct ck_apple_soc table[] = {
-    /* compat         id      name        gen aic idle start dies usbc       cpus dart  aic node compatible */
-    {"apple,t8103", 0x8103, "M1", 1, 1, WFI, ST, 1, I2C, 8, P16K, "apple,t8103-aic"},
-    {"apple,t6000", 0x6000, "M1 Pro", 1, 2, WFI, ST, 1, I2C, 10, P16K, "apple,aic2"},
-    {"apple,t6001", 0x6001, "M1 Max", 1, 2, WFI, ST, 1, I2C, 10, P16K, "apple,aic2"},
-    {"apple,t6002", 0x6002, "M1 Ultra", 1, 2, WFI, ST, 2, I2C, 20, P16K, "apple,aic2"},
-    {"apple,t8112", 0x8112, "M2", 2, 2, WFI, ST, 1, I2C, 8, P16K, "apple,aic2"},
-    {"apple,t6020", 0x6020, "M2 Pro", 2, 2, WFI, ST, 1, I2C, 12, P16K, "apple,aic2"},
-    {"apple,t6021", 0x6021, "M2 Max", 2, 2, WFI, ST, 1, I2C, 12, P16K, "apple,aic2"},
-    {"apple,t6022", 0x6022, "M2 Ultra", 2, 2, WFI, ST, 2, I2C, 24, P16K, "apple,aic2"},
-    {"apple,t8122", 0x8122, "M3", 3, 3, WFI, ST, 1, I2C | SPMI, 8, P16K, "apple,t8122-aic3"},
-    {"apple,t6030", 0x6030, "M3 Pro", 3, 3, WFI, ST, 1, SPMI, 12, P16K, "apple,t8122-aic3"},
-    {"apple,t6031", 0x6031, "M3 Max", 3, 3, WFI, ST, 1, SPMI, 16, P16K, "apple,t8122-aic3"},
-    {"apple,t6034", 0x6034, "M3 Max (binned)", 3, 3, WFI, ST, 1, SPMI, 16, P16K, "apple,t8122-aic3"},
-    {"apple,t6032", 0x6032, "M3 Ultra", 3, 3, WFI, ST, 2, 0, 32, P16K, "apple,t8122-aic3"},
-    {"apple,t8132", 0x8132, "M4", 4, 3, SPIN, ST, 1, 0, 10, P16K, "apple,t8122-aic3"},
+    /* compat         id      name        gen aic idle start dies usbc       cpus wfxt,ctrr aic node compatible */
+    {"apple,t8103", 0x8103, "M1", 1, 1, WFI, ST, 1, I2C, 8, WFXT, "apple,t8103-aic"},
+    {"apple,t6000", 0x6000, "M1 Pro", 1, 2, WFI, ST, 1, I2C, 10, WFXT, "apple,aic2"},
+    {"apple,t6001", 0x6001, "M1 Max", 1, 2, WFI, ST, 1, I2C, 10, WFXT, "apple,aic2"},
+    {"apple,t6002", 0x6002, "M1 Ultra", 1, 2, WFI, ST, 2, I2C, 20, WFXT, "apple,aic2"},
+    {"apple,t8112", 0x8112, "M2", 2, 2, WFI, ST, 1, I2C, 8, WFXT, "apple,aic2"},
+    {"apple,t6020", 0x6020, "M2 Pro", 2, 2, WFI, ST, 1, I2C, 12, WFXT, "apple,aic2"},
+    {"apple,t6021", 0x6021, "M2 Max", 2, 2, WFI, ST, 1, I2C, 12, WFXT, "apple,aic2"},
+    {"apple,t6022", 0x6022, "M2 Ultra", 2, 2, WFI, ST, 2, I2C, 24, WFXT, "apple,aic2"},
+    {"apple,t8122", 0x8122, "M3", 3, 3, WFI, ST, 1, I2C | SPMI, 8, WFXT, "apple,t8122-aic3"},
+    {"apple,t6030", 0x6030, "M3 Pro", 3, 3, WFI, ST, 1, SPMI, 12, WFXT, "apple,t8122-aic3"},
+    {"apple,t6031", 0x6031, "M3 Max", 3, 3, WFI, ST, 1, SPMI, 16, WFXT, "apple,t8122-aic3"},
+    {"apple,t6034", 0x6034, "M3 Max (binned)", 3, 3, WFI, ST, 1, SPMI, 16, WFXT, "apple,t8122-aic3"},
+    {"apple,t6032", 0x6032, "M3 Ultra", 3, 3, WFI, ST, 2, 0, 32, WFXT, "apple,t8122-aic3"},
+    {"apple,t8132", 0x8132, "M4", 4, 3, SPIN, ST, 1, 0, 10, M4CLASS, "apple,t8122-aic3"},
 };
 
 #define TABLE_ROWS (sizeof(table) / sizeof(table[0]))
@@ -217,10 +222,10 @@ int ck_apple_report(const struct ck_apple_platform *p, char *buf, size_t n)
     int unexpected = p->usbc != CK_APPLE_USBC_NONE && !(s->usbc_seen & (1u << p->usbc));
     return ck_snprintf(buf, n,
                        "apple: soc=t%04x name=\"%s\" gen=M%u aic=v%u aic_base=0x%llx aic_event=0x%llx "
-                       "idle=%s start=spin-table cpus=%u released=%u dart_page=%u usbc=%s%s",
+                       "idle=%s start=spin-table cpus=%u released=%u wfxt=%s ctrr_hole=%s usbc=%s%s",
                        s->soc_id, s->name, s->gen, s->aic, (unsigned long long)p->aic_base,
                        (unsigned long long)p->aic_event, ck_apple_idle_name(s->idle), p->ncpus, released,
-                       s->dart_page, ck_apple_usbc_name(p->usbc), unexpected ? "(unexpected)" : "");
+                       s->wfxt_ok ? "yes" : "no", s->ctrr_hole ? "reserve" : "no", ck_apple_usbc_name(p->usbc), unexpected ? "(unexpected)" : "");
 }
 
 uint8_t ck_apple_idle_effective(const struct ck_apple_soc *soc, int retention_ready)

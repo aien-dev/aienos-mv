@@ -52,7 +52,8 @@ struct ck_apple_soc {
     uint8_t dies;           /* AIC dies (2 on Ultra parts) */
     uint8_t usbc_seen;      /* bits (1 << CK_APPLE_USBC_*) seen in the pinned boards; 0 = none described yet */
     uint16_t max_cpus;      /* cpu nodes in the pinned tree */
-    uint32_t dart_page;     /* DART translation granule, bytes */
+    uint8_t wfxt_ok;        /* WFIT/WFET allowed in delay loops (0 on M4-class) */
+    uint8_t ctrr_hole;      /* secondaries keep a CTRR range that must be reserved (M4-class) */
     const char *aic_compat; /* compatible the interrupt controller node must carry */
 };
 

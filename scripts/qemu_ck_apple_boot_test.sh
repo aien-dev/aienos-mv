@@ -17,6 +17,10 @@
 #            "REFUSED apple,t8112 row wants interrupt controller".
 #   mutant   TEST-ONLY E2H image with the E2H-0 CNTHCTL_EL2 bits: must FAIL
 #            (red before green; proves the gate sees the timer-access layout).
+# Every row also starts CPUs 1-3 through PSCI CPU_ON into the secondary entry
+# the spin table uses on a Mac (apple_secondary_entry): each must check in at
+# EL1 after its own EL2 -> EL1 drop (QEMU path only: the spin table itself is
+# covered by the host model tests/test_apple_smp.c).
 # Every row except mutant also needs "AIENOS_APPLE_IMAGE: PASS" and QEMU exit 0.
 # Last line: AIENOS_CK_APPLE_BOOT: PASS|FAIL|NOT_RUN.
 # Lock and quiet flag: scripts/lib_gate_hold.sh, like every QEMU gate here.
@@ -72,6 +76,7 @@ common() {
     want "$1" "apple: timer ok"
     want "$1" "apple: family table rows=14"
     want "$1" "apple: idle policy in force=spin"
+    want "$1" "apple: secondaries started=3 of 3 (psci CPU_ON"
     if grep -qF "FAULT" "${work}/$1.txt"; then echo "  FAIL $1: fault line"; fail=1; fi
     if [ "$2" = 0 ]; then echo "  ok   $1: qemu exit 0"; else echo "  FAIL $1: qemu exit $2"; fail=1; fi
 }
@@ -91,13 +96,16 @@ want el2 "AIENOS_APPLE_IMAGE: entry el=2 e2h=0"
 want el2 "apple: el2->el1 done (CurrentEL=1, HCR_EL2.E2H=0)"
 want el2 'apple: REFUSED not an Apple platform (root compatible "linux,dummy-virt"); Apple drivers not started'
 want el2 "apple: psci SYSTEM_OFF via smc"
+want el2 "apple: cpu1 mpidr=0x1 checked in at EL1 (entered EL2, E2H=0) via psci CPU_ON"
 common el2-e2h "${el2_e2h_rc}"
 want el2-e2h "AIENOS_APPLE_IMAGE: entry el=2 e2h=1"
 want el2-e2h "apple: el2->el1 done (CurrentEL=1, HCR_EL2.E2H=1, SCTLR_EL12 path)"
+want el2-e2h "apple: cpu3 mpidr=0x3 checked in at EL1 (entered EL2, E2H=1) via psci CPU_ON"
 common el1 "${el1_rc}"
 want el1 "AIENOS_APPLE_IMAGE: entry el=1 e2h=0"
 want el1 "apple: entered at EL1 (CurrentEL=1)"
 want el1 "apple: psci SYSTEM_OFF via hvc"
+want el1 "apple: cpu2 mpidr=0x2 checked in at EL1 (entered EL1, E2H=0) via psci CPU_ON"
 common t8142 "${t8142_rc}"
 want t8142 'apple: REFUSED unknown Apple SoC (root compatible "apple,j999","apple,t8142","apple,arm-platform"; no family table row); Apple drivers not started'
 common noaic "${noaic_rc}"

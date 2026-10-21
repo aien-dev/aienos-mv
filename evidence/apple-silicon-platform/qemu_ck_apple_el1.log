@@ -1,0 +1,19 @@
+
+AIENOS_APPLE_IMAGE: entry el=1 e2h=0 dtb=0x48000000 image=0x40200000-0x4025b000
+apple: entered at EL1 (CurrentEL=1)
+apple: fdt ok version=17 nodes=62 props=240 bytes=1048576 boot_cpuid=0
+apple: console pl011 at 0x9000000 (stdout-path -> /pl011@9000000)
+apple: memory 0x40000000+0x40000000 (memory@40000000)
+apple: memreserve entries=0
+apple: vectors ok (brk at EL1 taken=1, returned)
+apple: timer ok cntfrq=62500000 el1 physical timer fired after 63960 ticks (polled, interrupt masked)
+apple: REFUSED not an Apple platform (root compatible "linux,dummy-virt"); Apple drivers not started
+apple: family table rows=14
+apple: fiq sources now=0x0 (timer bits only off-Apple)
+apple: cpu1 mpidr=0x1 checked in at EL1 (entered EL1, E2H=0) via psci CPU_ON
+apple: cpu2 mpidr=0x2 checked in at EL1 (entered EL1, E2H=0) via psci CPU_ON
+apple: cpu3 mpidr=0x3 checked in at EL1 (entered EL1, E2H=0) via psci CPU_ON
+apple: secondaries started=3 of 3 (psci CPU_ON, QEMU path: the spin table needs an Apple loader)
+apple: idle policy in force=spin (no state-retention setup built yet)
+AIENOS_APPLE_IMAGE: PASS
+apple: psci SYSTEM_OFF via hvc

@@ -24,49 +24,9 @@
 #define SCTLR_EL1_MMU_OFF_LO 0x0800 /* RES1 bits 11, 20, 22, 23, 28, 29: */
 #define SCTLR_EL1_MMU_OFF_HI 0x30d0 /* 0x30d00800, MMU, caches, alignment checks off */
 
-    .section .text.apple_entry, "ax"
-    .global _apple_start
-    .type _apple_start, %function
-_apple_start:
-    msr daifset, #0xf
-    mov x19, x0                         /* device tree */
-    mrs x20, CurrentEL
-    ubfx x20, x20, #2, #2               /* entry EL */
-    mov x21, #0                         /* E2H seen */
-    adrp x2, __image_base
-    add x2, x2, :lo12:__image_base      /* load address == link offset 0 */
-    adrp x3, __rela_start
-    add x3, x3, :lo12:__rela_start
-    adrp x4, __rela_end
-    add x4, x4, :lo12:__rela_end
-1:  cmp x3, x4
-    b.hs 3f
-    ldp x5, x6, [x3]                    /* r_offset, r_info */
-    ldr x7, [x3, #16]                   /* r_addend */
-    add x3, x3, #24
-    and x6, x6, #0xffffffff
-    cmp x6, #1027                       /* R_AARCH64_RELATIVE */
-    b.ne 2f
-    add x7, x7, x2
-    str x7, [x2, x5]
-    b 1b
-2:  cbz x6, 1b                          /* R_AARCH64_NONE */
-    b apple_stop                        /* unknown relocation: no console yet */
-3:  adrp x3, __bss_start
-    add x3, x3, :lo12:__bss_start
-    adrp x4, __bss_end
-    add x4, x4, :lo12:__bss_end
-4:  cmp x3, x4
-    b.hs 5f
-    str xzr, [x3], #8
-    b 4b
-5:  adrp x9, apple_stack_top
-    add x9, x9, :lo12:apple_stack_top
-    mov sp, x9
-    cmp x20, #2
-    b.ne 8f
-
-    /* EL2 -> EL1h */
+/* EL2 -> EL1h, MMU off; x21 = HCR_EL2.E2H read back. Uses x9, x10. Shared by
+ * the boot CPU and every secondary (apple_secondary_entry). */
+    .macro apple_el2_to_el1 target
     mov x9, #(1 << 31)                  /* HCR_EL2.RW: EL1 is AArch64 */
 #ifdef CK_APPLE_TEST_E2H
     orr x9, x9, #(1 << 34)              /* TEST-ONLY: E2H as an Apple CPU forces it */
@@ -115,10 +75,55 @@ _apple_start:
     msr sp_el1, x9
     mov x9, #0x3c5                      /* EL1h, DAIF masked */
     msr spsr_el2, x9
-    adr x9, 8f
+    adr x9, \target
     msr elr_el2, x9
     isb
     eret
+    .endm
+
+    .section .text.apple_entry, "ax"
+    .global _apple_start
+    .type _apple_start, %function
+_apple_start:
+    msr daifset, #0xf
+    mov x19, x0                         /* device tree */
+    mrs x20, CurrentEL
+    ubfx x20, x20, #2, #2               /* entry EL */
+    mov x21, #0                         /* E2H seen */
+    adrp x2, __image_base
+    add x2, x2, :lo12:__image_base      /* load address == link offset 0 */
+    adrp x3, __rela_start
+    add x3, x3, :lo12:__rela_start
+    adrp x4, __rela_end
+    add x4, x4, :lo12:__rela_end
+1:  cmp x3, x4
+    b.hs 3f
+    ldp x5, x6, [x3]                    /* r_offset, r_info */
+    ldr x7, [x3, #16]                   /* r_addend */
+    add x3, x3, #24
+    and x6, x6, #0xffffffff
+    cmp x6, #1027                       /* R_AARCH64_RELATIVE */
+    b.ne 2f
+    add x7, x7, x2
+    str x7, [x2, x5]
+    b 1b
+2:  cbz x6, 1b                          /* R_AARCH64_NONE */
+    b apple_stop                        /* unknown relocation: no console yet */
+3:  adrp x3, __bss_start
+    add x3, x3, :lo12:__bss_start
+    adrp x4, __bss_end
+    add x4, x4, :lo12:__bss_end
+4:  cmp x3, x4
+    b.hs 5f
+    str xzr, [x3], #8
+    b 4b
+5:  adrp x9, apple_stack_top
+    add x9, x9, :lo12:apple_stack_top
+    mov sp, x9
+    cmp x20, #2
+    b.ne 8f
+
+    apple_el2_to_el1 8f
 
 8:  mov x0, x19
     mov x1, x20
@@ -127,6 +132,7 @@ _apple_start:
     mov x30, xzr
     bl apple_main
     .size _apple_start, . - _apple_start
+
 
 /* Final state: interrupts masked, wait for an event forever. Used when there
  * is nothing left to do or no way to report (no console). */
@@ -137,6 +143,59 @@ apple_stop:
 9:  wfe
     b 9b
     .size apple_stop, . - apple_stop
+
+/* Secondary CPU entry (spin-table release on Apple, PSCI CPU_ON in the QEMU
+ * gate): x0..x3 are not used. MMU off, EL2 or EL1, DAIF state unknown. Finds
+ * its index by MPIDR affinity in apple_smp_mpidr[0..apple_smp_n) (filled by
+ * the boot CPU before any release), takes stack idx + 1 of apple_smp_stacks,
+ * drops to EL1 like the boot CPU and calls apple_secondary_main(idx,
+ * entry_el, e2h), which checks in and parks. Unknown MPIDR: apple_stop. */
+    .balign 8
+    .global apple_secondary_entry
+    .type apple_secondary_entry, %function
+apple_secondary_entry:
+    msr daifset, #0xf
+    mrs x0, mpidr_el1
+    movz x1, #0xffff
+    movk x1, #0x00ff, lsl #16
+    movk x1, #0x00ff, lsl #32           /* Aff3 Aff2 Aff1 Aff0: 0xff00ffffff */
+    and x0, x0, x1
+    adrp x2, apple_smp_mpidr
+    add x2, x2, :lo12:apple_smp_mpidr
+    adrp x3, apple_smp_n
+    ldr w3, [x3, :lo12:apple_smp_n]
+    mov x4, #0
+1:  cmp x4, x3
+    b.hs apple_stop
+    ldr x5, [x2, x4, lsl #3]
+    cmp x5, x0
+    b.eq 2f
+    add x4, x4, #1
+    b 1b
+2:  mov x22, x4                         /* cpu index */
+    adrp x9, apple_smp_stacks
+    add x9, x9, :lo12:apple_smp_stacks
+    add x10, x4, #1
+    add x9, x9, x10, lsl #12            /* 4 KiB stack per secondary */
+    mov sp, x9
+    mrs x20, CurrentEL
+    ubfx x20, x20, #2, #2
+    mov x21, #0
+    cmp x20, #2
+    b.ne 8f
+    apple_el2_to_el1 8f
+8:  adrp x9, apple_vectors
+    add x9, x9, :lo12:apple_vectors
+    msr vbar_el1, x9
+    isb
+    mov x0, x22
+    mov x1, x20
+    mov x2, x21
+    mov x29, xzr
+    mov x30, xzr
+    bl apple_secondary_main
+    b apple_stop
+    .size apple_secondary_entry, . - apple_secondary_entry
 
 /* EL1 vectors (Arm ARM D1.10.2: 16 entries of 0x80, table 2 KiB aligned).
  * Each saves x0-x30, ELR_EL1 and SPSR_EL1 in a 272-byte frame (struct
@@ -218,3 +277,7 @@ apple_vec_common:
 apple_stack:
     .space 65536
 apple_stack_top:
+    .balign 16
+    .global apple_smp_stacks
+apple_smp_stacks:                       /* 64 x 4 KiB: CK_APPLE_MAX_CPUS */
+    .space 64 * 4096

@@ -1,4 +1,3 @@
-| `apple/` | Apple Silicon platform layer, M1 to M4 (L250, `docs/APPLE_SILICON_PLATFORM.md`): device-tree reader, family table (14 SoCs; an unknown chip is refused, never guessed), raw arm64 `Image` entry with the device-tree handoff and the EL2 to EL1 drop Apple CPUs need (HCR_EL2.E2H stuck at 1), AIC1/AIC2/AICv3 and FIQ path and spin-table core start (host chip-model tests in progress). Built only with `CK_APPLE=1`; host-tested and booted in QEMU only, never on a Mac. |
 # native/kernel: AIENOS C kernel core (Lane 18)
 
 The first AIENOS kernel written in C for AArch64. It boots in QEMU through
@@ -16,6 +15,7 @@ QEMU qualifies nothing physical: a PASS here says nothing about real hardware.
 | `tests/` | Host unit tests. |
 | `third_party/omega/` | The canonical Omega Cortex store, byte for byte from the omega commit in `omega.lock` (checked by `scripts/omega_lock_check.sh`); built freestanding by `svc/cortex_store.c` over the sealed Store through `svc/cortex_journal.c` (native v1 plan P06). |
 | `x86/` | x86_64 port, first cut (AIENOS-IMAC-KERNEL-0, 2017 iMac): UEFI stub, descriptor tables and interrupt stubs, page tables, local APIC timer, ACPI power off, console, secondary-core start, PCI walk, read-only AHCI and NVMe disks, transmit-only BCM57766 Ethernet report. |
+| `apple/` | Apple Silicon platform layer, M1 to M4 (L250, `docs/APPLE_SILICON_PLATFORM.md`): device-tree reader, family table (14 SoCs; an unknown chip is refused, never guessed), raw arm64 `Image` entry with the device-tree handoff and the EL2 to EL1 drop Apple CPUs need (HCR_EL2.E2H stuck at 1), AIC1/AIC2/AICv3 driver and FIQ path, spin-table start of the other cores. Built only with `CK_APPLE=1`; host-tested on chip models and booted in QEMU only, never on a Mac. |
 | `../boot/` | Minimal UEFI entry stub (one image with the kernel). |
 
 ## Build and test

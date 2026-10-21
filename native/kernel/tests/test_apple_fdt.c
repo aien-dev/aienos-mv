@@ -519,7 +519,7 @@ static void test_table(void)
     for (const struct ck_apple_soc *s; (s = ck_apple_soc_at(rows)); rows++) {
         CHECK(s->aic >= 1 && s->aic <= 3);
         CHECK(s->start == CK_APPLE_START_SPIN_TABLE);
-        CHECK(s->dart_page == 16384);
+        CHECK(s->wfxt_ok == (s->gen < 4) && s->ctrr_hole == (s->gen >= 4));
         CHECK(s->idle == (s->gen >= 4 ? CK_APPLE_IDLE_SPIN : CK_APPLE_IDLE_WFI_RETAINED));
         CHECK(s->aic == (s->gen >= 3 ? 3 : s->soc_id == 0x8103 ? 1 : 2));
         CHECK(ck_apple_soc_by_compat(s->compat) == s);

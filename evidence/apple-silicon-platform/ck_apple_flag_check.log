@@ -1,0 +1,10 @@
+  ok   default CK_APPLE=off: BOOTAA64.EFI identical to 18e27659 (159744 bytes, sha256 17a59e96894cc3ba)
+  ok   default CK_APPLE=off: no Apple symbol in aienos-ck.elf
+  ok   default CK_APPLE=on: BOOTAA64.EFI identical to 18e27659 (159744 bytes, sha256 17a59e96894cc3ba)
+  ok   default CK_APPLE=on: no Apple symbol in aienos-ck.elf
+  ok   pi5 CK_APPLE=off: BOOTAA64.EFI identical to 18e27659 (180224 bytes, sha256 a23b2df1025f0ca8)
+  ok   pi5 CK_APPLE=off: no Apple symbol in aienos-ck.elf
+  ok   pi5 CK_APPLE=on: BOOTAA64.EFI identical to 18e27659 (180224 bytes, sha256 a23b2df1025f0ca8)
+  ok   pi5 CK_APPLE=on: no Apple symbol in aienos-ck.elf
+  ok   CK_APPLE=1 also built the Apple Image (40256 bytes)
+CK_APPLE_FLAG_CHECK: PASS

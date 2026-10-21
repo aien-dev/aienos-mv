@@ -1,0 +1,212 @@
+mutant 1: killed (4 checks failed)
+mutant 2: killed (3 checks failed)
+mutant 3: killed (3 checks failed)
+mutant 4: killed (2 checks failed)
+mutant 5: killed (3 checks failed)
+mutant 6: killed (3 checks failed)
+mutant 7: killed (3 checks failed)
+mutant 8: killed (3 checks failed)
+mutant 9: killed (8 checks failed)
+mutant 10: killed (1 checks failed)
+mutant 11: killed (2 checks failed)
+mutant 12: killed (8 checks failed)
+mutant 13: killed (4 checks failed)
+mutant 14: killed (3 checks failed)
+mutant 15: killed (4 checks failed)
+mutant 16: killed (4 checks failed)
+mutant 17: killed (4 checks failed)
+mutant 18: killed (4 checks failed)
+mutant 19: killed (4 checks failed)
+mutant 20: killed (2 checks failed)
+mutant 21: killed (3 checks failed)
+mutant 22: killed (3 checks failed)
+mutant 23: killed (4 checks failed)
+mutant 24: killed (1 checks failed)
+mutant 25: killed (1 checks failed)
+mutant flag refused without OSC_RCPT_HOST_TEST
+CK_OSC_RECEIPT_MUTANTS: PASS (25 of 25 killed)
+  policy: release
+  expected.txt: 22 cases, 22 refused
+  single-bit flips of a01.rcpt: 3328 refused of 3328
+  owner receipt a01.owner.rcpt under the release policy: VALID; single-bit flips refused 3328 of 3328
+test_osc_receipt: PASS (227 checks)
+test_handoff: FAIL (2 of 56 checks failed)
+test_handoff mutant (reserved0 check removed): FAILS as required
+test_acpi_dev mutant 1: FAILS as required
+test_acpi_dev mutant 2: FAILS as required
+test_acpi_dev mutant 3: FAILS as required
+mutant CK_IORT_MUTANT_TRUNCATE: killed (1 checks failed)
+mutant CK_IORT_MUTANT_SEGMENT_BLIND: killed (11 checks failed)
+mutant CK_IORT_MUTANT_OVERLAP_OK: killed (2 checks failed)
+mutant CK_IORT_MUTANT_OTHER_BLIND: killed (7 checks failed)
+mutant CK_IORT_MUTANT_RMR_BLIND: killed (10 checks failed)
+mutant CK_IORT_MUTANT_RMR_EXCLUSIVE: killed (3 checks failed)
+mutant CK_IORT_MUTANT_ROUTE_FIRST: killed (4 checks failed)
+mutant flag refused under CK_HARDWARE_STAGING
+CK_IORT_MUTANTS: PASS
+mutant CK_SMMU_MUTANT_SPAN_OVERFLOW: killed (19 checks failed)
+mutant CK_SMMU_MUTANT_UNGRANTED_VALID: killed (30 checks failed)
+mutant CK_SMMU_MUTANT_BAD_L1_PTR: killed (3 checks failed)
+mutant CK_SMMU_MUTANT_L2_NO_FILL: killed (2 checks failed)
+mutant flag refused under CK_HARDWARE_STAGING
+CK_SMMU_L2_MUTANTS: PASS
+test_osh_op: FAIL (19 of 155 checks failed)
+test_osh_op mutant (permission check always OK): FAILS as required
+test_context: FAIL (2 of 77 checks failed)
+test_context mutant (foreign binding check skipped): FAILS as required
+test_agent_cmd: FAIL (15 of 39 checks failed)
+test_agent_cmd mutant (any verb allowed): FAILS as required
+test_artifact_card: FAIL (1 of 33 checks failed)
+test_artifact_card mutant (trailing bytes accepted): FAILS as required
+test_artifact: PASS (35 checks)
+test_artifact Pi tier mutant (Pi image writes the QEMU tier): FAILS as required
+ALLEN subject id: 0b900d7250c8eb889ea9f300ea5640f9c4dd87257faf2ce058de52f5200542e3
+ALLEN agent: 5d5bca4696b343b3...
+ALLEN restored: sequence=2 intents=1 regime=7 target_ns=1000
+CK_CONTINUITY_SUBJECT_RESTART: PASS (two processes, sealed Store image /home/drakestapleton/workspace/aienos-apple-silicon-platform/target/native-kernel-gates-on/host-subject/allen.img)
+PASS valid fixture accepted (version 580.173.02, build id 000102030405060708090a0b0c0d0e0f10111213)
+PASS family gb10x refused: missing section: no signature section for this chip family
+PASS every truncation 0..639 refused
+PASS bad ELF magic: ELF magic missing
+PASS 32-bit class: not ELF64 (EI_CLASS)
+PASS big-endian: not little-endian (EI_DATA)
+PASS e_type EXEC: e_type is not ET_REL (the pinned container is a relocatable object)
+PASS e_machine x86-64: e_machine is not RISC-V (243)
+PASS e_shentsize 40: e_shentsize is not 64
+PASS e_shnum 0: e_shnum is 0: no section header table
+PASS e_shstrndx == shnum: e_shstrndx out of range
+PASS section header table past end: section header table outside the file
+PASS string table not NUL-terminated: section string table not NUL-terminated
+PASS section name index past string table: section name index outside the string table
+PASS .fwimage size past end of file: section bounds: offset+size outside the file
+PASS .fwimage offset near UINT64_MAX (overflow): section bounds: offset+size outside the file
+PASS .fwimage empty: .fwimage empty
+PASS .fwversion without NUL: version string not NUL-terminated
+PASS .fwversion text differs from pin: version mismatch against the pinned driver version
+PASS .fwversion 64 bytes: version section size not in 1..63
+PASS signature section empty: signature section empty
+PASS signature section for another family only: missing section: no signature section for this chip family
+PASS build-id note wrong type: build-id note is not an NT_GNU_BUILD_ID note
+PASS build-id descriptor past section: build-id note descriptor size out of range
+PASS build-id note truncated: build-id note too short
+CK_GSP_FW_INSPECT_SELFTEST: PASS (22 mutations)
+fwversion 580.173.02
+build_id b96f53b91f7ff27613d8afe25762756a42a4dc1e
+signature_section .fwsignature_gb10y size=4096
+sha256_file 32cb7cf3e77f97e92f6e92135939ccb3ba382748144569c0dfccf3338d43d963
+RESULT OK
+CK_GSP_FW_INSPECT_PIN: PASS
+CK_GSP_COT_ENCODE_SELFTEST: PASS (0 failures)
+CK_GSP_BINDATA_EXTRACT_SELFTEST: PASS (124 checks, 0 failures)
+CK_GSP_BINDATA_PIN: NOT_RUN (/home/drakestapleton/.cache/aienos/open-gpu-kernel-modules-580.173.02 lacks the two GB10B bindata files)
+CK_GSP_BOOT_ARGS_ENCODE_SELFTEST: PASS (142 checks, 0 failures)
+CK_GSP_RPC_ENCODE_SELFTEST: PASS (116 checks, 0 failures)
+CK_SLOT_TOOL_SELFTEST: PASS (155 checks, 0 failures)
+SLOT_FREE: PASS (undefined: aienos_sha512 aienos_ed25519_verify sha256_hash _GLOBAL_OFFSET_TABLE_)
+NATIVE_PACKAGE_TEST: PASS
+slot-loader refused as required: CK_HARDWARE_STAGING=1 CK_TEST_SLOT_KEY=1 (cannot be combined with CK_HARDWARE_STAGING)
+slot-loader refused as required: CK_TEST_SLOT_KEY=1 CK_SLOT_KEYS=/home/drakestapleton/workspace/aienos-apple-silicon-platform/native/kernel/tests/fixtures/owner/TEST-FIXTURE-owner-pubkeys.txt (are exclusive)
+slot-loader refused as required: CK_SLOT_KEYS=/home/drakestapleton/workspace/aienos-apple-silicon-platform/native/kernel/tests/fixtures/owner/TEST-FIXTURE-owner-pubkeys.missing (cannot read the keys file)
+slot-loader refused as required: no key source (give CK_SLOT_KEYS)
+SLOT_LOADER_BUILD: PASS (TEST-key and owner-key loaders built; TEST key refused with hardware staging)
+apple mutant CK_FDT_MUTANT_NAMEOFF: killed by test_apple_fdt (2 checks failed)
+apple mutant CK_FDT_MUTANT_RANGES_IDENTITY: killed by test_apple_fdt (4 checks failed)
+apple mutant CK_APPLE_MUTANT_GUESS: killed by test_apple_fdt (2 checks failed)
+apple mutant CK_AIC_MUTANT_DIE_STRIDE: killed by test_apple_aic (5 checks failed)
+apple mutant CK_AIC_MUTANT_V3_OFFSET: killed by test_apple_aic (18 checks failed)
+apple mutant CK_AIC_MUTANT_IPI_ACK_LATE: killed by test_apple_aic (3 checks failed)
+apple mutant CK_AIC_MUTANT_NO_ENABLE: killed by test_apple_aic (20 checks failed)
+apple mutant CK_SMP_MUTANT_NO_CLEAN: killed by test_apple_smp (6 checks failed)
+apple mutant CK_SMP_MUTANT_NO_SEV: killed by test_apple_smp (6 checks failed)
+apple mutant CK_SMP_MUTANT_NO_RSV_CHECK: killed by test_apple_smp (4 checks failed)
+CK_APPLE_MUTANTS: PASS
+  t8103-j313.dtb: apple: soc=t8103 name="M1" gen=M1 aic=v1 aic_base=0x23b100000 aic_event=0x23b100000 idle=wfi-after-retention start=spin-table cpus=8 released=0 dart_page=16384 usbc=cd3217-i2c
+  t8112-j413.dtb: apple: soc=t8112 name="M2" gen=M2 aic=v2 aic_base=0x23b0c0000 aic_event=0x23b0c8000 idle=wfi-after-retention start=spin-table cpus=8 released=0 dart_page=16384 usbc=cd3217-i2c
+  t8122-j613.dtb: apple: soc=t8122 name="M3" gen=M3 aic=v3 aic_base=0x2d1000000 aic_event=0x2d1040000 idle=wfi-after-retention start=spin-table cpus=8 released=0 dart_page=16384 usbc=ace3-spmi
+  t8132-j713.dtb: apple: soc=t8132 name="M4" gen=M4 aic=v3 aic_base=0x381000000 aic_event=0x381040000 idle=spin start=spin-table cpus=10 released=0 dart_page=16384 usbc=none
+  t6000-j314s.dtb: apple: soc=t6000 name="M1 Pro" gen=M1 aic=v2 aic_base=0x28e100000 aic_event=0x28e10c000 idle=wfi-after-retention start=spin-table cpus=10 released=0 dart_page=16384 usbc=cd3217-i2c
+  t6020-j414s.dtb: apple: soc=t6020 name="M2 Pro" gen=M2 aic=v2 aic_base=0x28e100000 aic_event=0x28e10c000 idle=wfi-after-retention start=spin-table cpus=12 released=0 dart_page=16384 usbc=cd3217-i2c
+  t6031-j514c.dtb: apple: soc=t6031 name="M3 Max" gen=M3 aic=v3 aic_base=0x292400000 aic_event=0x292440000 idle=wfi-after-retention start=spin-table cpus=16 released=0 dart_page=16384 usbc=ace3-spmi
+  qemu-virt.dtb: apple: REFUSED not an Apple platform (root compatible "linux,dummy-virt"); Apple drivers not started
+  flips: 478 opened, 2522 refused
+test_apple_fdt: PASS (356 checks)
+test_apple_aic: PASS (150 checks)
+  t8103-j313.dtb: cpus=8 boot=1 refused-no-release-addr=7 writes=0
+  t8112-j413.dtb: cpus=8 boot=1 refused-no-release-addr=7 writes=0
+  t8122-j613.dtb: cpus=8 boot=1 refused-no-release-addr=7 writes=0
+  t8132-j713.dtb: cpus=10 boot=1 refused-no-release-addr=9 writes=0
+  t6031-j514c.dtb: cpus=16 boot=1 refused-no-release-addr=15 writes=0
+test_apple_smp: PASS (53 checks)
+CK_APPLE_HOST: PASS
+CK_FMT: PASS (17 checks)
+CK_FRAMES: PASS (3870 checks)
+CK_PT: PASS (112 checks)
+CK_ACPI: PASS (77 checks)
+test_acpi_dev: PASS (53 checks)
+CK_HEAP: PASS (16 checks)
+test_smmu: PASS (202 checks)
+test_sched: PASS (32 checks)
+test_ipc: PASS (75 checks)
+test_artifact: PASS (35 checks)
+osc_unit conformance: container=57 lookups=6 state=3
+test_osc_unit: PASS (1056 checks)
+  launch.txt: 16 lines
+  differential vs the spec's C reference: 3000 cases, 1276 OK, 1724 refused, 0 mismatches
+test_osc_launch: PASS (680 checks)
+test_osc_admit: PASS (2 checks)
+  policy: qualification (CK_SEED0B_TEST_ANCHOR)
+  expected.txt: 22 cases, 16 refused
+  single-bit flips of a01.rcpt: 3328 refused of 3328
+  owner receipt a01.owner.rcpt under the release policy: VALID; single-bit flips refused 3328 of 3328
+test_osc_receipt: PASS (251 checks)
+test_entropy: PASS (43 checks)
+test_handoff: PASS (56 checks)
+test_fbcon: PASS (27 checks)
+test_osh_op: PASS (148 checks)
+  golden: 22 vectors, 86598 D-2 verdicts compared (C vs Rust)
+test_continuity_codec: PASS (218 checks)
+K-5 answer: ss_open rc=0, state=1 (1 = DegradedRecovery), peer=2 (2 = Malformed), generation 3 -> 3
+K-5 answer: ss_open rc=0, state=1 (1 = DegradedRecovery), peer=2 (2 = Malformed), generation 3 -> 3
+test_continuity_resolve: PASS (1168 checks)
+K-2 (bs=4096): catalog entries after provision = 4; after provision + 64 one-record WAL commits = 196 (3.00 entries per transaction; bound 4096)
+power cut, commit, 4096-byte blocks: 9 checkpoints (5 old, 4 new, 0 bad), 10 block boundaries (7 old, 3 new, 0 bad, 0 read-only degraded)
+power cut, provision, 4096-byte blocks: 9 checkpoints (5 old, 4 new, 0 bad), 10 block boundaries (7 old, 3 new, 0 bad, 0 read-only degraded)
+K-2 (bs=512): catalog entries after provision = 4; after provision + 64 one-record WAL commits = 196 (3.00 entries per transaction; bound 4096)
+power cut, commit,  512-byte blocks: 9 checkpoints (5 old, 4 new, 0 bad), 73 block boundaries (49 old, 24 new, 0 bad, 0 read-only degraded)
+power cut, provision,  512-byte blocks: 9 checkpoints (5 old, 4 new, 0 bad), 73 block boundaries (49 old, 24 new, 0 bad, 0 read-only degraded)
+test_continuity_commit: PASS (1947 checks)
+K-3/K-4 answer: byte 20 of the newest AgentRoot envelope flipped: reason=3 (RC_SEALED_REFUSAL=3) mount_rc=-303 (SealedRollback), mounted=0
+K-4 answer: sealed-valid newest manifest with a missing agent_state: reason=6 (RC_CONTINUITY_CORRUPT=6) why='referenced object is absent' mounted=1 state=0 applicable=0
+test_continuity_recovery: PASS (508 checks)
+test_continuity_geometry: PASS (262 checks)
+test_continuity_subject: PASS (150 checks)
+power cut, ALLEN genesis, 4096-byte blocks: 9 checkpoints + 11 block boundaries: 13 unprovisioned, 7 identity+subject, 0 other
+power cut, ALLEN genesis,  512-byte blocks: 9 checkpoints + 81 block boundaries: 62 unprovisioned, 28 identity+subject, 0 other
+test_continuity_subject_provision: PASS (764 checks)
+CK_LIFECYCLE: PASS (124 checks)
+CK_CONSOLE_RX: PASS (60 checks)
+test_klog: PASS (12 checks)
+test_klog_slot: PASS (23 checks)
+test_pi5: PASS (8 checks)
+test_pi5_marker: PASS (65 checks)
+  [init from cold: threshold, FIFO threshold, enable at 1 MHz]
+  [init when firmware already enabled it: no writes]
+  [block that will not enable: absent, probe refuses]
+  [healthy: probe OK, fill delivers, words come from two FIFO reads]
+  [FIFO stays empty: read fails, probe FAILED, buffer zeroed]
+  [warm-up never completes: no data fabricated]
+  [lockout that a soft reset clears: exactly one reset, then data]
+  [NIST fail that a reset clears]
+  [lockout that persists: one reset, refuse, latched, no more resets]
+  [stuck output (same word forever): existing entropy rule refuses]
+test_pi5_rng: PASS (33 checks)
+test_cpufeat: PASS (21 checks)
+test_dma_window: PASS (200107 checks)
+test_pi5_pcie: PASS (78 checks)
+test_pi5_net: PASS (96439 checks)
+test_pi5_gem: PASS (281 checks)
+test_unlock_req: PASS (23 checks)
+test_context: PASS (77 checks)
+test_agent_cmd: PASS (39 checks)
+test_artifact_card: PASS (33 checks)
+CK_CORE_HOST: PASS

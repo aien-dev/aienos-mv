@@ -1,0 +1,6 @@
+make test CK_APPLE=off rc=0
+qemu_ck_boot_test CK_APPLE=off rc=0
+make test CK_APPLE=on rc=2
+qemu_ck_boot_test CK_APPLE=on rc=0
+make test CK_APPLE=1 (command line, after MAKEOVERRIDES fix) rc=2
+make test CK_APPLE=1 (command line, after order-only fix) rc=0

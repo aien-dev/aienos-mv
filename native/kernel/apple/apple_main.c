@@ -18,6 +18,7 @@
 #include "aic.h"
 #include "apple_console.h"
 #include "apple_family.h"
+#include "apple_smp.h"
 #include "fdt.h"
 #include "fmt.h"
 
@@ -27,10 +28,18 @@ struct apple_frame {
 };
 _Static_assert(sizeof(struct apple_frame) == 272, "apple_frame matches apple_entry.S");
 
-extern char __image_base[], __image_end[], apple_vectors[];
+extern char __image_base[], __image_end[], apple_vectors[], apple_secondary_entry[];
 __attribute__((noreturn)) void apple_stop(void);
 __attribute__((noreturn)) void apple_main(uint64_t dtb, uint64_t entry_el, uint64_t e2h);
 void apple_exception(uint64_t idx, struct apple_frame *fr);
+__attribute__((noreturn)) void apple_secondary_main(uint64_t idx, uint64_t entry_el, uint64_t e2h);
+
+/* Secondary CPU table (apple_entry.S apple_secondary_entry reads the first
+ * two): MPIDR affinity per cpu index, count, and the check-in word each
+ * secondary writes: 1 | entry EL << 8 | E2H << 16 | CurrentEL << 24. */
+uint64_t apple_smp_mpidr[CK_APPLE_MAX_CPUS];
+uint32_t apple_smp_n;
+static volatile uint32_t apple_smp_checkin[CK_APPLE_MAX_CPUS];
 
 #define rd(reg) ({ uint64_t v_; __asm__ volatile("mrs %0, " #reg : "=r"(v_)); v_; })
 #define wr(reg, v) __asm__ volatile("msr " #reg ", %0" ::"r"((uint64_t)(v)) : "memory")
@@ -39,6 +48,8 @@ static struct ck_apple_uart uart;
 static struct ck_fdt fdt;
 static struct ck_apple_platform plat;
 static volatile uint32_t brk_taken;
+static struct ck_aic aic;
+static int aic_up;
 
 static void emit(void *ctx, char c)
 {
@@ -72,6 +83,16 @@ void apple_exception(uint64_t idx, struct apple_frame *fr)
         fr->elr += 4;
         return;
     }
+    /* IRQ (5) and FIQ (6) from the current EL: only once the AIC is up on a
+     * family-table chip; nothing unmasks them yet (DAIF stays masked). */
+    if (aic_up && idx == 6) {
+        ck_aic_handle_fiq(&aic, &ck_aic_io_live, 0);
+        return;
+    }
+    if (aic_up && idx == 5) {
+        ck_aic_handle_irq(&aic, 0, 0, 64u);
+        return;
+    }
     pr("apple: FAULT vector=%llu esr=0x%llx elr=0x%llx far=0x%llx spsr=0x%llx\n", (unsigned long long)idx,
        (unsigned long long)esr, (unsigned long long)fr->elr, (unsigned long long)rd(far_el1),
        (unsigned long long)fr->spsr);
@@ -103,14 +124,6 @@ static int timer_check(uint64_t *freq_out, uint64_t *ticks_out)
     return -1;
 }
 
-static void psci_off(const char *method)
-{
-    register uint64_t x0 __asm__("x0") = 0x84000008u; /* PSCI SYSTEM_OFF (DEN 0022) */
-    if (method[0] == 's')
-        __asm__ volatile("smc #0" : "+r"(x0)::"memory");
-    else
-        __asm__ volatile("hvc #0" : "+r"(x0)::"memory");
-}
 
 static int str_eq(const char *a, const char *b)
 {
@@ -121,6 +134,140 @@ static int str_eq(const char *a, const char *b)
     return *a == *b;
 }
 
+/* PSCI call (DEN 0022) through the tree's conduit: "smc" or "hvc". */
+static uint64_t psci_call(const char *method, uint64_t fn, uint64_t a1, uint64_t a2, uint64_t a3)
+{
+    register uint64_t x0 __asm__("x0") = fn;
+    register uint64_t x1 __asm__("x1") = a1;
+    register uint64_t x2 __asm__("x2") = a2;
+    register uint64_t x3 __asm__("x3") = a3;
+    if (method[0] == 's')
+        __asm__ volatile("smc #0" : "+r"(x0), "+r"(x1), "+r"(x2), "+r"(x3)::"memory");
+    else
+        __asm__ volatile("hvc #0" : "+r"(x0), "+r"(x1), "+r"(x2), "+r"(x3)::"memory");
+    return x0;
+}
+#define PSCI_SYSTEM_OFF 0x84000008u
+#define PSCI_CPU_ON_64 0xc4000003u
+
+/* Secondary, at EL1 on its own stack: check in, then park with interrupts
+ * masked (spinning: the idle policy for parked cores is not decided yet). */
+void apple_secondary_main(uint64_t idx, uint64_t entry_el, uint64_t e2h)
+{
+    if (idx < CK_APPLE_MAX_CPUS) {
+        apple_smp_checkin[idx] = 1u | (uint32_t)entry_el << 8 | (uint32_t)e2h << 16 | current_el() << 24;
+        __asm__ volatile("dsb sy\n dc civac, %0\n dsb sy\n sev" ::"r"(&apple_smp_checkin[idx]) : "memory");
+    }
+    for (;;) __asm__ volatile("yield");
+}
+
+/* Live spin-table accessors for ck_smp_spin_release. */
+static uint64_t smp_rd64(void *ctx, uint64_t pa)
+{
+    (void)ctx;
+    return *(volatile uint64_t *)(uintptr_t)pa;
+}
+static void smp_wr64(void *ctx, uint64_t pa, uint64_t v)
+{
+    (void)ctx;
+    *(volatile uint64_t *)(uintptr_t)pa = v;
+}
+static void smp_clean(void *ctx, uint64_t pa)
+{
+    (void)ctx;
+    __asm__ volatile("dsb sy\n dc civac, %0\n dsb sy" ::"r"(pa) : "memory");
+}
+static void smp_sev(void *ctx)
+{
+    (void)ctx;
+    __asm__ volatile("sev" ::: "memory");
+}
+/* One poll: the check-in word, then about 10 us of counter time. */
+static uint32_t smp_checkin(void *ctx, uint32_t idx)
+{
+    (void)ctx;
+    __asm__ volatile("dmb sy" ::: "memory");
+    if (idx < CK_APPLE_MAX_CPUS && apple_smp_checkin[idx]) return 1;
+    uint64_t t0 = rd(cntpct_el0), wait = rd(cntfrq_el0) / 100000u;
+    for (uint32_t i = 0; i < 1000000u && rd(cntpct_el0) - t0 < wait; i++) __asm__ volatile("yield");
+    return 0;
+}
+static const struct ck_smp_io smp_io = {smp_rd64, smp_wr64, smp_clean, smp_sev, smp_checkin, 0};
+#define SMP_POLLS 100000u
+
+static void smp_report(uint32_t i, const char *how, int rc)
+{
+    uint32_t w = apple_smp_checkin[i];
+    if (rc == 0)
+        pr("apple: cpu%u mpidr=0x%llx checked in at EL%u (entered EL%u, E2H=%u) via %s\n", i,
+           (unsigned long long)apple_smp_mpidr[i], w >> 24, (w >> 8) & 0xffu, (w >> 16) & 0xffu, how);
+    else
+        pr("apple: cpu%u mpidr=0x%llx not started via %s: %s\n", i, (unsigned long long)apple_smp_mpidr[i], how,
+           ck_smp_strerror(rc));
+}
+
+/* Starts every secondary. Family-table chip: the spin table (refusals are a
+ * safe outcome, never a failure). Otherwise (the QEMU gate), PSCI CPU_ON
+ * into the same apple_secondary_entry, so the gate runs the secondary EL2 ->
+ * EL1 path; there every secondary must check in. Returns 0 on a failure. */
+static int start_secondaries(int verdict, const char *psci)
+{
+    uint64_t me = rd(mpidr_el1) & CK_SMP_AFF_MASK;
+    uint32_t n = 0, started = 0, boot = CK_APPLE_MAX_CPUS;
+    if (verdict == CK_APPLE_OK) {
+        for (uint32_t i = 0; i < plat.ncpus && n < CK_APPLE_MAX_CPUS; i++)
+            apple_smp_mpidr[n++] = plat.cpu[i].mpidr & CK_SMP_AFF_MASK;
+    } else {
+        int cpus = ck_fdt_path(&fdt, "/cpus");
+        for (int c = cpus >= 0 ? ck_fdt_first_child(&fdt, cpus) : -1; c >= 0 && n < CK_APPLE_MAX_CPUS;
+             c = ck_fdt_next_sibling(&fdt, c)) {
+            const char *dt = ck_fdt_string(&fdt, c, "device_type");
+            uint64_t a, s;
+            if (dt && str_eq(dt, "cpu") && ck_fdt_reg(&fdt, c, 0, &a, &s) == 0) apple_smp_mpidr[n++] = a & CK_SMP_AFF_MASK;
+        }
+    }
+    for (uint32_t i = 0; i < n; i++) {
+        apple_smp_checkin[i] = 0;
+        if (apple_smp_mpidr[i] == me) boot = i;
+    }
+    apple_smp_n = n;
+    __asm__ volatile("dsb sy" ::: "memory");
+    if (boot == CK_APPLE_MAX_CPUS) {
+        pr("apple: secondaries not started: boot cpu mpidr=0x%llx not among %u cpu nodes\n", (unsigned long long)me, n);
+        return verdict == CK_APPLE_OK;
+    }
+    if (verdict == CK_APPLE_OK) {
+        for (uint32_t i = 0; i < n; i++) {
+            if (i == boot) continue;
+            int rc = ck_smp_spin_release(&fdt, &plat, i, me, (uint64_t)(uintptr_t)apple_secondary_entry,
+                                         (uint64_t)(uintptr_t)__image_base, (uint64_t)(uintptr_t)__image_end, &smp_io,
+                                         SMP_POLLS);
+            started += rc == 0;
+            smp_report(i, "spin-table", rc);
+        }
+        pr("apple: secondaries started=%u of %u (spin-table)\n", started, n - 1u);
+        return 1;
+    }
+    if (!psci) {
+        pr("apple: secondaries not started: no family-table row and no PSCI\n");
+        return 1;
+    }
+    for (uint32_t i = 0; i < n; i++) {
+        if (i == boot) continue;
+        uint64_t r = psci_call(psci, PSCI_CPU_ON_64, apple_smp_mpidr[i], (uint64_t)(uintptr_t)apple_secondary_entry, 0);
+        int rc = (int64_t)r == 0 ? CK_SMP_E_TIMEOUT : CK_SMP_E_METHOD;
+        for (uint32_t p = 0; (int64_t)r == 0 && p < SMP_POLLS; p++)
+            if (smp_checkin(0, i)) {
+                rc = 0;
+                break;
+            }
+        started += rc == 0;
+        smp_report(i, "psci CPU_ON", rc);
+    }
+    pr("apple: secondaries started=%u of %u (psci CPU_ON, QEMU path: the spin table needs an Apple loader)\n",
+       started, n - 1u);
+    return started == n - 1u;
+}
 void apple_main(uint64_t dtb, uint64_t entry_el, uint64_t e2h)
 {
     unsigned el = current_el();
@@ -185,15 +332,24 @@ void apple_main(uint64_t dtb, uint64_t entry_el, uint64_t e2h)
      * non-Apple CPU: the Apple IMP-DEF registers are read only on a table row). */
     uint32_t src = ck_aic_fiq_pending_live(verdict == CK_APPLE_OK ? plat.soc : 0);
     pr("apple: fiq sources now=0x%x (timer bits only off-Apple)\n", src);
+    if (verdict == CK_APPLE_OK) {
+        int arc = ck_aic_init(&aic, &ck_aic_io_live, plat.soc->aic, plat.aic_base, plat.aic_size, plat.aic_event,
+                              plat.aic_event_size);
+        aic_up = arc == 0;
+        pr("apple: aic v%u %s nr_irq=%u dies=%u (every IRQ masked)\n", plat.soc->aic, arc == 0 ? "up" : "REFUSED",
+           aic.nr_irq, aic.nr_die);
+    }
+    int psci = ck_fdt_path(&fdt, "/psci");
+    const char *method = psci >= 0 ? ck_fdt_string(&fdt, psci, "method") : 0;
+    if (method && !str_eq(method, "smc") && !str_eq(method, "hvc")) method = 0;
+    ok &= start_secondaries(verdict, method);
     uint8_t idle = ck_apple_idle_effective(verdict == CK_APPLE_OK ? plat.soc : 0, 0);
     pr("apple: idle policy in force=%s (no state-retention setup built yet)\n", ck_apple_idle_name(idle));
     pr("AIENOS_APPLE_IMAGE: %s\n", ok ? "PASS" : "FAIL");
 
-    int psci = ck_fdt_path(&fdt, "/psci");
-    const char *method = psci >= 0 ? ck_fdt_string(&fdt, psci, "method") : 0;
-    if (method && (str_eq(method, "smc") || str_eq(method, "hvc"))) {
+    if (method) {
         pr("apple: psci SYSTEM_OFF via %s\n", method);
-        psci_off(method);
+        psci_call(method, PSCI_SYSTEM_OFF, 0, 0, 0);
         pr("apple: psci SYSTEM_OFF returned\n");
     } else {
         pr("apple: no PSCI in the tree (Apple: no EL3); stopping with interrupts masked\n");

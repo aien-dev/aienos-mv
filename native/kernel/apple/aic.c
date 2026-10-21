@@ -95,7 +95,9 @@ int ck_aic_init(struct ck_aic *a, const struct ck_aic_io *io, uint32_t version, 
         wr(a, AIC1_IPI_ACK, AIC1_IPI_SELF | AIC1_IPI_OTHER);
         wr(a, AIC1_IPI_MASK_SET, AIC1_IPI_SELF | AIC1_IPI_OTHER);
     } else {
-#ifndef CK_AIC_MUTANT_NO_ENABLE
+#ifdef CK_AIC_MUTANT_NO_ENABLE
+        wr(a, AIC2_CONFIG, rd(a, AIC2_CONFIG) & ~AIC2_CONFIG_ENABLE); /* enable never set */
+#else
         wr(a, AIC2_CONFIG, rd(a, AIC2_CONFIG) | AIC2_CONFIG_ENABLE);
 #endif
     }
