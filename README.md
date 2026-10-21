@@ -16,6 +16,7 @@ The kernel is being rewritten in C (the `native/` directory) and is IMPLEMENTED 
 - [native/kernel/GATES.md](native/kernel/GATES.md): what each emulator gate checks
 - [docs/TRUST-1-M5-GATE-MATRIX.md](docs/TRUST-1-M5-GATE-MATRIX.md) and [docs/TRUST-1-OPERATOR-STEPS.md](docs/TRUST-1-OPERATOR-STEPS.md)
 - [docs/PLAN_AUTHORITY.md](docs/PLAN_AUTHORITY.md): how this repository's plans relate to the whole-system plan in [aien-architecture](https://github.com/aien-spark/aien-architecture)
+- [docs/design/DESIGN.md](docs/design/DESIGN.md): Allen's design system (colour, type, motion, sound, voice, accessibility), exported to C, Rust and CSS by `cargo run -p allen-design-tokens -- generate`; the boot reference sketch and its maths are in [docs/design/boot/](docs/design/boot/), and mockups of every first-run screen in [docs/design/screens/](docs/design/screens/) (pictures and a browser sketch, not shown on real hardware)
 
 ## How this fits with the other repositories
 
