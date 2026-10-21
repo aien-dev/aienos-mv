@@ -222,3 +222,11 @@ Local read-only copies under `/tmp/l372-src` on the Spark, GPL code read for fac
 - The M2 dumps: `~/handoffs/macbook-inventory-2026-10-20/ioreg-devicetree.txt` (OBSERVED values for the M2 row).
 
 Section history: sections 1 and 5 in `600e486d`, 2 to 4 in `0af2db3f`, M2-map corrections in `4204ab06`, 6 and 7 in the commit after.
+
+## 9. Limits of this map, and what was searched
+
+- Nothing was run on any Mac. Every M4-class and later fact rests on Asahi's code and one progress report; Asahi marks most of those blocks "TBA" or "WIP", and this map keeps them UNKNOWN rather than guessing from the M3.
+- The progress report and the third-party README were read through a page summariser, quotes as returned (2026-10-21); re-read at the source before a driver depends on them. Everything else was read in the cloned source at the pinned commits.
+- CPU power management: Apple chips have no EL3, so there is no PSCI firmware. Asahi is building "a UEFI Runtime Service based PSCI conduit" (progress report 7.2; Linux branch `efi-psci`, kernel patches posted as an RFC). Aienux does not need it for tethered boots (m1n1's spin-table covers start; idle follows section 5 rule 4); it becomes relevant only for CPU power-off and suspend on the standalone path. Not read further.
+- Consistency check with sibling work: branch `feat/macbook-agx-reverse-engineering` (`docs/AGX_FW_LAYOUT_G14_V13_5.md`) also targets the macOS 13.5 GPU firmware on the M2 for the same reason as section 4 (the container boots the 13.5 stub). No conflict found.
+- Reuse search (2026-10-21): `git grep -i -E "t8122|t8132|aic3|sptm|apple silicon family"` on origin/main (one unrelated hit in vendored `libc`); 553 remote branches (Apple-related: `feat/aienos-macbook-map`, `feat/aienos-mac-selfcontained` (runner scripts, no chip facts), `feat/macbook-agx-reverse-engineering` (M2 GPU only)); the ledger (L208, L250 to L252, L291, L372, L373); `org-check "sptm"`: `CHECKED org:fc21be5eb466 ... 11 hit(s)`, all unrelated (vendored `libc`, Intel `edk2-platforms` headers). Nothing in the organisation maps the Apple family; this document is new.
