@@ -2253,7 +2253,7 @@ imac-diag: $(IMACDIAG_EFI)
 # The network report is a LAB-ONLY diagnostic, opt-in and default off:
 #   make imac-kernel CK_X86_REPORT=1 -> $(OUT)/IMACKERN-LAB.EFI (own object dir)
 # adds x86/report_x86.c + ../../net/aienos_net.c and tg3 transmit (-DCK_X86_REPORT=1): during the
-# hold it broadcasts only allowlisted console lines (ck_x86_report_filter, never the raw console)
+# hold it broadcasts only allowlisted console lines (IMACKERN_REPORT_SYMS := ck_x86_report_hold|ck_x86_report_frame|ck_x86_report_filter|ck_x86_report_parts|ck_x86_tg3_send|ck_x86_tg3_drain|ck_x86_tg3_recv|ck_courier_udp_init|net_udp_build, never the raw console)
 # as UDP to port 47031, header "AIENOS-REPORT v=2 auth=none": UNAUTHENTICATED, never a
 # receipt, evidence or a command. Host test scripts/ck_imac_report_test.sh, receiver
 # tools/ck_imac_report_listen.c. The default image, and any resident or service (ALLEN) build,
@@ -2283,18 +2283,20 @@ IMACKERN_OBJS := $(IMACKERN_DIR)/efi_entry_x86_64.o $(IMACKERN_DIR)/efi_x86.o $(
 	$(IMACKERN_DIR)/paint.o $(IMACKERN_DIR)/night.o $(IMACKERN_DIR)/mind.o $(IMACKERN_DIR)/flow.o $(IMACKERN_DIR)/chirp.o \
 	$(IMACKERN_DIR)/allen_memory.o $(IMACKERN_DIR)/allen_notes.o $(IMACKERN_DIR)/gpt_add.o $(IMACKERN_DIR)/memory_x86.o \
 	$(IMACKERN_DIR)/fat_boot.o $(IMACKERN_DIR)/sha512.o $(IMACKERN_DIR)/ct.o $(IMACKERN_DIR)/panel_x86.o
-IMACKERN_REPORT_OBJS := $(IMACKERN_DIR)/report_x86.o $(IMACKERN_DIR)/aienos_net.o
+IMACKERN_REPORT_OBJS := $(IMACKERN_DIR)/report_x86.o $(IMACKERN_DIR)/aienos_net.o $(IMACKERN_DIR)/courier_udp_x86.o
+# The far side of Allen's Ethernet courier (x86/courier_udp.h): broadcast by default, a lab address overrides.
+CK_COURIER_PEER ?= 255.255.255.255
 # Symbols only the lab image may contain; the default image is checked for them after linking.
-IMACKERN_REPORT_SYMS := ck_x86_report_hold|ck_x86_report_frame|ck_x86_report_filter|ck_x86_report_parts|ck_x86_tg3_send|ck_x86_tg3_drain|net_udp_build
+IMACKERN_REPORT_SYMS := ck_x86_report_hold|ck_x86_report_frame|ck_x86_report_filter|ck_x86_report_parts|ck_x86_tg3_send|ck_x86_tg3_drain|ck_x86_tg3_recv|ck_courier_udp_init|net_udp_build
 ifeq ($(CK_X86_REPORT),1)
 IMACKERN_OBJS += $(IMACKERN_REPORT_OBJS)
-IMACKERN_CFLAGS += -DCK_X86_REPORT=1
+IMACKERN_CFLAGS += -DCK_X86_REPORT=1 -DCK_COURIER_PEER_STR=\"$(CK_COURIER_PEER)\"
 endif
 IMACKERN_HDRS := $(X86K)/x86.h $(BOOT)/handoff.h $(BOOT)/efi.h $(KDIR)/core/ck_internal.h $(KDIR)/include/ck.h
 $(IMACKERN_DIR)/efi_entry_x86_64.o: $(BOOT)/efi_entry_x86_64.S
 $(IMACKERN_DIR)/efi_x86.o: $(X86K)/efi_x86.c $(IMACKERN_HDRS) $(BOOT)/netboot_proto.h
 $(IMACKERN_DIR)/efi_gop.o: $(BOOT)/efi_gop.c $(IMACKERN_HDRS)
-$(IMACKERN_DIR)/kmain_x86.o: $(X86K)/kmain_x86.c $(IMACKERN_HDRS) $(KDIR)/core/handoff_check.h $(KDIR)/mm/frames.h $(KDIR)/mm/heap.h $(KDIR)/ui/allen_ui.h $(KDIR)/svc/allen_reply.h $(KDIR)/svc/allen_intent.h $(KDIR)/svc/courier.h $(OUT)/commit.stamp
+$(IMACKERN_DIR)/kmain_x86.o: $(X86K)/kmain_x86.c $(IMACKERN_HDRS) $(KDIR)/core/handoff_check.h $(KDIR)/mm/frames.h $(KDIR)/mm/heap.h $(KDIR)/ui/allen_ui.h $(KDIR)/svc/allen_reply.h $(KDIR)/svc/allen_intent.h $(KDIR)/svc/courier.h $(X86K)/courier_udp.h $(OUT)/commit.stamp
 $(IMACKERN_DIR)/console_x86.o: $(X86K)/console_x86.c $(IMACKERN_HDRS) $(KDIR)/core/fbcon.h
 $(IMACKERN_DIR)/trap.o: $(X86K)/trap.S
 $(IMACKERN_DIR)/fbcon.o: $(KDIR)/core/fbcon.c $(KDIR)/core/fbcon.h $(KDIR)/core/font8x8.h
@@ -2335,6 +2337,7 @@ $(IMACKERN_DIR)/fat_boot.o: $(KDIR)/dev/fat_boot.c $(KDIR)/dev/fat_boot.h $(NATI
 $(IMACKERN_DIR)/sha512.o: $(NATIVE)/sig/sha512.c $(NATIVE)/sig/aienos_sig.h
 $(IMACKERN_DIR)/ct.o: $(NATIVE)/sig/ct.c $(NATIVE)/sig/aienos_sig.h
 $(IMACKERN_DIR)/report_x86.o: $(X86K)/report_x86.c $(X86K)/report_x86.h $(IMACKERN_HDRS) $(NATIVE)/net/aienos_net.h
+$(IMACKERN_DIR)/courier_udp_x86.o: $(X86K)/courier_udp_x86.c $(X86K)/courier_udp.h $(IMACKERN_HDRS) $(NATIVE)/net/aienos_net.h $(KDIR)/svc/courier.h
 $(IMACKERN_DIR)/aienos_net.o: $(NATIVE)/net/aienos_net.c $(NATIVE)/net/aienos_net.h
 $(sort $(IMACKERN_OBJS) $(IMACKERN_REPORT_OBJS)):
 	@mkdir -p $(dir $@)

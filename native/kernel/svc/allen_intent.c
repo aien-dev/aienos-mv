@@ -217,3 +217,103 @@ int ck_allen_answer_line(const char *in, uint32_t *seq, char *text, unsigned cap
         *seq = v;
     return 1;
 }
+
+unsigned ck_allen_job_memory(const ck_allen_mind *m, unsigned notes_max, char *out, unsigned cap)
+{
+    if (!m || !out || cap < 2)
+        return 0;
+    struct say s = {out, 0, cap, 0};
+    put(&s, "\tself=");
+    put(&s, ck_allen_self(m));
+    if (m->mem.name[0]) {
+        put(&s, "\tname=");
+        put(&s, m->mem.name);
+    }
+    put(&s, "\tstarts=");
+    putu(&s, m->mem.starts);
+    for (uint32_t i = 0; i < m->mem.nfacts && i < CK_ALLEN_FACTS_MAX; i++) {
+        put(&s, "\tfact ");
+        put(&s, m->mem.fact[i].key);
+        put(&s, m->mem.fact[i].are ? " are " : " is ");
+        put(&s, m->mem.fact[i].val);
+    }
+    if (m->notes) {
+        unsigned given = 0;
+        for (uint32_t i = m->notes->n; i-- > 0 && given < notes_max;) {
+            if (m->notes->note[i].gone)
+                continue;
+            put(&s, "\tnote ");
+            for (const char *p = m->notes->note[i].text; *p; p++)
+                put(&s, (char[]){*p == '\t' || *p == '\n' ? ' ' : *p, 0});
+            given++;
+        }
+    }
+    out[s.full ? 0 : s.n] = 0;
+    return s.full ? 0 : s.n;
+}
+
+static int digits_of(const char **pp, uint32_t *v)
+{
+    const char *p = *pp;
+    int n = 0;
+    *v = 0;
+    while (*p >= '0' && *p <= '9' && n < 9)
+        *v = *v * 10 + (uint32_t)(*p++ - '0'), n++;
+    *pp = p;
+    return n;
+}
+
+int ck_allen_say_line(const char *in, uint32_t *seq, unsigned *part, unsigned *total, char *text, unsigned cap)
+{
+    if (!in || !text || cap < 2)
+        return 0;
+    text[0] = 0;
+    uint32_t v = 0, a = 0, b = 0;
+    if (starts(in, "WAIT")) {
+        const char *p = in + 4;
+        if (*p != ' ')
+            return 0;
+        p++;
+        if (!digits_of(&p, &v))
+            return 0;
+        if (seq)
+            *seq = v;
+        if (part)
+            *part = 0;
+        if (total)
+            *total = 0;
+        return 1;
+    }
+    if (!starts(in, "SAY") || in[3] != ' ')
+        return 0;
+    const char *p = in + 4;
+    if (!digits_of(&p, &v) || *p != ' ')
+        return 0;
+    p++;
+    /* "<part>/<total> " or straight into the text */
+    const char *q = p;
+    if (digits_of(&q, &a) && *q == '/' && (q++, digits_of(&q, &b)) && *q == ' ' && a >= 1) {
+        p = q + 1;
+    } else {
+        a = 1, b = 1;
+    }
+    /* the text, folded exactly as ck_allen_answer_line folds it */
+    char line[8 + 1024];
+    unsigned k = 0;
+    const char *head = "SAY 0 ";
+    while (*head)
+        line[k++] = *head++;
+    while (*p && k + 1 < sizeof line)
+        line[k++] = *p++;
+    line[k] = 0;
+    uint32_t dummy;
+    if (!ck_allen_answer_line(line, &dummy, text, cap))
+        return 0;
+    if (seq)
+        *seq = v;
+    if (part)
+        *part = a;
+    if (total)
+        *total = b;
+    return 1;
+}

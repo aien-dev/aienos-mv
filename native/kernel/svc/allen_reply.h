@@ -53,6 +53,8 @@ typedef struct {
     unsigned turns; /* lines answered this session */
     int asked_how;  /* Allen just asked "how are you?" */
     int naming;     /* Allen just asked "What will you call me?" (a first meeting) */
+    int far;        /* 1: a far-off worker is listening (svc/courier.h): it answers first, and the
+                     * answers below are only the offline fallback (goodbye, the naming, the greeting) */
     ck_allen_notes *notes; /* the notes (the kernel loads them), NULL: none */
     int note_dirty; /* index + 1 of a note to write to disk (the kernel writes, then clears) */
     int lit;        /* index + 1 of the note just saved or handed back, 0: none */
@@ -82,6 +84,14 @@ extern const char ck_allen_save_failed[];
 /* The honest "not yet" for a line nothing here can answer; the kernel compares
  * the pointer to know a far-off worker may be asked (svc/allen_intent.h). */
 extern const char ck_allen_not_yet[];
+/* What Allen says when the far-off worker he was listening to falls silent
+ * mid-answer (the kernel says it after 30 s without a word). */
+extern const char ck_allen_lost_thread[];
+/* Allen keeps a note of an exchange he had through the far-off worker (what
+ * was asked, what he said; cut to fit a note): 0 and the note marked for the
+ * kernel to write (note_dirty, changed), -1 when the notebook is full or the
+ * text is empty. Pure; the kernel writes the disk. */
+int ck_allen_note_exchange(ck_allen_mind *m, const char *asked, const char *said);
 /* Folds a line for matching: lowercase letters and digits, single spaces,
  * NUL-terminated in out (cap bytes); returns the length. */
 size_t ck_allen_fold(const char *s, char *out, size_t cap);

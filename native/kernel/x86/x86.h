@@ -218,6 +218,11 @@ void ck_x86_tg3_mac(uint8_t mac[6]);
  * and any resident or service build. */
 int ck_x86_tg3_send(const uint8_t *frame, size_t len);
 int ck_x86_tg3_drain(unsigned ms);
+/* The next received frame (lab image only): bytes copied to out, 0 when none waits. */
+size_t ck_x86_tg3_recv(uint8_t *out, size_t cap);
+/* kmain_x86.c (lab image only): Allen's courier over Ethernet (courier_udp.h)
+ * bound to the chip; NULL when the chip is not up. */
+const struct ck_courier *ck_x86_courier_udp(uint64_t tsc_hz);
 /* report_x86.c (lab only): holds `seconds`, sending the allowlisted console
  * lines as unauthenticated UDP broadcasts every 2 s while the link is up;
  * returns the rounds sent. */
