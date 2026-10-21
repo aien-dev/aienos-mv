@@ -76,6 +76,11 @@ way, it goes in as an open question with an experiment, and nothing is tried tha
    shared memory area the chip program needs and the first message exchange with it).
 2. Run it on the real chip under Linux, in a window the coordinator schedules, because it takes the GPU away from
    everything else for a while. Window 0 only reads the chip and gives it back (evidence/own-gpu-driver/rung2/RUNBOOK.md).
+   Window 1, after window 0 passes, starts NVIDIA's signed chip program with our own code: our small Linux module lets
+   our start-up tool touch only the 12 start-up registers (6 of them writable) and ring the security processor once;
+   the tool builds the start-up package, hands it over and waits for the chip program to say it is ready. Every
+   register access is recorded with its time. The one real risk: if the restart afterwards does not fully reset the
+   GPU, it needs a power cycle at the wall before NVIDIA's driver works again.
 3. The same core inside our own operating system on the Spark, once that boots natively (L318).
 
 ## Known unknowns (tested on the chip, never assumed)
