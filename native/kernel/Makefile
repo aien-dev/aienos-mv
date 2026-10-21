@@ -858,6 +858,14 @@ endif
 # GOP framebuffer console keeps the last report on screen before the PSCI
 # reset, so an operator can read or photograph it. 0 (default) in every QEMU
 # gate; scripts/stage_one_time_boot_ck.sh builds the hardware image with 120.
+# CK_BOOT_SHOW=1: the image plays the boot sequence (ui/boot_show.c: the night, the two black holes,
+# the chirp) on its screen after the devices stage: the VM screen (virtio-gpu) and speakers (virtio-sound)
+# when present, else the GOP framebuffer. Compiled into every image; on for the images people use (the
+# aienos-run VM, PC and Spark images), off by default so the QEMU gates keep their timing.
+CK_BOOT_SHOW ?= 0
+ifeq ($(filter 0 1,$(CK_BOOT_SHOW)),)
+$(error CK_BOOT_SHOW must be 0 or 1)
+endif
 CK_FB_HOLD_S ?= 0
 ifeq ($(shell echo '$(CK_FB_HOLD_S)' | grep -Ex '[0-9]{1,4}'),)
 $(error CK_FB_HOLD_S must be 0..9999 seconds)
@@ -869,7 +877,7 @@ MODULE_INC := -I$(NATIVE)/disk -I$(NATIVE)/store -I$(NATIVE)/m5 -I$(NATIVE)/cryp
 KCFLAGS := -std=gnu11 -O2 -Wall -Wextra -Werror -ffreestanding -nostdlib -fno-builtin \
 	-fno-stack-protector -fno-tree-loop-distribute-patterns -mstrict-align \
 	-mgeneral-regs-only -mno-outline-atomics -fno-asynchronous-unwind-tables -fpie \
-	-fvisibility=hidden -fno-plt $(KINC) $(SMP_TEST_FLAGS) -DCK_FB_HOLD_S=$(CK_FB_HOLD_S) $(CK_EXTRA_CFLAGS)
+	-fvisibility=hidden -fno-plt $(KINC) $(SMP_TEST_FLAGS) -DCK_FB_HOLD_S=$(CK_FB_HOLD_S) -DCK_BOOT_SHOW=$(CK_BOOT_SHOW) $(CK_EXTRA_CFLAGS)
 KLDFLAGS := -nostdlib -pie --no-dynamic-linker -z norelro -z noexecstack -z max-page-size=4096 --no-warn-rwx-segments \
 	-T $(BOOT)/image.ld
 
@@ -1037,6 +1045,12 @@ ifneq ($(strip $(CK_PI5_LIFECYCLE)),)
 STAGE_SRCS += $(filter-out $(KDIR)/svc/slot_service.c $(BOOT)/slot_select.c $(BOOT)/slot_control.c $(BOOT)/slot_update.c,$(SVC_STAGE_ADDED)) $(KDIR)/svc/slot_service_pi5.c
 endif
 endif
+# CK_BOOT_SHOW=1 images keep their own objects (kmain.c differs).
+ifeq ($(strip $(CK_BOOT_SHOW)),1)
+FULL_NAME := $(FULL_NAME)-boot-show
+endif
+# The boot sequence runner (core/boot_screen.c) needs the devices stage: full images only.
+STAGE_SRCS += $(KDIR)/core/boot_screen.c
 FULL_OUT := $(OUT)/$(FULL_NAME)
 STAGE_KOBJ := $(OUT)/obj/stage-$(FULL_NAME)
 STAGE_HDRS := $(HDRS) $(wildcard $(NATIVE)/*/*.h $(NATIVE)/argus/bridge/*.h $(KDIR)/svc/compat/*.h)

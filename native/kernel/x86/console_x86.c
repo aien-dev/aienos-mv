@@ -79,6 +79,23 @@ static void write_n(const char *s, size_t n)
     }
 }
 
+/* The boot sequence owns the screen while it plays (x86/boot_x86.c): the
+ * console stops drawing on it, then starts again on a cleared screen. */
+static int fb_paused;
+void ck_x86_console_fb_pause(void)
+{
+    if (fb_on)
+        fb_paused = 1, fb_on = 0;
+}
+void ck_x86_console_fb_resume(void)
+{
+    if (!fb_paused)
+        return;
+    fb_paused = 0;
+    ck_fbcon_clear(&fb);
+    fb_on = 1;
+}
+
 int ck_x86_console_fb_on(volatile void *base, uint32_t width, uint32_t height, uint32_t pitch,
                          uint32_t format, uint32_t *scale, uint32_t *cols, uint32_t *rows)
 {
