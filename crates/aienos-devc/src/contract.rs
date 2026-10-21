@@ -26,7 +26,7 @@ impl fmt::Display for Error {
     }
 }
 
-fn err<T>(line: usize, msg: impl Into<String>) -> Result<T, Error> {
+pub(crate) fn err<T>(line: usize, msg: impl Into<String>) -> Result<T, Error> {
     Err(Error {
         line,
         msg: msg.into(),
@@ -263,7 +263,7 @@ pub struct Contract {
 }
 
 /// Split a line into words; a double-quoted string is one word (quotes removed).
-fn words(line: &str, ln: usize) -> Result<Vec<String>, Error> {
+pub(crate) fn words(line: &str, ln: usize) -> Result<Vec<String>, Error> {
     let mut out = Vec::new();
     let mut cur = String::new();
     let mut in_str = false;
@@ -312,7 +312,7 @@ pub fn num(s: &str, ln: usize) -> Result<u64, Error> {
     r.or_else(|_| err(ln, format!("not a number: {s}")))
 }
 
-fn is_ident(s: &str) -> bool {
+pub(crate) fn is_ident(s: &str) -> bool {
     let mut c = s.chars();
     matches!(c.next(), Some(ch) if ch.is_ascii_alphabetic() || ch == '_')
         && s.chars().all(|ch| ch.is_ascii_alphanumeric() || ch == '_')

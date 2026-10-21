@@ -13,6 +13,7 @@ mod contract;
 mod doc;
 mod driver;
 mod fuzz;
+mod gpu;
 mod infer;
 mod model;
 
@@ -25,6 +26,14 @@ fn hex(d: &[u8]) -> String {
 
 /// Every generated file, by name. The digest covers the contract bytes.
 fn outputs(src: &str, name: &str) -> Result<(Vec<(String, String)>, String), String> {
+    if gpu::is_gpu(src) {
+        let g = gpu::parse(src, name).map_err(|e| e.to_string())?;
+        let digest = hex(&aienos_crypto::sha256::hash(src.as_bytes()));
+        let c = gpu::source(&g, &digest);
+        let md = gpu::markdown(&g, &digest, c.lines().count());
+        let stem = g.device.replace('-', "_");
+        return Ok((vec![("gch_contract.c".into(), c), (format!("{stem}.md"), md)], digest));
+    }
     let c = contract::parse(src, name).map_err(|e| e.to_string())?;
     let digest = hex(&aienos_crypto::sha256::hash(src.as_bytes()));
     let drv = driver::source(&c, &digest);
