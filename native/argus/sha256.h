@@ -18,5 +18,8 @@ void sha256_init(sha256_ctx *ctx);
 void sha256_update(sha256_ctx *ctx, const uint8_t *data, size_t len);
 void sha256_final(sha256_ctx *ctx, uint8_t digest[SHA256_DIGEST_SIZE]);
 void sha256_hash(const uint8_t *data, size_t len, uint8_t digest[SHA256_DIGEST_SIZE]);
+/* 0 = force the C transform, 1 = use the ARMv8 SHA-256 instructions when the
+ * CPU has them (the default). Returns 1 when the instructions are in use. */
+int sha256_isa_enable(int on);
 
 #endif /* OMEGA_SHA256_H */

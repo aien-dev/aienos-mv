@@ -681,19 +681,82 @@ static void test_sha_hmac(void)
     n_rust++;
 }
 
+/* L339: the instruction paths (AESE/AESMC, PMULL, SHA256H) must give the
+ * same bytes as the C paths. Every vector test above runs once per path (see
+ * main); here random inputs are compared path against path. On a CPU without
+ * the instructions both runs use C and this only checks determinism. */
+static uint64_t isa_rng = 0x2545f4914f6cdd1du;
+static void isa_fill(uint8_t *p, size_t n)
+{
+    while (n--) {
+        isa_rng ^= isa_rng << 13; isa_rng ^= isa_rng >> 7; isa_rng ^= isa_rng << 17;
+        *p++ = (uint8_t)(isa_rng >> 29);
+    }
+}
+
+static void set_isa(int on, int *aes, int *pv, int *sha)
+{
+    *aes = aienos_aes_isa_enable(on);
+    *pv = aienos_polyval_isa_enable(on);
+    *sha = sha256_isa_enable(on);
+}
+
+static int n_isa;
+static void test_isa_equal(void)
+{
+    static uint8_t buf[9000], o1[9000 + 16], o2[9000 + 16];
+    uint8_t key[32], nonce[12], a[16], b[16], d1[32], d2[32];
+    int aes, pv, sha;
+    for (int it = 0; it < 300; it++) {
+        size_t len = (size_t)it * 29 % 9000, aad = (size_t)it % 37;
+        isa_fill(key, 32); isa_fill(nonce, 12); isa_fill(buf, len + aad);
+        isa_fill(a, 16); isa_fill(b, 16);
+        uint8_t ba[16], bb[16], pa[16], pb[16];
+        aienos_aes256_key k;
+        memcpy(ba, a, 16); memcpy(bb, a, 16);
+
+        set_isa(0, &aes, &pv, &sha);
+        CHECK(!aes && !pv && !sha, "isa off did not force C");
+        aienos_aes256_init(&k, key); aienos_aes256_encrypt_block(&k, ba);
+        aienos_polyval_dot(pa, a, b);
+        sha256_hash(buf, len, d1);
+        CHECK(aienos_gcmsiv_seal(key, nonce, buf + len, aad, buf, len, o1, len + 16) == AIENOS_CRYPTO_OK, "seal C");
+
+        set_isa(1, &aes, &pv, &sha);
+        aienos_aes256_init(&k, key); aienos_aes256_encrypt_block(&k, bb);
+        aienos_polyval_dot(pb, a, b);
+        sha256_hash(buf, len, d2);
+        CHECK(aienos_gcmsiv_seal(key, nonce, buf + len, aad, buf, len, o2, len + 16) == AIENOS_CRYPTO_OK, "seal isa");
+
+        CHECK(memcmp(ba, bb, 16) == 0, "aes block isa != C (it %d)", it);
+        CHECK(memcmp(pa, pb, 16) == 0, "polyval isa != C (it %d)", it);
+        CHECK(memcmp(d1, d2, 32) == 0, "sha256 isa != C (len %zu)", len);
+        CHECK(memcmp(o1, o2, len + 16) == 0, "gcm-siv isa != C (len %zu aad %zu)", len, aad);
+        n_isa++;
+    }
+    printf("isa paths: aes=%d pmull=%d sha256=%d (1 = instructions compared against C)\n", aes, pv, sha);
+}
+
 int main(void)
 {
-    test_aes();
-    test_polyval();
-    test_gcmsiv();
-    test_lengths();
-    test_sha_hmac();
+    /* Vectors run on the C paths first, then on the instruction paths. */
+    for (int pass = 0; pass < 2; pass++) {
+        int aes, pv, sha;
+        set_isa(pass, &aes, &pv, &sha);
+        test_aes();
+        test_polyval();
+        test_gcmsiv();
+        test_lengths();
+        test_sha_hmac();
+    }
+    test_isa_equal();
 
     printf("vectors: AES/FIPS-197 %d, POLYVAL RFC 8452 %d, GCM-SIV RFC 8452 C.2+C.3 %d, "
            "aienos-crypto crate tests %d, SHA-256/HMAC %d, negative cases %d\n",
            n_aes, n_polyval, n_gcmsiv_rfc, n_rust, n_sha, n_neg);
+    printf("isa vs C random cross-checks: %d\n", n_isa);
     printf("checks: %d, failures: %d\n", g_checks, g_fail);
-    if (g_fail == 0 && n_gcmsiv_rfc >= 26) {
+    if (g_fail == 0 && n_gcmsiv_rfc >= 52 && n_isa == 300) {
         printf("AIENOS_CRYPTO_NATIVE: PASS\n");
         return 0;
     }

@@ -5,10 +5,12 @@
  * affine transform. All arithmetic is shifts, masks and XORs with a fixed
  * number of steps, 8 bytes packed per uint64_t ("SIMD within a register"),
  * so no memory address and no branch depends on key or data bytes.
- * Slower than table AES; ARMv8 AESE/AESMC are a possible future speedup.
+ * On CPUs with the ARMv8 AES instructions the same rounds run as AESE/AESMC
+ * (L339, ../argus/isa_arm64.h); this C path is the fallback and the reference.
  */
 #include "aienos_crypto.h"
 #include "crypto_internal.h"
+#include "../argus/isa_arm64.h"
 
 static const uint32_t RCON[10] = {
     0x01000000u, 0x02000000u, 0x04000000u, 0x08000000u, 0x10000000u,
@@ -91,6 +93,87 @@ void aienos_aes_sub_bytes16(uint8_t s[16])
     store_le64(s + 8, sub_lanes(load_le64(s + 8)));
 }
 
+
+#ifdef AIENOS_ISA_ARM64
+/* aienos_aes256_arm_blocks(rk, buf, n): encrypt n 16-byte blocks in place
+ * with AESE/AESMC. rk is the word schedule above; REV32 turns each stored
+ * big-endian-valued word into the FIPS 197 byte order. Round keys sit in
+ * v16-v30, the block in v0; all are zeroed before return.
+ * aienos_aes_arm_subword(w): SubWord(w) as AESE with a zero round key on w
+ * copied into all four columns (ShiftRows then moves equal columns only). */
+void aienos_aes256_arm_blocks(const uint32_t rk[60], uint8_t *buf, size_t n);
+uint32_t aienos_aes_arm_subword(uint32_t w);
+__asm__(
+    ".text\n"
+    ".arch_extension aes\n"
+    ".balign 16\n"
+    ".globl aienos_aes256_arm_blocks\n"
+    ".type aienos_aes256_arm_blocks, %function\n"
+    "aienos_aes256_arm_blocks:\n"
+    "  cbz x2, 2f\n"
+    "  ld1 {v16.16b, v17.16b, v18.16b, v19.16b}, [x0], #64\n"
+    "  ld1 {v20.16b, v21.16b, v22.16b, v23.16b}, [x0], #64\n"
+    "  ld1 {v24.16b, v25.16b, v26.16b, v27.16b}, [x0], #64\n"
+    "  ld1 {v28.16b, v29.16b, v30.16b}, [x0]\n"
+    "  rev32 v16.16b, v16.16b\n  rev32 v17.16b, v17.16b\n  rev32 v18.16b, v18.16b\n"
+    "  rev32 v19.16b, v19.16b\n  rev32 v20.16b, v20.16b\n  rev32 v21.16b, v21.16b\n"
+    "  rev32 v22.16b, v22.16b\n  rev32 v23.16b, v23.16b\n  rev32 v24.16b, v24.16b\n"
+    "  rev32 v25.16b, v25.16b\n  rev32 v26.16b, v26.16b\n  rev32 v27.16b, v27.16b\n"
+    "  rev32 v28.16b, v28.16b\n  rev32 v29.16b, v29.16b\n  rev32 v30.16b, v30.16b\n"
+    "1:\n"
+    "  ld1 {v0.16b}, [x1]\n"
+    "  aese v0.16b, v16.16b\n  aesmc v0.16b, v0.16b\n"
+    "  aese v0.16b, v17.16b\n  aesmc v0.16b, v0.16b\n"
+    "  aese v0.16b, v18.16b\n  aesmc v0.16b, v0.16b\n"
+    "  aese v0.16b, v19.16b\n  aesmc v0.16b, v0.16b\n"
+    "  aese v0.16b, v20.16b\n  aesmc v0.16b, v0.16b\n"
+    "  aese v0.16b, v21.16b\n  aesmc v0.16b, v0.16b\n"
+    "  aese v0.16b, v22.16b\n  aesmc v0.16b, v0.16b\n"
+    "  aese v0.16b, v23.16b\n  aesmc v0.16b, v0.16b\n"
+    "  aese v0.16b, v24.16b\n  aesmc v0.16b, v0.16b\n"
+    "  aese v0.16b, v25.16b\n  aesmc v0.16b, v0.16b\n"
+    "  aese v0.16b, v26.16b\n  aesmc v0.16b, v0.16b\n"
+    "  aese v0.16b, v27.16b\n  aesmc v0.16b, v0.16b\n"
+    "  aese v0.16b, v28.16b\n  aesmc v0.16b, v0.16b\n"
+    "  aese v0.16b, v29.16b\n"
+    "  eor v0.16b, v0.16b, v30.16b\n"
+    "  st1 {v0.16b}, [x1], #16\n"
+    "  subs x2, x2, #1\n"
+    "  b.ne 1b\n"
+    "  movi v0.16b, #0\n"
+    "  movi v16.16b, #0\n  movi v17.16b, #0\n  movi v18.16b, #0\n  movi v19.16b, #0\n"
+    "  movi v20.16b, #0\n  movi v21.16b, #0\n  movi v22.16b, #0\n  movi v23.16b, #0\n"
+    "  movi v24.16b, #0\n  movi v25.16b, #0\n  movi v26.16b, #0\n  movi v27.16b, #0\n"
+    "  movi v28.16b, #0\n  movi v29.16b, #0\n  movi v30.16b, #0\n"
+    "2:\n"
+    "  ret\n"
+    ".size aienos_aes256_arm_blocks, .-aienos_aes256_arm_blocks\n"
+    ".balign 16\n"
+    ".globl aienos_aes_arm_subword\n"
+    ".type aienos_aes_arm_subword, %function\n"
+    "aienos_aes_arm_subword:\n"
+    "  dup v0.4s, w0\n"
+    "  movi v1.16b, #0\n"
+    "  aese v0.16b, v1.16b\n"
+    "  umov w0, v0.s[0]\n"
+    "  movi v0.16b, #0\n"
+    "  ret\n"
+    ".size aienos_aes_arm_subword, .-aienos_aes_arm_subword\n");
+
+AIENOS_ISA_STATE(aes_isa);
+#define AES_HW() ((aienos_isa_caps(&aes_isa) & AIENOS_ISA_AES) != 0)
+#endif
+
+int aienos_aes_isa_enable(int on)
+{
+#ifdef AIENOS_ISA_ARM64
+    return aienos_isa_select(&aes_isa, on, AIENOS_ISA_AES);
+#else
+    (void)on;
+    return 0;
+#endif
+}
+
 static uint32_t sub_word(uint32_t w)
 {
     return (uint32_t)sub_lanes(w);
@@ -112,15 +195,28 @@ void aienos_aes256_init(aienos_aes256_key *k, const uint8_t key[32])
     for (int i = 0; i < 8; i++)
         rk[i] = ((uint32_t)key[4 * i] << 24) | ((uint32_t)key[4 * i + 1] << 16) |
                 ((uint32_t)key[4 * i + 2] << 8) | (uint32_t)key[4 * i + 3];
+    uint32_t (*sw)(uint32_t) = sub_word;
+#ifdef AIENOS_ISA_ARM64
+    uint64_t daif = 0;
+    int hw = AES_HW();
+    if (hw) {
+        sw = aienos_aes_arm_subword;
+        daif = aienos_isa_enter();
+    }
+#endif
     /* i % 8 depends only on the public loop index. */
     for (int i = 8; i < 60; i++) {
         uint32_t t = rk[i - 1];
         if (i % 8 == 0)
-            t = sub_word(rot_word(t)) ^ RCON[i / 8 - 1];
+            t = sw(rot_word(t)) ^ RCON[i / 8 - 1];
         else if (i % 8 == 4)
-            t = sub_word(t);
+            t = sw(t);
         rk[i] = rk[i - 8] ^ t;
     }
+#ifdef AIENOS_ISA_ARM64
+    if (hw)
+        aienos_isa_leave(daif);
+#endif
 }
 
 void aienos_aes256_wipe(aienos_aes256_key *k)
@@ -162,7 +258,7 @@ static inline void mix_columns(uint8_t s[16])
 }
 
 /* Works directly on the caller's block: no state copy left on the stack. */
-void aienos_aes256_encrypt_block(const aienos_aes256_key *k, uint8_t block[16])
+static void encrypt_block_c(const aienos_aes256_key *k, uint8_t block[16])
 {
     add_round_key(block, &k->rk[0]);
     for (int round = 1; round < 14; round++) {
@@ -174,4 +270,29 @@ void aienos_aes256_encrypt_block(const aienos_aes256_key *k, uint8_t block[16])
     aienos_aes_sub_bytes16(block);
     shift_rows(block);
     add_round_key(block, &k->rk[56]);
+}
+
+void aienos_aes256_encrypt_block(const aienos_aes256_key *k, uint8_t block[16])
+{
+    aienos_aes256_encrypt_blocks(k, block, 1);
+}
+
+/* n independent blocks in place (ECB): the CTR keystream and key derivation. */
+void aienos_aes256_encrypt_blocks(const aienos_aes256_key *k, uint8_t *buf, size_t n)
+{
+#ifdef AIENOS_ISA_ARM64
+    if (AES_HW()) {
+        while (n) {
+            size_t m = n < 4 * AIENOS_ISA_MAX_BLOCKS ? n : 4 * AIENOS_ISA_MAX_BLOCKS;
+            uint64_t daif = aienos_isa_enter();
+            aienos_aes256_arm_blocks(k->rk, buf, m);
+            aienos_isa_leave(daif);
+            buf += 16 * m;
+            n -= m;
+        }
+        return;
+    }
+#endif
+    for (; n; n--, buf += 16)
+        encrypt_block_c(k, buf);
 }

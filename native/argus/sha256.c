@@ -1,6 +1,9 @@
-/* Copied from aien-dev/omega src/sha256.{c,h} at ceb68d6 (in-house lineage), unchanged except this note */
+/* Copied from aien-dev/omega src/sha256.{c,h} at ceb68d6 (in-house lineage). L339 adds the
+ * ARMv8 SHA-256 instruction path (sha256_blocks, isa_arm64.h); the C transform stays the fallback. */
 #include "sha256.h"
 #include <string.h>
+
+#include "isa_arm64.h"
 
 #define ROTR(x, n) (((x) >> (n)) | ((x) << (32 - (n))))
 #define CH(x, y, z) (((x) & (y)) ^ (~(x) & (z)))
@@ -75,6 +78,104 @@ static void sha256_transform(sha256_ctx *ctx, const uint8_t *data) {
     ctx->state[7] += h;
 }
 
+
+#ifdef AIENOS_ISA_ARM64
+/* aienos_sha256_arm_blocks(state, data, nblk, K): nblk >= 0 blocks with
+ * SHA256H/H2/SU0/SU1; same state update as sha256_transform per block.
+ * v0/v1 = state, v2/v3 = working ABCD/EFGH, v4-v7 = W, v16 = W+K, v17 = ABCD
+ * before the round. All are zeroed before return (see isa_arm64.h). */
+void aienos_sha256_arm_blocks(uint32_t state[8], const uint8_t *data, size_t nblk, const uint32_t *k);
+__asm__(
+    ".text\n"
+    ".arch_extension sha2\n"
+    ".macro aienos_sha_qr w0, w1, w2, w3, upd\n"
+    "  ld1 {v16.4s}, [x4], #16\n"
+    "  add v16.4s, v16.4s, \\w0\\().4s\n"
+    "  mov v17.16b, v2.16b\n"
+    "  sha256h q2, q3, v16.4s\n"
+    "  sha256h2 q3, q17, v16.4s\n"
+    "  .if \\upd\n"
+    "  sha256su0 \\w0\\().4s, \\w1\\().4s\n"
+    "  sha256su1 \\w0\\().4s, \\w2\\().4s, \\w3\\().4s\n"
+    "  .endif\n"
+    ".endm\n"
+    ".balign 16\n"
+    ".globl aienos_sha256_arm_blocks\n"
+    ".type aienos_sha256_arm_blocks, %function\n"
+    "aienos_sha256_arm_blocks:\n"
+    "  cbz x2, 2f\n"
+    "  ld1 {v0.4s, v1.4s}, [x0]\n"
+    "1:\n"
+    "  ld1 {v4.16b, v5.16b, v6.16b, v7.16b}, [x1], #64\n"
+    "  rev32 v4.16b, v4.16b\n"
+    "  rev32 v5.16b, v5.16b\n"
+    "  rev32 v6.16b, v6.16b\n"
+    "  rev32 v7.16b, v7.16b\n"
+    "  mov v2.16b, v0.16b\n"
+    "  mov v3.16b, v1.16b\n"
+    "  mov x4, x3\n"
+    "  aienos_sha_qr v4, v5, v6, v7, 1\n"
+    "  aienos_sha_qr v5, v6, v7, v4, 1\n"
+    "  aienos_sha_qr v6, v7, v4, v5, 1\n"
+    "  aienos_sha_qr v7, v4, v5, v6, 1\n"
+    "  aienos_sha_qr v4, v5, v6, v7, 1\n"
+    "  aienos_sha_qr v5, v6, v7, v4, 1\n"
+    "  aienos_sha_qr v6, v7, v4, v5, 1\n"
+    "  aienos_sha_qr v7, v4, v5, v6, 1\n"
+    "  aienos_sha_qr v4, v5, v6, v7, 1\n"
+    "  aienos_sha_qr v5, v6, v7, v4, 1\n"
+    "  aienos_sha_qr v6, v7, v4, v5, 1\n"
+    "  aienos_sha_qr v7, v4, v5, v6, 1\n"
+    "  aienos_sha_qr v4, v5, v6, v7, 0\n"
+    "  aienos_sha_qr v5, v6, v7, v4, 0\n"
+    "  aienos_sha_qr v6, v7, v4, v5, 0\n"
+    "  aienos_sha_qr v7, v4, v5, v6, 0\n"
+    "  add v0.4s, v0.4s, v2.4s\n"
+    "  add v1.4s, v1.4s, v3.4s\n"
+    "  subs x2, x2, #1\n"
+    "  b.ne 1b\n"
+    "  st1 {v0.4s, v1.4s}, [x0]\n"
+    "  movi v0.16b, #0\n  movi v1.16b, #0\n  movi v2.16b, #0\n  movi v3.16b, #0\n"
+    "  movi v4.16b, #0\n  movi v5.16b, #0\n  movi v6.16b, #0\n  movi v7.16b, #0\n"
+    "  movi v16.16b, #0\n  movi v17.16b, #0\n"
+    "2:\n"
+    "  ret\n"
+    ".size aienos_sha256_arm_blocks, .-aienos_sha256_arm_blocks\n"
+    ".purgem aienos_sha_qr\n");
+
+AIENOS_ISA_STATE(sha_isa);
+#endif
+
+int sha256_isa_enable(int on)
+{
+#ifdef AIENOS_ISA_ARM64
+    return aienos_isa_select(&sha_isa, on, AIENOS_ISA_SHA256);
+#else
+    (void)on;
+    return 0;
+#endif
+}
+
+/* n whole blocks: the instructions when the CPU has them, else C. */
+static void sha256_blocks(sha256_ctx *ctx, const uint8_t *data, size_t n)
+{
+#ifdef AIENOS_ISA_ARM64
+    if (aienos_isa_caps(&sha_isa) & AIENOS_ISA_SHA256) {
+        while (n) {
+            size_t m = n < AIENOS_ISA_MAX_BLOCKS ? n : AIENOS_ISA_MAX_BLOCKS;
+            uint64_t daif = aienos_isa_enter();
+            aienos_sha256_arm_blocks(ctx->state, data, m, K);
+            aienos_isa_leave(daif);
+            data += m * SHA256_BLOCK_SIZE;
+            n -= m;
+        }
+        return;
+    }
+#endif
+    for (; n; n--, data += SHA256_BLOCK_SIZE)
+        sha256_transform(ctx, data);
+}
+
 void sha256_init(sha256_ctx *ctx) {
     ctx->count = 0;
     ctx->state[0] = 0x6a09e667;
@@ -98,15 +199,16 @@ void sha256_update(sha256_ctx *ctx, const uint8_t *data, size_t len) {
             return;
         }
         memcpy(&ctx->buffer[buffer_index], data, left);
-        sha256_transform(ctx, ctx->buffer);
+        sha256_blocks(ctx, ctx->buffer, 1);
         data += left;
         len -= left;
     }
 
-    while (len >= SHA256_BLOCK_SIZE) {
-        sha256_transform(ctx, data);
-        data += SHA256_BLOCK_SIZE;
-        len -= SHA256_BLOCK_SIZE;
+    if (len >= SHA256_BLOCK_SIZE) {
+        size_t n = len / SHA256_BLOCK_SIZE;
+        sha256_blocks(ctx, data, n);
+        data += n * SHA256_BLOCK_SIZE;
+        len -= n * SHA256_BLOCK_SIZE;
     }
 
     if (len > 0) {
