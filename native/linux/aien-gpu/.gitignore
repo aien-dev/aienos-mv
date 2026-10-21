@@ -8,3 +8,5 @@
 Module.symvers
 modules.order
 .module-common.o
+# user-space tools (make tools / sim-test)
+build/

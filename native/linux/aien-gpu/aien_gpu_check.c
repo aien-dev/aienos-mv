@@ -7,12 +7,7 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
-struct aien_gpu_info {
-    uint32_t boot0, boot42;
-    uint64_t bar0_bytes, arena_bytes, arena_iova, fw_bytes;
-    uint32_t fw_ok, pad;
-};
-#define AIEN_GPU_INFO _IOR('A', 0x01, struct aien_gpu_info)
+#include "aien_gpu_uapi.h"
 
 int main(void)
 {

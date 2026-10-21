@@ -1,0 +1,29 @@
+# GspSystemInfo for window 1 (L332 rung 2): what NVIDIA's driver 580.173.02 would send in GSP_SET_SYSTEM_INFO on this
+# Spark (GB10 at PCI 000f:01:00.0). Encoded by native/kernel/tools/ck_gsp_sysinfo_encode; every field not listed is 0.
+# Driver source: rpcGspSetSystemInfo_v17_00 (src/nvidia/src/kernel/vgpu/rpc.c:10493-) and clSyncWithGsp_IMPL
+# (src/nvidia/src/kernel/platform/chipset/chipset.c:760-815). Tags: DOCUMENTED = driver line, OBSERVED = read on this box
+# 2026-10-21, ASSUMED = not settled, reason given. $O = ~/workspace/_ext/open-gpu-kernel-modules-580.173.02.
+
+# Bus addresses. The GB10 has one memory BAR: BAR0 0x24000000, 64 MiB (sysfs resource, lspci; OBSERVED). nv-pci.c:1495-1508
+# fills nv->bars[] with valid memory BARs in order, so nv->fb (bars[1]) and bars[2] (IMEM) stay zero (DOCUMENTED).
+# osinit.c:737-742 -> gpu_mgr.c (non-SOC branch): gpuPhysAddr = BAR0, gpuPhysFbAddr = 0, gpuPhysIoAddr = 0, and with no
+# IMEM BAR gpuPhysInstAddr = BAR0 + 0x700000 (NV_PRAMIN, gpu_mgr.c ~1994).
+gpuPhysAddr                 0x24000000
+gpuPhysInstAddr             0x24700000
+# gpuEncodeDomainBusDevice (g_gpu_nvoc.h:502-507, fields 63:32 domain, 15:8 bus, 7:0 device; function not encoded),
+# via nv_encode_pci_info (osinit.c:144-147): domain 0xf, bus 1, device 0.
+nvDomainBusDeviceFunc       0x0000000f00000100
+
+# PCI identity, as the GB100-family HAL reads config space (kern_gpu_gb100.c:940-967): DEVICE_VENDOR_ID dword,
+# SUBSYSTEM_ID_AND_VENDOR_ID dword, revision byte of dword 8. OBSERVED: 10de:2e12, subsystem 10de:0000, revision 0xa1.
+PCIDeviceID                 0x2e1210de
+PCISubDeviceID              0x000010de
+PCIRevisionID               0xa1
+
+# OS: TASK_SIZE (os-interface.c:1128-1131) with CONFIG_ARM64_VA_BITS=48 (OBSERVED /boot/config); osGetPageSize = 4096
+# (CONFIG_ARM64_4K_PAGES=y, getconf PAGESIZE, OBSERVED).
+maxUserVa                   0x1000000000000
+hostPageSize                4096
+
+# PCIe link capabilities register of the GPU (config 0x6c = Express cap 0x60 + 0xc), OBSERVED setpci 6c.l.
+pcieConfigReg.linkCap       0x00457901

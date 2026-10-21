@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# L332 rung 2 window 1, part 3 (after the restore reboot): the box is back as before. Read-only.
+set -u
+here=$(cd "$(dirname "$0")" && pwd)
+log=$here/$(readlink "$here/window1-current.log")
+ts() { echo "$(date -u +%FT%T.%NZ) $*" | tee -a "$log"; }
+ok=1
+ts "check start; boot $(uptime -s)"
+[ -e /etc/modprobe.d/zz-aien-gpu-window1.conf ] && { ts "blacklist file still there: delete it and reboot"; ok=0; }
+n=$(lsmod | grep -cE '^nvidia'); ts "nvidia modules loaded: $n (want 4)"; [ "$n" = 4 ] || ok=0
+lsmod | grep -q '^aien_gpu' && { ts "aien_gpu loaded after reboot: unexpected"; ok=0; }
+nvidia-smi -L >> "$log" 2>&1 || { ts "nvidia-smi failed: GPU not back on NVIDIA's driver"; ok=0; }
+ts "WINDOW1 RESTORE $([ $ok = 1 ] && echo PASS || echo FAIL)"

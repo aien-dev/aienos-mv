@@ -63,7 +63,46 @@ Scripts in this directory, each line timed into window0-<UTC>.log (window0-curre
 - After the restore reboot: four modules back, file gone.
 - Log committed under evidence/own-gpu-driver/rung2/, pass or fail.
 
+## Window 1: start NVIDIA's GSP firmware with our own code
+Only after window 0 PASS (part 1 refuses otherwise). Same take-away and give-back as window 0 (reboot with NVIDIA held
+back, restore reboot), so the same people stop the same GPU users.
+
+What our code does to the chip, all of it from the source lines quoted in native/kernel/gpu/gsp_mmio.h and
+gpu/contract/gb10_gsp.devc: builds the start-up package in memory the GPU can read (L192 builder), writes one 868-byte
+signed packet into SEC2's mailbox memory, rings SEC2 once, waits for SEC2 to hand control to GSP, writes the GSP-RM
+version into one register, then only reads: GSP's status messages until "INIT_DONE" or 30 s.
+
+Why this cannot harm the chip: the GPU checks NVIDIA's signature on the firmware itself (the chain of trust lives in
+SEC2 and the boot ROM; we hand over NVIDIA's signed images byte for byte, pinned by SHA-256). Our module lets user space
+reach only the 12 start-up registers (6 of them writable), only with allow_boot=1, and rings the SEC2 doorbell once per
+load. What can go wrong is that GSP is left stopped or half started until the GPU is reset.
+
+UNKNOWN until this window (said out loud):
+- whether the restore reboot resets the GB10's GSP and SEC2 fully. If it does not, NVIDIA's driver fails after the
+  restore reboot (part 3 shows it) and the fix is a full power cycle at the wall: Drake, physical. That would also keep
+  the 35B server down until then. This is the one real cost; the coordinator weighs it when scheduling.
+- whether SEC2 accepts the packet with Linux's driver absent (inventory 14.5), whether GSP-FMC accepts our WprMeta and
+  heap, whether our GspSystemInfo values (rung2/system_info.txt, each tagged with its source) are what GSP-RM needs,
+  whether GSP-RM asks for a CPU sequencer run before INIT_DONE (window 1 records it and stops; handling it is window 2).
+
+Steps (each line timed into window1-<UTC>.log, window1-current.log points at it):
+0. Before the window: `make -C native/linux/aien-gpu all tools sim-test` (sim test PASS), the package
+   `./window1-package.sh <dir>` (WINDOW1_PACKAGE: PASS), then `./window1-pre.sh <dir>` (checks only).
+1. Window opens, GPU users stopped: `./window1-pre.sh <dir> --go` (blacklist file, reboot).
+2. After ssh is back: `./window1-post.sh`: deletes the file, aborts if any NVIDIA module is loaded, sets panic
+   auto-reboot, insmod aien_gpu allow_bind=1 allow_boot=1 arena_mib=<package size + 9> heap_mib=512, runs
+   aien_gsp_boot (register trace with times, plan, every status message, GSP log buffers, verdict) into
+   window1-<UTC>-run/, prints WINDOW1 PASS or STOPPED, reboots WITHOUT rmmod.
+3. After the restore reboot: `./window1-check.sh` (four NVIDIA modules, nvidia-smi answers, file gone, aien_gpu not
+   loaded): WINDOW1 RESTORE PASS. Owners restart their servers. Commit the log and the run directory, pass or fail.
+
+Recovery: as window 0. If part 3 fails (nvidia-smi does not list the GPU after the restore reboot), reboot once more;
+if it still fails, the GPU needs a power cycle (Drake, physical), and nothing else is tried on the chip until then.
+
+Gate (window 1 PASS): aien_gsp_boot verdict INIT-DONE, register trace inside the allowlist, WINDOW1 RESTORE PASS.
+Any other verdict is still a result: it names the step that stopped (SEC2, mask, lockdown, FMC code, core, queue).
+
 ## Later windows (each needs its own prepared step and its own request)
-1. GSP boot through FSP from aien-gpu (L192 builder + the BAR0 MMIO sequence, L346).
+1. (window 1 above.)
 2. The RPC subset from docs/numeric/DRIVER_FLOOR.md and one channel (gpu/contract/gb10_chan.devc).
 3. Omega on aien-gpu through L202's typed handles: golden tokens identical to nvidia.ko, per-word timing and start time side by side.

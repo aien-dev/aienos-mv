@@ -2038,6 +2038,34 @@ gsp-rpc-test: $(GSP_RPC_TOOL)
 	$(GSP_RPC_TOOL) selftest | grep -E '^CK_GSP_RPC_ENCODE_SELFTEST: (PASS|FAIL)' | grep -q PASS || { $(GSP_RPC_TOOL) selftest | grep -E 'FAIL|SELFTEST'; exit 1; }
 	@$(GSP_RPC_TOOL) selftest | tail -1
 
+# ---- GspSystemInfo encoder (L332 rung 2 window 1): the 936 bytes of GSP_SET_SYSTEM_INFO from a
+# "field value" text file. gsp-sysinfo-test = anchors, a known encoding, every refusal.
+# gsp-sysinfo-nvhdr-test = our field list against NVIDIA's own struct text, cut out of the pinned
+# tree (OGKM_DIR) at build time by line range; each cut is checked to start and end where expected.
+GSP_SI_TOOL := $(OUT)/host/ck_gsp_sysinfo_encode
+$(GSP_SI_TOOL): $(KDIR)/tools/ck_gsp_sysinfo_encode.c
+	@mkdir -p $(dir $@)
+	$(HOSTCC) -std=gnu11 -O2 -Wall -Wextra -Werror -o $@ $<
+gsp-sysinfo-test: $(GSP_SI_TOOL)
+	$(GSP_SI_TOOL) selftest | grep -E '^CK_GSP_SYSINFO_ENCODE_SELFTEST: (PASS|FAIL)' | grep -q PASS || { $(GSP_SI_TOOL) selftest | grep -E 'FAIL|SELFTEST'; exit 1; }
+	@$(GSP_SI_TOOL) selftest | tail -1
+GSP_SI_NV := $(OUT)/host/gsp_sysinfo_nvidia.h
+gsp-sysinfo-nvhdr-test: $(KDIR)/tools/ck_gsp_sysinfo_encode.c
+	@test -d $(OGKM_SRC) || { echo "GSP_SYSINFO_NVHDR: FAIL (no open-gpu-kernel-modules 580.173.02 tree at OGKM_DIR=$(OGKM_DIR))"; exit 1; }
+	@mkdir -p $(OUT)/host
+	@cut() { sed -n "$$2,$$3p" "$(OGKM_SRC)/$$1" > $(GSP_SI_NV).part; \
+	  head -1 $(GSP_SI_NV).part | grep -q "$$4" && tail -1 $(GSP_SI_NV).part | grep -q "$$5" || \
+	  { echo "GSP_SYSINFO_NVHDR: FAIL ($$1:$$2-$$3 is not $$4 .. $$5)"; exit 1; }; cat $(GSP_SI_NV).part >> $(GSP_SI_NV); }; \
+	: > $(GSP_SI_NV); \
+	cut common/sdk/nvidia/inc/ctrl/ctrl0073/ctrl0073system.h 747 747 'NV0073_CTRL_SYSTEM_ACPI_ID_MAP_MAX_DISPLAYS' '(16U)' && \
+	cut nvidia/inc/kernel/gpu/gpu_acpi_data.h 72 115 'typedef struct DOD_METHOD_DATA' '} ACPI_METHOD_DATA;' && \
+	cut nvidia/generated/g_chipset_nvoc.h 220 227 'typedef struct' '} BUSINFO;' && \
+	cut nvidia/inc/kernel/gpu/gsp/gsp_static_config.h 45 62 'typedef struct GSP_VF_INFO' '} GSP_PCIE_CONFIG_REG;' && \
+	cut nvidia/inc/kernel/gpu/gsp/gsp_static_config.h 172 227 'typedef struct GspSystemInfo' '} GspSystemInfo;'
+	$(HOSTCC) -std=gnu11 -O2 -Wall -Wextra -Werror $(OGKM_INC) -DCK_SYSINFO_NVHDR='"$(GSP_SI_NV)"' \
+	  -o $(OUT)/host/ck_gsp_sysinfo_nvhdr $(KDIR)/tools/ck_gsp_sysinfo_encode.c
+	$(OUT)/host/ck_gsp_sysinfo_nvhdr nvhdr
+
 # ---- GB10 GSP boot builder, freestanding (L192, aienos#286 cut C host side) ----
 # dev/gb10_gsp_boot.c composes every block above into one arena plus the SEC2 COT packet and the
 # post-init RPCs (GSP_RM_ALLOC / CONTROL / FREE, GET_GSP_STATIC_INFO). Bytes in memory only: no
