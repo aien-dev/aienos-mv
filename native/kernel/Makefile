@@ -2498,3 +2498,6 @@ pi5-gem-mutants:
 	  if $(OUT)/host/test_pi5_gem_mut_$$m >/dev/null; then echo "MUTANT SURVIVED: $$m"; fail=1; else echo "mutant killed: $$m"; fi; \
 	done; test $$fail -eq 0
 .PHONY: test-pi5-gem pi5-gem-mutants
+
+# ---- Apple Silicon platform layer (apple.mk; image only with CK_APPLE=1) ----
+include $(KDIR)/apple.mk
