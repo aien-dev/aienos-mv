@@ -2524,6 +2524,39 @@ gsp-mmio-freestanding:
 	  nm -u $(OUT)/host/gpu-fs/gsp_mmio.o; echo "gsp-mmio-freestanding: FAIL"; exit 1; fi; \
 	echo "gsp-mmio-freestanding: PASS (gsp_mmio.c with KCC/KCFLAGS, no undefined symbol)"
 .PHONY: test-gsp-mmio gsp-mmio-freestanding
+# The same start-up written from gpu/contract/gb10_gsp.devc (aienos-devc class gpu-boot, branch feat/devc-gpu):
+# gen/gsb_contract.c has the gsp_mmio.h API with the contract's own offsets. It must pass test_gsp_mmio and match
+# the hand twin access for access in every gsp_boot_trace scenario.
+GSP_CONTRACT_C := $(KDIR)/gpu/contract/gen/gsb_contract.c
+GSP_TRACE_DEPS := $(KDIR)/tests/gsp_boot_trace.c $(KDIR)/gpu/gsp_sim.c $(KDIR)/gpu/gsp_mmio.h $(KDIR)/gpu/gsp_sim.h $(KDIR)/gpu/gmmu.h
+$(OUT)/host/test_gsp_mmio_contract: $(GSP_MMIO_DEPS) $(GSP_CONTRACT_C)
+	@mkdir -p $(dir $@)
+	$(HOSTCC) $(HCFLAGS) -I$(KDIR)/gpu -o $@ $< $(GSP_CONTRACT_C) $(KDIR)/gpu/gsp_sim.c
+$(OUT)/host-san/test_gsp_mmio_contract: $(GSP_MMIO_DEPS) $(GSP_CONTRACT_C)
+	@mkdir -p $(dir $@)
+	$(HOSTCC) $(HCFLAGS) $(SANFLAGS) -I$(KDIR)/gpu -o $@ $< $(GSP_CONTRACT_C) $(KDIR)/gpu/gsp_sim.c
+$(OUT)/host/gsp_boot_trace_hand: $(GSP_TRACE_DEPS) $(KDIR)/gpu/gsp_mmio.c
+	@mkdir -p $(dir $@)
+	$(HOSTCC) $(HCFLAGS) -I$(KDIR)/gpu -o $@ $< $(KDIR)/gpu/gsp_mmio.c $(KDIR)/gpu/gsp_sim.c
+$(OUT)/host/gsp_boot_trace_contract: $(GSP_TRACE_DEPS) $(GSP_CONTRACT_C)
+	@mkdir -p $(dir $@)
+	$(HOSTCC) $(HCFLAGS) -I$(KDIR)/gpu -o $@ $< $(GSP_CONTRACT_C) $(KDIR)/gpu/gsp_sim.c
+test-gsp-contract: $(OUT)/host/test_gsp_mmio_contract $(OUT)/host-san/test_gsp_mmio_contract
+	$(OUT)/host/test_gsp_mmio_contract
+	$(OUT)/host-san/test_gsp_mmio_contract
+gsp-contract-trace: $(OUT)/host/gsp_boot_trace_hand $(OUT)/host/gsp_boot_trace_contract
+	@$(OUT)/host/gsp_boot_trace_hand > $(OUT)/host/gsp_boot_trace_hand.txt
+	@$(OUT)/host/gsp_boot_trace_contract > $(OUT)/host/gsp_boot_trace_contract.txt
+	@cmp $(OUT)/host/gsp_boot_trace_hand.txt $(OUT)/host/gsp_boot_trace_contract.txt \
+	  && echo "gsp-contract-trace: PASS ($$(wc -l < $(OUT)/host/gsp_boot_trace_hand.txt) lines identical, hand vs contract)"
+gsp-contract-freestanding:
+	@mkdir -p $(OUT)/host/gpu-fs
+	@$(KCC) $(KCFLAGS) -I$(KDIR)/gpu -c -o $(OUT)/host/gpu-fs/gsb_contract.o $(GSP_CONTRACT_C) || exit 1; \
+	if nm -u $(OUT)/host/gpu-fs/gsb_contract.o | grep -v " _GLOBAL_OFFSET_TABLE_$$" | grep -q .; then \
+	  nm -u $(OUT)/host/gpu-fs/gsb_contract.o; echo "gsp-contract-freestanding: FAIL"; exit 1; fi; \
+	echo "gsp-contract-freestanding: PASS (gsb_contract.c with KCC/KCFLAGS, no undefined symbol)"
+.PHONY: test-gsp-contract gsp-contract-trace gsp-contract-freestanding
+
 
 # AIENOS-PI5 PCIe root complex / RP1 enumerator logic over a fake register file. Not the hardware.
 PI5PCIE_SRCS := $(KDIR)/dev/pi5_pcie.c

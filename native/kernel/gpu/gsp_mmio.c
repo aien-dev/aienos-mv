@@ -52,7 +52,8 @@ int ck_gsp_mmio_boot(const struct ck_gpu_regs *r, const struct ck_gsp_mmio_in *i
 
     /* 1 */
     for (n = 0;; n++) {
-        if (rd(r, CK_GSP_SEC2_QHEAD0) == rd(r, CK_GSP_SEC2_QTAIL0))
+        uint32_t head = rd(r, CK_GSP_SEC2_QHEAD0); /* HEAD then TAIL, as _ksec2GetQueueHeadTail_GB10B :103-104 */
+        if (head == rd(r, CK_GSP_SEC2_QTAIL0))
             break;
         if (n >= in->polls_can_send) {
             o->polls[0] = n;

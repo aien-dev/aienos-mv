@@ -18,7 +18,7 @@
 struct ck_gspsim_cfg {
     uint32_t busy_reads;      /* HEAD reads during which the SEC2 channel still holds an old message */
     uint32_t cmd_reads;       /* MAILBOX0 reads that return 0xc001cafe after the doorbell */
-    uint32_t mask_reads;      /* HWCFG2 reads that return 0xBADF4101 after the command is handled */
+    uint32_t mask_reads;      /* HWCFG2 reads that return 0xBADF41A7 after the command is handled */
     uint32_t args_reads;      /* GSP MAILBOX0 reads that still return the boot-argument address */
     uint32_t lockdown_reads;  /* HWCFG2 reads with lockdown set after the target mask is released */
     uint32_t fmc_error;       /* non-zero: the FMC writes this code to GSP MAILBOX0 instead of releasing */

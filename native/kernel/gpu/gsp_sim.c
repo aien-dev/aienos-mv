@@ -29,7 +29,7 @@ void ck_gspsim_init(struct ck_gspsim *s, const struct ck_gspsim_cfg *cfg)
         s->qhead = 0;
         s->qtail = 16;
     }
-    s->hwcfg2 = CK_GSP_PRIV_LOCKED | 1u; /* SIM-CHOICE: target locked to SEC2 before the boot */
+    s->hwcfg2 = CK_GSP_PRIV_LOCKED | 0xA7u; /* SIM-CHOICE: target locked to SEC2; low byte = "extra error information" (:272) */
     s->sec2_mb0 = 0;                     /* SIM-CHOICE: idle SEC2 mailbox value unknown; 0 */
     s->left = cfg->busy_reads;
 }

@@ -12,7 +12,7 @@ cp "$K/gpu/gsp_mmio.h" "$K/gpu/gsp_sim.h" "$K/gpu/gsp_sim.c" "$K/gpu/gmmu.h" "$w
 build() { $CC -std=c11 -O1 -I"$work/gpu" -I"$K/tests" -o "$work/t" "$K/tests/test_gsp_mmio.c" "$1" "$work/gpu/gsp_sim.c" > "$work/cc.log" 2>&1; }
 build "$K/gpu/gsp_mmio.c" && "$work/t" > /dev/null 2>&1 || { echo "BASELINE FAILS"; exit 2; }
 muts=(
-  "if (rd(r, CK_GSP_SEC2_QHEAD0) == rd(r, CK_GSP_SEC2_QTAIL0))|if (rd(r, CK_GSP_SEC2_QHEAD0) != rd(r, CK_GSP_SEC2_QTAIL0))"
+  "if (head == rd(r, CK_GSP_SEC2_QTAIL0))|if (head != rd(r, CK_GSP_SEC2_QTAIL0))"
   "if (n >= in->polls_can_send) {|if (n > in->polls_can_send) {"
   "wr(r, CK_GSP_SEC2_EMEMC0, CK_GSP_EMEMC_AINCW);|wr(r, CK_GSP_SEC2_EMEMC0, 0);"
   "(uint32_t)in->packet[i + 3] << 24|(uint32_t)in->packet[i + 3] << 16"

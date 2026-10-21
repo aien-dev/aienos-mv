@@ -15,4 +15,10 @@ bash evidence/own-gpu-driver/rung1/contract_mutants.sh "$DEVC" "$A/native/kernel
 make -s -C native/kernel OUT=$O test-gsp-mmio 2>&1 | tail -3
 make -s -C native/kernel OUT=$O gsp-mmio-freestanding 2>&1 | tail -2
 bash evidence/own-gpu-driver/rung1/gsp_mmio_mutants.sh "$A/native/kernel" 2>&1 | tail -3
+t2=$(mktemp -d); "$DEVC" gen "$A/native/kernel/gpu/contract/gb10_gsp.devc" "$t2" >/dev/null || { echo "GATE gsp gen FAIL"; exit 1; }
+for f in "$t2"/*; do cmp -s "$f" "$A/native/kernel/gpu/contract/gen/$(basename "$f")" && echo "drift: $(basename "$f") identical" || echo "GATE drift FAIL: $(basename "$f")"; done
+make -s -C native/kernel OUT=$O test-gsp-contract 2>&1 | tail -3
+make -s -C native/kernel OUT=$O gsp-contract-trace 2>&1 | tail -2
+make -s -C native/kernel OUT=$O gsp-contract-freestanding 2>&1 | tail -2
+bash evidence/own-gpu-driver/rung1/gsp_contract_mutants.sh "$DEVC" "$A/native/kernel" 2>&1 | tail -3
 echo "gates exit done"

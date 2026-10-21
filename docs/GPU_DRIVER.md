@@ -41,20 +41,30 @@ chip's cache that the main processor writes while the chip reads it (the mistake
 The generated code has to behave exactly like the hand-written version from L193: same 225 checks, and a side-by-side
 trace of every register write and the whole simulated memory after each of about 330 operations must match byte for byte.
 
+The second contract is the chip start-up: `native/kernel/gpu/contract/gb10_gsp.devc`. It describes the eleven register
+steps that hand NVIDIA's signed start-up package to the chip's security processor (SEC2), wait for it to check and start
+the chip's own operating program, and confirm that program is running. The compiler refuses a start-up that writes the
+package while an older message is still there, rings the bell before the message is complete, touches the chip's main
+processor before the security processor releases it, or waits on anything without a time limit. A hand-written version
+(`native/kernel/gpu/gsp_mmio.c`) runs against a simulated security processor; the generated one must pass the same 67
+checks and make the very same register accesses in 16 scenarios, including every way the start-up can fail. Twenty
+deliberate small errors in each version are all caught. None of this has run on the chip yet.
+
 On Linux, a small add-on module `aien-gpu` (native/linux/aien-gpu) will host that core in place of NVIDIA's driver.
 Its first version only reads the chip's identity, loads NVIDIA's firmware file and sets up one big shared memory area;
 it binds to the chip only when told to, after NVIDIA's driver is gone.
 
 ## What stays on loan from NVIDIA, and why
 
-The chip's small processor only runs a program signed by NVIDIA. A security block on the chip (FSP) checks the signature
-before it lets that program start, and we do not have NVIDIA's signing key. So these files stay NVIDIA's, loaded the way
+The chip's small processor only runs a program signed by NVIDIA. A security block on the chip checks the signature before
+it lets that program start (on the GB10 that is the SEC2 processor; this chip has no FSP), and we do not have NVIDIA's
+signing key. So these files stay NVIDIA's, loaded the way
 we load model weights, named here:
 
 1. `gsp_ga10x.bin` (75,012,080 bytes, /lib/firmware/nvidia/580.173.02/), the chip's operating program.
 2. The GSP boot loader and the signed first-stage loader (FMC) for GB10B, which ship inside nvidia.ko as embedded data
    (g_bindata_kgspGetBinArchiveGspRmBoot_GB10B.c, GspRmFmcGfwProdSigned_GB10B.c in the open driver source), together with
-   the hash, signature and public key the driver hands to FSP (kern_fsp_gh100.c around lines 1023 to 1070).
+   the hash, signature and public key the driver hands to the security processor in one 868-byte message.
 
 Everything on the main processor side becomes ours. If evidence ever shows the signature check can be satisfied another
 way, it goes in as an open question with an experiment, and nothing is tried that could damage the chip.
@@ -62,8 +72,8 @@ way, it goes in as an open question with an experiment, and nothing is tried tha
 ## The rungs
 
 0. Measure what NVIDIA's driver costs (above).
-1. The driver core in our contract language, proven on the simulator (job queue done first; the chip start-up sequence
-   (GSP boot) is the next contract, L192's hand code is its reference twin).
+1. The driver core in our contract language, proven on the simulator (job queue and chip start-up done; next the
+   shared memory area the chip program needs and the first message exchange with it).
 2. Run it on the real chip under Linux, in a window the coordinator schedules, because it takes the GPU away from
    everything else for a while. Window 0 only reads the chip and gives it back (evidence/own-gpu-driver/rung2/RUNBOOK.md).
 3. The same core inside our own operating system on the Spark, once that boots natively (L318).
