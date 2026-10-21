@@ -1,5 +1,6 @@
-apple Image: /home/drakestapleton/workspace/aienos-apple-silicon-platform/target/native-kernel/apple-test-e2h/Image 40256 bytes, header ok (ARM\x64, b at 0, only RELATIVE relocations)
-apple Image: /home/drakestapleton/workspace/aienos-apple-silicon-platform/target/native-kernel/apple-test-e2h-mutant-cnthctl/Image 40256 bytes, header ok (ARM\x64, b at 0, only RELATIVE relocations)
+apple Image: /home/drakestapleton/workspace/aienos-apple-silicon-platform/target/native-kernel/apple/Image 40328 bytes, header ok (ARM\x64, b at 0, only RELATIVE relocations)
+apple Image: /home/drakestapleton/workspace/aienos-apple-silicon-platform/target/native-kernel/apple-test-e2h/Image 40328 bytes, header ok (ARM\x64, b at 0, only RELATIVE relocations)
+apple Image: /home/drakestapleton/workspace/aienos-apple-silicon-platform/target/native-kernel/apple-test-e2h-mutant-cnthctl/Image 40328 bytes, header ok (ARM\x64, b at 0, only RELATIVE relocations)
 ---- el2 (qemu exit 0) ----
 AIENOS_APPLE_IMAGE: entry el=2 e2h=0 dtb=0x48000000 image=0x40200000-0x4025b000
 apple: el2->el1 done (CurrentEL=1, HCR_EL2.E2H=0)
@@ -8,7 +9,7 @@ apple: console pl011 at 0x9000000 (stdout-path -> /pl011@9000000)
 apple: memory 0x40000000+0x40000000 (memory@40000000)
 apple: memreserve entries=0
 apple: vectors ok (brk at EL1 taken=1, returned)
-apple: timer ok cntfrq=62500000 el1 physical timer fired after 63545 ticks (polled, interrupt masked)
+apple: timer ok cntfrq=62500000 el1 physical timer fired after 63157 ticks (polled, interrupt masked)
 apple: REFUSED not an Apple platform (root compatible "linux,dummy-virt"); Apple drivers not started
 apple: family table rows=14
 apple: fiq sources now=0x0 (timer bits only off-Apple)
@@ -27,7 +28,7 @@ apple: console pl011 at 0x9000000 (stdout-path -> /pl011@9000000)
 apple: memory 0x40000000+0x40000000 (memory@40000000)
 apple: memreserve entries=0
 apple: vectors ok (brk at EL1 taken=1, returned)
-apple: timer ok cntfrq=62500000 el1 physical timer fired after 63193 ticks (polled, interrupt masked)
+apple: timer ok cntfrq=62500000 el1 physical timer fired after 64452 ticks (polled, interrupt masked)
 apple: REFUSED not an Apple platform (root compatible "linux,dummy-virt"); Apple drivers not started
 apple: family table rows=14
 apple: fiq sources now=0x0 (timer bits only off-Apple)
@@ -46,7 +47,7 @@ apple: console pl011 at 0x9000000 (stdout-path -> /pl011@9000000)
 apple: memory 0x40000000+0x40000000 (memory@40000000)
 apple: memreserve entries=0
 apple: vectors ok (brk at EL1 taken=1, returned)
-apple: timer ok cntfrq=62500000 el1 physical timer fired after 63960 ticks (polled, interrupt masked)
+apple: timer ok cntfrq=62500000 el1 physical timer fired after 63177 ticks (polled, interrupt masked)
 apple: REFUSED not an Apple platform (root compatible "linux,dummy-virt"); Apple drivers not started
 apple: family table rows=14
 apple: fiq sources now=0x0 (timer bits only off-Apple)
@@ -65,7 +66,7 @@ apple: console pl011 at 0x9000000 (stdout-path -> /pl011@9000000)
 apple: memory 0x40000000+0x40000000 (memory@40000000)
 apple: memreserve entries=0
 apple: vectors ok (brk at EL1 taken=1, returned)
-apple: timer ok cntfrq=62500000 el1 physical timer fired after 63062 ticks (polled, interrupt masked)
+apple: timer ok cntfrq=62500000 el1 physical timer fired after 63389 ticks (polled, interrupt masked)
 apple: REFUSED unknown Apple SoC (root compatible "apple,j999","apple,t8142","apple,arm-platform"; no family table row); Apple drivers not started
 apple: family table rows=14
 apple: fiq sources now=0x0 (timer bits only off-Apple)
@@ -84,7 +85,7 @@ apple: console pl011 at 0x9000000 (stdout-path -> /pl011@9000000)
 apple: memory 0x40000000+0x40000000 (memory@40000000)
 apple: memreserve entries=0
 apple: vectors ok (brk at EL1 taken=1, returned)
-apple: timer ok cntfrq=62500000 el1 physical timer fired after 64701 ticks (polled, interrupt masked)
+apple: timer ok cntfrq=62500000 el1 physical timer fired after 63573 ticks (polled, interrupt masked)
 apple: REFUSED apple,t8112 row wants interrupt controller "apple,aic2"; tree has none; Apple drivers not started
 apple: family table rows=14
 apple: fiq sources now=0x0 (timer bits only off-Apple)

@@ -120,23 +120,23 @@ apple mutant CK_SMP_MUTANT_NO_CLEAN: killed by test_apple_smp (6 checks failed)
 apple mutant CK_SMP_MUTANT_NO_SEV: killed by test_apple_smp (6 checks failed)
 apple mutant CK_SMP_MUTANT_NO_RSV_CHECK: killed by test_apple_smp (4 checks failed)
 CK_APPLE_MUTANTS: PASS
-  t8103-j313.dtb: apple: soc=t8103 name="M1" gen=M1 aic=v1 aic_base=0x23b100000 aic_event=0x23b100000 idle=wfi-after-retention start=spin-table cpus=8 released=0 dart_page=16384 usbc=cd3217-i2c
-  t8112-j413.dtb: apple: soc=t8112 name="M2" gen=M2 aic=v2 aic_base=0x23b0c0000 aic_event=0x23b0c8000 idle=wfi-after-retention start=spin-table cpus=8 released=0 dart_page=16384 usbc=cd3217-i2c
-  t8122-j613.dtb: apple: soc=t8122 name="M3" gen=M3 aic=v3 aic_base=0x2d1000000 aic_event=0x2d1040000 idle=wfi-after-retention start=spin-table cpus=8 released=0 dart_page=16384 usbc=ace3-spmi
-  t8132-j713.dtb: apple: soc=t8132 name="M4" gen=M4 aic=v3 aic_base=0x381000000 aic_event=0x381040000 idle=spin start=spin-table cpus=10 released=0 dart_page=16384 usbc=none
-  t6000-j314s.dtb: apple: soc=t6000 name="M1 Pro" gen=M1 aic=v2 aic_base=0x28e100000 aic_event=0x28e10c000 idle=wfi-after-retention start=spin-table cpus=10 released=0 dart_page=16384 usbc=cd3217-i2c
-  t6020-j414s.dtb: apple: soc=t6020 name="M2 Pro" gen=M2 aic=v2 aic_base=0x28e100000 aic_event=0x28e10c000 idle=wfi-after-retention start=spin-table cpus=12 released=0 dart_page=16384 usbc=cd3217-i2c
-  t6031-j514c.dtb: apple: soc=t6031 name="M3 Max" gen=M3 aic=v3 aic_base=0x292400000 aic_event=0x292440000 idle=wfi-after-retention start=spin-table cpus=16 released=0 dart_page=16384 usbc=ace3-spmi
+  t8103-j313.dtb: apple: soc=t8103 name="M1" gen=M1 aic=v1 aic_base=0x23b100000 aic_event=0x23b100000 idle=wfi-after-retention start=spin-table cpus=8 released=0 wfxt=yes ctrr_hole=no usbc=cd3217-i2c
+  t8112-j413.dtb: apple: soc=t8112 name="M2" gen=M2 aic=v2 aic_base=0x23b0c0000 aic_event=0x23b0c8000 idle=wfi-after-retention start=spin-table cpus=8 released=0 wfxt=yes ctrr_hole=no usbc=cd3217-i2c
+  t8122-j613.dtb: apple: soc=t8122 name="M3" gen=M3 aic=v3 aic_base=0x2d1000000 aic_event=0x2d1040000 idle=wfi-after-retention start=spin-table cpus=8 released=0 wfxt=yes ctrr_hole=no usbc=ace3-spmi
+  t8132-j713.dtb: apple: soc=t8132 name="M4" gen=M4 aic=v3 aic_base=0x381000000 aic_event=0x381040000 idle=spin start=spin-table cpus=10 released=0 wfxt=no ctrr_hole=reserve usbc=none
+  t6000-j314s.dtb: apple: soc=t6000 name="M1 Pro" gen=M1 aic=v2 aic_base=0x28e100000 aic_event=0x28e10c000 idle=wfi-after-retention start=spin-table cpus=10 released=0 wfxt=yes ctrr_hole=no usbc=cd3217-i2c
+  t6020-j414s.dtb: apple: soc=t6020 name="M2 Pro" gen=M2 aic=v2 aic_base=0x28e100000 aic_event=0x28e10c000 idle=wfi-after-retention start=spin-table cpus=12 released=0 wfxt=yes ctrr_hole=no usbc=cd3217-i2c
+  t6031-j514c.dtb: apple: soc=t6031 name="M3 Max" gen=M3 aic=v3 aic_base=0x292400000 aic_event=0x292440000 idle=wfi-after-retention start=spin-table cpus=16 released=0 wfxt=yes ctrr_hole=no usbc=ace3-spmi
   qemu-virt.dtb: apple: REFUSED not an Apple platform (root compatible "linux,dummy-virt"); Apple drivers not started
   flips: 478 opened, 2522 refused
 test_apple_fdt: PASS (356 checks)
 test_apple_aic: PASS (150 checks)
-  t8103-j313.dtb: cpus=8 boot=1 refused-no-release-addr=7 writes=0
-  t8112-j413.dtb: cpus=8 boot=1 refused-no-release-addr=7 writes=0
-  t8122-j613.dtb: cpus=8 boot=1 refused-no-release-addr=7 writes=0
-  t8132-j713.dtb: cpus=10 boot=1 refused-no-release-addr=9 writes=0
-  t6031-j514c.dtb: cpus=16 boot=1 refused-no-release-addr=15 writes=0
-test_apple_smp: PASS (53 checks)
+  t8103-j313.dtb: cpus=8 boot=1 refused-no-release-addr=7 refused-ctrr=0 writes=0
+  t8112-j413.dtb: cpus=8 boot=1 refused-no-release-addr=7 refused-ctrr=0 writes=0
+  t8122-j613.dtb: cpus=8 boot=1 refused-no-release-addr=7 refused-ctrr=0 writes=0
+  t8132-j713.dtb: cpus=10 boot=1 refused-no-release-addr=0 refused-ctrr=9 writes=0
+  t6031-j514c.dtb: cpus=16 boot=1 refused-no-release-addr=15 refused-ctrr=0 writes=0
+test_apple_smp: PASS (55 checks)
 CK_APPLE_HOST: PASS
 CK_FMT: PASS (17 checks)
 CK_FRAMES: PASS (3870 checks)

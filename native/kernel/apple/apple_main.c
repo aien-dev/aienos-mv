@@ -255,8 +255,13 @@ static int start_secondaries(int verdict, const char *psci)
     for (uint32_t i = 0; i < n; i++) {
         if (i == boot) continue;
         uint64_t r = psci_call(psci, PSCI_CPU_ON_64, apple_smp_mpidr[i], (uint64_t)(uintptr_t)apple_secondary_entry, 0);
-        int rc = (int64_t)r == 0 ? CK_SMP_E_TIMEOUT : CK_SMP_E_METHOD;
-        for (uint32_t p = 0; (int64_t)r == 0 && p < SMP_POLLS; p++)
+        if ((int64_t)r != 0) { /* PSCI error code (DEN 0022 table 5.2), not a spin-table reason */
+            pr("apple: cpu%u mpidr=0x%llx not started via psci CPU_ON: returned %lld\n", i,
+               (unsigned long long)apple_smp_mpidr[i], (long long)(int64_t)r);
+            continue;
+        }
+        int rc = CK_SMP_E_TIMEOUT;
+        for (uint32_t p = 0; p < SMP_POLLS; p++)
             if (smp_checkin(0, i)) {
                 rc = 0;
                 break;

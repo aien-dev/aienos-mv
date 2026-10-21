@@ -6,7 +6,7 @@ apple: console pl011 at 0x9000000 (stdout-path -> /pl011@9000000)
 apple: memory 0x40000000+0x40000000 (memory@40000000)
 apple: memreserve entries=0
 apple: vectors ok (brk at EL1 taken=1, returned)
-apple: timer ok cntfrq=62500000 el1 physical timer fired after 63960 ticks (polled, interrupt masked)
+apple: timer ok cntfrq=62500000 el1 physical timer fired after 63177 ticks (polled, interrupt masked)
 apple: REFUSED not an Apple platform (root compatible "linux,dummy-virt"); Apple drivers not started
 apple: family table rows=14
 apple: fiq sources now=0x0 (timer bits only off-Apple)
