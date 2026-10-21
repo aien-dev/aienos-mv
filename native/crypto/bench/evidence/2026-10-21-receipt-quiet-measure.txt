@@ -1,0 +1,31 @@
+== before: origin/main 18e2765
+sha256 4 MiB                  20711.632 us
+aes256 key schedule            1959.590 ns
+aes256 block                   4352.934 ns
+polyval dot                     170.866 ns
+gcm-siv seal 64 B                52.880 us
+gcm-siv seal 4 KiB             1194.933 us
+gcm-siv open 4 KiB             1195.181 us
+gcm-siv seal 4 MiB             1189.988 ms
+x25519                          457.554 us
+ed25519 sign 64 B               173.910 us
+ed25519 verify 64 B             168.322 us
+verify good=1 forged-rejected=1
+output digest 3ecd78818f2edfd4527e9e854bc455d64d2436511dc14aab72f067c3be2fb207
+== after: worktree 07545dc
+sha256 4 MiB                   1719.869 us
+aes256 key schedule              82.679 ns
+aes256 block                      9.750 ns
+polyval dot                      11.016 ns
+gcm-siv seal 64 B                 0.596 us
+gcm-siv seal 4 KiB                4.431 us
+gcm-siv open 4 KiB                4.438 us
+gcm-siv seal 4 MiB                4.076 ms
+x25519                           43.560 us
+ed25519 sign 64 B               169.764 us
+ed25519 verify 64 B              97.274 us
+verify good=1 forged-rejected=1
+output digest 3ecd78818f2edfd4527e9e854bc455d64d2436511dc14aab72f067c3be2fb207
+RECEIPT: outputs identical
+
+[exited with code 0]
