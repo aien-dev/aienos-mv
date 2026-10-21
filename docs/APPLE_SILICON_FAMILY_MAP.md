@@ -170,6 +170,45 @@ Not in the table, on purpose: DART page size, interrupt counts, die count, MMIO 
 
 L250 builds the table, the discovery reads, AIC2 and AIC3 (AIC1 if cheap) and spin-table start; the other variants are later rungs (D4, D6, D10). This section is the contract between L372 and L250: if L250 finds a fact that contradicts section 1, it notes L372 by `ledger note L372` and this map is corrected.
 
+## 6. Verdict: the best second Apple target
+
+**The M3 MacBook Air (13-inch or 15-inch, 2024; chip T8122, boards J613 and J615).**
+
+Reasons, each from section 1 and 2:
+
+1. **It is the newest chip where the published references cover the first four tethered boots.** Asahi lists the installer as "yes", the device tree as upstream 7.2, and boot framebuffer, keyboard, touchpad, NVMe, USB2/USB3 on the ports, UART, watchdog, I2C, GPIO, SMC, SPMI and USB-PD as "linux-asahi" or upstream (feature page M3). Those are exactly the blocks of boots 1 to 4 in the M2 map (proxy, console, framebuffer, disk read-only).
+2. **It exercises the two variants every later chip uses, while keeping the rest equal to the M2.** New against the M2: AIC3 (also on M3 Pro/Max, M4, A18 Pro, and INFERRED M5/M6) and ACE3 on SPMI for USB-C (the M3 Air, M3 Pro/Max and INFERRED later chips), plus the N3 ATCPHY tunables. Same as the M2: ANS2 disk, T8110-style DART, RTKit, MTP keyboard, spin-table start at the same PMGR offset (0x34000), and napping cores keep their state. So the M3 Air tests the platform layer's "variant" seam without also changing the disk, the DMA guard and the idle rule at once.
+3. **Boot-path risk is the lowest of the newer chips.** The Asahi installer supports it with macOS 14.8.3 boot firmware (`asahi-installer` `src/main.py`, `j613ap`/`j615ap` in the 14.8.3 IPSW device list). Per the only source that dates SPTM on M3 (third party), SPTM entered the M3's macOS chain only at 26.0, and it does not affect a raw boot object in any case (section 3).
+
+Why not the others (bring-up cost counted as driver variants beyond the M2, not as time; no time was measured):
+
+| Candidate | New variants beyond the M2 | Boot-path risk | Verdict |
+| --- | --- | --- | --- |
+| M2 Pro/Max/Ultra (MacBook Pro 14"/16" 2023, Mac mini, Mac Studio) | 0 (multi-die AIC2 on Ultra only) | lowest (installer yes) | cheapest, but proves nothing about newer chips; good third target |
+| M1 (any) | 3: AIC1, T8020-style DART, SPI keyboard | lowest | older, and its variants exist on no later chip |
+| **M3 MacBook Air** | **2 plus tunables: AIC3, ACE3/SPMI, ATCPHY N3** | **low (installer yes, 14.8.3)** | **chosen** |
+| M3 MacBook Pro 14" (base M3) | 1: AIC3 (keeps CD3217 on I2C) | low | fine, but skips the ACE3 variant later chips need |
+| M4-class (MacBook Air 2025, Mac mini 2024, MacBook Neo) | at least 5: AIC3, ANS secure-bar variant, SARTv4, idle `SPIN`, CTRR hole, plus DART and USB-PD UNKNOWN | medium (no installer; manual `kmutil --raw` set-up; firmware versions of the working Asahi machines not stated) | second choice once Asahi publishes DART, USB and SMC; the Mac mini 2024 is the cheapest M4 to test as it needs no keyboard or battery path |
+| M5 / M6 | unknown: only chip ids, core parts, start offset and disk | highest (nothing beyond NVMe published) | not yet |
+
+Drake owns only the M2 MacBook Air; no purchase is implied by this verdict. If a second Mac is ever chosen, this is the one the sources favour.
+
+## 7. UNKNOWN rows and the experiments that settle them
+
+All are read-only. The ones marked "attended" need a Mac and are L251-style steps with Drake present; this map does not run them.
+
+| UNKNOWN | Experiment |
+| --- | --- |
+| DART page size on M4-class and later | Read `PARAMS1` of one DART through the m1n1 proxy (attended, read-only), or read the ADT `page-size` property of any `dart-*` node from an `ioreg -l -p IODeviceTree` dump of an M4 Mac (no boot change; any M4 owner can produce it) |
+| DART register family on M4-class | Same ADT dump: the `compatible` of the `dart-*` nodes (`dart,t8110` or a new name) |
+| USB-C PD chip on M4-class and later | Same ADT dump: the `hpm*` nodes' `compatible` (`usbc,cd3217` or the ACE3 name) and whether they sit under `nub-spmi` or an I2C bus |
+| AIC version on M5 and M6 | Same ADT dump: `/arm-io/aic` `compatible` (`aic,3` or newer) |
+| Which macOS / firmware versions Asahi's working M4/M5 machines ran | Section 3 table |
+| M3 GPU generation name and UAT layout | Watch Asahi's `drivers/gpu/drm/asahi/hw/` for a T8122 file; not needed before boot 4 |
+| Whether M5 Pro/Max "M" cores need different handling from "E" cores | Read m1n1 commits after `b2d3f5e` for `MPIDR_CORE_TYPE_M` use; read `MPIDR_EL1` on the chip (attended) |
+| SPTM-by-macOS-version cells (M1 never, M2 from 15.0, M3 from 26.0) | Download one macOS 15.0 and one 14.x IPSW for an M2 board and check whether the boot manifest lists an SPTM image for that board (`BuildManifest.plist`, per-board `Manifest` keys); same for M3 at 15.6 and 26.0. Host only, no Mac |
+| Idle on M4-class: is WFE safe | When m1n1 stops the secondary cores before handing over ("Stopping secondary CPUs...") it switches them to WFE waiting (`smp_set_wfe_mode(true)`, `src/smp.c`) on every chip, M4-class included, which suggests WFE keeps state (INFERRED); confirm with m1n1 `proxyclient/experiments/wfi.py` on the chip (attended) or its published results |
+
 ## 8. Sources (all read 2026-10-21)
 
 Local read-only copies under `/tmp/l372-src` on the Spark, GPL code read for facts only, nothing copied into Aienux:
@@ -182,4 +221,4 @@ Local read-only copies under `/tmp/l372-src` on the Spark, GPL code read for fac
 - Third party, not Asahi: `github.com/antiapplefox/m5-linux` README (no commit date visible). Quotes: "M2 had SPTM in its boot chain by 15.0; M4 was born with it (15.2)"; "M3 only got SPTM at macOS 26.0"; "M1 base (`t8103`) never got it"; "iBoot's `load_kernelcache` rejects the image (panics) if it isn't `MH_FILESET`"; and, decisive for its weight: "No hardware bring-up yet." Every SPTM-by-version cell above that says "third party" rests on this source alone.
 - The M2 dumps: `~/handoffs/macbook-inventory-2026-10-20/ioreg-devicetree.txt` (OBSERVED values for the M2 row).
 
-Sections 2, 3, 4, 6 and 7 follow in later commits.
+Section history: sections 1 and 5 in `600e486d`, 2 to 4 in `0af2db3f`, M2-map corrections in `4204ab06`, 6 and 7 in the commit after.
