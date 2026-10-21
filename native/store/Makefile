@@ -39,7 +39,7 @@ STORE_LIB = $(OUT)/libaienos_store.a
 INC = -I. -I../argus -I../disk -Itests -I$(OUT)
 GOLDEN_JSON = ../../docs/adr/0015-golden-vectors.json
 GOLDEN_H = $(OUT)/golden_vectors.h
-TEST_NAMES = store_v1_test store_engine_test store_sealed_test store_powercut_test
+TEST_NAMES = store_v1_test store_engine_test store_sealed_test store_powercut_test store_mount_test
 TEST_OBJS = $(TEST_NAMES:%=$(OUT)/t_%.o)
 STORE_TESTS = $(TEST_NAMES:%=$(OUT)/%)
 XCHECK = $(OUT)/store_xcheck
@@ -96,6 +96,7 @@ test: $(TEST) $(STORE_TESTS) $(XCHECK) lib-checks
 	./$(OUT)/store_engine_test $(OUT) || fail=1; \
 	./$(OUT)/store_sealed_test $(OUT) || fail=1; \
 	./$(OUT)/store_powercut_test $(OUT) || fail=1; \
+	./$(OUT)/store_mount_test || fail=1; \
 	RUST_STORE_TOOL=$(RUST_STORE_TOOL) sh tests/rust_crosscheck.sh ./$(XCHECK) $(OUT); xrc=$$?; if [ $$xrc -ne 0 ] && [ $$xrc -ne 2 ]; then fail=1; fi; \
 	if [ $$fail -eq 0 ]; then echo "AIENOS_STORE_NATIVE: PASS"; else echo "AIENOS_STORE_NATIVE: FAIL"; exit 1; fi
 
