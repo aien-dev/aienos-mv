@@ -240,7 +240,7 @@ static void test_games(void)
     CHECK(!strcmp(w.v.line[0], "Screen: 60 times a second now, it can do 165. My graphics driver will set it."), "%s",
           w.v.line[0]);
     CHECK(!strcmp(w.v.line[1], "Graphics: NVIDIA GeForce RTX 4070, driven by NVIDIA 560.94"), "%s", w.v.line[1]);
-    CHECK(has_line(&w, "I couldn't measure this yet"), "frames are not invented");
+    CHECK(has_line(&w, "I'll measure them the first time a game runs"), "frames are not invented");
     for (unsigned i = 0; i < w.v.nline; i++)
         if (strstr(w.v.line[i], "Frames"))
             CHECK(!strpbrk(w.v.line[i], "0123456789"), "a frame rate with no measurement: %s", w.v.line[i]);
@@ -429,7 +429,7 @@ static void test_key_fails(void)
     key(&w, SW_K_CHAR, '2');
     key(&w, SW_K_CHAR, '2');
     key(&w, SW_K_CHAR, '1'); /* Claude */
-    CHECK(sw_step_of(&w) == SW_KEY && strstr(w.v.say, "Paste your key for Claude."), "%s", w.v.say);
+    CHECK(sw_step_of(&w) == SW_KEY && strstr(w.v.say, "Type your key for Claude."), "%s", w.v.say);
     enter(&w);
     CHECK(sw_step_of(&w) == SW_KEY && has_line(&w, "I need the key"), "Claude needs a key");
     type(&w, "bad-key");

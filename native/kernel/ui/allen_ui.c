@@ -375,7 +375,7 @@ static void draw_bar(const ck_rect *r, uint32_t t)
     int32_t x = b.x + pad;
     if (!ui.input_len) {
         if (tc.w)
-            text(&ui.cv, &tc, &ui.body, x, base, hint, hint_len, CK_RGB(150, 160, 196), 150 * A >> 8);
+            text(&ui.cv, &tc, &ui.body, x, base, hint, hint_len, CK_RGB(150, 160, 196), 192 * A >> 8);
     } else {
         int32_t avail = b.w - 2 * pad - S(12);
         unsigned from = 0;
@@ -405,7 +405,7 @@ static void draw_bar(const ck_rect *r, uint32_t t)
             n++;
         int32_t fw = (int32_t)ck_af_measure(&ui.small, ui.footer, n);
         text(&ui.cv, r, &ui.small, (ui.w - fw) / 2, b.y + b.h + S(34), ui.footer, n, CK_RGB(130, 140, 176),
-             110 * A >> 8);
+             222 * A >> 8);
     }
 }
 
@@ -441,7 +441,7 @@ static void draw_pill(const ck_rect *r, const ck_rect *p, const char *s, unsigne
     }
     int32_t tw = (int32_t)ck_af_measure(&ui.body, s, n);
     uint32_t c = ck_mix(CK_RGB(160, 168, 204), CK_RGB(244, 246, 255), l);
-    text(&ui.cv, r, &ui.body, p->x + (p->w - tw) / 2, p->y + p->h / 2 + S(7), s, n, c, (150 + (106 * l >> 8)) * A >> 8);
+    text(&ui.cv, r, &ui.body, p->x + (p->w - tw) / 2, p->y + p->h / 2 + S(7), s, n, c, (184 + (72 * l >> 8)) * A >> 8);
 }
 
 static void draw_panel(const ck_rect *r, uint32_t t)
@@ -480,13 +480,13 @@ static void draw_panel(const ck_rect *r, uint32_t t)
         unsigned n = copy_len(ui.pan.hint);
         int32_t hw = (int32_t)ck_af_measure(&ui.small, ui.pan.hint, n);
         text(&ui.cv, r, &ui.small, (ui.w - hw) / 2, ui.bar.y + ui.bar.h + S(34), ui.pan.hint, n, CK_RGB(170, 178, 210),
-             170 * A >> 8);
+             184 * A >> 8);
     }
     if (ui.pan.aside[0]) {
         unsigned n = copy_len(ui.pan.aside);
         int32_t aw = (int32_t)ck_af_measure(&ui.small, ui.pan.aside, n);
-        text(&ui.cv, r, &ui.small, (ui.w - aw) / 2, ui.bar.y + ui.bar.h + S(64), ui.pan.aside, n, CK_RGB(120, 130, 166),
-             110 * A >> 8);
+        text(&ui.cv, r, &ui.small, (ui.w - aw) / 2, ui.bar.y + ui.bar.h + S(64), ui.pan.aside, n, CK_RGB(130, 140, 176),
+             222 * A >> 8);
     }
 }
 
@@ -602,9 +602,9 @@ static void draw_map(const ck_rect *r, uint32_t t)
     n += put_num(line + n, ui.links);
     n += copy(line + n, ui.links == 1 ? " link" : " links", 16);
     int32_t hw = (int32_t)ck_af_measure(&ui.small, "Notes", 5);
-    text(&ui.cv, r, &ui.small, ui.mx - hw / 2, ui.my - ui.mr - S(34), "Notes", 5, CK_RGB(170, 180, 214), 170 * A >> 8);
+    text(&ui.cv, r, &ui.small, ui.mx - hw / 2, ui.my - ui.mr - S(34), "Notes", 5, CK_RGB(170, 180, 214), 184 * A >> 8);
     int32_t lw = (int32_t)ck_af_measure(&ui.small, line, n);
-    text(&ui.cv, r, &ui.small, ui.mx - lw / 2, ui.my + ui.mr + S(40), line, n, CK_RGB(150, 160, 196), 150 * A >> 8);
+    text(&ui.cv, r, &ui.small, ui.mx - lw / 2, ui.my + ui.mr + S(40), line, n, CK_RGB(150, 160, 196), 192 * A >> 8);
     if (ui.lit >= 0 && ui.label_len) {
         char cut[TEXT_MAX + 4];
         unsigned m = ui.label_len;

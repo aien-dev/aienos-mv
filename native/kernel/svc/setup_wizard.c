@@ -297,7 +297,7 @@ static void games_lines(sw_wizard *w)
         si_cat(d, at, " cores free for the game.", SW_LINE);
     } else
         si_copy(d, "Processor: I'll keep it free for the game.", SW_LINE);
-    add_line(w, "Frames a second: I couldn't measure this yet. I'll tell you when I can.");
+    add_line(w, "Frames a second: I'll measure them the first time a game runs. Nothing to do now.");
 }
 
 static void fit_line(sw_wizard *w, const char *what, uint32_t mib, uint32_t mem, int shared)
@@ -544,14 +544,14 @@ static void render(sw_wizard *w)
         si_copy(v->aside, "Back: Escape", sizeof v->aside);
         break;
     case SW_URL:
-        say(w, "What's your service's web address? Its settings show it for OpenAI-compatible apps.");
+        say(w, "What's your service's web address? It starts with https:// and its settings page shows it.");
         si_copy(v->prompt, "Its web address", sizeof v->prompt);
         v->ntyped = si_copy(v->typed, w->text, SW_TEXT);
         if (w->why[0])
             add_line(w, w->why);
         break;
     case SW_KEY:
-        at = si_copy(buf, "Paste your key for ", SW_SAY);
+        at = si_copy(buf, "Type your key for ", SW_SAY);
         at = si_cat(buf, at, service_name(w->service), SW_SAY);
         at = si_cat(buf, at, w->service == SW_LLM_OTHER ? ", or press Enter if it needs none." : ".", SW_SAY);
         si_cat(buf, at, " I test it once and never show it again; it is not written to this disk.", SW_SAY);
@@ -848,7 +848,7 @@ static void submit(sw_wizard *w, uint32_t now)
         return;
     case SW_KEY:
         if (!w->nkey && w->service != SW_LLM_OTHER) {
-            si_copy(w->why, "I need the key to connect. Paste it, or press Escape to go back.", SW_LINE);
+            si_copy(w->why, "I need the key to connect. Type it, or press Escape to go back.", SW_LINE);
             render(w);
             return;
         }
