@@ -1,0 +1,16 @@
+{
+  "phase": "red",
+  "cases": 1,
+  "failures": 1,
+  "makefile_sha256": "0f5deb2861a89e3aa33c3d308ef1ff1e032a94de7a300c573b72d67c10fd352c",
+  "results": [
+    {
+      "case": "broken-native",
+      "pass": false,
+      "exit": 0,
+      "boot_gate_pass": false,
+      "simulation_passes": 2,
+      "log_sha256": "e319e8aef237153390f57ab1955d18e12ba112bd44ce0d1bc9896bea9ae08600"
+    }
+  ]
+}

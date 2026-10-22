@@ -1,0 +1,54 @@
+{
+  "phase": "green",
+  "cases": 5,
+  "failures": 0,
+  "makefile_sha256": "b3ae9d032835a43d3b8996f6eac99f4847d9537d8f8bdbb91e8f6a8894c1c2ed",
+  "results": [
+    {
+      "case": "qualified-native",
+      "pass": true,
+      "exit": 0,
+      "native_cases": 125,
+      "native_failures": 0,
+      "boot_gate_pass": true,
+      "simulation_passes": 2,
+      "log_sha256": "bc9de1cde50088dd352ae4eb45a7b9a03e1b92a1cdf448198bd5c36866191cb8"
+    },
+    {
+      "case": "broken-native",
+      "pass": true,
+      "exit": 2,
+      "native_cases": 125,
+      "native_failures": 117,
+      "boot_gate_pass": false,
+      "simulation_passes": 0,
+      "log_sha256": "94ac29e4ef4567bb549ca18577bc3cb7ff3f441dc33827c483cfaa161b2589e1"
+    },
+    {
+      "case": "optimized-broken-native",
+      "pass": true,
+      "exit": 2,
+      "native_cases": 125,
+      "native_failures": 117,
+      "boot_gate_pass": false,
+      "simulation_passes": 0,
+      "log_sha256": "cd74dbd2392aa39ffd54a12e41c5f7d7435652eb6888804f5baeed06501fb4be"
+    },
+    {
+      "case": "cached-success-then-broken",
+      "pass": true,
+      "exit": 2,
+      "native_cases": 125,
+      "native_failures": 117,
+      "boot_gate_pass": false,
+      "simulation_passes": 0,
+      "log_sha256": "ce457914621e2f16b0e1fd82f5d570f9d3234e956d14b56ef402f5305fc16af5"
+    },
+    {
+      "case": "optimized-changed-compiler",
+      "pass": true,
+      "exit": 2,
+      "log_sha256": "470746c7de40c8da6cb3b2118089702746bb4ce3e954663f270d0e84ccf871e2"
+    }
+  ]
+}

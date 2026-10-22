@@ -84,3 +84,20 @@ The I/O harness consumes fixtures created by the passing primary suite.
 `evidence/omega-sequencer/boot-replay.sh` reconstructs the compiler from the seed
 in a clean committed export and repeats the primary suite, I/O and existing
 normal/sanitized boot-simulator gates. This remains host-only qualification.
+
+## Required driver simulation entry
+
+`make -C native/linux/aien-gpu sim-test` now requires the phony
+`omega-boot-test` prerequisite: the native boot differential suite and I/O
+checks must succeed before this target can pass. It runs Python in isolated
+mode so `PYTHONOPTIMIZE` cannot erase the qualification assertions. A cached
+binary or a file named `omega-boot-test` cannot satisfy this prerequisite.
+
+`tests/bootseq-caller.py` preserves the old-target RED: a broken native boot
+stub still passed both legacy simulations. GREEN checks the qualified native
+core, the broken stub, the same stub under optimization, a successful cached
+run followed by broken source (with a colliding target file), and a changed
+compiler under optimization. Each case runs in its own exported source tree.
+This attaches native boot-control verification to a real test caller; it does
+not switch the production boot engine to Omega or make read tapes into a
+causal device model.
