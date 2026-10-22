@@ -1,0 +1,38 @@
+PASS seed0 408 bytes, rebuilds itself
+PASS hex1 776 bytes, born from seed0
+PASS asm2 2464 bytes, born from hex1
+PASS om4 om4.bin 14224 bytes
+PASS omc fixpoint 01b1545b23e8ff40cb5691e20b5df910ea4acaefde3495f0d62d270465b98cd6
+PASS fwd exit 0
+PASS fwd runs, exit 7
+PASS mut exit 0
+PASS mut runs, exit 0
+PASS cycle exit 9
+PASS assign exit 7
+RC=0
+{"status": "PASS", "wolfram_semantic_cases": 11, "boundary_cases": 2, "version_magic": 844190535}
+{
+  "cases": 3,
+  "failures": 0,
+  "results": [
+    {
+      "case": "closed-input",
+      "pass": true,
+      "exit": 2
+    },
+    {
+      "case": "read-error-after-complete-frame",
+      "pass": true,
+      "exit": 2
+    },
+    {
+      "case": "output-enospc",
+      "pass": true,
+      "exit": 2
+    }
+  ]
+}
+{"cases": 222, "failures": 0, "preflight_refusals": 122, "source_sha256": "7b7ce2b3b1d298666705e75f3562c5b2b18e9c622c11ac70bc9cc4c225d2a117", "binary_sha256": "1709f5338bf5f472b33398a70eeb4d8ffc3a54a6d07eb84ba8c9ed345d908a46", "oracle_source_sha256": "4c172bed0b18ee15d59b81c597126ced94eab177fcffb44dbbcca735a6baa193"}
+SEED_NATIVE_SEQUENCER_V2_REPLAY_PASS
+
+RC=0
