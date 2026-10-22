@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # L332 rung 2 window 1, part 3 (after the restore reboot): the box is back as before. Read-only.
 set -u
+export PATH=$PATH:/usr/sbin:/sbin   # modinfo, lsmod and friends live in sbin; a normal user shell may not list it
 here=$(cd "$(dirname "$0")" && pwd)
 log=$here/$(readlink "$here/window1-current.log")
 ts() { echo "$(date -u +%FT%T.%NZ) $*" | tee -a "$log"; }

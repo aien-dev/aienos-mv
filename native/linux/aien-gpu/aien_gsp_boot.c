@@ -36,6 +36,7 @@
 #include "gsp_mmio.h"
 #ifdef AIEN_GSP_BOOT_SIM
 #include "gsp_sim.h"
+static uint8_t *volatile g_host_arena;   /* the simulated arena; volatile so the store survives -O and the leak check sees it */
 #else
 #include "aien_gpu_uapi.h"
 #endif
@@ -83,6 +84,10 @@ static void out_bytes(const char *name, const void *p, size_t n)
     fclose(f);
 }
 
+/* every loaded package file stays reachable until exit (one-shot tool; the sanitized sim build checks for leaks) */
+static uint8_t *volatile g_loaded[8];
+static unsigned g_nloaded;
+
 static uint8_t *load(const char *dir, const char *name, size_t *n, size_t want)
 {
     char p[4096];
@@ -99,6 +104,8 @@ static uint8_t *load(const char *dir, const char *name, size_t *n, size_t want)
     if (!b || fread(b, 1, (size_t)st.st_size, f) != (size_t)st.st_size)
         die("PACKAGE-REFUSED", "%s: read", p);
     fclose(f);
+    if (g_nloaded < sizeof g_loaded / sizeof g_loaded[0])
+        g_loaded[g_nloaded++] = b;
     *n = (size_t)st.st_size;
     return b;
 }
@@ -296,6 +303,7 @@ int main(int argc, char **argv)
     heap_bytes = 512ull << 20;
     dma_bits = 40;
     base = aligned_alloc(GSP_PAGE, arena_bytes);
+    g_host_arena = base;   /* reachable until exit */
     if (!base)
         die("TOOL-ERROR", "no memory for the host arena");
 #else

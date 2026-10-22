@@ -3,6 +3,7 @@
 # on the coordinator's list are stopped. Records the box, checks the module, writes a temporary "do not load NVIDIA"
 # file (removed by part 2 as its first action) and reboots. Usage: window0-pre.sh [--go]  (without --go: checks only).
 set -u
+export PATH=$PATH:/usr/sbin:/sbin   # modinfo, lsmod and friends live in sbin; a normal user shell may not list it
 here=$(cd "$(dirname "$0")" && pwd); repo=$(cd "$here/../../.." && pwd)
 log=$here/window0-$(date -u +%Y%m%dT%H%M%SZ).log; ln -sfn "$(basename "$log")" "$here/window0-current.log"
 ts() { echo "$(date -u +%FT%T.%NZ) $*" | tee -a "$log"; }

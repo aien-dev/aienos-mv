@@ -141,7 +141,7 @@ static int encode(const char *src, uint8_t out[936], char *why, size_t whylen, F
         unsigned long long v = strtoull(val, &end, 0);
         if (errno || *end || val[0] == '-') { snprintf(why, whylen, "line %u: %s is not a number", line, val); return -1; }
         if (fields[i].size < 8 && v >> (8 * fields[i].size)) {
-            snprintf(why, whylen, "line %u: %s does not fit %s (%u bytes)", line, val, name, fields[i].size);
+            snprintf(why, whylen, "line %u: %.40s does not fit %.60s (%u bytes)", line, val, name, fields[i].size);
             return -1;
         }
         for (uint32_t b = 0; b < fields[i].size; b++) out[fields[i].off + b] = (uint8_t)(v >> (8 * b));   /* little endian */

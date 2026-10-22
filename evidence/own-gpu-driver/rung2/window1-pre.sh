@@ -4,6 +4,7 @@
 # a temporary "do not load NVIDIA" file (removed by part 2 as its first action) and reboots.
 # Usage: window1-pre.sh PKG_DIR [--go]   (without --go: checks only; PKG_DIR from window1-package.sh)
 set -u
+export PATH=$PATH:/usr/sbin:/sbin   # modinfo, lsmod and friends live in sbin; a normal user shell may not list it
 here=$(cd "$(dirname "$0")" && pwd); repo=$(cd "$here/../../.." && pwd)
 PKG=${1:?usage: window1-pre.sh PKG_DIR [--go]}; PKG=$(cd "$PKG" && pwd)
 log=$here/window1-$(date -u +%Y%m%dT%H%M%SZ).log; ln -sfn "$(basename "$log")" "$here/window1-current.log"

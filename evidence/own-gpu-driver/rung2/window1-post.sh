@@ -5,6 +5,7 @@
 # (GSP may still use its memory); a normal reboot gives the GPU back to NVIDIA's driver, and part 3 checks that.
 # Usage: window1-post.sh [--no-reboot]
 set -u
+export PATH=$PATH:/usr/sbin:/sbin   # modinfo, lsmod and friends live in sbin; a normal user shell may not list it
 here=$(cd "$(dirname "$0")" && pwd); repo=$(cd "$here/../../.." && pwd)
 log=$here/$(readlink "$here/window1-current.log")
 ts() { echo "$(date -u +%FT%T.%NZ) $*" | tee -a "$log"; }

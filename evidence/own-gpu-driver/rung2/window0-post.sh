@@ -3,6 +3,7 @@
 # the chip and gives it back, NVIDIA's driver is loaded again (timed: today's load-to-ready baseline), Omega proves the chip
 # works, and a normal reboot restores the box exactly (display modules included). Usage: window0-post.sh [--no-reboot]
 set -u
+export PATH=$PATH:/usr/sbin:/sbin   # modinfo, lsmod and friends live in sbin; a normal user shell may not list it
 here=$(cd "$(dirname "$0")" && pwd); repo=$(cd "$here/../../.." && pwd)
 log=$here/$(readlink "$here/window0-current.log")
 ts() { echo "$(date -u +%FT%T.%NZ) $*" | tee -a "$log"; }
