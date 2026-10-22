@@ -1,0 +1,98 @@
+[
+  {
+    "mutant": "accept-invalid-save",
+    "compiled": true,
+    "failures": 7,
+    "failed_cases": [
+      "save-eight",
+      "save-huge",
+      "random-11",
+      "random-23",
+      "random-75",
+      "random-116",
+      "random-125"
+    ]
+  },
+  {
+    "mutant": "wrong-modify-mask",
+    "compiled": true,
+    "failures": 26,
+    "failed_cases": [
+      "op-1-core-0",
+      "op-1-core-1",
+      "op-1-core-2",
+      "modify-mask",
+      "random-4",
+      "random-28",
+      "random-29",
+      "random-34",
+      "random-36",
+      "random-58",
+      "random-63",
+      "random-69",
+      "random-83",
+      "random-86",
+      "random-90",
+      "random-91",
+      "random-96",
+      "random-105",
+      "random-108",
+      "random-112",
+      "random-113",
+      "random-120",
+      "random-122",
+      "random-131",
+      "random-132",
+      "random-148"
+    ]
+  },
+  {
+    "mutant": "accept-disabled-core",
+    "compiled": true,
+    "failures": 30,
+    "failed_cases": [
+      "op-5-core-0",
+      "op-6-core-0",
+      "op-7-core-0",
+      "op-8-core-0",
+      "random-3",
+      "random-6",
+      "random-9",
+      "random-18",
+      "random-35",
+      "random-40",
+      "random-51",
+      "random-53",
+      "random-60",
+      "random-61",
+      "random-62",
+      "random-78",
+      "random-83",
+      "random-84",
+      "random-87",
+      "random-93",
+      "random-95",
+      "random-104",
+      "random-107",
+      "random-110",
+      "random-117",
+      "random-127",
+      "random-134",
+      "random-139",
+      "random-145",
+      "random-146"
+    ]
+  },
+  {
+    "mutant": "zero-poll-budget",
+    "compiled": true,
+    "failures": 5,
+    "failed_cases": [
+      "stuck-0",
+      "random-30",
+      "random-46",
+      "random-66",
+      "random-143"
+    ]
+  }
+]

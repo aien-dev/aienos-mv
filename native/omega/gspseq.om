@@ -1,0 +1,193 @@
+note Handwritten seed-native GSP CPU sequencer with an OFFLINE register backend.
+note No MMIO, ioctl, firmware loading, sleeps, resets or live-device operations.
+note Input LE32: nwords,end,budget,coremode,delayenabled,regs8,save8,words.
+note Output LE32: status,reads,writes,delaytotal,corecalls,regs8,save8.
+global In uchar 4181
+global Out uchar 84
+global Words uint 1024
+global Regs uint 8
+global Save uint 8
+global Counts uint 5
+global Config uint 5
+fn word pos ulong to uint
+v = uint 0
+for j ulong 4
+v = or v shl uint get In add pos j mul uint j 8
+end
+ret v
+end
+fn inc slot ulong to void
+put Counts slot add get Counts slot uint 1
+end
+fn rd addr uint to uint
+inc 1
+if lt addr uint 8
+ret get Regs ulong addr
+end
+ret uint 0
+end
+fn wr addr uint value uint to void
+inc 2
+if lt addr uint 8
+put Regs ulong addr value
+end
+end
+fn size op uint to ulong
+if eq op uint 0
+ret 2
+end
+if eq op uint 1
+ret 3
+end
+if eq op uint 2
+ret 5
+end
+if eq op uint 3
+ret 1
+end
+if eq op uint 4
+ret 2
+end
+if le op uint 8
+ret 0
+end
+ret 99
+end
+fn poll p ulong to int
+left = get Config 2
+if eq left uint 0
+left = uint 1
+end
+v = rd get Words p
+while ne and v get Words add p 1 get Words add p 2
+if eq left uint 0
+ret 1
+end
+left = sub left uint 1
+v = rd get Words p
+end
+ret 0
+end
+fn step op uint p ulong to int
+if eq op uint 0
+wr get Words p get Words add p 1
+ret 0
+end
+if eq op uint 1
+v = rd get Words p
+v = or and v xor get Words add p 1 uint 4294967295 get Words add p 2
+wr get Words p v
+ret 0
+end
+if eq op uint 2
+ret poll p
+end
+if eq op uint 3
+if ne get Config 4 uint 0
+put Counts 3 add get Counts 3 get Words p
+end
+ret 0
+end
+if eq op uint 4
+index = get Words add p 1
+if ge index uint 8
+ret 1
+end
+put Save ulong index rd get Words p
+ret 0
+end
+if eq get Config 3 uint 0
+ret 1
+end
+inc 4
+if eq get Config 3 uint 2
+ret 1
+end
+ret 0
+end
+fn run to int
+n = ulong get Config 0
+stop = ulong get Config 1
+if or eq n 0 ge stop n
+ret 1
+end
+i = ulong 0
+while lt i stop
+op = get Words i
+i = add i 1
+s = size op
+if or eq s 99 gt s sub stop i
+ret 1
+end
+status = step op i
+if ne status 0
+ret status
+end
+i = add i s
+end
+ret 0
+end
+fn emit to int
+for i ulong 21
+v = uint 0
+if lt i 5
+v = get Counts i
+else
+if lt i 13
+v = get Regs sub i 5
+else
+v = get Save sub i 13
+end
+end
+for j ulong 4
+put Out add mul i 4 j uchar and shr v mul uint j 8 uint 255
+end
+end
+sent = ulong 0
+while lt sent len Out
+n = write 1 Out sent sub len Out sent
+if le n 0
+ret 2
+end
+sent = add sent ulong n
+end
+ret int get Counts 0
+end
+fn decode n ulong to int
+if or lt n 84 ne rem n 4 0
+ret 2
+end
+for i ulong 5
+put Config i word mul i 4
+end
+count = ulong get Config 0
+if or gt count 1024 ne n mul add count 21 4
+ret 2
+end
+if or gt get Config 2 uint 1024 or gt get Config 3 uint 2 gt get Config 4 uint 1
+ret 2
+end
+for i ulong 8
+put Regs i word mul add i 5 4
+put Save i word mul add i 13 4
+end
+for i ulong count
+put Words i word mul add i 21 4
+end
+put Counts 0 uint run
+ret emit
+end
+fn main to int
+used = ulong 0
+while lt used len In
+n = read 0 In used sub len In used
+if lt n 0
+ret 2
+end
+if eq n 0
+ret decode used
+end
+used = add used ulong n
+end
+ret 2
+end
