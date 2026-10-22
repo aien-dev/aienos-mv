@@ -24,4 +24,4 @@ import json,sys
 r=json.load(open(sys.argv[1]));assert r['cases']==193 and r['failures']==0
 print(json.dumps({k:r[k] for k in ['cases','failures','source_sha256','part_sha256','binary_sha256']}))
 PY
-printf 'SEED_NATIVE_GSQ3_REPLAY_PASS\n' 
+printf 'SEED_NATIVE_GSQ3_REPLAY_PASS\n'
