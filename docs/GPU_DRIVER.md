@@ -80,7 +80,10 @@ way, it goes in as an open question with an experiment, and nothing is tried tha
    our start-up tool touch only the 12 start-up registers (6 of them writable) and ring the security processor once;
    the tool builds the start-up package, hands it over and waits for the chip program to say it is ready. Every
    register access is recorded with its time. The one real risk: if the restart afterwards does not fully reset the
-   GPU, it needs a power cycle at the wall before NVIDIA's driver works again.
+   GPU, it needs a power cycle at the wall before NVIDIA's driver works again. Status 2026-10-22: window 1 is built
+   and passes its 56 simulator checks, with the real firmware package checked against its pinned fingerprints; it waits
+   for window 0. Still open until it runs: whether the chip program asks our side to run a short list of chores before
+   it says it is ready (if so, window 1 records the request and stops there).
 3. The same core inside our own operating system on the Spark, once that boots natively (L318).
 
 ## Known unknowns (tested on the chip, never assumed)
