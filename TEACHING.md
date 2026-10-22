@@ -18,3 +18,8 @@ make -s -C native/kernel "$PWD/target/native-kernel/host/test_ipc"
 ```
 
 Expected exit is 0 with `AIENOS_CK_M3: PASS` and `AIENOS_CK_M1: PASS`, including the IPC and MMU checks. The host fixture must print `test_ipc: PASS (75 checks)` with exit 0; it exercises wrong rights, forged handles and revocation. A `NOT_RUN` is not a pass. The negative case can be inspected without hardware in `test_ipc.c`; the gate log also checks for faults and panic rather than accepting an unbounded boot. My observed output and actual replay status are in [TEACHING-REPLAY.txt](TEACHING-REPLAY.txt). A QEMU pass checks the emulated boot only. Pi 5 reports, old Rust tests and native Spark qualification are separate evidence.
+
+
+### Parent fresh-checkout replay
+
+A separate coordination replay is retained in [the parent receipt](docs/parent-replay-2026-10-22.txt). Its scope and observed exit are explicit; source review and final desk qualification remain separate. A recorded absence or expected failing baseline is not a passing implementation.

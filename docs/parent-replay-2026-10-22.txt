@@ -1,0 +1,46 @@
+2026-10-22 parent coordination replay
+Repository: aien-dev/aienux
+Exact executable source: 18e276590424593647cd7c39c6d16c2f9f8d6027
+Observed exit: 0; expected by the documented bounded recipe: 0
+Scope: QEMU M1/M3 and host IPC fixture passed; no physical qualification
+
+This is a separate fresh temporary checkout, not reuse of the author build directory. Git objects may be shared as immutable source storage; compiled outputs were not copied. The original author receipt is preserved. This replay is not a fresh-context source review, full repository suite, protected-branch admission, live service check, security audit or physical-hardware qualification. The website's nonzero baseline is a retained FAIL, not a passing product build. Missing implementation inspections remain absence checks, not executed features.
+Host: Spark Linux7.0.0-1019-nvidia aarch64; relevant tool versions appear below. Builds were run serially via quiet-build.
+
+RAW OBSERVED OUTPUT:
+PARENT FRESH REPLAY
+REPO aien-dev/aienux
+SOURCE 18e276590424593647cd7c39c6d16c2f9f8d6027
+COMMAND
+bash scripts/qemu_ck_boot_test.sh && make -s -C native/kernel "$PWD/target/native-kernel/host/test_ipc" && ./target/native-kernel/host/test_ipc
+
+ENVIRONMENT
+Linux aarch64
+gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+rustc 1.98.1 (48a229cea 2026-09-01)
+18e276590424593647cd7c39c6d16c2f9f8d6027
+qemu exit 0 after 5 s (commit 18e276590424, -cpu max)
+PASS  pre-exit report printed
+PASS  image is this commit
+PASS  left firmware and entered the kernel
+PASS  kernel entered EL1h
+PASS  EL1 page tables and caches enabled
+PASS  GICv3 enabled
+PASS  timer IRQ delivered at least five ticks
+PASS  MMU switched from firmware tables (0x47fff000) to AIENOS tables (0x40000000)
+PASS  GIC bases from the ACPI MADT, GICv3 architecture and ICC system registers
+PASS  tick statistics consistent (period 10000 us, min 10020 avg 10075 max 10214)
+PASS  guard pages fault and the fault is contained (C kernel addition)
+PASS  CPU feature line printed (ID_AA64ISAR0/ISAR1/PFR0 decode, C kernel addition)
+PASS  kernel entropy from RNDR: FEAT_RNG present, bounded retry, stuck test (C kernel addition)
+PASS  no kernel entropy refusal (C kernel addition)
+PASS  final report on the SPCR console
+PASS  no panic or fault
+PASS  cooperative threads interleaved
+PASS  EL0 capability and fault isolation
+PASS  timer-driven preemption across runnable tasks
+PASS  deterministic MADT placement of preempt workers
+PASS  typed IPC with attenuated revocable delegation
+AIENOS_CK_M3: PASS
+AIENOS_CK_M1: PASS
+test_ipc: PASS (75 checks)
