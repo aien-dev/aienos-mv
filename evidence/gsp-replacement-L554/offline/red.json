@@ -1,0 +1,10 @@
+{
+  "compiler_sha256": "01b1545b23e8ff40cb5691e20b5df910ea4acaefde3495f0d62d270465b98cd6",
+  "source_sha256": "10893e97baf71418a826add2e7c0a94e92a1a0aca9b39a34bfa45b3c5e447686",
+  "binary_sha256": "4805ed90a7d494354c88989342f3e35a65ba4923a929e8d5bf31109c997b36b8",
+  "compiled_exit": 0,
+  "run_exit": 0,
+  "cases": 10561,
+  "mismatches": 6341,
+  "result": "EXPECTED_RED: compilable constant-zero stub disagrees with emulated original"
+}

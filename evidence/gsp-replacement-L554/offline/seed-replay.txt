@@ -1,0 +1,48 @@
+COMMAND ['sh', 'seed/omega-from-seed.sh']
+PASS seed0 408 bytes, rebuilds itself
+PASS hex1 776 bytes, born from seed0
+PASS asm2 2464 bytes, born from hex1
+PASS om4 om4.bin 14224 bytes
+PASS omc fixpoint 01b1545b23e8ff40cb5691e20b5df910ea4acaefde3495f0d62d270465b98cd6
+PASS fwd exit 0
+PASS fwd runs, exit 7
+PASS mut exit 0
+PASS mut runs, exit 0
+PASS cycle exit 9
+PASS assign exit 7
+RC=0
+
+EXIT=0
+COMMAND ['sh', 'seed/omc/gate6.sh']
+PASS fixpoint 01b1545b23e8ff40cb5691e20b5df910ea4acaefde3495f0d62d270465b98cd6
+PASS om4 refuses struct (exit 16)
+PASS t1 exit 42
+PASS t1x exit 20
+PASS t1y exit 22
+PASS t2 exit 6
+PASS t3 exit 15
+PASS t4 exit 17
+PASS t5 exit 10
+PASS t6 exit 21
+PASS t7 exit 1
+PASS t7b exit 9
+PASS t8 exit 1
+PASS t9 exit 1
+PASS bad_field error 3
+PASS after_fn error 9
+PASS dup_struct error 10
+PASS put_view error 20
+PASS fields17 error 14
+PASS idx_hi error 21
+PASS still_free error 9
+PASS field_is_struct error 10
+PASS new_in_if error 9
+PASS no_end error 4
+PASS empty error 16
+PASS dup_field error 10
+PASS missing_val error 4
+PASS mut field-swap exit 22
+PASS gate6 26 cases
+RC=0
+
+EXIT=0

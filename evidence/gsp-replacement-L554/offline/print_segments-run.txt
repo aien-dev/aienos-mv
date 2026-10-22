@@ -1,0 +1,9 @@
+{
+  "payloads": 11,
+  "rejected_magic": 1,
+  "stale_section_tables": 11,
+  "print": "/home/drakestapleton/handoffs/gsp-L554/snapshot-20261022T212950Z/PRINT.md",
+  "disassembly_gzip_bytes": 57251527
+}
+
+RC=0

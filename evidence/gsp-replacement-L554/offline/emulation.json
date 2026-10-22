@@ -1,0 +1,413 @@
+{
+  "unicorn": "2.1.4",
+  "capstone": "5.0.6",
+  "firmware_sha256": "32cb7cf3e77f97e92f6e92135939ccb3ba382748144569c0dfccf3338d43d963",
+  "boot": {
+    "assumptions": {
+      "base": 268435456,
+      "entry_offset": 0,
+      "initial_registers": "zero",
+      "memory": "copied image only; rounded page padding refused on access"
+    },
+    "instructions_observed": 40,
+    "instructions_before_boundary": 39,
+    "stop": {
+      "kind": "UNMAPPED_MEMORY",
+      "access": 19,
+      "address": 2305843009213696512,
+      "size": 4,
+      "value": 0,
+      "emulator_error": "Invalid memory read (UC_ERR_READ_UNMAPPED)"
+    },
+    "trace": [
+      {
+        "pc": 268435456,
+        "offset": 0,
+        "bytes": "97c20600",
+        "assembly": "auipc t0, 0x6c"
+      },
+      {
+        "pc": 268435460,
+        "offset": 4,
+        "bytes": "93828207",
+        "assembly": "addi t0, t0, 0x78"
+      },
+      {
+        "pc": 268435464,
+        "offset": 8,
+        "bytes": "83820200",
+        "assembly": "lb t0, 0(t0)"
+      },
+      {
+        "pc": 268435468,
+        "offset": 12,
+        "bytes": "63840200",
+        "assembly": "beqz t0, 8"
+      },
+      {
+        "pc": 268435476,
+        "offset": 20,
+        "bytes": "17010200",
+        "assembly": "auipc sp, 0x20"
+      },
+      {
+        "pc": 268435480,
+        "offset": 24,
+        "bytes": "1301c1fe",
+        "assembly": "addi sp, sp, -0x14"
+      },
+      {
+        "pc": 268435484,
+        "offset": 28,
+        "bytes": "17d70600",
+        "assembly": "auipc a4, 0x6d"
+      },
+      {
+        "pc": 268435488,
+        "offset": 32,
+        "bytes": "130747fe",
+        "assembly": "addi a4, a4, -0x1c"
+      },
+      {
+        "pc": 268435492,
+        "offset": 36,
+        "bytes": "6f10f066",
+        "assembly": "j 0x1e6e"
+      },
+      {
+        "pc": 268443282,
+        "offset": 7826,
+        "bytes": "1301019e",
+        "assembly": "addi sp, sp, -0x620"
+      },
+      {
+        "pc": 268443286,
+        "offset": 7830,
+        "bytes": "23388160",
+        "assembly": "sd s0, 0x610(sp)"
+      },
+      {
+        "pc": 268443290,
+        "offset": 7834,
+        "bytes": "233c315f",
+        "assembly": "sd s3, 0x5f8(sp)"
+      },
+      {
+        "pc": 268443294,
+        "offset": 7838,
+        "bytes": "2338415f",
+        "assembly": "sd s4, 0x5f0(sp)"
+      },
+      {
+        "pc": 268443298,
+        "offset": 7842,
+        "bytes": "2334515f",
+        "assembly": "sd s5, 0x5e8(sp)"
+      },
+      {
+        "pc": 268443302,
+        "offset": 7846,
+        "bytes": "2330615f",
+        "assembly": "sd s6, 0x5e0(sp)"
+      },
+      {
+        "pc": 268443306,
+        "offset": 7850,
+        "bytes": "233c715d",
+        "assembly": "sd s7, 0x5d8(sp)"
+      },
+      {
+        "pc": 268443310,
+        "offset": 7854,
+        "bytes": "2338815d",
+        "assembly": "sd s8, 0x5d0(sp)"
+      },
+      {
+        "pc": 268443314,
+        "offset": 7858,
+        "bytes": "233c1160",
+        "assembly": "sd ra, 0x618(sp)"
+      },
+      {
+        "pc": 268443318,
+        "offset": 7862,
+        "bytes": "23349160",
+        "assembly": "sd s1, 0x608(sp)"
+      },
+      {
+        "pc": 268443322,
+        "offset": 7866,
+        "bytes": "23302161",
+        "assembly": "sd s2, 0x600(sp)"
+      },
+      {
+        "pc": 268443326,
+        "offset": 7870,
+        "bytes": "2334915d",
+        "assembly": "sd s9, 0x5c8(sp)"
+      },
+      {
+        "pc": 268443330,
+        "offset": 7874,
+        "bytes": "2330a15d",
+        "assembly": "sd s10, 0x5c0(sp)"
+      },
+      {
+        "pc": 268443334,
+        "offset": 7878,
+        "bytes": "233cb15b",
+        "assembly": "sd s11, 0x5b8(sp)"
+      },
+      {
+        "pc": 268443338,
+        "offset": 7882,
+        "bytes": "97fb0100",
+        "assembly": "auipc s7, 0x1f"
+      },
+      {
+        "pc": 268443342,
+        "offset": 7886,
+        "bytes": "938b6b15",
+        "assembly": "addi s7, s7, 0x156"
+      },
+      {
+        "pc": 268443346,
+        "offset": 7890,
+        "bytes": "83c70b00",
+        "assembly": "lbu a5, 0(s7)"
+      },
+      {
+        "pc": 268443350,
+        "offset": 7894,
+        "bytes": "3a8a",
+        "assembly": "c.mv s4, a4"
+      },
+      {
+        "pc": 268443352,
+        "offset": 7896,
+        "bytes": "17ab0600",
+        "assembly": "auipc s6, 0x6a"
+      },
+      {
+        "pc": 268443356,
+        "offset": 7900,
+        "bytes": "130b0b1d",
+        "assembly": "addi s6, s6, 0x1d0"
+      },
+      {
+        "pc": 268443360,
+        "offset": 7904,
+        "bytes": "17240200",
+        "assembly": "auipc s0, 0x22"
+      },
+      {
+        "pc": 268443364,
+        "offset": 7908,
+        "bytes": "13040412",
+        "assembly": "addi s0, s0, 0x120"
+      },
+      {
+        "pc": 268443368,
+        "offset": 7912,
+        "bytes": "97aa0600",
+        "assembly": "auipc s5, 0x6a"
+      },
+      {
+        "pc": 268443372,
+        "offset": 7916,
+        "bytes": "938a8a1b",
+        "assembly": "addi s5, s5, 0x1b8"
+      },
+      {
+        "pc": 268443376,
+        "offset": 7920,
+        "bytes": "97a90600",
+        "assembly": "auipc s3, 0x6a"
+      },
+      {
+        "pc": 268443380,
+        "offset": 7924,
+        "bytes": "9389891a",
+        "assembly": "addi s3, s3, 0x1a8"
+      },
+      {
+        "pc": 268443384,
+        "offset": 7928,
+        "bytes": "130c012f",
+        "assembly": "addi s8, sp, 0x2f0"
+      },
+      {
+        "pc": 268443388,
+        "offset": 7932,
+        "bytes": "638d0730",
+        "assembly": "beqz a5, 0x31a"
+      },
+      {
+        "pc": 268443392,
+        "offset": 7936,
+        "bytes": "97370000",
+        "assembly": "auipc a5, 3"
+      },
+      {
+        "pc": 268443396,
+        "offset": 7940,
+        "bytes": "83b70793",
+        "assembly": "ld a5, -0x6d0(a5)"
+      },
+      {
+        "pc": 268443400,
+        "offset": 7944,
+        "bytes": "9c43",
+        "assembly": "c.lw a5, 0(a5)"
+      }
+    ],
+    "memory": [
+      {
+        "kind": 16,
+        "address": 268877944,
+        "size": 1,
+        "value": 0
+      },
+      {
+        "kind": 17,
+        "address": 268566512,
+        "size": 8,
+        "value": 0
+      },
+      {
+        "kind": 17,
+        "address": 268566488,
+        "size": 8,
+        "value": 0
+      },
+      {
+        "kind": 17,
+        "address": 268566480,
+        "size": 8,
+        "value": 0
+      },
+      {
+        "kind": 17,
+        "address": 268566472,
+        "size": 8,
+        "value": 0
+      },
+      {
+        "kind": 17,
+        "address": 268566464,
+        "size": 8,
+        "value": 0
+      },
+      {
+        "kind": 17,
+        "address": 268566456,
+        "size": 8,
+        "value": 0
+      },
+      {
+        "kind": 17,
+        "address": 268566448,
+        "size": 8,
+        "value": 0
+      },
+      {
+        "kind": 17,
+        "address": 268566520,
+        "size": 8,
+        "value": 0
+      },
+      {
+        "kind": 17,
+        "address": 268566504,
+        "size": 8,
+        "value": 0
+      },
+      {
+        "kind": 17,
+        "address": 268566496,
+        "size": 8,
+        "value": 0
+      },
+      {
+        "kind": 17,
+        "address": 268566440,
+        "size": 8,
+        "value": 0
+      },
+      {
+        "kind": 17,
+        "address": 268566432,
+        "size": 8,
+        "value": 0
+      },
+      {
+        "kind": 17,
+        "address": 268566424,
+        "size": 8,
+        "value": 0
+      },
+      {
+        "kind": 16,
+        "address": 268570656,
+        "size": 1,
+        "value": 0
+      },
+      {
+        "kind": 16,
+        "address": 268453936,
+        "size": 8,
+        "value": 0
+      }
+    ],
+    "final_registers": {
+      "0": 0,
+      "1": 0,
+      "2": 268564960,
+      "3": 0,
+      "4": 0,
+      "5": 0,
+      "6": 0,
+      "7": 0,
+      "8": 268582912,
+      "9": 0,
+      "10": 0,
+      "11": 0,
+      "12": 0,
+      "13": 0,
+      "14": 268881920,
+      "15": 2305843009213696512,
+      "16": 0,
+      "17": 0,
+      "18": 0,
+      "19": 268877976,
+      "20": 268881920,
+      "21": 268877984,
+      "22": 268877992,
+      "23": 268570656,
+      "24": 268565712,
+      "25": 0,
+      "26": 0,
+      "27": 0,
+      "28": 0,
+      "29": 0,
+      "30": 0,
+      "31": 0
+    }
+  },
+  "leaf": {
+    "entry_offset": 40,
+    "code_extent": [
+      40,
+      84
+    ],
+    "code_sha256": "a5d388a59f99f2e5afe44f3dab0b7eb3ad8832240e17ece7e4bc4555728996f5",
+    "inferred_contract": "zero-length => 0; unsigned endpoint overflow => 1; otherwise half-open range intersection",
+    "cases": 10561,
+    "ones": 6341,
+    "zeros": 4220,
+    "input_sha256": "d46bed1cf5b8b325c0f655b7561820192d3aaed758a3f86be03d463799cc80a3",
+    "expected_sha256": "f292b3819c543a91edfe3e3bbd813860ead276e90ffdec36ad2697d079cea23f",
+    "result": "BINARY_LEAF_EQUIVALENCE_PASS",
+    "limits": "One pure routine; not proof of full firmware functionality, symbol identity, firmware boot, or hardware admission"
+  }
+}

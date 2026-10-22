@@ -1,0 +1,9 @@
+{
+  "source": "/lib/firmware/nvidia/580.173.02/gsp_ga10x.bin",
+  "copy": "/home/drakestapleton/handoffs/gsp-L554/snapshot-20261022T212950Z/gsp_ga10x.bin",
+  "bytes": 75012080,
+  "sha256": "32cb7cf3e77f97e92f6e92135939ccb3ba382748144569c0dfccf3338d43d963",
+  "source_pre_sha256": "32cb7cf3e77f97e92f6e92135939ccb3ba382748144569c0dfccf3338d43d963",
+  "source_post_sha256": "32cb7cf3e77f97e92f6e92135939ccb3ba382748144569c0dfccf3338d43d963",
+  "utc": "2026-10-22T21:29:51.132218+00:00"
+}

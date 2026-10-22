@@ -1,0 +1,29 @@
+{
+  "boot_stop": {
+    "kind": "UNMAPPED_MEMORY",
+    "access": 19,
+    "address": 2305843009213696512,
+    "size": 4,
+    "value": 0,
+    "emulator_error": "Invalid memory read (UC_ERR_READ_UNMAPPED)"
+  },
+  "boot_instructions_observed": 40,
+  "leaf": {
+    "entry_offset": 40,
+    "code_extent": [
+      40,
+      84
+    ],
+    "code_sha256": "a5d388a59f99f2e5afe44f3dab0b7eb3ad8832240e17ece7e4bc4555728996f5",
+    "inferred_contract": "zero-length => 0; unsigned endpoint overflow => 1; otherwise half-open range intersection",
+    "cases": 10561,
+    "ones": 6341,
+    "zeros": 4220,
+    "input_sha256": "d46bed1cf5b8b325c0f655b7561820192d3aaed758a3f86be03d463799cc80a3",
+    "expected_sha256": "f292b3819c543a91edfe3e3bbd813860ead276e90ffdec36ad2697d079cea23f",
+    "result": "BINARY_LEAF_EQUIVALENCE_PASS",
+    "limits": "One pure routine; not proof of full firmware functionality, symbol identity, firmware boot, or hardware admission"
+  }
+}
+
+RC=0

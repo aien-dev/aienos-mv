@@ -1,0 +1,17 @@
+{
+  "firmware_sha256": "32cb7cf3e77f97e92f6e92135939ccb3ba382748144569c0dfccf3338d43d963",
+  "post_original_same": true,
+  "snapshot_same": true,
+  "source_tar_sha256": "52d9bdf5c785d49c6ac597dda103c699f779be26d36f52776995437d8d263f25",
+  "compiler_reconstructed_identical": true,
+  "boot_stop_address_hex": "0x2000000000000a00",
+  "boot_last_offset_hex": "0x1f08",
+  "source_sha256": {
+    "README.md": "550694674ee53581dafb49b4bdcab461e4f891c4672a424a2e3f77510a5b0793",
+    "print_segments.py": "1f4c8789a58238f7d6e2da33ce059cfacd1bec01d15c56f3943740127b96ee65",
+    "emulate_firmware.py": "8ee8949f6a112483545739dab27951ca3fa739d6d212c616c9a1353693fd4f4f",
+    "ranges-red.om": "10893e97baf71418a826add2e7c0a94e92a1a0aca9b39a34bfa45b3c5e447686",
+    "verify_ranges.py": "10848b621294e94b262963e667ffcc4ca21406feb60cfbaa058d3244e9f00ccb",
+    "ranges.om": "1c95f65da8c7b06666c003575845ce555924340a370fbb565eb3cf4e1a6498b8"
+  }
+}

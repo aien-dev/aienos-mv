@@ -1,0 +1,653 @@
+{
+  "firmware_sha256": "32cb7cf3e77f97e92f6e92135939ccb3ba382748144569c0dfccf3338d43d963",
+  "firmware_bytes": 75012080,
+  "fwimage_offset": 64,
+  "fwimage_bytes": 74969088,
+  "fwimage_sha256": "931add19204a5f0240442272f58fb2bc5db6cec4dd6f6341c1d888754146aa07",
+  "objects": [
+    {
+      "offset": 450560,
+      "extent": 155648,
+      "entry": 18446744071880835072,
+      "flags": 1,
+      "section_table_offset": 155856,
+      "section_count": 8,
+      "segments": [
+        {
+          "type": 1879048195,
+          "flags": 4,
+          "offset": 0,
+          "vaddr": 0,
+          "paddr": 0,
+          "filesz": 0,
+          "memsz": 0,
+          "align": 8
+        },
+        {
+          "type": 1,
+          "flags": 5,
+          "offset": 0,
+          "vaddr": 18446744071880830976,
+          "paddr": 18446744071880830976,
+          "filesz": 53248,
+          "memsz": 53248,
+          "align": 4096
+        },
+        {
+          "type": 1,
+          "flags": 6,
+          "offset": 53248,
+          "vaddr": 18446744072149270528,
+          "paddr": 18446744072149270528,
+          "filesz": 102400,
+          "memsz": 102400,
+          "align": 4096
+        }
+      ],
+      "sha256": "3dd3af01611dc9364d25f5fbb1923d7560139933b6c66e2340d8a49176cb4c9c",
+      "filename": "load-0006e000.payload",
+      "section_table_within_payload": false,
+      "listings": [
+        {
+          "segment": 1,
+          "gzip": "load-0006e000-exec-1.elf.asm.gz",
+          "bytes_sha256": "796975f7369acc71175ff8c4169dfd5faa8d36dc794812f08d3df1a385023da8"
+        }
+      ]
+    },
+    {
+      "offset": 606208,
+      "extent": 163840,
+      "entry": 18446744071880835072,
+      "flags": 1,
+      "section_table_offset": 164048,
+      "section_count": 8,
+      "segments": [
+        {
+          "type": 1879048195,
+          "flags": 4,
+          "offset": 0,
+          "vaddr": 0,
+          "paddr": 0,
+          "filesz": 0,
+          "memsz": 0,
+          "align": 8
+        },
+        {
+          "type": 1,
+          "flags": 5,
+          "offset": 0,
+          "vaddr": 18446744071880830976,
+          "paddr": 18446744071880830976,
+          "filesz": 57344,
+          "memsz": 57344,
+          "align": 4096
+        },
+        {
+          "type": 1,
+          "flags": 6,
+          "offset": 57344,
+          "vaddr": 18446744072149270528,
+          "paddr": 18446744072149270528,
+          "filesz": 106496,
+          "memsz": 106496,
+          "align": 4096
+        }
+      ],
+      "sha256": "7f069aa759156aae7d92b81a51d655c3ac83472c1b9b739e55724cb9fa3789ce",
+      "filename": "load-00094000.payload",
+      "section_table_within_payload": false,
+      "listings": [
+        {
+          "segment": 1,
+          "gzip": "load-00094000-exec-1.elf.asm.gz",
+          "bytes_sha256": "83f559df8f35522cc314b618a45356744b82670c87871d9794f33e486de0788a"
+        }
+      ]
+    },
+    {
+      "offset": 770048,
+      "extent": 192512,
+      "entry": 18446744071880835072,
+      "flags": 1,
+      "section_table_offset": 192720,
+      "section_count": 8,
+      "segments": [
+        {
+          "type": 1879048195,
+          "flags": 4,
+          "offset": 0,
+          "vaddr": 0,
+          "paddr": 0,
+          "filesz": 0,
+          "memsz": 0,
+          "align": 8
+        },
+        {
+          "type": 1,
+          "flags": 5,
+          "offset": 0,
+          "vaddr": 18446744071880830976,
+          "paddr": 18446744071880830976,
+          "filesz": 77824,
+          "memsz": 77824,
+          "align": 4096
+        },
+        {
+          "type": 1,
+          "flags": 6,
+          "offset": 77824,
+          "vaddr": 18446744072149270528,
+          "paddr": 18446744072149270528,
+          "filesz": 114688,
+          "memsz": 114688,
+          "align": 4096
+        }
+      ],
+      "sha256": "7c49a3f634721d08c09a9fa382d8f6c5086cb5eb27fe71feb9c981cee0c6249c",
+      "filename": "load-000bc000.payload",
+      "section_table_within_payload": false,
+      "listings": [
+        {
+          "segment": 1,
+          "gzip": "load-000bc000-exec-1.elf.asm.gz",
+          "bytes_sha256": "aa28cf2ec224312062b175512c72cbc0a9454a9ffd7f4eb4d606bdf163a099c2"
+        }
+      ]
+    },
+    {
+      "offset": 962560,
+      "extent": 192512,
+      "entry": 18446744071880835072,
+      "flags": 1,
+      "section_table_offset": 192720,
+      "section_count": 8,
+      "segments": [
+        {
+          "type": 1879048195,
+          "flags": 4,
+          "offset": 0,
+          "vaddr": 0,
+          "paddr": 0,
+          "filesz": 0,
+          "memsz": 0,
+          "align": 8
+        },
+        {
+          "type": 1,
+          "flags": 5,
+          "offset": 0,
+          "vaddr": 18446744071880830976,
+          "paddr": 18446744071880830976,
+          "filesz": 77824,
+          "memsz": 77824,
+          "align": 4096
+        },
+        {
+          "type": 1,
+          "flags": 6,
+          "offset": 77824,
+          "vaddr": 18446744072149270528,
+          "paddr": 18446744072149270528,
+          "filesz": 114688,
+          "memsz": 114688,
+          "align": 4096
+        }
+      ],
+      "sha256": "1c04812dae95a4b9ac09652e43ff107dc16ae929703ca0b6c52849f087130129",
+      "filename": "load-000eb000.payload",
+      "section_table_within_payload": false,
+      "listings": [
+        {
+          "segment": 1,
+          "gzip": "load-000eb000-exec-1.elf.asm.gz",
+          "bytes_sha256": "8026df99dc552431150cf9c61395da4599dcc9b2882cff9fae5d580efe9de8b0"
+        }
+      ]
+    },
+    {
+      "offset": 1155072,
+      "extent": 192512,
+      "entry": 18446744071880835072,
+      "flags": 1,
+      "section_table_offset": 192720,
+      "section_count": 8,
+      "segments": [
+        {
+          "type": 1879048195,
+          "flags": 4,
+          "offset": 0,
+          "vaddr": 0,
+          "paddr": 0,
+          "filesz": 0,
+          "memsz": 0,
+          "align": 8
+        },
+        {
+          "type": 1,
+          "flags": 5,
+          "offset": 0,
+          "vaddr": 18446744071880830976,
+          "paddr": 18446744071880830976,
+          "filesz": 81920,
+          "memsz": 81920,
+          "align": 4096
+        },
+        {
+          "type": 1,
+          "flags": 6,
+          "offset": 81920,
+          "vaddr": 18446744072149270528,
+          "paddr": 18446744072149270528,
+          "filesz": 110592,
+          "memsz": 110592,
+          "align": 4096
+        }
+      ],
+      "sha256": "b0e018e3def3999293669f341557e062e51c430e27763bd4c41641ae83d92dfa",
+      "filename": "load-0011a000.payload",
+      "section_table_within_payload": false,
+      "listings": [
+        {
+          "segment": 1,
+          "gzip": "load-0011a000-exec-1.elf.asm.gz",
+          "bytes_sha256": "0360ff62e21777493ffd9c99e273863e0767f9807c911c4f58e909fce17c4470"
+        }
+      ]
+    },
+    {
+      "offset": 1347584,
+      "extent": 188416,
+      "entry": 18446744071880835072,
+      "flags": 1,
+      "section_table_offset": 188624,
+      "section_count": 8,
+      "segments": [
+        {
+          "type": 1879048195,
+          "flags": 4,
+          "offset": 0,
+          "vaddr": 0,
+          "paddr": 0,
+          "filesz": 0,
+          "memsz": 0,
+          "align": 8
+        },
+        {
+          "type": 1,
+          "flags": 5,
+          "offset": 0,
+          "vaddr": 18446744071880830976,
+          "paddr": 18446744071880830976,
+          "filesz": 81920,
+          "memsz": 81920,
+          "align": 4096
+        },
+        {
+          "type": 1,
+          "flags": 6,
+          "offset": 81920,
+          "vaddr": 18446744072149270528,
+          "paddr": 18446744072149270528,
+          "filesz": 106496,
+          "memsz": 106496,
+          "align": 4096
+        }
+      ],
+      "sha256": "4a67bbce1b874d171a199d2b8ba0e29a42210958f19309b07abc72bb12818299",
+      "filename": "load-00149000.payload",
+      "section_table_within_payload": false,
+      "listings": [
+        {
+          "segment": 1,
+          "gzip": "load-00149000-exec-1.elf.asm.gz",
+          "bytes_sha256": "a2845fc8ea75c3916437fd2cea312b568103cb96abafc0c26b0dda4d3328a220"
+        }
+      ]
+    },
+    {
+      "offset": 1536000,
+      "extent": 122880,
+      "entry": 16787738,
+      "flags": 1,
+      "section_table_offset": 122984,
+      "section_count": 7,
+      "segments": [
+        {
+          "type": 1,
+          "flags": 5,
+          "offset": 0,
+          "vaddr": 16777216,
+          "paddr": 16777216,
+          "filesz": 32768,
+          "memsz": 32768,
+          "align": 4096
+        },
+        {
+          "type": 1,
+          "flags": 6,
+          "offset": 32768,
+          "vaddr": 67108864,
+          "paddr": 67108864,
+          "filesz": 90112,
+          "memsz": 90112,
+          "align": 4096
+        },
+        {
+          "type": 1610612736,
+          "flags": 4,
+          "offset": 0,
+          "vaddr": 536870912,
+          "paddr": 0,
+          "filesz": 0,
+          "memsz": 0,
+          "align": 8
+        }
+      ],
+      "sha256": "5b9fb6c800102a6fe63703f6370d02cef562c2d38d17f9eecf5826e157430462",
+      "filename": "load-00177000.payload",
+      "section_table_within_payload": false,
+      "listings": [
+        {
+          "segment": 0,
+          "gzip": "load-00177000-exec-0.elf.asm.gz",
+          "bytes_sha256": "d06fefb698c736e057c378706946196f292027e90833a82ade7ed263fa6a6d0f"
+        }
+      ]
+    },
+    {
+      "offset": 1658880,
+      "extent": 49152,
+      "entry": 16789414,
+      "flags": 1,
+      "section_table_offset": 49256,
+      "section_count": 7,
+      "segments": [
+        {
+          "type": 1,
+          "flags": 5,
+          "offset": 0,
+          "vaddr": 16777216,
+          "paddr": 16777216,
+          "filesz": 32768,
+          "memsz": 32768,
+          "align": 4096
+        },
+        {
+          "type": 1,
+          "flags": 6,
+          "offset": 32768,
+          "vaddr": 67108864,
+          "paddr": 67108864,
+          "filesz": 16384,
+          "memsz": 16384,
+          "align": 4096
+        },
+        {
+          "type": 1610612736,
+          "flags": 4,
+          "offset": 0,
+          "vaddr": 536870912,
+          "paddr": 0,
+          "filesz": 0,
+          "memsz": 0,
+          "align": 8
+        }
+      ],
+      "sha256": "f0f0132bdc148939047076be4c19938ffe5d6e13d593c7ac744a4f63521d2546",
+      "filename": "load-00195000.payload",
+      "section_table_within_payload": false,
+      "listings": [
+        {
+          "segment": 0,
+          "gzip": "load-00195000-exec-0.elf.asm.gz",
+          "bytes_sha256": "17037a66da0200df89fd546e40016d1c0d0ea7ac701304fed2375e2f01803b29"
+        }
+      ]
+    },
+    {
+      "offset": 1708032,
+      "extent": 16904192,
+      "entry": 27887874,
+      "flags": 1,
+      "section_table_offset": 16904344,
+      "section_count": 7,
+      "segments": [
+        {
+          "type": 1,
+          "flags": 5,
+          "offset": 0,
+          "vaddr": 16777216,
+          "paddr": 16777216,
+          "filesz": 15216640,
+          "memsz": 15216640,
+          "align": 4096
+        },
+        {
+          "type": 1,
+          "flags": 6,
+          "offset": 15216640,
+          "vaddr": 67108864,
+          "paddr": 67108864,
+          "filesz": 1687552,
+          "memsz": 1687552,
+          "align": 4096
+        },
+        {
+          "type": 1610612736,
+          "flags": 4,
+          "offset": 0,
+          "vaddr": 536870912,
+          "paddr": 0,
+          "filesz": 0,
+          "memsz": 0,
+          "align": 8
+        }
+      ],
+      "sha256": "1c987efbf9869fe39951632fbf2fdc5c3d66fc6f5256e97c204d3c0870998312",
+      "filename": "load-001a1000.payload",
+      "section_table_within_payload": false,
+      "listings": [
+        {
+          "segment": 0,
+          "gzip": "load-001a1000-exec-0.elf.asm.gz",
+          "bytes_sha256": "561491f3ca696372e9fbcadc3c91872dd443c5bee85962590115f9186797c55e"
+        }
+      ]
+    },
+    {
+      "offset": 18612224,
+      "extent": 1159168,
+      "entry": 17357970,
+      "flags": 1,
+      "section_table_offset": 1159272,
+      "section_count": 7,
+      "segments": [
+        {
+          "type": 1,
+          "flags": 5,
+          "offset": 0,
+          "vaddr": 16777216,
+          "paddr": 16777216,
+          "filesz": 790528,
+          "memsz": 790528,
+          "align": 4096
+        },
+        {
+          "type": 1,
+          "flags": 6,
+          "offset": 790528,
+          "vaddr": 67108864,
+          "paddr": 67108864,
+          "filesz": 368640,
+          "memsz": 368640,
+          "align": 4096
+        },
+        {
+          "type": 1610612736,
+          "flags": 4,
+          "offset": 0,
+          "vaddr": 536870912,
+          "paddr": 0,
+          "filesz": 0,
+          "memsz": 0,
+          "align": 8
+        }
+      ],
+      "sha256": "b8d7c13367e944785cf1ba5a7cca813372470a6531a3c67311377bbe3fe172e1",
+      "filename": "load-011c0000.payload",
+      "section_table_within_payload": false,
+      "listings": [
+        {
+          "segment": 0,
+          "gzip": "load-011c0000-exec-0.elf.asm.gz",
+          "bytes_sha256": "3f2254a8168bca00caedbc9180a7cf7e5b800bc24a2869a067f79b1dad1bb4f0"
+        }
+      ]
+    },
+    {
+      "offset": 19771392,
+      "extent": 61440,
+      "entry": 16787812,
+      "flags": 1,
+      "section_table_offset": 61544,
+      "section_count": 7,
+      "segments": [
+        {
+          "type": 1,
+          "flags": 5,
+          "offset": 0,
+          "vaddr": 16777216,
+          "paddr": 16777216,
+          "filesz": 24576,
+          "memsz": 24576,
+          "align": 4096
+        },
+        {
+          "type": 1,
+          "flags": 6,
+          "offset": 24576,
+          "vaddr": 67108864,
+          "paddr": 67108864,
+          "filesz": 36864,
+          "memsz": 36864,
+          "align": 4096
+        },
+        {
+          "type": 1610612736,
+          "flags": 4,
+          "offset": 0,
+          "vaddr": 536870912,
+          "paddr": 0,
+          "filesz": 0,
+          "memsz": 0,
+          "align": 8
+        }
+      ],
+      "sha256": "aa58ea06462eee5cfeef2c974055661c6764c92240195d0123c1674bfed1def4",
+      "filename": "load-012db000.payload",
+      "section_table_within_payload": false,
+      "listings": [
+        {
+          "segment": 0,
+          "gzip": "load-012db000-exec-0.elf.asm.gz",
+          "bytes_sha256": "d026271589da88bed32e3987ed776a52a6a1b3f091ee600f0bc00c7c46cfc261"
+        }
+      ]
+    }
+  ],
+  "rejected_magic_hits": [
+    {
+      "offset": 30423742,
+      "reason": "not ELF64 little-endian v1"
+    }
+  ],
+  "method": "bounded ELF program headers; section tables outside load extents are not recovered",
+  "outer_sections": [
+    {
+      "name": "",
+      "offset": 0,
+      "size": 0
+    },
+    {
+      "name": ".fwimage",
+      "offset": 64,
+      "size": 74969088
+    },
+    {
+      "name": ".note.gnu.build-id",
+      "offset": 74969152,
+      "size": 36
+    },
+    {
+      "name": ".fwversion",
+      "offset": 74969188,
+      "size": 11
+    },
+    {
+      "name": ".fwsignature_gb20y",
+      "offset": 74969199,
+      "size": 4096
+    },
+    {
+      "name": ".fwsignature_cc_gb20x",
+      "offset": 74973295,
+      "size": 4096
+    },
+    {
+      "name": ".fwsignature_gb20x",
+      "offset": 74977391,
+      "size": 4096
+    },
+    {
+      "name": ".fwsignature_cc_gb10x",
+      "offset": 74981487,
+      "size": 4096
+    },
+    {
+      "name": ".fwsignature_gb10y",
+      "offset": 74985583,
+      "size": 4096
+    },
+    {
+      "name": ".fwsignature_gb10x",
+      "offset": 74989679,
+      "size": 4096
+    },
+    {
+      "name": ".fwsignature_cc_gh100",
+      "offset": 74993775,
+      "size": 4096
+    },
+    {
+      "name": ".fwsignature_gh100",
+      "offset": 74997871,
+      "size": 4096
+    },
+    {
+      "name": ".fwsignature_ad10x",
+      "offset": 75001967,
+      "size": 4096
+    },
+    {
+      "name": ".fwsignature_ga10x",
+      "offset": 75006063,
+      "size": 4096
+    },
+    {
+      "name": ".symtab",
+      "offset": 75010160,
+      "size": 96
+    },
+    {
+      "name": ".strtab",
+      "offset": 75010256,
+      "size": 466
+    },
+    {
+      "name": ".shstrtab",
+      "offset": 75010722,
+      "size": 265
+    }
+  ]
+}

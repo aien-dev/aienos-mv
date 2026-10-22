@@ -1,0 +1,80 @@
+{
+  "compiler_sha256": "01b1545b23e8ff40cb5691e20b5df910ea4acaefde3495f0d62d270465b98cd6",
+  "compiler_source_pin": "413f87c84e9b4233e4a56487dc6643b2139b5d0c",
+  "oracle": {
+    "entry_offset": 40,
+    "code_extent": [
+      40,
+      84
+    ],
+    "code_sha256": "a5d388a59f99f2e5afe44f3dab0b7eb3ad8832240e17ece7e4bc4555728996f5",
+    "inferred_contract": "zero-length => 0; unsigned endpoint overflow => 1; otherwise half-open range intersection",
+    "cases": 10561,
+    "ones": 6341,
+    "zeros": 4220,
+    "input_sha256": "d46bed1cf5b8b325c0f655b7561820192d3aaed758a3f86be03d463799cc80a3",
+    "expected_sha256": "f292b3819c543a91edfe3e3bbd813860ead276e90ffdec36ad2697d079cea23f",
+    "result": "BINARY_LEAF_EQUIVALENCE_PASS",
+    "limits": "One pure routine; not proof of full firmware functionality, symbol identity, firmware boot, or hardware admission"
+  },
+  "logs": [
+    {
+      "name": "green-stream",
+      "cases": 10561,
+      "mismatches": 0,
+      "run_rc": 0,
+      "source_sha256": "1c95f65da8c7b06666c003575845ce555924340a370fbb565eb3cf4e1a6498b8",
+      "binary_sha256": "0006d257e2e3b31b7ed10dc12ced06cce5b43e854f86b712c55a907691beb8bb",
+      "compile_rc": 0
+    },
+    {
+      "name": "transport",
+      "empty": 1,
+      "short_records": 31,
+      "valid_then_short": 1,
+      "result": "PASS"
+    },
+    {
+      "name": "direct-core",
+      "cases": 12,
+      "result": "PASS"
+    },
+    {
+      "name": "no-zero-guard",
+      "mutation_detected": true,
+      "mismatches": 648,
+      "run_rc": 0,
+      "source_sha256": "e8186b5d8b2b499d3374da6c0fd022b7c826def4a55e07f073112024aab1a7f7",
+      "binary_sha256": "a7cb4eba4b93df12add7ab0e069ce17b273e2c777bb4d80bdb7c0e9e59177c0d",
+      "compile_rc": 0
+    },
+    {
+      "name": "first-overflow",
+      "mutation_detected": true,
+      "mismatches": 2988,
+      "run_rc": 0,
+      "source_sha256": "d50ed330a637aba9af229b66f1801422c82b72db88e9cc1cc88bbb3d7282c6c4",
+      "binary_sha256": "3d85414dde600392b233937eb18d2952bb44289a718e6aa187c9fc5f184cc081",
+      "compile_rc": 0
+    },
+    {
+      "name": "second-overflow",
+      "mutation_detected": true,
+      "mismatches": 1696,
+      "run_rc": 0,
+      "source_sha256": "c1810fdcb8ce4c801fa33dfd06624b3b44b5a587557994cc5bf852a55e4cea8f",
+      "binary_sha256": "2b6c5ae61e97084d7b52154560411a8df94908cffd08b30a0ad5006168ceb7ad",
+      "compile_rc": 0
+    },
+    {
+      "name": "adjacent-overlaps",
+      "mutation_detected": true,
+      "mismatches": 132,
+      "run_rc": 0,
+      "source_sha256": "59545c04dccbba0f82385e5309d175a1349708dd5c4599a03ea8e32abf8268a2",
+      "binary_sha256": "720409275f0e016d6cf2d613d3107d889566c340ffdc7521bdc315314453d203",
+      "compile_rc": 0
+    }
+  ],
+  "result": "HOST_NATIVE_MIRROR_PASS; NOT_RISCV_FIRMWARE; NOT_GPU_FUNCTION_PARITY"
+}
