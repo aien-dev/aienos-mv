@@ -1,0 +1,62 @@
+note Shared Omega register policy. init then C0 boot and C1 latch; C2 reserved for adapter.
+global R uint 13
+global W uint 6
+global C uint 3
+fn init to void
+put R 0 uint 0
+put R 1 uint 2560
+put R 2 uint 8650816
+put R 3 uint 8650820
+put R 4 uint 8653504
+put R 5 uint 8653824
+put R 6 uint 8653828
+put R 7 uint 1114176
+put R 8 uint 1114180
+put R 9 uint 1114240
+put R 10 uint 1114356
+put R 11 uint 1117184
+put R 12 uint 1119112
+put W 0 uint 8653504
+put W 1 uint 8653508
+put W 2 uint 8653824
+put W 3 uint 8653828
+put W 4 uint 1114240
+put W 5 uint 1117184
+end
+fn canread off uint to bool
+for i ulong len R
+if eq off get R i
+ret true
+end
+end
+ret false
+end
+fn canwrite off uint to bool
+for i ulong len W
+if eq off get W i
+ret true
+end
+end
+ret false
+end
+fn allow op uint off uint to uint
+if eq op uint 0
+if canread off
+ret uint 0
+end
+ret uint 1
+end
+if ne op uint 1
+ret uint 25
+end
+if or eq get C 0 uint 0 not canwrite off
+ret uint 1
+end
+if eq off uint 8653824
+if ne get C 1 uint 0
+ret uint 114
+end
+put C 1 uint 1
+end
+ret uint 0
+end

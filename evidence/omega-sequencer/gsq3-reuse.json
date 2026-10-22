@@ -1,0 +1,53 @@
+{
+  "origin_commit": "f3a00467438e92bc6f5e5e2059ccbdad22859932",
+  "unchanged_function_bodies": [
+    {
+      "origin": "regpolicy.om",
+      "consumer": "regcore.om",
+      "function": "init",
+      "sha256": "c1cdb3b0efe1f0be6a3d545848d85ee9d74e03afde04d0a67d7b75d53a295686"
+    },
+    {
+      "origin": "regpolicy.om",
+      "consumer": "regcore.om",
+      "function": "canread",
+      "sha256": "16e92b68b4690659ccd6ffc317ed6710262e8fe90f3c287a607e8a5a011a94ac"
+    },
+    {
+      "origin": "regpolicy.om",
+      "consumer": "regcore.om",
+      "function": "canwrite",
+      "sha256": "38dfdf1090705c979aeb6ee96b80457a0ffaa8580fd16bc70d9671e8a84b01e6"
+    },
+    {
+      "origin": "regpolicy.om",
+      "consumer": "regcore.om",
+      "function": "allow",
+      "sha256": "4831709749e1ddf58b0c03676a37730b184b3a7eae9e6b84f9a3b46ef2eb3107"
+    },
+    {
+      "origin": "gspseq.om",
+      "consumer": "gsq3.om",
+      "function": "size",
+      "sha256": "8af224db8c01c40b2a4e02bf83acdd13846511770c2370b19adfbdc8c3b7510f"
+    },
+    {
+      "origin": "gspseq.om",
+      "consumer": "gsq3.om",
+      "function": "poll",
+      "sha256": "b2321169ed4b5b1710007a4d484aab744921e1100fdfb3af3fc706eae75a327b"
+    },
+    {
+      "origin": "gspseq.om",
+      "consumer": "gsq3.om",
+      "function": "step",
+      "sha256": "b123ae1fd3f2720575c3689cc9f48d1c187567b9990aa36f0ead11370a16ca4c"
+    },
+    {
+      "origin": "gspseq.om",
+      "consumer": "gsq3.om",
+      "function": "valid",
+      "sha256": "4ad5b19df939b29051b3ec68efaca8fda0523d21e08961c011396f9b0de6f98e"
+    }
+  ]
+}

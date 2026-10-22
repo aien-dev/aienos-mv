@@ -1,5 +1,7 @@
 # Seed-native register-access policy, RGP1
 
+Current source composition: `regcore.om` followed by one LF and `regpolicy.om`. The policy functions now live only in the shared core; GSQ3 uses that same core directly. The test harness assembles these native source bytes before compiling. Original `policy-*` receipts describe the pre-extraction commit; `shared-policy-*` receipts qualify the current composition. See `GSQ3.md` for the integration contract.
+
 `regpolicy.om` hand-ports the register permission and one-shot SEC2 doorbell policy from the pinned `native/linux/aien-gpu/aien_gpu.c` into seeded Omega. It decides permissions only: **no ioctl, MMIO, register values, firmware, module load, or live-driver replacement**. The C shim remains active code and is not retired by this offline milestone. GSQ2 still uses its eight-slot simulator; this policy is not yet attached to a hardware backend.
 
 ## Wire contract

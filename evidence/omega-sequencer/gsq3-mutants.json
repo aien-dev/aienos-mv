@@ -1,0 +1,27 @@
+[
+  {
+    "mutant": "no-permission-preflight",
+    "compiled": true,
+    "failures": 17
+  },
+  {
+    "mutant": "consume-shadow-latch",
+    "compiled": true,
+    "failures": 7
+  },
+  {
+    "mutant": "missing-modify-read",
+    "compiled": true,
+    "failures": 2
+  },
+  {
+    "mutant": "aliased-registers",
+    "compiled": true,
+    "failures": 27
+  },
+  {
+    "mutant": "shared-repeat-doorbell",
+    "compiled": true,
+    "failures": 5
+  }
+]

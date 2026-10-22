@@ -1,0 +1,296 @@
+note Handwritten seed-native GSP CPU sequencer with an OFFLINE register backend.
+note No MMIO, ioctl, firmware loading, sleeps, resets or live-device operations.
+note GSQ3: nwords,end,budget,core,delay,boot,latch,regs14,save8,words after magic.
+note Output: status,reads,writes,delay,corecalls,latch,regs14,save8.
+note Compile after regcore.om. Real offsets, simulated values, NO MMIO.
+global In uchar 4217
+global Out uchar 112
+global Words uint 1024
+global Regs uint 14
+global Save uint 8
+global Counts uint 5
+global Config uint 7
+fn raw pos ulong to uint
+v = uint 0
+for j ulong 4
+v = or v shl uint get In add pos j mul uint j 8
+end
+ret v
+end
+fn word pos ulong to uint
+ret raw add pos 4
+end
+fn inc slot ulong to void
+put Counts slot add get Counts slot uint 1
+end
+fn locate addr uint to ulong
+for i ulong 13
+if eq addr get R i
+ret i
+end
+end
+if eq addr uint 8653508
+ret 13
+end
+ret 14
+end
+fn rd addr uint to uint
+if ne allow uint 0 addr uint 0
+put Counts 0 uint 3
+ret uint 0
+end
+index = locate addr
+if ge index len Regs
+put Counts 0 uint 3
+ret uint 0
+end
+inc 1
+ret get Regs index
+end
+fn wr addr uint value uint to void
+if ne allow uint 1 addr uint 0
+put Counts 0 uint 3
+ret
+end
+index = locate addr
+if ge index len Regs
+put Counts 0 uint 3
+ret
+end
+inc 2
+put Regs index value
+end
+fn size op uint to ulong
+if eq op uint 0
+ret 2
+end
+if eq op uint 1
+ret 3
+end
+if eq op uint 2
+ret 5
+end
+if eq op uint 3
+ret 1
+end
+if eq op uint 4
+ret 2
+end
+if le op uint 8
+ret 0
+end
+ret 99
+end
+fn poll p ulong to int
+left = get Config 2
+if eq left uint 0
+left = uint 1
+end
+v = rd get Words p
+while ne and v get Words add p 1 get Words add p 2
+if eq left uint 0
+ret 1
+end
+left = sub left uint 1
+v = rd get Words p
+end
+ret 0
+end
+fn step op uint p ulong to int
+if eq op uint 0
+wr get Words p get Words add p 1
+ret 0
+end
+if eq op uint 1
+v = rd get Words p
+v = or and v xor get Words add p 1 uint 4294967295 get Words add p 2
+wr get Words p v
+ret 0
+end
+if eq op uint 2
+ret poll p
+end
+if eq op uint 3
+if ne get Config 4 uint 0
+put Counts 3 add get Counts 3 get Words p
+end
+ret 0
+end
+if eq op uint 4
+index = get Words add p 1
+if ge index uint 8
+ret 1
+end
+put Save ulong index rd get Words p
+ret 0
+end
+if eq get Config 3 uint 0
+ret 1
+end
+inc 4
+if eq get Config 3 uint 2
+ret 1
+end
+ret 0
+end
+note Structural validation is effect-free and precedes every operation.
+fn valid n ulong stop ulong to int
+if or eq n 0 ge stop n
+ret 1
+end
+i = ulong 0
+while lt i stop
+op = get Words i
+i = add i 1
+s = size op
+if or eq s 99 gt s sub stop i
+ret 1
+end
+if eq op uint 4
+if ge get Words add i 1 uint 8
+ret 1
+end
+end
+if ge op uint 5
+if eq get Config 3 uint 0
+ret 1
+end
+end
+i = add i s
+end
+ret 0
+end
+note Run policy on a shadow latch after structural validation.
+fn permit stop ulong to int
+i = ulong 0
+while lt i stop
+op = get Words i
+i = add i 1
+if or eq op uint 1 or eq op uint 2 eq op uint 4
+if ne allow uint 0 get Words i uint 0
+ret 3
+end
+end
+if or eq op uint 0 eq op uint 1
+if ne allow uint 1 get Words i uint 0
+ret 3
+end
+end
+i = add i size op
+end
+ret 0
+end
+fn run to int
+n = ulong get Config 0
+stop = ulong get Config 1
+guard = valid n stop
+if ne guard 0
+ret guard
+end
+latch = get C 1
+guard = permit stop
+put C 1 latch
+if ne guard 0
+ret guard
+end
+if or eq n 0 ge stop n
+ret 1
+end
+i = ulong 0
+while lt i stop
+op = get Words i
+i = add i 1
+s = size op
+if or eq s 99 gt s sub stop i
+ret 1
+end
+status = step op i
+if ne get Counts 0 uint 0
+ret int get Counts 0
+end
+if ne status 0
+ret status
+end
+i = add i s
+end
+ret 0
+end
+fn emit to int
+for i ulong 28
+v = uint 0
+if lt i 5
+v = get Counts i
+else
+if eq i 5
+v = get C 1
+else
+if lt i 20
+v = get Regs sub i 6
+else
+v = get Save sub i 20
+end
+end
+end
+for j ulong 4
+put Out add mul i 4 j uchar and shr v mul uint j 8 uint 255
+end
+end
+sent = ulong 0
+while lt sent len Out
+n = write 1 Out sent sub len Out sent
+if le n 0
+ret 2
+end
+sent = add sent ulong n
+end
+ret int get Counts 0
+end
+fn decode n ulong to int
+if or lt n 120 ne rem n 4 0
+ret 2
+end
+if ne raw 0 uint 860967751
+ret 2
+end
+for i ulong 7
+put Config i word mul i 4
+end
+count = ulong get Config 0
+if or gt count 1024 ne n mul add count 30 4
+ret 2
+end
+if or gt get Config 2 uint 1024 or gt get Config 3 uint 2 gt get Config 4 uint 1
+ret 2
+end
+if gt get Config 5 uint 1
+ret 2
+end
+init
+put C 0 get Config 5
+put C 1 get Config 6
+for i ulong 14
+put Regs i word mul add i 7 4
+end
+for i ulong 8
+put Save i word mul add i 21 4
+end
+for i ulong count
+put Words i word mul add i 29 4
+end
+put Counts 0 uint run
+ret emit
+end
+fn main to int
+used = ulong 0
+while lt used len In
+n = read 0 In used sub len In used
+if lt n 0
+ret 2
+end
+if eq n 0
+ret decode used
+end
+used = add used ulong n
+end
+ret 2
+end

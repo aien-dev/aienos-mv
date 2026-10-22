@@ -7,7 +7,7 @@ for name in ['rd','wr']:
  body=re.search(r'aien_gpu_'+name+r'_ok\[\] = \{(.*?)\};',shim.decode(),re.S).group(1)
  sets[name]=set(int(x,16) for x in re.findall(r'0x[0-9a-fA-F]+',body))
 bell=int(re.search(r'#define AIEN_GPU_SEC2_DOORBELL (0x[0-9a-fA-F]+)',shim.decode()).group(1),16)
-source=(w/'native/omega/regpolicy.om').read_bytes();p=subprocess.run([str(cc)],input=source,capture_output=True);assert p.returncode==0,p.stderr
+source=b'\n'.join((w/'native/omega'/name).read_bytes() for name in ['regcore.om','regpolicy.om']);p=subprocess.run([str(cc)],input=source,capture_output=True);assert p.returncode==0,p.stderr
 assert p.stdout[:6]==b'\x7fELF\x02\x01' and struct.unpack_from('<HH',p.stdout,16)==(2,183)
 phoff=struct.unpack_from('<Q',p.stdout,32)[0];ps,pn=struct.unpack_from('<HH',p.stdout,54);assert ps==56 and pn and phoff+ps*pn<=len(p.stdout)
 assert not {2,3}.intersection(struct.unpack_from('<I',p.stdout,phoff+i*ps)[0] for i in range(pn))

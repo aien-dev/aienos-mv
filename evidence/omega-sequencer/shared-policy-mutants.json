@@ -1,0 +1,26 @@
+[
+  {
+    "mutant": "read-all",
+    "compiled": true,
+    "failures": 6,
+    "allowlist_equality": false
+  },
+  {
+    "mutant": "ignore-boot-switch",
+    "compiled": true,
+    "failures": 3,
+    "allowlist_equality": true
+  },
+  {
+    "mutant": "repeat-doorbell",
+    "compiled": true,
+    "failures": 4,
+    "allowlist_equality": true
+  },
+  {
+    "mutant": "wrong-read-register",
+    "compiled": true,
+    "failures": 6,
+    "allowlist_equality": false
+  }
+]

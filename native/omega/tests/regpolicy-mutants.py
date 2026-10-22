@@ -1,5 +1,5 @@
 import pathlib,subprocess,sys,json
-w=pathlib.Path(sys.argv[1]).resolve();o=pathlib.Path(sys.argv[2]).resolve();p=w/'native/omega/regpolicy.om';source=p.read_bytes();rows=[]
+w=pathlib.Path(sys.argv[1]).resolve();o=pathlib.Path(sys.argv[2]).resolve();p=w/'native/omega/regcore.om';source=p.read_bytes();rows=[]
 mutants=[('read-all',b'if eq off get R i',b'if true'),('ignore-boot-switch',b'if or eq get C 0 uint 0 not canwrite off',b'if not canwrite off'),('repeat-doorbell',b'if ne get C 1 uint 0',b'if false'),('wrong-read-register',b'put R 12 uint 1119112',b'put R 12 uint 1119113')]
 try:
  for name,old,new in mutants:
