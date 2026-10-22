@@ -1,3 +1,7 @@
+<!-- github-native-navigation -->
+[Source](https://github.com/aien-dev/aienux) · [Walkthrough](TEACHING.md) · [Replay receipt](TEACHING-REPLAY.txt) · [Issues](https://github.com/aien-dev/aienux/issues) · [Actual tags](https://github.com/aien-dev/aienux/tags) · [Published releases](https://github.com/aien-dev/aienux/releases)
+<!-- /github-native-navigation -->
+
 # AIENOS
 
 > **Status: experimental / pre-alpha. Nothing here is physically qualified.** The first native boot on the NVIDIA DGX Spark passed on 2026-09-24 ([evidence](evidence/m2_first_boot_2026-09-24.md)). Since then most of the work has run in an emulator (QEMU); the C kernel has also run on a Raspberry Pi 5 (see Current state). No support, stability or compatibility promises. Expect breaking changes.
@@ -64,3 +68,12 @@ Start with [issues labelled `good first issue`](https://github.com/aien-spark/ai
 ## License
 
 Licensed under the GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later). See [LICENSE](LICENSE) and [NOTICE](NOTICE). Contact: aien@aienos.com.
+
+<details>
+<summary>Existing published tags and release scope</summary>
+
+- [alpha-0.1](https://github.com/aien-dev/aienux/releases/tag/alpha-0.1) is marked **prerelease** by GitHub. Read its own assets, platform and limitations; this tag does not qualify the current branch.
+
+No tags were created, renamed or moved for this documentation. Draft releases are not advertised as public availability.
+
+</details>
