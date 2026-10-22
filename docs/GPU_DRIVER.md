@@ -94,6 +94,17 @@ way, it goes in as an open question with an experiment, and nothing is tried tha
 - GB10B keeps some cache lines "sticky" until flushed (uvm_gpu.h:1135, NVIDIA bug 4577236, fixed only in later chips):
   memory the main processor polls must be set up uncached; the contract compiler enforces that rule.
 
+## The CPU sequencer
+
+NVIDIA's driver runs a short program the chip sends back (`kgspExecuteSequencerBuffer` in
+kernel_gsp.c of open-gpu-kernel-modules 580.173.02): register write, modify, poll, a delay, a
+save, and four core operations. That program is now ours (`native/kernel/gpu/gsp_seq.c`). It
+refuses an unknown opcode, a short payload, a save index of 8 or more, and any core operation
+unless the caller supplies the callback, because those restart the chip. A copy with the save-index
+check removed fails the test. The window-1 simulator runs a register-write sequencer and then
+reaches INIT-DONE; an empty sequencer request still stops, as before. This has not run on the chip.
+The live `nvidia.ko` is not replaced by this commit.
+
 ## Status
 
 See the handoff ~/handoffs/2026-10-21-own-gpu-driver.md and the ledger line L332 for the live state.

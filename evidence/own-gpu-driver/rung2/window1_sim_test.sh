@@ -30,6 +30,7 @@ run() { # name expected-verdict expected-exit args...
 }
 run init      "INIT-DONE"             0 --sim-events init
 run seq       "SEQUENCER-REQUESTED"   1 --sim-events seq
+run seqregs   "INIT-DONE"             0 --sim-events seq-regs
 run silent    "NO-INIT-DONE"          1 --sim-events none
 run junk      "STATUS-QUEUE-ERROR"    1 --sim-events junk
 run busy      "STOPPED-AT E_BUSY"     1 --sim-cfg busy
@@ -73,7 +74,11 @@ miss_r=$(comm -23 <(echo "$used_r") <(echo "$rdl")); miss_w=$(comm -23 <(echo "$
 [[ -n "$rdl" && -z "$miss_r" ]] && ok "every read the tool made is on the module read list ($(echo "$used_r" | wc -l) registers)" || bad "reads not allowed: $miss_r"
 [[ -n "$wrl" && -z "$miss_w" ]] && ok "every write the tool made is on the module write list ($(echo "$used_w" | wc -l) registers)" || bad "writes not allowed: $miss_w"
 extra_w=$(comm -13 <(echo "$used_w") <(echo "$wrl") | tr '\n' ' ')
-[[ "$extra_w" == "110c00 " ]] && ok "write list has one register the start-up does not use: GSP QHEAD0 (notify, after INIT_DONE)" || bad "write list extras: '$extra_w'"
+[[ -z "$extra_w" ]] && ok "every write-allowlist register is used by some path" || bad "write list extras: '$extra_w'"
+init_qh=$(awk '$1=="W" && $2=="110c00"' "$T/init/regs.txt" | wc -l)
+[[ $init_qh -eq 0 ]] && ok "start-up itself does not write GSP QHEAD0" || bad "init wrote QHEAD0 $init_qh times"
+seq_qh=$(awk '$1=="W" && $2=="110c00"' "$T/seqregs/regs.txt" | wc -l)
+[[ $seq_qh -ge 1 ]] && ok "sequencer path wrote GSP QHEAD0" || bad "seqregs did not write QHEAD0"
 doorbells=$(awk '$1=="W" && $2=="840c00"' "$T/init/regs.txt" | wc -l)
 [[ $doorbells -eq 1 ]] && ok "one SEC2 doorbell per start-up" || bad "doorbells in one start-up: $doorbells"
 

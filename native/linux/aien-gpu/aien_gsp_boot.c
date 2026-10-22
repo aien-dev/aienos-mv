@@ -34,6 +34,7 @@
 
 #include "gb10_gsp_boot.h"
 #include "gsp_mmio.h"
+#include "gsp_seq.h"
 #ifdef AIEN_GSP_BOOT_SIM
 #include "gsp_sim.h"
 static uint8_t *volatile g_host_arena;   /* the simulated arena; volatile so the store survives -O and the leak check sees it */
@@ -225,6 +226,24 @@ static void sim_gsp_answer(const gsp_arena *a, const gsp_boot_plan *p, const cha
     if (!strcmp(events, "junk")) {
         uint32_t two = 2;            /* writePtr past an empty slot: element count 0, a corrupt queue */
         memcpy(statq + 16, &two, 4);
+        return;
+    }
+    if (!strcmp(events, "seq-regs")) {
+        /* rpc_run_cpu_sequencer_v17_00: size, cmdIndex, save[8], then commands.
+         * One REG_WRITE of falcon mailbox0, then a following INIT_DONE. */
+        uint32_t seqb[14] = {0};
+        seqb[0] = 4;
+        seqb[1] = 3;
+        seqb[10] = 0;
+        seqb[11] = 0x00110c00; /* GSP queue head, on the module write allowlist */
+        seqb[12] = 0x7;
+        gsp_seg se = {seqb, sizeof seqb};
+        if (gsp_mq_send(&gsp, GSP_EV_RUN_CPU_SEQUENCER, &se, 1, sizeof seqb, 0, 0, &why))
+            die("TOOL-ERROR", "sim send: %s", why);
+        uint8_t done[8] = {0};
+        gsp_seg de = {done, sizeof done};
+        if (gsp_mq_send(&gsp, GSP_EV_INIT_DONE, &de, 1, sizeof done, 0, 0, &why))
+            die("TOOL-ERROR", "sim send: %s", why);
         return;
     }
     uint8_t body[64] = {0};
@@ -476,6 +495,29 @@ int main(int argc, char **argv)
             break;
         }
         if (fn == GSP_EV_RUN_CPU_SEQUENCER) {
+            /* Replaces kgspExecuteSequencerBuffer for register opcodes. Core opcodes
+             * still refuse (they restart the chip). A buffer we cannot run keeps the
+             * old stop, with the payload saved. */
+            uint32_t pay = len > GSP_RPC_HDR_SIZE ? len - GSP_RPC_HDR_SIZE : 0;
+            uint32_t words[64];
+            const char *sw = 0;
+            int ran = 0;
+            if (pay >= 40 && pay / 4 <= 64 && (pay % 4) == 0) {
+                memcpy(words, msg + GSP_ELEM_HDR_SIZE + GSP_RPC_HDR_SIZE, pay);
+                gsp_seq_io sio;
+                memset(&sio, 0, sizeof sio);
+                sio.rd = rd;
+                sio.wr = wr;
+                sio.ctx = &rc;
+                sio.poll_budget = 8;
+                if (words[0] <= pay / 4 - 10 &&
+                    gsp_seq_run(words + 10, words[0], words[1], &sio, &sw) == 0 && !rc.err)
+                    ran = 1;
+            }
+            if (ran) {
+                fprintf(fm, "sequencer ran\n");
+                continue;
+            }
             verdict = "SEQUENCER-REQUESTED (not handled in window 1; payload saved)";
             break;
         }

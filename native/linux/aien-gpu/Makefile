@@ -10,7 +10,7 @@ OUT ?= $(CURDIR)/build
 CC ?= cc
 TCFLAGS := -std=c11 -D_POSIX_C_SOURCE=200809L -D_DEFAULT_SOURCE -O2 -g -Wall -Wextra -Werror \
 	-I$(CORE)/gpu -I$(CORE)/dev -I$(CURDIR)
-BOOT_SRCS := aien_gsp_boot.c $(CORE)/gpu/gsp_mmio.c $(CORE)/dev/gb10_gsp_boot.c
+BOOT_SRCS := aien_gsp_boot.c $(CORE)/gpu/gsp_mmio.c $(CORE)/gpu/gsp_seq.c $(CORE)/dev/gb10_gsp_boot.c
 SIM_TEST := $(CURDIR)/../../../evidence/own-gpu-driver/rung2/window1_sim_test.sh
 all:
 	$(MAKE) -C $(KDIR) M=$(CURDIR) modules
