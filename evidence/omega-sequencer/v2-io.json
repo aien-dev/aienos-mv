@@ -1,0 +1,21 @@
+{
+  "cases": 3,
+  "failures": 0,
+  "results": [
+    {
+      "case": "closed-input",
+      "pass": true,
+      "exit": 2
+    },
+    {
+      "case": "read-error-after-complete-frame",
+      "pass": true,
+      "exit": 2
+    },
+    {
+      "case": "output-enospc",
+      "pass": true,
+      "exit": 2
+    }
+  ]
+}

@@ -14,7 +14,7 @@ exe=d/'gspseq';exe.write_bytes(p.stdout);exe.chmod(0o700)
 subprocess.run(['cc','-std=c11','-O1','-g','-fsanitize=address,undefined','-fno-sanitize-recover=all','-I'+str(w/'native/kernel/gpu'),str(w/'native/omega/tests/oracle.c'),str(w/'native/kernel/gpu/gsp_seq.c'),'-o',str(d/'oracle')],check=True)
 def frame(words,end=None,budget=4,core=0,delay=1,regs=None,saved=None):
  data=[len(words),len(words)-1 if end is None else end,budget,core,delay]+(regs or list(range(8)))+(saved or [0]*8)+words
- return struct.pack('<'+'I'*len(data),*data)
+ return b'GSQ2'+struct.pack('<'+'I'*len(data),*data)
 fixtures=[]
 def add(name,words,**kw):fixtures.append((name,frame(words,**kw)))
 add('empty',[],end=0);add('empty-execution',[0],end=0)
@@ -28,7 +28,10 @@ add('delay-disabled',[3,25,0],delay=0);add('delay-wrap',[3,4294967295,3,2,0])
 for budget in [0,1,4,1024]:add('stuck-'+str(budget),[2,3,1,0,0,0,0],budget=budget)
 add('write-poll-store',[0,3,7,2,3,255,7,10,1,4,3,0,0])
 add('out-of-map',[0,99,123,4,99,0,0]);add('max-words',[3,1]*511+[0,0],end=1022)
-fixtures += [('short',b'x'),('trailing',frame([0])+b'x'),('capacity',bytes(4181)),('budget-over',frame([0],budget=1025)),('core-over',frame([0],core=3)),('delay-over',frame([0],delay=2))]
+fixtures += [('short',b'x'),('trailing',frame([0])+b'x'),('capacity',frame([3,1]*511+[0,0],end=1022)+b'x'),('budget-over',frame([0],budget=1025)),('core-over',frame([0],core=3)),('delay-over',frame([0],delay=2)),('legacy-envelope',frame([0])[4:]),('wrong-version',b'GSQ1'+frame([0])[4:])]
+for label,tail in [('unknown',[99]),('save',[4,1,8]),('disabled-core',[5]),('truncated',[0])]:add('preflight-'+label,[0,1,99,3,25,4,1,0]+tail+[0])
+add('runtime-poll-failure',[0,1,99,2,3,1,0,0,0,0])
+add('runtime-core-failure',[0,1,99,5,0],core=2)
 rng=random.Random(332)
 for k in range(150):
  words=[]
@@ -40,15 +43,33 @@ for k in range(150):
   elif op==3:words += [rng.getrandbits(32)]
   elif op==4:words += [rng.randrange(10),rng.randrange(10)]
  words.append(0);add('random-'+str(k),words,core=rng.randrange(3),budget=rng.randrange(5),regs=[rng.getrandbits(32) for _ in range(8)],saved=[rng.getrandbits(32) for _ in range(8)])
+def structurally_valid(header,words):
+ stop=header[1]
+ if not words or stop>=len(words):return False
+ sizes={0:2,1:3,2:5,3:1,4:2,5:0,6:0,7:0,8:0};i=0
+ while i<stop:
+  op=words[i];i+=1
+  if op not in sizes or sizes[op]>stop-i:return False
+  if op==4 and words[i+1]>=8:return False
+  if op>=5 and header[3]==0:return False
+  i+=sizes[op]
+ return True
 rows=[]
 for name,data in fixtures:
- a=subprocess.run([str(d/'oracle')],input=data,capture_output=True,timeout=10);assert a.returncode in [0,1,2] and not a.stderr,(name,a.returncode,a.stderr)
+ body=data[4:] if data[:4]==b'GSQ2' else b''
+ a=subprocess.run([str(d/'oracle')],input=body,capture_output=True,timeout=10);assert a.returncode in [0,1,2] and not a.stderr,(name,a.returncode,a.stderr)
+ want_status,want_bytes=a.returncode,a.stdout;kind='legacy-equivalent'
+ if a.returncode!=2:
+  fields=struct.unpack('<'+'I'*(len(body)//4),body)
+  if not structurally_valid(fields[:21],fields[21:]):
+   want_status=1;want_bytes=struct.pack('<21I',1,0,0,0,0,*fields[5:21]);kind='preflight-refusal'
  b=subprocess.run([str(exe)],input=data,capture_output=True,timeout=10)
- rows.append({'case':name,'pass':(a.returncode,a.stdout)==(b.returncode,b.stdout),'expected_exit':a.returncode,'exit':b.returncode,'expected':a.stdout.hex(),'actual':b.stdout.hex()})
-# Independent state invariants, not merely agreement with the C reference.
-for name,data in fixtures:
- if name=='modify-mask':
-  a=subprocess.run([str(d/'oracle')],input=data,capture_output=True);assert struct.unpack('<21I',a.stdout)[7]==240
- if name=='stuck-0':
-  a=subprocess.run([str(d/'oracle')],input=data,capture_output=True);assert struct.unpack('<21I',a.stdout)[:2]==(1,2)
-print(json.dumps({'cases':len(rows),'failures':sum(not r['pass'] for r in rows),'source_sha256':hashlib.sha256(source).hexdigest(),'binary_sha256':hashlib.sha256(exe.read_bytes()).hexdigest(),'oracle_source_sha256':hashlib.sha256((w/'native/kernel/gpu/gsp_seq.c').read_bytes()).hexdigest(),'results':rows},indent=2));sys.exit(any(not r['pass'] for r in rows))
+ rows.append({'case':name,'contract':kind,'pass':(want_status,want_bytes)==(b.returncode,b.stdout),'expected_exit':want_status,'exit':b.returncode,'expected':want_bytes.hex(),'actual':b.stdout.hex(),'legacy_exit':a.returncode,'legacy':a.stdout.hex()})
+byname={r['case']:r for r in rows}
+for name in ['partial-effects','preflight-unknown','preflight-save','preflight-disabled-core','preflight-truncated']:
+ r=byname[name];assert r['contract']=='preflight-refusal' and r['expected']!=r['legacy']
+for name in ['runtime-poll-failure','runtime-core-failure']:
+ r=byname[name];assert r['contract']=='legacy-equivalent' and struct.unpack('<21I',bytes.fromhex(r['expected']))[2]>0
+assert struct.unpack('<21I',bytes.fromhex(byname['modify-mask']['expected']))[7]==240
+assert struct.unpack('<21I',bytes.fromhex(byname['stuck-0']['expected']))[:2]==(1,2)
+print(json.dumps({'cases':len(rows),'failures':sum(not r['pass'] for r in rows),'preflight_refusals':sum(r['contract']=='preflight-refusal' for r in rows),'source_sha256':hashlib.sha256(source).hexdigest(),'binary_sha256':hashlib.sha256(exe.read_bytes()).hexdigest(),'oracle_source_sha256':hashlib.sha256((w/'native/kernel/gpu/gsp_seq.c').read_bytes()).hexdigest(),'results':rows},indent=2));sys.exit(any(not r['pass'] for r in rows))

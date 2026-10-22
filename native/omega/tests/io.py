@@ -1,5 +1,6 @@
 import pathlib,subprocess,struct,os,json,sys
-w=pathlib.Path(sys.argv[1]).resolve();exe=w/'build/omega-sequencer/gspseq';packet=struct.pack('<22I',1,0,4,0,1,*range(8),*([0]*8),0);rows=[]
+w=pathlib.Path(sys.argv[1]).resolve();exe=w/'build/omega-sequencer/gspseq';packet=b'GSQ2'+struct.pack('<22I',1,0,4,0,1,*range(8),*([0]*8),0);rows=[]
+p=subprocess.run([str(exe)],input=packet,capture_output=True);assert p.returncode==0 and len(p.stdout)==84,'I/O positive control must execute the current envelope'
 p=subprocess.run(['sh','-c','exec "$1" 0<&-','sh',str(exe)],capture_output=True);rows.append({'case':'closed-input','pass':p.returncode==2 and not p.stdout,'exit':p.returncode})
 r,wr=os.pipe();os.set_blocking(r,False)
 try:

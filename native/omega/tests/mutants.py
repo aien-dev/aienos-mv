@@ -1,6 +1,6 @@
 import pathlib,subprocess,sys,json
 w=pathlib.Path(sys.argv[1]).resolve();omega=pathlib.Path(sys.argv[2]).resolve();p=w/'native/omega/gspseq.om';source=p.read_bytes();rows=[]
-mutants=[('accept-invalid-save',b'if ge index uint 8\nret 1',b'if ge index uint 8\nret 0'),('wrong-modify-mask',b'xor get Words add p 1 uint 4294967295',b'get Words add p 1'),('accept-disabled-core',b'if eq get Config 3 uint 0\nret 1',b'if eq get Config 3 uint 0\nret 0'),('zero-poll-budget',b'left = uint 1',b'left = uint 0')]
+mutants=[('skip-preflight',b'guard = valid n stop',b'guard = int 0'),('preflight-save-missing',b'if ge get Words add i 1 uint 8',b'if false'),('preflight-core-missing',b'if ge op uint 5',b'if false'),('wrong-modify-mask',b'xor get Words add p 1 uint 4294967295',b'get Words add p 1'),('zero-poll-budget',b'left = uint 1',b'left = uint 0')]
 try:
  for name,old,new in mutants:
   assert source.count(old)==1;p.write_bytes(source.replace(old,new))

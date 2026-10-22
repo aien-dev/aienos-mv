@@ -1,20 +1,23 @@
 note Handwritten seed-native GSP CPU sequencer with an OFFLINE register backend.
 note No MMIO, ioctl, firmware loading, sleeps, resets or live-device operations.
-note Input LE32: nwords,end,budget,coremode,delayenabled,regs8,save8,words.
+note V2 input: GSQ2 magic then LE32 nwords,end,budget,coremode,delayenabled,regs8,save8,words.
 note Output LE32: status,reads,writes,delaytotal,corecalls,regs8,save8.
-global In uchar 4181
+global In uchar 4185
 global Out uchar 84
 global Words uint 1024
 global Regs uint 8
 global Save uint 8
 global Counts uint 5
 global Config uint 5
-fn word pos ulong to uint
+fn raw pos ulong to uint
 v = uint 0
 for j ulong 4
 v = or v shl uint get In add pos j mul uint j 8
 end
 ret v
+end
+fn word pos ulong to uint
+ret raw add pos 4
 end
 fn inc slot ulong to void
 put Counts slot add get Counts slot uint 1
@@ -105,9 +108,40 @@ ret 1
 end
 ret 0
 end
+note Structural validation is effect-free and precedes every operation.
+fn valid n ulong stop ulong to int
+if or eq n 0 ge stop n
+ret 1
+end
+i = ulong 0
+while lt i stop
+op = get Words i
+i = add i 1
+s = size op
+if or eq s 99 gt s sub stop i
+ret 1
+end
+if eq op uint 4
+if ge get Words add i 1 uint 8
+ret 1
+end
+end
+if ge op uint 5
+if eq get Config 3 uint 0
+ret 1
+end
+end
+i = add i s
+end
+ret 0
+end
 fn run to int
 n = ulong get Config 0
 stop = ulong get Config 1
+guard = valid n stop
+if ne guard 0
+ret guard
+end
 if or eq n 0 ge stop n
 ret 1
 end
@@ -154,14 +188,17 @@ end
 ret int get Counts 0
 end
 fn decode n ulong to int
-if or lt n 84 ne rem n 4 0
+if or lt n 88 ne rem n 4 0
+ret 2
+end
+if ne raw 0 uint 844190535
 ret 2
 end
 for i ulong 5
 put Config i word mul i 4
 end
 count = ulong get Config 0
-if or gt count 1024 ne n mul add count 21 4
+if or gt count 1024 ne n mul add count 22 4
 ret 2
 end
 if or gt get Config 2 uint 1024 or gt get Config 3 uint 2 gt get Config 4 uint 1
