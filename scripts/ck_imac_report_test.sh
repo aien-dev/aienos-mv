@@ -33,7 +33,7 @@ done
 SYMS='ck_x86_report_(hold|frame|filter|parts)|ck_x86_tg3_(send|drain)|net_udp_build'
 make -s -C $K X86_CROSS="$X" OUT="$W/build" imac-kernel >"$W/build.log" 2>&1 ||
     fail "default imac-kernel build: $(tail -3 "$W/build.log")"
-make -s -C $K X86_CROSS="$X" OUT="$W/build" CK_X86_REPORT=1 imac-kernel >>"$W/build.log" 2>&1 ||
+make -s -C $K X86_CROSS="$X" OUT="$W/build" CK_X86_REPORT=1 CK_TEST_SLOT_KEY=1 imac-kernel >>"$W/build.log" 2>&1 ||
     fail "lab imac-kernel build: $(tail -3 "$W/build.log")"
 d=$("${X}nm" "$W/build/imackern/imackern.elf" | grep -E " ($SYMS)\$" || true)
 [ -z "$d" ] || fail "default image has report symbols: $(echo $d)"

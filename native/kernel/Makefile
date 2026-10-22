@@ -1344,7 +1344,7 @@ HOST_SRCS := $(KDIR)/core/fmt.c $(KDIR)/core/acpi.c $(KDIR)/core/smmu.c $(KDIR)/
 	$(KDIR)/mm/pt.c $(KDIR)/mm/heap.c $(KDIR)/core/sched.c $(KDIR)/core/ipc.c $(KDIR)/core/entropy.c \
 	$(KDIR)/core/handoff_check.c $(KDIR)/core/fbcon.c $(KDIR)/core/acpi_dev.c $(KDIR)/core/lifecycle_fsm.c \
 	$(KDIR)/core/line_rx.c $(KDIR)/core/klog.c $(KDIR)/core/klog_slot.c $(KDIR)/core/cpufeat.c $(KDIR)/core/unlock_req.c $(KDIR)/core/agent_cmd.c $(KDIR)/core/artifact_card.c
-TESTS := test_fmt test_frames test_pt test_acpi test_acpi_dev test_heap test_smmu test_sched test_ipc test_artifact test_osc_unit test_osc_launch test_osc_admit test_osc_receipt test_entropy test_handoff test_fbcon test_osh_op \
+TESTS := test_fmt test_frames test_pt test_acpi test_dmar test_acpi_dev test_heap test_smmu test_sched test_ipc test_artifact test_osc_unit test_osc_launch test_osc_admit test_osc_receipt test_entropy test_handoff test_fbcon test_osh_op \
 	test_continuity_codec test_continuity_resolve test_continuity_commit test_continuity_recovery test_continuity_geometry \
 	test_continuity_subject test_continuity_subject_provision test_lifecycle test_console_rx test_klog test_klog_slot test_pi5 test_pi5_marker test_pi5_rng test_cpufeat test_dma_window test_pi5_pcie test_pi5_net test_pi5_gem test_unlock_req test_context test_agent_cmd test_artifact_card
 HCFLAGS := -std=gnu11 -O1 -g -Wall -Wextra -Werror -I$(KDIR)/core -I$(KDIR)/mm -I$(KDIR)/tests -I$(BOOT)
@@ -1357,6 +1357,15 @@ $(OUT)/host/%: $(KDIR)/tests/%.c $(HOST_SRCS) $(KDIR)/tests/ck_test.h $(HDRS)
 $(OUT)/host-san/%: $(KDIR)/tests/%.c $(HOST_SRCS) $(KDIR)/tests/ck_test.h $(HDRS)
 	@mkdir -p $(dir $@)
 	$(HOSTCC) $(HCFLAGS) $(SANFLAGS) -o $@ $< $(HOST_SRCS)
+
+# DMAR is a standalone byte parser; unrelated host tests need not link it.
+DMAR_TEST_SRCS := $(KDIR)/tests/test_dmar.c $(KDIR)/core/dmar.c
+$(OUT)/host/test_dmar: $(DMAR_TEST_SRCS) $(KDIR)/core/dmar.h $(KDIR)/tests/ck_test.h
+	@mkdir -p $(dir $@)
+	$(HOSTCC) $(HCFLAGS) -o $@ $(DMAR_TEST_SRCS)
+$(OUT)/host-san/test_dmar: $(DMAR_TEST_SRCS) $(KDIR)/core/dmar.h $(KDIR)/tests/ck_test.h
+	@mkdir -p $(dir $@)
+	$(HOSTCC) $(HCFLAGS) $(SANFLAGS) -o $@ $(DMAR_TEST_SRCS)
 
 # OSH adapter operation layer (core/osh_op.c, aien-architecture#158): pure logic over ipc.c capabilities, SHA-256 for the
 # request digest. Its own rule because it needs the argus SHA-256 source.
@@ -2304,7 +2313,7 @@ IMACKERN_CFLAGS := $(X86CFLAGS) -I$(KDIR)/include -I$(KDIR)/mm -I$(KDIR)/dev -I$
 	-I$(NATIVE)/argus -I$(NATIVE)/sig
 IMACKERN_OBJS := $(IMACKERN_DIR)/efi_entry_x86_64.o $(IMACKERN_DIR)/efi_x86.o $(IMACKERN_DIR)/efi_gop.o \
 	$(IMACKERN_DIR)/kmain_x86.o $(IMACKERN_DIR)/console_x86.o $(IMACKERN_DIR)/trap.o \
-	$(IMACKERN_DIR)/fbcon.o $(IMACKERN_DIR)/fmt.o $(IMACKERN_DIR)/acpi.o $(IMACKERN_DIR)/handoff_check.o \
+	$(IMACKERN_DIR)/fbcon.o $(IMACKERN_DIR)/fmt.o $(IMACKERN_DIR)/acpi.o $(IMACKERN_DIR)/dmar.o $(IMACKERN_DIR)/dmar_x86.o $(IMACKERN_DIR)/handoff_check.o \
 	$(IMACKERN_DIR)/frames.o $(IMACKERN_DIR)/heap.o $(IMACKERN_DIR)/libc_min.o \
 	$(IMACKERN_DIR)/ahci_x86.o $(IMACKERN_DIR)/disk_part.o $(IMACKERN_DIR)/disk.o \
 	$(IMACKERN_DIR)/pci_x86.o $(IMACKERN_DIR)/smp_x86.o $(IMACKERN_DIR)/disk_nvme.o \
@@ -2387,6 +2396,8 @@ $(IMACKERN_DIR)/trap.o: $(X86K)/trap.S
 $(IMACKERN_DIR)/fbcon.o: $(KDIR)/core/fbcon.c $(KDIR)/core/fbcon.h $(KDIR)/core/font8x8.h
 $(IMACKERN_DIR)/fmt.o: $(KDIR)/core/fmt.c $(KDIR)/core/fmt.h
 $(IMACKERN_DIR)/acpi.o: $(KDIR)/core/acpi.c $(KDIR)/core/acpi.h
+$(IMACKERN_DIR)/dmar.o: $(KDIR)/core/dmar.c $(KDIR)/core/dmar.h
+$(IMACKERN_DIR)/dmar_x86.o: $(X86K)/dmar_x86.c $(KDIR)/core/dmar.h $(IMACKERN_HDRS)
 $(IMACKERN_DIR)/handoff_check.o: $(KDIR)/core/handoff_check.c $(KDIR)/core/handoff_check.h $(BOOT)/handoff.h
 $(IMACKERN_DIR)/frames.o: $(KDIR)/mm/frames.c $(KDIR)/mm/frames.h
 $(IMACKERN_DIR)/heap.o: $(KDIR)/mm/heap.c $(KDIR)/mm/heap.h

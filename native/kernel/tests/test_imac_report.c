@@ -35,6 +35,7 @@ static char log_text[56 * 61];
 static const char allowed_part[] =
     "AIENOS-KERNEL-0\n"
     "aienos_commit: 0123abcd\n"
+    "dmar: inventory-only register_access=none; DMA confinement NOT QUALIFIED\n"
     "pci: ahci 00:1f.2 id=8086:2922 class=0106\n"
     "net_tg3: link up 1000 Mb/s full duplex\n"
     "summary: cores=4/4 timer=ok sata_disks=1 nvme_disks=1 gpt_valid=1 writes=none net=up\n"
@@ -51,6 +52,7 @@ static size_t build_mixed(char *out, size_t cap)
         "AIENOS-KERNEL-0\n",
         "allen: secret-chat-SENTINEL\n",
         "aienos_commit: 0123abcd\n",
+        "dmar: inventory-only register_access=none; DMA confinement NOT QUALIFIED\n",
         "key: SENTINEL-KEY\n",
         "memory: frame_ranges=3 free_bytes=1 heap=0x1000+64 SENTINEL-MEM\n",
         "pci: ahci 00:1f.2 id=8086:2922 class=0106\n",

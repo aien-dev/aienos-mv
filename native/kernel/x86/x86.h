@@ -10,6 +10,9 @@
 #include "disk.h"
 #include "../svc/allen_reply.h"
 
+/* Read-only firmware inventory; never establishes DMA protection. */
+void ck_x86_dmar_inventory(uint64_t rsdp);
+
 static inline void ck_outb(uint16_t p, uint8_t v) { __asm__ volatile("outb %0, %1" ::"a"(v), "Nd"(p)); }
 static inline void ck_outw(uint16_t p, uint16_t v) { __asm__ volatile("outw %0, %1" ::"a"(v), "Nd"(p)); }
 static inline uint8_t ck_inb(uint16_t p)

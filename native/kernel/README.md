@@ -176,6 +176,14 @@ transmit is not compiled in. The last line before the hold is a one-line
 `summary:`. It prints `kernel: alive`, holds the screen 60 s and powers off
 through ACPI S5.
 
+Before starting PCI drivers, the kernel inventories the firmware's Intel DMAR
+table (`core/dmar.c`, `x86/dmar_x86.c`). It reports remapping units, device
+paths and reserved DMA regions without accessing remapping registers. PCI
+diagnostics include the segment and requester ID. This is discovery only;
+DMA confinement remains **NOT QUALIFIED**. Bounds, refusal behavior and the
+optional QEMU DMAR test are documented in
+[`docs/IMAC_DMAR_INVENTORY.md`](../../docs/IMAC_DMAR_INVENTORY.md).
+
 **Network report: lab-only, opt-in, unauthenticated.** `make -C native/kernel
 imac-kernel CK_X86_REPORT=1` builds a separate lab image,
 `IMACKERN-LAB.EFI`, that adds `x86/report_x86.c`, `../net/aienos_net.c` and
