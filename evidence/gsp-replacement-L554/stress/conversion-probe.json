@@ -1,0 +1,6 @@
+{
+  "source": "fn main to int\nx = ulong 18446744073709551615\ny = long x\nret 0\nend\n",
+  "compile_exit": 0,
+  "run_exit": 105,
+  "stderr": ""
+}

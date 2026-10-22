@@ -1,0 +1,59 @@
+{
+  "status": "FINAL_CONTROLS_PASS",
+  "checks": [
+    {
+      "name": "Wolfram-boundary-QEMU",
+      "cases": 13,
+      "exit": 0
+    },
+    {
+      "name": "Wolfram-boundary-Omega",
+      "cases": 13,
+      "exit": 0
+    },
+    {
+      "name": "truncated-image-print_segments.py",
+      "exit": 1,
+      "stderr": "Traceback (most recent call last):\n  File \"/home/drakestapleton/workspace/aienux-gsp-replacement-L554/spikes/gsp-L554-offline/print_segments.py\", line 117, in <module>\n    if __name__=='__main__':main()\n                            ^^^^^^\n  File \"/home/drakestapleton/workspace/aienux-gsp-replacement-L554/spikes/gsp-L554-offline/print_segments.py\", line 50, in main\n    raw=(out/'gsp_ga10x.bin').read_bytes();assert sha(raw)==PIN\n                                                  ^^^^^^^^^^^^^\nAssertionError\n",
+      "mutated_sha256": "c592bebb4a476c20eacd0565d46e706c6da752143973bc8e09bc678bcba67486",
+      "no_output_files": true
+    },
+    {
+      "name": "truncated-image-emulate_firmware.py",
+      "exit": 1,
+      "stderr": "Traceback (most recent call last):\n  File \"/home/drakestapleton/workspace/aienux-gsp-replacement-L554/spikes/gsp-L554-offline/emulate_firmware.py\", line 90, in <module>\n    if __name__=='__main__':main()\n                            ^^^^^^\n  File \"/home/drakestapleton/workspace/aienux-gsp-replacement-L554/spikes/gsp-L554-offline/emulate_firmware.py\", line 83, in main\n    original=(p/'gsp_ga10x.bin').read_bytes();assert hashlib.sha256(original).hexdigest()==PIN\n                                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError\n",
+      "mutated_sha256": "c592bebb4a476c20eacd0565d46e706c6da752143973bc8e09bc678bcba67486",
+      "no_output_files": true
+    },
+    {
+      "name": "changed-image-print_segments.py",
+      "exit": 1,
+      "stderr": "Traceback (most recent call last):\n  File \"/home/drakestapleton/workspace/aienux-gsp-replacement-L554/spikes/gsp-L554-offline/print_segments.py\", line 117, in <module>\n    if __name__=='__main__':main()\n                            ^^^^^^\n  File \"/home/drakestapleton/workspace/aienux-gsp-replacement-L554/spikes/gsp-L554-offline/print_segments.py\", line 50, in main\n    raw=(out/'gsp_ga10x.bin').read_bytes();assert sha(raw)==PIN\n                                                  ^^^^^^^^^^^^^\nAssertionError\n",
+      "mutated_sha256": "01c5f3b3784066524a509ea26e6561fc11dc873375e9a61383d5624877b9b778",
+      "no_output_files": true
+    },
+    {
+      "name": "changed-image-emulate_firmware.py",
+      "exit": 1,
+      "stderr": "Traceback (most recent call last):\n  File \"/home/drakestapleton/workspace/aienux-gsp-replacement-L554/spikes/gsp-L554-offline/emulate_firmware.py\", line 90, in <module>\n    if __name__=='__main__':main()\n                            ^^^^^^\n  File \"/home/drakestapleton/workspace/aienux-gsp-replacement-L554/spikes/gsp-L554-offline/emulate_firmware.py\", line 83, in main\n    original=(p/'gsp_ga10x.bin').read_bytes();assert hashlib.sha256(original).hexdigest()==PIN\n                                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError\n",
+      "mutated_sha256": "01c5f3b3784066524a509ea26e6561fc11dc873375e9a61383d5624877b9b778",
+      "no_output_files": true
+    },
+    {
+      "name": "wrong-compiler-pin",
+      "exit": 1,
+      "stderr": "Traceback (most recent call last):\n  File \"/home/drakestapleton/workspace/aienux-gsp-replacement-L554/spikes/gsp-L554-offline/verify_ranges.py\", line 64, in <module>\n    if __name__=='__main__':main()\n                            ^^^^^^\n  File \"/home/drakestapleton/workspace/aienux-gsp-replacement-L554/spikes/gsp-L554-offline/verify_ranges.py\", line 13, in main\n    assert sha(compiler.read_bytes())==EXPECTED_COMPILER\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError\n"
+    },
+    {
+      "name": "changed-leaf-input.bin",
+      "exit": 1,
+      "stderr": "Traceback (most recent call last):\n  File \"/home/drakestapleton/workspace/aienux-gsp-replacement-L554/spikes/gsp-L554-offline/verify_ranges.py\", line 64, in <module>\n    if __name__=='__main__':main()\n                            ^^^^^^\n  File \"/home/drakestapleton/workspace/aienux-gsp-replacement-L554/spikes/gsp-L554-offline/verify_ranges.py\", line 16, in main\n    assert sha(inputs)==oracle['input_sha256'] and sha(want)==oracle['expected_sha256']\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError\n"
+    },
+    {
+      "name": "changed-leaf-expected.bin",
+      "exit": 1,
+      "stderr": "Traceback (most recent call last):\n  File \"/home/drakestapleton/workspace/aienux-gsp-replacement-L554/spikes/gsp-L554-offline/verify_ranges.py\", line 64, in <module>\n    if __name__=='__main__':main()\n                            ^^^^^^\n  File \"/home/drakestapleton/workspace/aienux-gsp-replacement-L554/spikes/gsp-L554-offline/verify_ranges.py\", line 16, in main\n    assert sha(inputs)==oracle['input_sha256'] and sha(want)==oracle['expected_sha256']\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError\n"
+    }
+  ],
+  "firmware_unchanged_sha256": "32cb7cf3e77f97e92f6e92135939ccb3ba382748144569c0dfccf3338d43d963"
+}

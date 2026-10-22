@@ -1,0 +1,239 @@
+{
+  "z3": "4.13.0",
+  "capstone": "5.0.6",
+  "code_sha256": "a5d388a59f99f2e5afe44f3dab0b7eb3ad8832240e17ece7e4bc4555728996f5",
+  "decoded": [
+    {
+      "pc": 40,
+      "bytes": "aa87",
+      "op": "c.mv",
+      "operands": "a5, a0"
+    },
+    {
+      "pc": 42,
+      "bytes": "0145",
+      "op": "c.li",
+      "operands": "a0, 0"
+    },
+    {
+      "pc": 44,
+      "bytes": "9dc1",
+      "op": "c.beqz",
+      "operands": "a1, 0x26"
+    },
+    {
+      "pc": 46,
+      "bytes": "95c2",
+      "op": "c.beqz",
+      "operands": "a3, 0x24"
+    },
+    {
+      "pc": 48,
+      "bytes": "3388f500",
+      "op": "add",
+      "operands": "a6, a1, a5"
+    },
+    {
+      "pc": 52,
+      "bytes": "0545",
+      "op": "c.li",
+      "operands": "a0, 1"
+    },
+    {
+      "pc": 54,
+      "bytes": "636eb800",
+      "op": "bltu",
+      "operands": "a6, a1, 0x1c"
+    },
+    {
+      "pc": 58,
+      "bytes": "3387c600",
+      "op": "add",
+      "operands": "a4, a3, a2"
+    },
+    {
+      "pc": 62,
+      "bytes": "636ad700",
+      "op": "bltu",
+      "operands": "a4, a3, 0x14"
+    },
+    {
+      "pc": 66,
+      "bytes": "63f5c700",
+      "op": "bgeu",
+      "operands": "a5, a2, 0xa"
+    },
+    {
+      "pc": 70,
+      "bytes": "0145",
+      "op": "c.li",
+      "operands": "a0, 0"
+    },
+    {
+      "pc": 72,
+      "bytes": "63750601",
+      "op": "bgeu",
+      "operands": "a2, a6, 0xa"
+    },
+    {
+      "pc": 76,
+      "bytes": "33b5e700",
+      "op": "sltu",
+      "operands": "a0, a5, a4"
+    },
+    {
+      "pc": 80,
+      "bytes": "8280",
+      "op": "c.jr",
+      "operands": "ra"
+    },
+    {
+      "pc": 82,
+      "bytes": "8280",
+      "op": "c.jr",
+      "operands": "ra"
+    }
+  ],
+  "return_paths": 7,
+  "path_details": [
+    {
+      "trace": [
+        "0x28",
+        "0x2a",
+        "0x2c",
+        "0x2e",
+        "0x30",
+        "0x34",
+        "0x36",
+        "0x3a",
+        "0x3e",
+        "0x42",
+        "0x46",
+        "0x48",
+        "0x4c",
+        "0x50"
+      ],
+      "feasible": true
+    },
+    {
+      "trace": [
+        "0x28",
+        "0x2a",
+        "0x2c",
+        "0x2e",
+        "0x30",
+        "0x34",
+        "0x36",
+        "0x3a",
+        "0x3e",
+        "0x42",
+        "0x46",
+        "0x48",
+        "0x52"
+      ],
+      "feasible": true
+    },
+    {
+      "trace": [
+        "0x28",
+        "0x2a",
+        "0x2c",
+        "0x2e",
+        "0x30",
+        "0x34",
+        "0x36",
+        "0x3a",
+        "0x3e",
+        "0x42",
+        "0x4c",
+        "0x50"
+      ],
+      "feasible": true
+    },
+    {
+      "trace": [
+        "0x28",
+        "0x2a",
+        "0x2c",
+        "0x2e",
+        "0x30",
+        "0x34",
+        "0x36",
+        "0x3a",
+        "0x3e",
+        "0x52"
+      ],
+      "feasible": true
+    },
+    {
+      "trace": [
+        "0x28",
+        "0x2a",
+        "0x2c",
+        "0x2e",
+        "0x30",
+        "0x34",
+        "0x36",
+        "0x52"
+      ],
+      "feasible": true
+    },
+    {
+      "trace": [
+        "0x28",
+        "0x2a",
+        "0x2c",
+        "0x2e",
+        "0x52"
+      ],
+      "feasible": true
+    },
+    {
+      "trace": [
+        "0x28",
+        "0x2a",
+        "0x2c",
+        "0x52"
+      ],
+      "feasible": true
+    }
+  ],
+  "coverage_counterexample": "unsat",
+  "comparisons": [
+    {
+      "contract": "correct",
+      "verdict": "unsat"
+    },
+    {
+      "contract": "no-empty-guard",
+      "verdict": "sat",
+      "counterexample": [
+        10806229568169151575,
+        17049574969494753095,
+        2966197289731195552,
+        0
+      ]
+    },
+    {
+      "contract": "no-overflow",
+      "verdict": "sat",
+      "counterexample": [
+        113770564459413392,
+        2240244670199982142,
+        4656757335608692321,
+        13909692870369641184
+      ]
+    },
+    {
+      "contract": "inclusive",
+      "verdict": "sat",
+      "counterexample": [
+        1517127592872051711,
+        84663417921300277,
+        1601791010793351988,
+        2585555787553912448
+      ]
+    }
+  ],
+  "scope": "All four-u64 argument combinations under the listed instruction semantics. Not a proof of the decoder, emulator, compiler, GPU hardware, or full firmware."
+}

@@ -42,7 +42,8 @@ from Omega source pin `413f87c84e9b4233e4a56487dc6643b2139b5d0c`.
 There is no C compiler/runtime in this artifact's construction/computation chain.
 Linux, shell, file utilities and the external emulator remain lab infrastructure.
 
-Results:
+Initial milestone results (historical; the current-source rerun is retained in
+`evidence/gsp-replacement-L554/stress/legacy-green.json`):
 - Compilable constant-zero RED: 6,341 mismatches, normal compile/run exits.
 - Handwritten Omega GREEN: 10,561/10,561 match emulated original bytes.
 - Twelve additional direct-core calls, without the streaming adapter: PASS.
@@ -55,6 +56,17 @@ Results:
 This is a host-native mirror of ONE small firmware behavior. It is NOT RISC-V
 replacement firmware, whole-GSP equivalence, a driver cutover, or a GPU feature
 parity result. No compiler backend or another owner's worktree was changed.
+
+## Expanded stress qualification
+
+The [expanded test report](../../evidence/gsp-replacement-L554/stress/README.md)
+records 1,015,952 comparisons per engine (QEMU, Unicorn and native Omega),
+symbolic path checking, adversarial parser/transport controls and eight compiled
+mutants. It also retains the long-stream defect the larger tests found: the old
+adapter hit the compiler loop budget after 1,000,000 records. The current adapter
+uses explicit bounded batches, accepts at most 2,097,152 complete records per
+process, and refuses excess input with exit 4 while retaining prior outputs.
+This transport correction does not change the pure `ranges` function or compiler.
 
 ## Startup trace and next concrete dependency
 

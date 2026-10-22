@@ -1,0 +1,5 @@
+{
+  "oracle": "Wolfram Language evaluator, exact integers",
+  "code": "ExportString[<|\"batches\"->4096,\"recordsPerBatch\"->512,\"capacity\"->4096*512,\"capacityInputBytes\"->4096*512*32,\"capacityOutputBytes\"->4096*512*8|>,\"RawJSON\"]",
+  "result": {"batches":4096,"recordsPerBatch":512,"capacity":2097152,"capacityInputBytes":67108864,"capacityOutputBytes":16777216}
+}

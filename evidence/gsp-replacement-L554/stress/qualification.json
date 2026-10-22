@@ -1,0 +1,51 @@
+{
+  "status": "HOST_ONLY_STRESS_PASS",
+  "tested_source_commit": "c5192f25cab953dcdf04657c4a555d9f4d712fc7",
+  "source_sha256": {
+    "adversarial.py": "5da6338d7bef69eb2bd65fae58e73b88c41ff8db6aae4bf477fadeedc1d0f237",
+    "emulate_firmware.py": "8ee8949f6a112483545739dab27951ca3fa739d6d212c616c9a1353693fd4f4f",
+    "final_controls.py": "9a696f122444ee8cd47cc4432e56e960e855c0a7433fbd75fc24a6e51c8363d5",
+    "print_segments.py": "1f4c8789a58238f7d6e2da33ce059cfacd1bec01d15c56f3943740127b96ee65",
+    "prove_leaf.py": "d9f7e2a0b67461d79143963185e042a42c58353a9ecdec0f4ee4d46c27967c9c",
+    "qemu_adapter.S": "ac7034a74bca99d6bb711d6ea600c915297d368beec4b7d8c591ec2efce92f58",
+    "ranges-red.om": "10893e97baf71418a826add2e7c0a94e92a1a0aca9b39a34bfa45b3c5e447686",
+    "ranges.om": "a6b2e4c6502c311caf73871488dee4c4051493876882281a68bbf1caebbdd654",
+    "stress_ranges.py": "a9c183052feac77b5670a2075a6462cc9562efdef2bfcfaa3d8bf2d84f3f90f6",
+    "verify_ranges.py": "10848b621294e94b262963e667ffcc4ca21406feb60cfbaa058d3244e9f00ccb"
+  },
+  "receipt_sha256": {
+    "README.md": "8441950f1f5892cbf38ca949ff266e566cdb971d0279a15b4ef2121dd84df4c6",
+    "adversarial-first-failure.json": "b9acc76a841a974334e6abe10da3cc8bca80b63c82a4ac767e838122c709f0ce",
+    "adversarial-result.json": "88d7f6f2b12868bbd5c65be8171cd377e7c7cb32dce79145d09262373fd9e0e7",
+    "adversarial-run.txt": "88d7f6f2b12868bbd5c65be8171cd377e7c7cb32dce79145d09262373fd9e0e7",
+    "conversion-probe.json": "f6a3ec6a8a3f4426d565cbbdc3c92665766325c24f587a50edaea5a931d0efa4",
+    "corpus.json": "4d48cc0fcda75b26249639a19e1c20c310bd2bb7dfe8ece2acf9f09e0e4a9fd4",
+    "final-controls-run.txt": "387f831e1c1b3bc11e896d1e0efbdcdd7e1ae35d0b087b9998e787380b1fe163",
+    "final-controls.json": "7291c9ba29b092069368f1e83dc18c9d78193236167011cbffd1505670d4ec25",
+    "leaf-correct.smt2": "38518f7c0a8f1bcde8d68ce0929c280ae640bc2df2c475b0b70a985abd3e3b21",
+    "leaf-inclusive.smt2": "88ba67d2fb2e709bf090428e181ede03dc351ed8d6b5e62a4b4bacfec3258dbe",
+    "leaf-no-empty-guard.smt2": "e861a47c465ae1f5b790170c38b967df35b4ab83af0864c7479037b20c379b8a",
+    "leaf-no-overflow.smt2": "3de1c344ded42f25cbc27c9459e51fd479cd571082d4d25b79fe75dc86954a7e",
+    "legacy-green.json": "de74261f20f30c633d539dfda7f7aa9e41bb109416a220d038d0077f8482a28b",
+    "legacy-rerun.txt": "de74261f20f30c633d539dfda7f7aa9e41bb109416a220d038d0077f8482a28b",
+    "omega-long-stream-failure.json": "515cfd49b42db8569bc2fa0170b22b178a1d1d07f22e595f8db5e77c57f9ceea",
+    "proof-run.txt": "0969abf51c4a4a7c84405d29737441e6386a73a421ae05e1a0bcca9572867e61",
+    "qemu-adapter-failure.json": "e2caace3f54e7d182eb0ce8bc822f0c737aea7f2d8af23ac9385240313bc8961",
+    "ranges-readelf.txt": "c663aa49f7c7fa449661e83271b2f95a8023b85e2c49de51d0c5ca57155dc1ef",
+    "signed-mutant-failure.json": "9a708530bbc6a4c8d1b576a0b379ee30e0f7a5f0e8961bab72470a3efa1c3edb",
+    "stress-first-failure.json": "f8db85857f63d84f3950f87eed40e17034937c661e1ac27e29911a4609a46b91",
+    "stress-omega-failure.json": "a2c117d57224d9486bc77e1c08aa40dcb14a7d10de825605a6282b8c6e7d6e26",
+    "stress-result.json": "1106d3dbb7294f82cea9fc7de66e9d202bf27ce69e5356f387cc64a0fd2ee2c8",
+    "stress-run.txt": "b8449a07552ea25b36daaf77aecd78a7977c105706b925f670e0893c7f5fab37",
+    "symbolic-proof.json": "0969abf51c4a4a7c84405d29737441e6386a73a421ae05e1a0bcca9572867e61",
+    "wolfram-boundaries.json": "584e5e37d5c9fcf6640cd7fb5c939d91fbc958bcbb4b93fc027ce167f15d9943",
+    "wolfram-capacity.json": "d90e4f1dbc7d0dbe0df6ecebc4474a23f0fceac0e2ebefcc7db6e99ab67c84b0"
+  },
+  "independent_review": "L578 pending; not represented as completed",
+  "limitations": [
+    "No GSP replacement firmware built or booted",
+    "No hardware-admission or full-GPU-function qualification",
+    "Symbolic proof models only the pinned 44-byte vendor leaf",
+    "Host-only Omega transport has explicit2097152record capacity"
+  ]
+}

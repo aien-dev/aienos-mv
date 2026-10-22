@@ -1,0 +1,69 @@
+{
+  "status": "FAIL",
+  "source_pin": "0f97c7c945cc9b96d250ffce0a25b82beadebc43",
+  "corpus": {
+    "cases": 1015952,
+    "distinct_inputs": 1007332,
+    "groups": {
+      "original": 10561,
+      "exhaustive-low": 65536,
+      "exhaustive-high": 65536,
+      "exhaustive-mixed": 65536,
+      "power-boundaries": 4800,
+      "solver-counterexamples": 3,
+      "empty-b": 71639,
+      "wrap-a": 71639,
+      "wrap-b": 71639,
+      "adjacent": 71639,
+      "overlap": 71639,
+      "disjoint": 71639,
+      "near-max": 71639,
+      "full-width": 71639,
+      "identical": 71639,
+      "contained": 71639,
+      "empty-a": 71638,
+      "symmetry": 10561,
+      "translation": 5391
+    },
+    "ones": 628338,
+    "zeros": 387614,
+    "input_sha256": "15d7c240b38504dedfff0f0056551370a2b9e1d2bda8d5b62aff43836461dc08",
+    "output_sha256": "ca0f72d81d5529026701d2dc9eb108648984bcad74a55ce8d2ba1d957c0c65d0",
+    "metamorphic_pairs": 15952
+  },
+  "qemu_identity": {
+    "commands": [
+      [
+        "/home/drakestapleton/handoffs/gsp-L554/stress/tools/usr/bin/riscv64-linux-gnu-as",
+        "-march=rv64imac",
+        "-mabi=lp64",
+        "-o",
+        "/home/drakestapleton/handoffs/gsp-L554/stress/qemu-adapter.o",
+        "/home/drakestapleton/handoffs/gsp-L554/stress/qemu-adapter.S"
+      ],
+      [
+        "/home/drakestapleton/handoffs/gsp-L554/stress/tools/usr/bin/riscv64-linux-gnu-ld",
+        "-m",
+        "elf64lriscv",
+        "-static",
+        "-e",
+        "_start",
+        "-o",
+        "/home/drakestapleton/handoffs/gsp-L554/stress/qemu-oracle.elf",
+        "/home/drakestapleton/handoffs/gsp-L554/stress/qemu-adapter.o"
+      ]
+    ],
+    "adapter_sha256": "2604bfc16b97e903144f86c48b4e400df5fd3a1b666ab686ec91534382d6f3ae",
+    "executable_sha256": "80743a525f491e322190e1f634df383157c710d72ba79dc066c8b1d0f7e3fbb3",
+    "leaf_sha256": "a5d388a59f99f2e5afe44f3dab0b7eb3ad8832240e17ece7e4bc4555728996f5",
+    "leaf_va": 65988,
+    "version": "qemu-riscv64 version 8.2.2 (Debian 1:8.2.2+ds-0ubuntu1.18)",
+    "qemu_sha256": "7f812b5afeb02f324c60c794114d683e9cda41c71fe94003f300ab77985059dd"
+  },
+  "omega_identity": {
+    "compile_rc": 0,
+    "source_sha256": "1c95f65da8c7b06666c003575845ce555924340a370fbb565eb3cf4e1a6498b8",
+    "executable_sha256": "0006d257e2e3b31b7ed10dc12ced06cce5b43e854f86b712c55a907691beb8bb"
+  },
+  "failure": "AssertionError((['/home/drakestapleton/handoffs/gsp-L554/stress/tools/usr/bin/qemu-riscv64', '/home/drakestapleton/handoffs/gsp-L554/stress/qemu-oracle.elf'], -11, b''))"
+}

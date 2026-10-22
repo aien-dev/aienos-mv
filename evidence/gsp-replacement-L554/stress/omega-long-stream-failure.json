@@ -1,0 +1,14 @@
+{
+  "run_exit": 104,
+  "completed_records": 1000000,
+  "output_bytes": 8000000,
+  "first_unreturned_args": [
+    0,
+    0,
+    0,
+    0
+  ],
+  "isolated_case_exit": 0,
+  "isolated_case_stdout": "0000000000000000",
+  "stderr": ""
+}

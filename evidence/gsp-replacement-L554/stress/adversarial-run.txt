@@ -1,0 +1,962 @@
+{
+  "status": "ADVERSARIAL_PASS",
+  "parser": {
+    "directed": 2616,
+    "expected_rejections": 2583,
+    "expected_acceptances": 33,
+    "random_mutations": {
+      "refused": 7052,
+      "structurally_accepted": 2948
+    }
+  },
+  "emulator_controls": [
+    {
+      "name": "ecall",
+      "stop": {
+        "kind": "SYSTEM_INSTRUCTION_BOUNDARY",
+        "pc": 268435456,
+        "offset": 0,
+        "word_hex": "0x73",
+        "csr": 0,
+        "assembly": "ecall "
+      },
+      "observed": 1
+    },
+    {
+      "name": "ebreak",
+      "stop": {
+        "kind": "SYSTEM_INSTRUCTION_BOUNDARY",
+        "pc": 268435456,
+        "offset": 0,
+        "word_hex": "0x100073",
+        "csr": 1,
+        "assembly": "ebreak "
+      },
+      "observed": 1
+    },
+    {
+      "name": "mret",
+      "stop": {
+        "kind": "SYSTEM_INSTRUCTION_BOUNDARY",
+        "pc": 268435456,
+        "offset": 0,
+        "word_hex": "0x30200073",
+        "csr": 770,
+        "assembly": "mret "
+      },
+      "observed": 1
+    },
+    {
+      "name": "mstatus-csr",
+      "stop": {
+        "kind": "SYSTEM_INSTRUCTION_BOUNDARY",
+        "pc": 268435456,
+        "offset": 0,
+        "word_hex": "0x30002573",
+        "csr": 768,
+        "assembly": "csrr a0, mstatus"
+      },
+      "observed": 1
+    },
+    {
+      "name": "satp-csr",
+      "stop": {
+        "kind": "SYSTEM_INSTRUCTION_BOUNDARY",
+        "pc": 268435456,
+        "offset": 0,
+        "word_hex": "0x18002573",
+        "csr": 384,
+        "assembly": "csrr a0, satp"
+      },
+      "observed": 1
+    },
+    {
+      "name": "unmapped-read",
+      "stop": {
+        "kind": "UNMAPPED_MEMORY",
+        "access": 19,
+        "address": 0,
+        "size": 8,
+        "value": 0,
+        "emulator_error": "Invalid memory read (UC_ERR_READ_UNMAPPED)"
+      },
+      "observed": 1
+    },
+    {
+      "name": "unmapped-jump",
+      "stop": {
+        "kind": "UNMAPPED_MEMORY",
+        "access": 21,
+        "address": 0,
+        "size": 2,
+        "value": 0,
+        "emulator_error": "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)"
+      },
+      "observed": 1
+    },
+    {
+      "name": "infinite-loop",
+      "stop": {
+        "kind": "INSTRUCTION_LIMIT",
+        "pc": 268435456
+      },
+      "observed": 10000
+    },
+    {
+      "name": "page-padding-read",
+      "stop": {
+        "kind": "OUTSIDE_IMAGE_BYTES",
+        "address": 268435464,
+        "size": 8
+      },
+      "observed": 2
+    },
+    {
+      "name": "compressed-break",
+      "stop": {
+        "emulator_error": "Invalid instruction (UC_ERR_INSN_INVALID)"
+      },
+      "observed": 1
+    }
+  ],
+  "register_poison": {
+    "cases": 10561,
+    "preserved_registers": [
+      2,
+      3,
+      4,
+      8,
+      9,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27
+    ],
+    "paths": [
+      {
+        "trace": [
+          "0x28",
+          "0x2a",
+          "0x2c",
+          "0x52"
+        ],
+        "cases": 729
+      },
+      {
+        "trace": [
+          "0x28",
+          "0x2a",
+          "0x2c",
+          "0x2e",
+          "0x52"
+        ],
+        "cases": 648
+      },
+      {
+        "trace": [
+          "0x28",
+          "0x2a",
+          "0x2c",
+          "0x2e",
+          "0x30",
+          "0x34",
+          "0x36",
+          "0x3a",
+          "0x3e",
+          "0x42",
+          "0x4c",
+          "0x50"
+        ],
+        "cases": 2351
+      },
+      {
+        "trace": [
+          "0x28",
+          "0x2a",
+          "0x2c",
+          "0x2e",
+          "0x30",
+          "0x34",
+          "0x36",
+          "0x3a",
+          "0x3e",
+          "0x42",
+          "0x46",
+          "0x48",
+          "0x52"
+        ],
+        "cases": 1465
+      },
+      {
+        "trace": [
+          "0x28",
+          "0x2a",
+          "0x2c",
+          "0x2e",
+          "0x30",
+          "0x34",
+          "0x36",
+          "0x3a",
+          "0x3e",
+          "0x52"
+        ],
+        "cases": 1696
+      },
+      {
+        "trace": [
+          "0x28",
+          "0x2a",
+          "0x2c",
+          "0x2e",
+          "0x30",
+          "0x34",
+          "0x36",
+          "0x3a",
+          "0x3e",
+          "0x42",
+          "0x46",
+          "0x48",
+          "0x4c",
+          "0x50"
+        ],
+        "cases": 684
+      },
+      {
+        "trace": [
+          "0x28",
+          "0x2a",
+          "0x2c",
+          "0x2e",
+          "0x30",
+          "0x34",
+          "0x36",
+          "0x52"
+        ],
+        "cases": 2988
+      }
+    ]
+  },
+  "transport": [
+    {
+      "test": "truncation",
+      "records": 0,
+      "tail": 1,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 0,
+      "tail": 2,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 0,
+      "tail": 3,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 0,
+      "tail": 4,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 0,
+      "tail": 5,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 0,
+      "tail": 6,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 0,
+      "tail": 7,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 0,
+      "tail": 8,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 0,
+      "tail": 9,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 0,
+      "tail": 10,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 0,
+      "tail": 11,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 0,
+      "tail": 12,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 0,
+      "tail": 13,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 0,
+      "tail": 14,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 0,
+      "tail": 15,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 0,
+      "tail": 16,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 0,
+      "tail": 17,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 0,
+      "tail": 18,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 0,
+      "tail": 19,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 0,
+      "tail": 20,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 0,
+      "tail": 21,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 0,
+      "tail": 22,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 0,
+      "tail": 23,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 0,
+      "tail": 24,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 0,
+      "tail": 25,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 0,
+      "tail": 26,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 0,
+      "tail": 27,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 0,
+      "tail": 28,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 0,
+      "tail": 29,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 0,
+      "tail": 30,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 0,
+      "tail": 31,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 1,
+      "tail": 1,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 1,
+      "tail": 2,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 1,
+      "tail": 3,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 1,
+      "tail": 4,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 1,
+      "tail": 5,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 1,
+      "tail": 6,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 1,
+      "tail": 7,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 1,
+      "tail": 8,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 1,
+      "tail": 9,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 1,
+      "tail": 10,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 1,
+      "tail": 11,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 1,
+      "tail": 12,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 1,
+      "tail": 13,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 1,
+      "tail": 14,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 1,
+      "tail": 15,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 1,
+      "tail": 16,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 1,
+      "tail": 17,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 1,
+      "tail": 18,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 1,
+      "tail": 19,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 1,
+      "tail": 20,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 1,
+      "tail": 21,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 1,
+      "tail": 22,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 1,
+      "tail": 23,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 1,
+      "tail": 24,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 1,
+      "tail": 25,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 1,
+      "tail": 26,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 1,
+      "tail": 27,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 1,
+      "tail": 28,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 1,
+      "tail": 29,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 1,
+      "tail": 30,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 1,
+      "tail": 31,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 17,
+      "tail": 1,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 17,
+      "tail": 2,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 17,
+      "tail": 3,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 17,
+      "tail": 4,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 17,
+      "tail": 5,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 17,
+      "tail": 6,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 17,
+      "tail": 7,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 17,
+      "tail": 8,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 17,
+      "tail": 9,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 17,
+      "tail": 10,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 17,
+      "tail": 11,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 17,
+      "tail": 12,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 17,
+      "tail": 13,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 17,
+      "tail": 14,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 17,
+      "tail": 15,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 17,
+      "tail": 16,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 17,
+      "tail": 17,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 17,
+      "tail": 18,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 17,
+      "tail": 19,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 17,
+      "tail": 20,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 17,
+      "tail": 21,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 17,
+      "tail": 22,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 17,
+      "tail": 23,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 17,
+      "tail": 24,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 17,
+      "tail": 25,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 17,
+      "tail": 26,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 17,
+      "tail": 27,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 17,
+      "tail": 28,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 17,
+      "tail": 29,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 17,
+      "tail": 30,
+      "exit": 2
+    },
+    {
+      "test": "truncation",
+      "records": 17,
+      "tail": 31,
+      "exit": 2
+    },
+    {
+      "test": "closed-fd",
+      "fd": 0,
+      "exit": 3
+    },
+    {
+      "test": "closed-fd",
+      "fd": 1,
+      "exit": 3
+    },
+    {
+      "test": "output-ENOSPC",
+      "exit": 3
+    },
+    {
+      "test": "fragmented-input",
+      "fragment": 1,
+      "records": 64,
+      "exit": 0
+    },
+    {
+      "test": "fragmented-input",
+      "fragment": 2,
+      "records": 64,
+      "exit": 0
+    },
+    {
+      "test": "fragmented-input",
+      "fragment": 3,
+      "records": 64,
+      "exit": 0
+    },
+    {
+      "test": "fragmented-input",
+      "fragment": 7,
+      "records": 64,
+      "exit": 0
+    },
+    {
+      "test": "fragmented-input",
+      "fragment": 31,
+      "records": 64,
+      "exit": 0
+    }
+  ],
+  "capacity": {
+    "records": 2097152,
+    "cases": [
+      {
+        "records": 999999,
+        "extra_bytes": 0,
+        "exit": 0,
+        "output_bytes": 7999992
+      },
+      {
+        "records": 1000000,
+        "extra_bytes": 0,
+        "exit": 0,
+        "output_bytes": 8000000
+      },
+      {
+        "records": 1000001,
+        "extra_bytes": 0,
+        "exit": 0,
+        "output_bytes": 8000008
+      },
+      {
+        "records": 2097151,
+        "extra_bytes": 0,
+        "exit": 0,
+        "output_bytes": 16777208
+      },
+      {
+        "records": 2097152,
+        "extra_bytes": 0,
+        "exit": 0,
+        "output_bytes": 16777216
+      },
+      {
+        "records": 2097152,
+        "extra_bytes": 1,
+        "exit": 4,
+        "output_bytes": 16777216
+      },
+      {
+        "records": 2097152,
+        "extra_bytes": 32,
+        "exit": 4,
+        "output_bytes": 16777216
+      }
+    ]
+  },
+  "mutants": [
+    {
+      "name": "no-zero",
+      "compiled_exit": 0,
+      "run_exit": 0,
+      "mismatches": 648,
+      "source_sha256": "8181d36ffcd69f6d859b4ab9b2bbbb8e742621a3dfceafcf3838058b13c61ab0",
+      "binary_sha256": "279dfd0891a11bb8bf704391d37e540e499e58a405f7b662f9bdf29161e0aa42"
+    },
+    {
+      "name": "first-overflow",
+      "compiled_exit": 0,
+      "run_exit": 0,
+      "mismatches": 2988,
+      "source_sha256": "cc909460f7d393d7d0153ff59240fe4f503239fe44ae58d7d05b95d8660c7a3f",
+      "binary_sha256": "3cdfb3765d31b957fe0a5eb3a8bcb4181d11cc0981a32c0c33b9dce15fae7354"
+    },
+    {
+      "name": "second-overflow",
+      "compiled_exit": 0,
+      "run_exit": 0,
+      "mismatches": 1696,
+      "source_sha256": "450d1bcc16d803a02fb0d135e8dbecd9769cafa05dec8ea57bdc9ea83b2c23c6",
+      "binary_sha256": "8e68dcd041d1deddbf5439c5f26c9a82022cbdc97e28c8dd24656c8ad2a45274"
+    },
+    {
+      "name": "inclusive-a",
+      "compiled_exit": 0,
+      "run_exit": 0,
+      "mismatches": 66,
+      "source_sha256": "2fd426f285b0b017864618cb52664f78594b5bed1b7101c3c26326c05c3e6174",
+      "binary_sha256": "0465314978e4c0486e31ced5fb40af03bfc2ef319eb03b089a587e232752e2b6"
+    },
+    {
+      "name": "inclusive-b",
+      "compiled_exit": 0,
+      "run_exit": 0,
+      "mismatches": 66,
+      "source_sha256": "56eb4899018a91eeae2943f1dabab2dfd32fd81b12bb3d603e8b72396f5308a8",
+      "binary_sha256": "b953895e7fd0b60ca9f8734a2e5f9cc90922fc341ef4c437431c63f2bf286d7d"
+    },
+    {
+      "name": "signed-order",
+      "compiled_exit": 0,
+      "run_exit": 0,
+      "mismatches": 1193,
+      "source_sha256": "dcd28de56960d002bed140077a53b6c22611b2aefce6eb14f048c77d0af44586",
+      "binary_sha256": "022ee78b2c7aa2adb61f4ff7c5b4c74bc6df94ddb4877cf896559febf6b92f88"
+    },
+    {
+      "name": "false-overlap",
+      "compiled_exit": 0,
+      "run_exit": 0,
+      "mismatches": 1657,
+      "source_sha256": "708d1b637df9a78b74fb2037f2148831f617b85dc4e33e2054ade2ec8fab7aff",
+      "binary_sha256": "6caf9bf05603ad07d503a97a68fae3777d9d758daaee99ad7198547f32afccbe"
+    },
+    {
+      "name": "empty-returns-one",
+      "compiled_exit": 0,
+      "run_exit": 0,
+      "mismatches": 1377,
+      "source_sha256": "7bab29598b2a6bb08f28c4376451b6d61381f55c41c0a446bb5a4dd641dd15ab",
+      "binary_sha256": "4faee58daf4f8ad3be40f1a8730c1dfdf2c51b151d11ad19809f33a2e6130a3a"
+    }
+  ]
+}

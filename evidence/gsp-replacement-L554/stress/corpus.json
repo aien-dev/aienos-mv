@@ -1,0 +1,30 @@
+{
+  "cases": 1015952,
+  "distinct_inputs": 1007332,
+  "groups": {
+    "original": 10561,
+    "exhaustive-low": 65536,
+    "exhaustive-high": 65536,
+    "exhaustive-mixed": 65536,
+    "power-boundaries": 4800,
+    "solver-counterexamples": 3,
+    "empty-b": 71639,
+    "wrap-a": 71639,
+    "wrap-b": 71639,
+    "adjacent": 71639,
+    "overlap": 71639,
+    "disjoint": 71639,
+    "near-max": 71639,
+    "full-width": 71639,
+    "identical": 71639,
+    "contained": 71639,
+    "empty-a": 71638,
+    "symmetry": 10561,
+    "translation": 5391
+  },
+  "ones": 628338,
+  "zeros": 387614,
+  "input_sha256": "15d7c240b38504dedfff0f0056551370a2b9e1d2bda8d5b62aff43836461dc08",
+  "output_sha256": "ca0f72d81d5529026701d2dc9eb108648984bcad74a55ce8d2ba1d957c0c65d0",
+  "metamorphic_pairs": 15952
+}
