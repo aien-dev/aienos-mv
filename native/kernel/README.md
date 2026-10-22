@@ -407,14 +407,35 @@ in a work folder and hands Allen at most 150 characters cut at a sentence end,
 in plain letters (typographic dashes and quotes become plain ones, accented
 letters lose their accents, anything else the typeface cannot draw is dropped;
 the kernel drops any stray byte too); it prints lengths and timings, never the
-words. Ethernet replaces the serial
-wire once the card may receive (#411). The lab report sees `screen: Allen asked
+words. The lab image also carries the Ethernet courier
+(`x86/courier_udp_x86.c`): numbered UDP messages, acknowledgements and retries.
+This laboratory transport does not authenticate its peer. Its boot identifier
+and checksums do not establish who sent an answer. Device DMA confinement
+(#411), authenticated transport integration and physical round-trip evidence
+remain prerequisites for a qualified network service. The lab report sees `screen: Allen asked
 the far side (N characters in, M in the job)` and `screen: the far side
 answered job N (M characters out)` or `... did not answer job N`: lengths only.
 Test: `scripts/qemu_ck_allen_courier_test.sh` (QEMU with COM2 on a Unix socket,
 the relay on it and the model server on this machine; NOT_RUN without one;
 screenshot `target/native-kernel-allen-courier/allen-far-side.png`). A machine
 without a second serial port gets Allen as before, answering alone.
+
+`scripts/ck_courier_udp_test.sh` runs the kernel's Ethernet courier against the
+Rust relay on loopback, including two levels of packet loss, two busy replies
+and a delayed reply. Its model fixture is compiled with `rustc` from
+`x86/tests/courier_model_fixture.rs`; the test needs no interpreter. Set
+`ALLEN_MODEL=127.0.0.1:18091` to add a real-model exchange after those cases.
+These host tests exercise the protocol, not the physical Broadcom card or
+authenticated networking.
+
+For conversational recall, the relay sends complete `asked: ... / said: ...`
+exchange notes as earlier user and assistant turns, oldest first. These remain
+short saved excerpts, not a full transcript; the model is told they may be
+incomplete. Other notes stay in the memory prompt. This reconstruction uses
+the notes supplied by Allen on each request, so it needs no new relay-side
+session store. The live QEMU test checks that the answer to "what did I just
+ask you" recalls both the form and topic of the earlier request, separately
+from checking that the note was transported.
 
 **The canvas: the model decides what is painted.** Besides the words, the
 model writes a few short scene lines (`svc/allen_scene.c` checks them one by

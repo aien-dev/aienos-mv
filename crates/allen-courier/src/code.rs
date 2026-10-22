@@ -22,7 +22,11 @@ pub fn crc32(b: &[u8]) -> u32 {
     for &x in b {
         c ^= x as u32;
         for _ in 0..8 {
-            c = if c & 1 != 0 { (c >> 1) ^ 0xedb8_8320 } else { c >> 1 };
+            c = if c & 1 != 0 {
+                (c >> 1) ^ 0xedb8_8320
+            } else {
+                c >> 1
+            };
         }
     }
     !c
@@ -153,7 +157,18 @@ pub fn pieces(seq: u32, code: &str, lang: &str) -> Vec<String> {
     let lang = if lang.is_empty() { "-" } else { lang };
     b.chunks(PIECE)
         .enumerate()
-        .map(|(i, p)| format!("CODE {} {}/{} {} {:08x} {} {}", seq, i + 1, n, b.len(), crc, lang, escape(p)))
+        .map(|(i, p)| {
+            format!(
+                "CODE {} {}/{} {} {:08x} {} {}",
+                seq,
+                i + 1,
+                n,
+                b.len(),
+                crc,
+                lang,
+                escape(p)
+            )
+        })
         .collect()
 }
 
@@ -169,7 +184,10 @@ mod tests {
 
     #[test]
     fn a_sentence_and_a_fenced_block_are_read() {
-        let r = read_reply("Here is a small calculator.\n\n```python\nprint(1 + 1)\n\tx = 2\n```\nEnjoy.").unwrap();
+        let r = read_reply(
+            "Here is a small calculator.\n\n```python\nprint(1 + 1)\n\tx = 2\n```\nEnjoy.",
+        )
+        .unwrap();
         assert_eq!(r.sentence, "Here is a small calculator.");
         assert_eq!(r.lang, "python");
         assert_eq!(r.code, "print(1 + 1)\n    x = 2\n");
@@ -187,7 +205,10 @@ mod tests {
 
     #[test]
     fn an_unclosed_block_runs_to_the_end_and_no_block_is_none() {
-        assert_eq!(read_reply("Sure.\n```c\nint main(void) {\n").unwrap().code, "int main(void) {\n");
+        assert_eq!(
+            read_reply("Sure.\n```c\nint main(void) {\n").unwrap().code,
+            "int main(void) {\n"
+        );
         assert!(read_reply("I would rather not.").is_none());
         assert!(read_reply("```\n\n```").is_none());
     }

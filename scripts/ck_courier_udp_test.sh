@@ -35,39 +35,23 @@ else
     relay="${CARGO_TARGET_DIR:-target}/release/allen-courier"
 fi
 
-free_port() { python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1])'; }
+rustc --edition=2021 -D warnings -O -o "$W/model-fixture" "$K/x86/tests/courier_model_fixture.rs" ||
+    fail "the model fixture does not build"
+free_port() { "$W/model-fixture" --free-udp-port; }
 
-# a stand-in model server: 503 (Retry-After: 1) for the first BUSY requests, then (after DELAY seconds
-# of silence, like a server whose GPU is held by another job) a streamed answer
-cat >"$W/fake_model.py" <<'EOF'
-import json, sys, time
-from http.server import BaseHTTPRequestHandler, HTTPServer
-busy = int(sys.argv[2])
-delay = float(sys.argv[3]) if len(sys.argv) > 3 else 0.0  # seconds the server sits on a request before it answers
-seen = [0]
-WORDS = ("I am here. The rain is soft tonight and I like listening to it with you. "
-         "Tell me more about your day when you are ready.").split(" ")
-class H(BaseHTTPRequestHandler):
-    protocol_version = "HTTP/1.1"
-    def log_message(self, *a): pass
-    def do_POST(self):
-        n = int(self.headers.get("Content-Length", "0"))
-        body = json.loads(self.rfile.read(n))
-        seen[0] += 1
-        if delay and seen[0] > busy:
-            time.sleep(delay)
-        if seen[0] <= busy:
-            self.send_response(503); self.send_header("Retry-After", "1"); self.send_header("Content-Length", "0")
-            self.send_header("Connection", "close"); self.end_headers(); return
-        assert body["messages"][0]["role"] == "system" and "Allen" in body["messages"][0]["content"]
-        self.send_response(200); self.send_header("Content-Type", "text/event-stream"); self.send_header("Connection", "close")
-        self.end_headers()
-        for w in WORDS:
-            self.wfile.write(("data: " + json.dumps({"choices": [{"delta": {"content": w + " "}}]}) + "\n\n").encode()); self.wfile.flush()
-            time.sleep(0.03)
-        self.wfile.write(b"data: [DONE]\n\n"); self.wfile.flush(); self.close_connection = True
-HTTPServer(("127.0.0.1", int(sys.argv[1])), H).serve_forever()
-EOF
+# The fixture binds loopback before publishing its port. Its readiness wait
+# is bounded and also notices an early failure, instead of guessing a delay.
+start_model() { # port-file busy-count delay-seconds
+    "$W/model-fixture" "$1" "$2" "$3" >"$1.log" 2>&1 &
+    model_pid=$!
+    pids+=("$model_pid")
+    for _ in {1..100}; do
+        [[ -s "$1" ]] && return 0
+        kill -0 "$model_pid" 2>/dev/null || fail "model fixture exited before binding"
+        sleep 0.05
+    done
+    fail "model fixture did not publish its port"
+}
 
 printf 'JOB 1 chat Answer as Allen.\thello allen, how was your day\tself=Allen\tname=Drake\tstarts=20\tnote asked: hi / said: Hello\n' >"$W/job.txt"
 
@@ -85,28 +69,22 @@ run() { # label model drop_every
     wait "$rpid" 2>/dev/null
 }
 
-mp=$(free_port)
-python3 "$W/fake_model.py" "$mp" 0 &
-fake1=$!
-pids+=("$fake1")
-sleep 0.5
+start_model "$W/clean.port" 0 0
+mp=$(cat "$W/clean.port")
+fake1=$model_pid
 run clean "127.0.0.1:$mp" 0
 run lossy "127.0.0.1:$mp" 3
 run lossy2 "127.0.0.1:$mp" 2
 grep -aq "job resends [1-9]" "$W/test-lossy2.log" || fail "the lost job was not sent again"
 kill "$fake1" 2>/dev/null || true
 wait "$fake1" 2>/dev/null
-mp2=$(free_port)
-python3 "$W/fake_model.py" "$mp2" 2 &
-pids+=($!)
-sleep 0.5
+start_model "$W/busy.port" 2 0
+mp2=$(cat "$W/busy.port")
 run busy "127.0.0.1:$mp2" 0
 grep -aqE "waits 2|waits [2-9]" "$W/relay-busy.log" || fail "the relay did not wait out the busy answers"
 echo "[busy] relay waited out the busy answers: $(grep -a 'waits' "$W/relay-busy.log" | head -1 | sed 's/.*first in/first in/')"
-mp3=$(free_port)
-python3 "$W/fake_model.py" "$mp3" 0 4 &
-pids+=("$!")
-sleep 0.5
+start_model "$W/slow.port" 0 4
+mp3=$(cat "$W/slow.port")
 run slow "127.0.0.1:$mp3" 0
 grep -aqE "[1-9][0-9]* waits" "$W/test-slow.log" || fail "the relay kept no word going while the model sat on the request"
 echo "[slow] the relay sent WAIT while the model sat silent: $(grep -aoE '[0-9]+ waits' "$W/test-slow.log" | head -1)"

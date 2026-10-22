@@ -164,6 +164,12 @@ log="$(ls "${work}"/log/*.jsonl 2>/dev/null | head -1)"
 [[ -n "${log}" && "$(wc -l <"${log}")" == 2 ]] && echo "PASS  the learning log holds both exchanges" || { echo "FAIL  the learning log does not hold two exchanges"; fails=$((fails + 1)); }
 [[ -n "${log}" ]] && chk "the learning log keeps the questions" "${log}" '"ask":"write a haiku about rain"'
 [[ -n "${log}" ]] && chk "the second job carried the first exchange as a note" <(sed -n 2p "${log}") '"memory":\[[^]]*note asked: write a haiku about rain'
+# Check the actual second answer, separately from the question and memory
+# fields. Carrying the note alone does not prove that Allen recalled it.
+recall=""
+[[ -n "${log}" ]] && recall=$(sed -n 2p "${log}" | grep -aoE '"reply":"([^"\\]|\\.)*"' || true)
+chk "the second answer recalls the requested form" <(printf '%s\n' "${recall}") '[Hh][Aa][Ii][Kk][Uu]'
+chk "the second answer recalls the requested topic" <(printf '%s\n' "${recall}") '[Rr][Aa][Ii][Nn]'
 [[ -n "${log}" ]] && { mkdir -p "${out}/log"; cp "${log}" "${out}/log/"; }
 chk "Allen says goodbye" "${work}/one.txt" '^allen: Goodbye\. Until next time\.$'
 [[ -s "${out}/allen-far-side.png" ]] && echo "PASS  screenshot kept (${out}/allen-far-side.png)" || { echo "FAIL  no screenshot"; fails=$((fails + 1)); }
