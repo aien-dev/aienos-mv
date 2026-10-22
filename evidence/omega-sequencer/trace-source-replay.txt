@@ -1,0 +1,133 @@
+PASS seed0 408 bytes, rebuilds itself
+PASS hex1 776 bytes, born from seed0
+PASS asm2 2464 bytes, born from hex1
+PASS om4 om4.bin 14224 bytes
+PASS omc fixpoint 01b1545b23e8ff40cb5691e20b5df910ea4acaefde3495f0d62d270465b98cd6
+PASS fwd exit 0
+PASS fwd runs, exit 7
+PASS mut exit 0
+PASS mut runs, exit 0
+PASS cycle exit 9
+PASS assign exit 7
+RC=0
+{
+  "cases": 6,
+  "results": [
+    {
+      "case": "closed-input",
+      "pass": true
+    },
+    {
+      "case": "read-after-progress-error",
+      "pass": true
+    },
+    {
+      "case": "symlink",
+      "pass": true
+    },
+    {
+      "case": "hardlink",
+      "pass": true
+    },
+    {
+      "case": "source-overlap",
+      "pass": true
+    },
+    {
+      "case": "no-stale-output-on-missing-compiler",
+      "pass": true
+    }
+  ]
+}
+make: Entering directory '/home/drakestapleton/workspace/aienos-omega-driver-direct/build/replay-regtrace.I9B6jjAH/driver/native/linux/aien-gpu'
+make -C /lib/modules/7.0.0-1019-nvidia/build M=/home/drakestapleton/workspace/aienos-omega-driver-direct/build/replay-regtrace.I9B6jjAH/driver/native/linux/aien-gpu modules
+make[1]: Entering directory '/usr/src/linux-headers-7.0.0-1019-nvidia'
+make[2]: Entering directory '/home/drakestapleton/workspace/aienos-omega-driver-direct/build/replay-regtrace.I9B6jjAH/driver/native/linux/aien-gpu'
+warning: the compiler differs from the one used to build the kernel
+  The kernel was built by: aarch64-linux-gnu-gcc-13 (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+  You are using:           gcc-13 (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+warning: pahole version differs from the one used to build the kernel
+  The kernel was built with: 125
+  You are using:             0
+  CC [M]  aien_gpu.o
+  MODPOST Module.symvers
+  CC [M]  aien_gpu.mod.o
+  CC [M]  .module-common.o
+  LD [M]  aien_gpu.ko
+  BTF [M] aien_gpu.ko
+Skipping BTF generation for aien_gpu.ko due to unavailability of vmlinux
+make[2]: Leaving directory '/home/drakestapleton/workspace/aienos-omega-driver-direct/build/replay-regtrace.I9B6jjAH/driver/native/linux/aien-gpu'
+make[1]: Leaving directory '/usr/src/linux-headers-7.0.0-1019-nvidia'
+cc -std=c11 -D_POSIX_C_SOURCE=200809L -D_DEFAULT_SOURCE -O2 -g -Wall -Wextra -Werror -I/home/drakestapleton/workspace/aienos-omega-driver-direct/build/replay-regtrace.I9B6jjAH/driver/native/linux/aien-gpu/../../kernel/gpu -I/home/drakestapleton/workspace/aienos-omega-driver-direct/build/replay-regtrace.I9B6jjAH/driver/native/linux/aien-gpu/../../kernel/dev -I/home/drakestapleton/workspace/aienos-omega-driver-direct/build/replay-regtrace.I9B6jjAH/driver/native/linux/aien-gpu -o /home/drakestapleton/workspace/aienos-omega-driver-direct/build/replay-regtrace.I9B6jjAH/driver/native/linux/aien-gpu/build/aien_gpu_check aien_gpu_check.c
+cc -std=c11 -D_POSIX_C_SOURCE=200809L -D_DEFAULT_SOURCE -O2 -g -Wall -Wextra -Werror -I/home/drakestapleton/workspace/aienos-omega-driver-direct/build/replay-regtrace.I9B6jjAH/driver/native/linux/aien-gpu/../../kernel/gpu -I/home/drakestapleton/workspace/aienos-omega-driver-direct/build/replay-regtrace.I9B6jjAH/driver/native/linux/aien-gpu/../../kernel/dev -I/home/drakestapleton/workspace/aienos-omega-driver-direct/build/replay-regtrace.I9B6jjAH/driver/native/linux/aien-gpu -o /home/drakestapleton/workspace/aienos-omega-driver-direct/build/replay-regtrace.I9B6jjAH/driver/native/linux/aien-gpu/build/aien_gsp_boot aien_gsp_boot.c /home/drakestapleton/workspace/aienos-omega-driver-direct/build/replay-regtrace.I9B6jjAH/driver/native/linux/aien-gpu/../../kernel/gpu/gsp_mmio.c /home/drakestapleton/workspace/aienos-omega-driver-direct/build/replay-regtrace.I9B6jjAH/driver/native/linux/aien-gpu/../../kernel/gpu/gsp_seq.c /home/drakestapleton/workspace/aienos-omega-driver-direct/build/replay-regtrace.I9B6jjAH/driver/native/linux/aien-gpu/../../kernel/dev/gb10_gsp_boot.c
+cc -std=c11 -D_POSIX_C_SOURCE=200809L -D_DEFAULT_SOURCE -O2 -g -Wall -Wextra -Werror -I/home/drakestapleton/workspace/aienos-omega-driver-direct/build/replay-regtrace.I9B6jjAH/driver/native/linux/aien-gpu/../../kernel/gpu -I/home/drakestapleton/workspace/aienos-omega-driver-direct/build/replay-regtrace.I9B6jjAH/driver/native/linux/aien-gpu/../../kernel/dev -I/home/drakestapleton/workspace/aienos-omega-driver-direct/build/replay-regtrace.I9B6jjAH/driver/native/linux/aien-gpu -DAIEN_GSP_BOOT_SIM -o /home/drakestapleton/workspace/aienos-omega-driver-direct/build/replay-regtrace.I9B6jjAH/driver/native/linux/aien-gpu/build/aien_gsp_boot_sim aien_gsp_boot.c /home/drakestapleton/workspace/aienos-omega-driver-direct/build/replay-regtrace.I9B6jjAH/driver/native/linux/aien-gpu/../../kernel/gpu/gsp_mmio.c /home/drakestapleton/workspace/aienos-omega-driver-direct/build/replay-regtrace.I9B6jjAH/driver/native/linux/aien-gpu/../../kernel/gpu/gsp_seq.c /home/drakestapleton/workspace/aienos-omega-driver-direct/build/replay-regtrace.I9B6jjAH/driver/native/linux/aien-gpu/../../kernel/dev/gb10_gsp_boot.c /home/drakestapleton/workspace/aienos-omega-driver-direct/build/replay-regtrace.I9B6jjAH/driver/native/linux/aien-gpu/../../kernel/gpu/gsp_sim.c
+cc -std=c11 -D_POSIX_C_SOURCE=200809L -D_DEFAULT_SOURCE -O2 -g -Wall -Wextra -Werror -I/home/drakestapleton/workspace/aienos-omega-driver-direct/build/replay-regtrace.I9B6jjAH/driver/native/linux/aien-gpu/../../kernel/gpu -I/home/drakestapleton/workspace/aienos-omega-driver-direct/build/replay-regtrace.I9B6jjAH/driver/native/linux/aien-gpu/../../kernel/dev -I/home/drakestapleton/workspace/aienos-omega-driver-direct/build/replay-regtrace.I9B6jjAH/driver/native/linux/aien-gpu -O1 -fsanitize=address,undefined -fno-sanitize-recover=all -DAIEN_GSP_BOOT_SIM -o /home/drakestapleton/workspace/aienos-omega-driver-direct/build/replay-regtrace.I9B6jjAH/driver/native/linux/aien-gpu/build/aien_gsp_boot_sim_san \
+	aien_gsp_boot.c /home/drakestapleton/workspace/aienos-omega-driver-direct/build/replay-regtrace.I9B6jjAH/driver/native/linux/aien-gpu/../../kernel/gpu/gsp_mmio.c /home/drakestapleton/workspace/aienos-omega-driver-direct/build/replay-regtrace.I9B6jjAH/driver/native/linux/aien-gpu/../../kernel/gpu/gsp_seq.c /home/drakestapleton/workspace/aienos-omega-driver-direct/build/replay-regtrace.I9B6jjAH/driver/native/linux/aien-gpu/../../kernel/dev/gb10_gsp_boot.c /home/drakestapleton/workspace/aienos-omega-driver-direct/build/replay-regtrace.I9B6jjAH/driver/native/linux/aien-gpu/../../kernel/gpu/gsp_sim.c
+python3 /home/drakestapleton/workspace/aienos-omega-driver-direct/build/replay-regtrace.I9B6jjAH/driver/native/linux/aien-gpu/../../../native/omega/tests/regtrace.py /home/drakestapleton/workspace/aienos-omega-driver-direct/build/replay-regtrace.I9B6jjAH/driver/native/linux/aien-gpu/../../.. /home/drakestapleton/workspace/aienos-omega-driver-direct/build/replay-regtrace.I9B6jjAH/omega/seed/out/omc /home/drakestapleton/workspace/aienos-omega-driver-direct/build/replay-regtrace.I9B6jjAH/driver/native/linux/aien-gpu/build/regtrace --build-only
+bash /home/drakestapleton/workspace/aienos-omega-driver-direct/build/replay-regtrace.I9B6jjAH/driver/native/linux/aien-gpu/../../../evidence/own-gpu-driver/rung2/window1_sim_test.sh /home/drakestapleton/workspace/aienos-omega-driver-direct/build/replay-regtrace.I9B6jjAH/driver/native/linux/aien-gpu/build/aien_gsp_boot_sim /home/drakestapleton/workspace/aienos-omega-driver-direct/build/replay-regtrace.I9B6jjAH/driver/native/linux/aien-gpu/aien_gpu.c /home/drakestapleton/workspace/aienos-omega-driver-direct/build/replay-regtrace.I9B6jjAH/driver/native/linux/aien-gpu/build/regtrace
+PASS init: INIT-DONE (exit 0)
+PASS seq: SEQUENCER-REQUESTED (exit 1)
+PASS seqregs: INIT-DONE (exit 0)
+PASS silent: NO-INIT-DONE (exit 1)
+PASS junk: STATUS-QUEUE-ERROR (exit 1)
+PASS busy: STOPPED-AT E_BUSY (exit 1)
+PASS fmcerr: STOPPED-AT E_FMC (exit 1)
+PASS dead: STOPPED-AT E_RISCV (exit 1)
+PASS planonly: PLAN-ONLY (exit 0)
+PASS small: BUILD-REFUSED (exit 2)
+PASS arena too small: no register touched
+PASS init wrote plan.txt
+PASS init wrote result.txt
+PASS init wrote messages.txt
+PASS init wrote regs.txt
+PASS init wrote cot_packet.bin
+PASS init wrote log-LOGINIT.bin
+PASS init wrote rpc-shared.bin
+PASS INIT_DONE recorded in messages.txt
+PASS COT packet 868 bytes
+PASS result.txt carries the verdict
+PASS package notify address sent unchanged
+PASS zero notify field filled with the zeroed first arena page
+PASS no other GspSystemInfo byte changed
+PASS 935-byte GspSystemInfo refused, no register touched
+PASS Omega trace policy: every access permitted, every write-list entry exercised
+PASS start-up itself does not write GSP QHEAD0
+PASS sequencer path wrote GSP QHEAD0
+PASS one SEC2 doorbell per start-up
+WINDOW1_SIM_TEST: PASS
+bash /home/drakestapleton/workspace/aienos-omega-driver-direct/build/replay-regtrace.I9B6jjAH/driver/native/linux/aien-gpu/../../../evidence/own-gpu-driver/rung2/window1_sim_test.sh /home/drakestapleton/workspace/aienos-omega-driver-direct/build/replay-regtrace.I9B6jjAH/driver/native/linux/aien-gpu/build/aien_gsp_boot_sim_san /home/drakestapleton/workspace/aienos-omega-driver-direct/build/replay-regtrace.I9B6jjAH/driver/native/linux/aien-gpu/aien_gpu.c /home/drakestapleton/workspace/aienos-omega-driver-direct/build/replay-regtrace.I9B6jjAH/driver/native/linux/aien-gpu/build/regtrace
+PASS init: INIT-DONE (exit 0)
+PASS seq: SEQUENCER-REQUESTED (exit 1)
+PASS seqregs: INIT-DONE (exit 0)
+PASS silent: NO-INIT-DONE (exit 1)
+PASS junk: STATUS-QUEUE-ERROR (exit 1)
+PASS busy: STOPPED-AT E_BUSY (exit 1)
+PASS fmcerr: STOPPED-AT E_FMC (exit 1)
+PASS dead: STOPPED-AT E_RISCV (exit 1)
+PASS planonly: PLAN-ONLY (exit 0)
+PASS small: BUILD-REFUSED (exit 2)
+PASS arena too small: no register touched
+PASS init wrote plan.txt
+PASS init wrote result.txt
+PASS init wrote messages.txt
+PASS init wrote regs.txt
+PASS init wrote cot_packet.bin
+PASS init wrote log-LOGINIT.bin
+PASS init wrote rpc-shared.bin
+PASS INIT_DONE recorded in messages.txt
+PASS COT packet 868 bytes
+PASS result.txt carries the verdict
+PASS package notify address sent unchanged
+PASS zero notify field filled with the zeroed first arena page
+PASS no other GspSystemInfo byte changed
+PASS 935-byte GspSystemInfo refused, no register touched
+PASS Omega trace policy: every access permitted, every write-list entry exercised
+PASS start-up itself does not write GSP QHEAD0
+PASS sequencer path wrote GSP QHEAD0
+PASS one SEC2 doorbell per start-up
+WINDOW1_SIM_TEST: PASS
+make: Leaving directory '/home/drakestapleton/workspace/aienos-omega-driver-direct/build/replay-regtrace.I9B6jjAH/driver/native/linux/aien-gpu'
+{"cases": 23, "failures": 0, "source_sha256": "8a97b5489752d9b4f9444e5f133ba984c26c090e9d378374356055cd53cada67", "binary_sha256": "cc22fc9229a45324e85fec309cb18f764d7d45bfded051b05e4d96429c5ebde6"}
+SEED_NATIVE_REGTRACE_REPLAY_PASS
+
+RC=0
