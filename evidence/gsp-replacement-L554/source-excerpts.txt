@@ -1,0 +1,578 @@
+NVIDIA source 20e4e6e19cc26ba47b5cbe23130a396be100c427; git status empty; line-numbered excerpts (trailing whitespace omitted).
+
+FILE src/nvidia/generated/g_kern_fsp_nvoc.c sha256 2b4e5169852aef6e1347e856faac33ce7e9d98f573ba415d781f020c27c1d479
+220:     PORT_UNREFERENCED_VARIABLE(pGpuhalspecowner);
+221:     PORT_UNREFERENCED_VARIABLE(pRmhalspecowner);
+222:     PORT_UNREFERENCED_VARIABLE(chipHal);
+223:     PORT_UNREFERENCED_VARIABLE(chipHal_HalVarIdx);
+224:     PORT_UNREFERENCED_VARIABLE(rmVariantHal);
+225:     PORT_UNREFERENCED_VARIABLE(rmVariantHal_HalVarIdx);
+226:
+227:     // NVOC Property Hal field -- PDB_PROP_KFSP_IS_MISSING
+228:     if (( ((chipHal_HalVarIdx >> 5) == 1UL) && ((1UL << (chipHal_HalVarIdx & 0x1f)) & 0x70000000UL) ) ||
+229:         ( ((chipHal_HalVarIdx >> 5) == 2UL) && ((1UL << (chipHal_HalVarIdx & 0x1f)) & 0x000003e6UL) )) /* ChipHal: GH100 | GB100 | GB102 | GB110 | GB112 | GB202 | GB203 | GB205 | GB206 | GB207 */
+230:     {
+231:         pThis->setProperty(pThis, PDB_PROP_KFSP_IS_MISSING, NV_FALSE);
+232:     }
+233:     // default
+234:     else
+235:     {
+236:         pThis->setProperty(pThis, PDB_PROP_KFSP_IS_MISSING, NV_TRUE);
+237:     }
+238:
+239:     // NVOC Property Hal field -- PDB_PROP_KFSP_FSP_FUSE_ERROR_CHECK_ENABLED
+240:     if (( ((chipHal_HalVarIdx >> 5) == 1UL) && ((1UL << (chipHal_HalVarIdx & 0x1f)) & 0x60000000UL) ) ||
+
+FILE src/nvidia/generated/g_kernel_sec2_nvoc.c sha256 3eeb7130fa84a34e9fd9a8319def753802ad45f3acdd5387273ff5a224f5f4ac
+438:     PORT_UNREFERENCED_VARIABLE(pThis);
+439:     PORT_UNREFERENCED_VARIABLE(pGpuhalspecowner);
+440:     PORT_UNREFERENCED_VARIABLE(pRmhalspecowner);
+441:     PORT_UNREFERENCED_VARIABLE(chipHal);
+442:     PORT_UNREFERENCED_VARIABLE(chipHal_HalVarIdx);
+443:     PORT_UNREFERENCED_VARIABLE(rmVariantHal);
+444:     PORT_UNREFERENCED_VARIABLE(rmVariantHal_HalVarIdx);
+445:
+446:     // NVOC Property Hal field -- PDB_PROP_KSEC2_BOOT_GSPFMC
+447:     if (( ((chipHal_HalVarIdx >> 5) == 1UL) && ((1UL << (chipHal_HalVarIdx & 0x1f)) & 0x80000000UL) ) ||
+448:         ( ((chipHal_HalVarIdx >> 5) == 2UL) && ((1UL << (chipHal_HalVarIdx & 0x1f)) & 0x00000c00UL) )) /* ChipHal: GB10B | GB20B | GB20C */
+449:     {
+450:         pThis->setProperty(pThis, PDB_PROP_KSEC2_BOOT_GSPFMC, NV_TRUE);
+451:     }
+452:     // default
+453:     else
+454:     {
+
+FILE src/nvidia/src/kernel/gpu/sec2/arch/blackwell/kernel_sec2_gb10b.c sha256 7a7367f9b3a720a49015ac588571fccc2252f3b2e2dbe009d96cc413a5429968
+216: _ksec2GetGspUcodeArchive
+217: (
+218:     OBJGPU    *pGpu,
+219:     KernelSec2 *pKernelSec2
+220: )
+221: {
+222:     KernelGsp *pKernelGsp = GPU_GET_KERNEL_GSP(pGpu);
+223:
+224:     if (pKernelSec2->getProperty(pKernelSec2, PDB_PROP_KSEC2_GSP_MODE_GSPRM))
+225:     {
+226:         if (kgspIsDebugModeEnabled_HAL(pGpu, pKernelGsp))
+227:         {
+228:             NV_PRINTF(LEVEL_INFO, "Loading Debug GSP FMC image for GSP RM using SEC2.\n");
+229:             return kgspGetBinArchiveGspRmFmcGfwDebugSigned_HAL(pKernelGsp);
+230:         }
+231:         else
+232:         {
+233:             NV_PRINTF(LEVEL_INFO, "Loading Prod GSP FMC image for GSP RM using SEC2.\n");
+234:             return kgspGetBinArchiveGspRmFmcGfwProdSigned_HAL(pKernelGsp);
+235:         }
+236:     }
+237:     return NULL;
+285: static NvBool
+286: _ksec2IsCmdhandlingCompleted_GB10B
+287: (
+288:     OBJGPU  *pGpu,
+289:     void    *pVoid
+290: )
+291: {
+292:     const NvU32 cmdHandlingState = 0xc001cafe;
+293:     NvU32 reg;
+294:
+295:     reg = GPU_REG_RD32(pGpu, NV_PSEC_FALCON_MAILBOX0);
+296:     return (reg  != cmdHandlingState);
+297: }
+298:
+299: static NV_STATUS
+300: _ksec2WaitForCmdHandling
+301: (
+302:     OBJGPU    *pGpu,
+303:     KernelSec2 *pKernelSec2
+304: )
+305: {
+306:     NV_STATUS status = NV_OK;
+307:
+308:     status =  gpuTimeoutCondWait(pGpu, _ksec2IsCmdhandlingCompleted_GB10B, NULL, NULL);
+309:
+310:     return status;
+311: }
+312:
+313: /*!
+314:  * @brief Get maximum size of a packet we can send.
+315:  *
+316:  * @param[in] pGpu       OBJGPU pointer
+317:  * @param[in] pKernelSec2 KernelSec2 pointer
+318:  *
+319:  * @return Packet size in bytes
+320:  */
+321: NvU32
+322: ksec2GetMaxSendPacketSize_GB10B
+323: (
+324:     OBJGPU    *pGpu,
+325:     KernelSec2 *pKernelSec2
+326: )
+327: {
+328:     //
+329:     // Channel size is hardcoded to 1K for now. Later we will use EMEMR to
+330:     // properly fetch the lower and higher bounds of the EMEM channel
+331:     //
+332:     return SEC2_EMEM_CHANNEL_RM_SIZE;
+333: }
+334:
+335: /*!
+336:  * @brief Check if RM can send a packet to SEC2
+337:  *
+338:  * @param[in] pGpu          OBJGPU pointer
+339:  * @param[in] pKernelSec2   KernelSec2 pointer
+340:  *
+341:  * @return NV_TRUE if send is possible, NV_FALSE otherwise
+342:  */
+343: NvBool
+344: ksec2CanSendPacket_GB10B
+345: (
+438: ksec2SetupGspImages_GB10B
+439: (
+440:     OBJGPU           *pGpu,
+441:     KernelSec2       *pKernelSec2,
+442:     NVDM_PAYLOAD_COT *pCotPayload
+443: )
+444: {
+445:     NV_STATUS status = NV_OK;
+446:
+447:     const BINDATA_ARCHIVE *pBinArchive;
+448:     PBINDATA_STORAGE pGspImage;
+449:     PBINDATA_STORAGE pGspImageHash;
+450:     PBINDATA_STORAGE pGspImageSignature;
+451:     PBINDATA_STORAGE pGspImagePublicKey;
+452:     NvU32 pGspImageSize;
+453:     NvU32 pGspImageMapSize;
+454:     NvP64 pVaKernel = NULL;
+455:     NvP64 pPrivKernel = NULL;
+456:     NvU64 flags = MEMDESC_FLAGS_NONE;
+457:
+458:     NV_PRINTF(LEVEL_INFO, "Setup GSP FMC Images!\n");
+459:
+460:     // Detect the mode of operation for GSP and fetch the right image to boot
+461:     pBinArchive = _ksec2GetGspUcodeArchive(pGpu, pKernelSec2);
+462:     if (pBinArchive == NULL)
+463:     {
+464:         NV_PRINTF(LEVEL_ERROR, "Cannot find correct ucode archive for booting!\n");
+465:         status = NV_ERR_OBJECT_NOT_FOUND;
+466:         goto gsp_image_err;
+467:     }
+468:
+469:     if (pKernelSec2->getProperty(pKernelSec2, PDB_PROP_KSEC2_GSP_MODE_GSPRM))
+470:     {
+471:         // Set up the structures to send GSP-FMC
+472:         pGspImage = (PBINDATA_STORAGE)bindataArchiveGetStorage(pBinArchive, BINDATA_LABEL_UCODE_IMAGE);
+473:         pGspImageHash = (PBINDATA_STORAGE)bindataArchiveGetStorage(pBinArchive, BINDATA_LABEL_UCODE_HASH);
+474:         pGspImageSignature = (PBINDATA_STORAGE)bindataArchiveGetStorage(pBinArchive, BINDATA_LABEL_UCODE_SIG);
+475:         pGspImagePublicKey = (PBINDATA_STORAGE)bindataArchiveGetStorage(pBinArchive, BINDATA_LABEL_UCODE_PKEY);
+476:
+477:         if ((pGspImage == NULL) || (pGspImageHash == NULL) ||
+478:             (pGspImageSignature == NULL) || (pGspImagePublicKey == NULL))
+479:         {
+480:             status = NV_ERR_NOT_SUPPORTED;
+481:             goto gsp_image_err;
+482:         }
+483:
+484:         pGspImageSize = bindataGetBufferSize(pGspImage);
+485:         pGspImageMapSize = NV_ALIGN_UP(pGspImageSize, 0x1000);
+486:
+487:         status = memdescCreate(&pKernelSec2->pGspFmcMemdesc, pGpu, pGspImageMapSize,
+488:                            0, NV_TRUE, ADDR_SYSMEM, NV_MEMORY_CACHED, flags);
+489:         NV_ASSERT_OR_GOTO(status == NV_OK, failed);
+490:
+491:         memdescTagAlloc(status, NV_FB_ALLOC_RM_INTERNAL_OWNER_UNNAMED_TAG_7,
+492:                     pKernelSec2->pGspFmcMemdesc);
+493:         NV_ASSERT_OR_GOTO(status == NV_OK, failed);
+494:
+495:         status = memdescMap(pKernelSec2->pGspFmcMemdesc, 0, pGspImageMapSize, NV_TRUE,
+496:                         NV_PROTECT_READ_WRITE, &pVaKernel, &pPrivKernel);
+497:         NV_ASSERT_OR_GOTO(status == NV_OK, failed);
+498:
+499:         portMemSet(pVaKernel, 0, pGspImageMapSize);
+500:
+501:         status = bindataWriteToBuffer(pGspImage, pVaKernel, pGspImageSize);
+502:         NV_ASSERT_OR_GOTO(status == NV_OK, failed);
+503:
+504:          // Clean up CPU side resources since they are not needed anymore
+505:         memdescUnmap(pKernelSec2->pGspFmcMemdesc, NV_TRUE, pVaKernel, pPrivKernel);
+506:
+507:         pCotPayload->gspFmcSysmemOffset = memdescGetPhysAddr(pKernelSec2->pGspFmcMemdesc, AT_GPU, 0);
+508:         pCotPayload->frtsSysmemSize = pGspImageSize;
+509:         NV_PRINTF(LEVEL_INFO, "Setup GSP FMC SysMem Offset GPA 0x%llx, SPA 0x%llx ,Size = 0x%x!\n",
+510:                   pCotPayload->gspFmcSysmemOffset,
+511:                   memdescGetPhysAddr(pKernelSec2->pGspFmcMemdesc, AT_CPU, 0),
+512:                   pCotPayload->frtsSysmemSize);
+513:
+514:         status = bindataWriteToBuffer(pGspImageHash, (NvU8*)pCotPayload->hash384, sizeof(pCotPayload->hash384));
+515:         NV_ASSERT_OR_GOTO(status == NV_OK, failed);
+516:
+517:         NV_ASSERT_OR_GOTO(bindataGetBufferSize(pGspImageSignature) == pKernelSec2->cotPayloadSignatureSize, failed);
+518:         NV_PRINTF(LEVEL_INFO, "GSP FMC Signature Size 0x%08x\n", bindataGetBufferSize(pGspImageSignature));
+519:         NV_ASSERT_OR_GOTO(bindataGetBufferSize(pGspImageSignature) <= sizeof(pCotPayload->signature), failed);
+520:         status = bindataWriteToBuffer(pGspImageSignature, (NvU8*)pCotPayload->signature,
+521:                                       bindataGetBufferSize(pGspImageSignature));
+522:         NV_ASSERT_OR_GOTO(status == NV_OK, failed);
+523:
+524:         NV_ASSERT_OR_GOTO(bindataGetBufferSize(pGspImagePublicKey) == pKernelSec2->cotPayloadPublicKeySize, failed);
+525:         NV_PRINTF(LEVEL_INFO, "GSP FMC PK Size 0x%08x\n", bindataGetBufferSize(pGspImagePublicKey));
+526:         NV_ASSERT_OR_GOTO(bindataGetBufferSize(pGspImagePublicKey) <= sizeof(pCotPayload->publicKey), failed);
+527:         status = bindataWriteToBuffer(pGspImagePublicKey, (NvU8*)pCotPayload->publicKey,
+528:                                       bindataGetBufferSize(pGspImagePublicKey));
+529:         NV_ASSERT_OR_GOTO(status == NV_OK, failed);
+530:
+531:         // Set up boot args based on the mode of operation
+532:         status = _ksec2GetGspBootArgs(pGpu, pKernelSec2, &pCotPayload->gspBootArgsSysmemOffset);
+533:         NV_ASSERT_OR_GOTO(status == NV_OK, failed);
+534:     }
+535:
+
+FILE src/nvidia/src/kernel/gpu/gsp/arch/hopper/kernel_gsp_gh100.c sha256 12b78f06244658de15ef083978d00121403e3f00722b43f4e8ff88b5c6c6c0f0
+775: kgspPrepareForBootstrap_GH100
+776: (
+777:     OBJGPU *pGpu,
+778:     KernelGsp *pKernelGsp,
+779:     KernelGspBootMode bootMode
+780: )
+781: {
+782:     KernelFsp *pKernelFsp = GPU_GET_KERNEL_FSP(pGpu);
+783:     KernelSec2 *pKernelSec2 = GPU_GET_KERNEL_SEC2(pGpu);
+784:
+785:     // Only for GSP client builds
+786:     if (!IS_GSP_CLIENT(pGpu))
+787:     {
+788:         NV_PRINTF(LEVEL_ERROR, "IS_GSP_CLIENT is not set.\n");
+789:         return NV_ERR_NOT_SUPPORTED;
+790:     }
+791:
+792:     // Setup the descriptors that GSP-FMC needs to boot GSP-RM
+793:     NV_CHECK_OK_OR_RETURN(LEVEL_ERROR,
+794:             kgspSetupGspFmcArgs_HAL(pGpu, pKernelGsp, bootMode));
+795:
+796:     if (pKernelFsp != NULL && !pKernelFsp->getProperty(pKernelFsp, PDB_PROP_KFSP_DISABLE_GSPFMC))
+797:     {
+798:         pKernelFsp->setProperty(pKernelFsp, PDB_PROP_KFSP_GSP_MODE_GSPRM, NV_TRUE);
+799:         NV_CHECK_OK_OR_RETURN(LEVEL_ERROR,
+800:             kfspPrepareBootCommands_HAL(pGpu, pKernelFsp));
+801:     }
+802:     else if (pKernelSec2 != NULL && pKernelSec2->getProperty(pKernelSec2, PDB_PROP_KSEC2_BOOT_GSPFMC))
+803:     {
+804:         NV_PRINTF(LEVEL_INFO, "Sec2 preparing for GSPRM boot\n");
+805:         pKernelSec2->setProperty(pKernelSec2, PDB_PROP_KSEC2_GSP_MODE_GSPRM, NV_TRUE);
+806:         NV_CHECK_OK_OR_RETURN(LEVEL_ERROR,
+807:             ksec2PrepareBootCommands_HAL(pGpu, pKernelSec2));
+808:     }
+845:
+846:     //
+847:     // Hopper+ GSP always boots in RISC-V mode. The GSP-FMC blocks RISCV_BCR_CTRL reads via PLM,
+848:     // so override the setting here so KernelFalcon doesn't try to read it from HW.
+849:     //
+850:     kflcnSetRiscvMode(pKernelFalcon, NV_TRUE);
+851:
+852:     if (pKernelFsp != NULL && !pKernelFsp->getProperty(pKernelFsp, PDB_PROP_KFSP_DISABLE_GSPFMC))
+853:     {
+854:         //
+855:         // For resume, ACR will restore FRTS based on what was saved during suspend.
+856:         // For GC6, FRTS will stay alive in WPR2. So, instruct FSP to skip
+857:         // vidmem FRTS for boot modes other than normal boot.
+858:         //
+859:         if (bootMode != KGSP_BOOT_MODE_NORMAL)
+860:         {
+861:             pKernelFsp->pCotPayload->frtsVidmemOffset = 0;
+862:             pKernelFsp->pCotPayload->frtsVidmemSize = 0;
+863:         }
+864:
+865:         NV_PRINTF(LEVEL_NOTICE, "Starting to boot GSP via FSP.\n");
+866:         NV_CHECK_OK_OR_RETURN(LEVEL_ERROR, kfspSendBootCommands_HAL(pGpu, pKernelFsp));
+867:     }
+868:     else if (pKernelSec2 != NULL && pKernelSec2->getProperty(pKernelSec2, PDB_PROP_KSEC2_BOOT_GSPFMC))
+869:     {
+870:         NV_PRINTF(LEVEL_INFO, "Starting to boot GSP via SEC2.\n");
+871:         NV_CHECK_OK_OR_RETURN(LEVEL_ERROR, ksec2SendBootCommands_HAL(pGpu, pKernelSec2));
+872:     }
+873:     else
+874:     {
+875:         NV_ASSERT_OK_OR_RETURN(_kgspBootstrapGspFmc_GH100(pGpu, pKernelGsp));
+876:     }
+877:
+878:     // Wait for target mask to be released.
+879:     if (pKernelFsp != NULL)
+880:     {
+881:         status = kfspWaitForGspTargetMaskReleased_HAL(pGpu, pKernelFsp);
+882:         if (status != NV_OK)
+883:         {
+884:             NV_PRINTF(LEVEL_ERROR, "Timeout waiting for GSP target mask release. "
+885:                       "This error may be caused by several reasons: Bootrom may have failed, "
+886:                       "GSP init code may have failed or ACR failed to release target mask. "
+887:                       "RM does not have access to information on which of those conditions happened.\n");
+888:
+889:             if (pKernelFsp->getProperty(pKernelFsp, PDB_PROP_KFSP_GSP_MODE_GSPRM))
+890:             {
+891:                 kfspDumpDebugState_HAL(pGpu, pKernelFsp);
+892:             }
+893:
+894:             return status;
+895:         }
+896:     }
+897:     else if (pKernelSec2 != NULL &&
+898:              pKernelSec2->getProperty(pKernelSec2, PDB_PROP_KSEC2_BOOT_GSPFMC) &&
+899:              pKernelSec2->getProperty(pKernelSec2, PDB_PROP_KSEC2_GSP_MODE_GSPRM))
+900:     {
+
+FILE src/nvidia/src/kernel/gpu/gsp/kernel_gsp.c sha256 2bc6af6c6897dd337ab280b0f6e398b9c006aa13b34590bf8b256ceeac7be4a4
+4740:     NvU64 elfDataSize,
+4741:     const char *pNameInMsg
+4742: )
+4743: {
+4744:     const char *pFwversion;
+4745:     NvU64 fwversionSize;
+4746:     NvBool bIsVersionValid;
+4747:
+4748:     {
+4749:         const void *pFwversionRaw;
+4750:
+4751:         NV_CHECK_OK_OR_RETURN(LEVEL_ERROR,
+4752:             _kgspFwContainerGetSection(pGpu, pKernelGsp,
+4753:                 pElfData,
+4754:                 elfDataSize,
+4755:                 GSP_VERSION_SECTION_NAME,
+4756:                 &pFwversionRaw,
+4757:                 &fwversionSize));
+4758:
+4759:         pFwversion = (const char *) pFwversionRaw;
+4760:     }
+4761:
+4762:     // Sanity check .fwversion before attempting to print it
+4763:     bIsVersionValid =
+4764:         ((fwversionSize > 0) &&
+4765:          (fwversionSize < 64) &&
+4766:          (pFwversion[fwversionSize - 1] == '\0'));
+4767:
+4768:     NvU64 expectedVersionLength = portStringLength(NV_VERSION_STRING);
+4769:
+4770:     // Check that text in .fwversion section of ELF matches our NV_VERSION_STRING
+4771:     if ((fwversionSize != expectedVersionLength + 1) ||
+4772:         (portStringCompare(pFwversion, NV_VERSION_STRING, expectedVersionLength) != 0))
+4773:     {
+4774:         if (bIsVersionValid)
+4775:         {
+4776:             NV_PRINTF(LEVEL_ERROR, "%s version mismatch: got version %s, expected version %s\n",
+4777:                       pNameInMsg, pFwversion, NV_VERSION_STRING);
+4778:         }
+4779:         else
+4780:         {
+4781:             NV_PRINTF(LEVEL_ERROR, "%s version unknown or malformed, expected version %s\n",
+4782:                       pNameInMsg, NV_VERSION_STRING);
+4783:         }
+4784:
+4785:         return NV_ERR_INVALID_DATA;
+4786:     }
+4787:
+4788:     return NV_OK;
+4789: }
+4790:
+4791: /*!
+4792:  * Get the name of the section corresponding to the given section name
+4793:  * prefix and the current chip.
+4794:  */
+4795: static NV_STATUS
+4796: _kgspGetSectionNameForPrefix
+4797: (
+4798:     OBJGPU *pGpu,
+4799:     KernelGsp *pKernelGsp,
+4800:     char *pSectionNameBuf,  // out
+4801:     NvLength sectionNameBufSize,
+4802:     const char *pSectionPrefix
+4803: )
+4804: {
+4805:     NvLength sectionPrefixLength;
+4806:
+4807:     nv_firmware_chip_family_t chipFamily;
+4808:     const char *pChipFamilyName;
+4809:     NvLength chipFamilyNameLength;
+4810:
+4811:     NvLength totalSize;
+4812:
+4813:     NV_ASSERT_OR_RETURN(pSectionNameBuf != NULL, NV_ERR_INVALID_ARGUMENT);
+4814:     NV_ASSERT_OR_RETURN(sectionNameBufSize > 0, NV_ERR_INVALID_ARGUMENT);
+4815:     NV_ASSERT_OR_RETURN(pSectionPrefix != NULL, NV_ERR_INVALID_ARGUMENT);
+4816:
+4817:     chipFamily = nv_firmware_get_chip_family(gpuGetChipArch(pGpu),
+4818:                                              gpuGetChipImpl(pGpu));
+4819:     NV_ASSERT_OR_RETURN(chipFamily != NV_FIRMWARE_CHIP_FAMILY_NULL,
+4820:                         NV_ERR_INVALID_STATE);
+4821:
+4822:     pChipFamilyName = nv_firmware_chip_family_to_string(chipFamily);
+4823:     NV_ASSERT_OR_RETURN(portStringLength(pChipFamilyName) != 0, NV_ERR_INVALID_STATE);
+4824:
+4825:     sectionPrefixLength = portStringLength(pSectionPrefix);
+4826:     chipFamilyNameLength = portStringLength(pChipFamilyName);
+4827:
+4828:     totalSize = sectionPrefixLength + chipFamilyNameLength + 1;
+4829:     NV_ASSERT_OR_RETURN(sectionNameBufSize >= sectionPrefixLength + 1,
+4830:                         NV_ERR_BUFFER_TOO_SMALL);
+4831:     NV_ASSERT_OR_RETURN(sectionNameBufSize >= totalSize,
+4832:                         NV_ERR_BUFFER_TOO_SMALL);
+4833:
+4834:     portStringCopy(pSectionNameBuf, sectionNameBufSize,
+4835:                    pSectionPrefix, sectionPrefixLength + 1);
+4836:     portStringCat(pSectionNameBuf, sectionNameBufSize,
+4837:                   pChipFamilyName, chipFamilyNameLength + 1);
+4838:
+4839:     return NV_OK;
+4840: }
+4841:
+4842: static NV_STATUS
+4843: _kgspPrepareGspRmBinaryImage
+4844: (
+4845:     OBJGPU *pGpu,
+4846:     KernelGsp *pKernelGsp,
+4847:     GSP_FIRMWARE *pGspFw
+4848: )
+4849: {
+4850:     char signatureSectionName[32];
+4851:
+4852:     NV_CHECK_OK_OR_RETURN(LEVEL_ERROR,
+4853:         _kgspFwContainerVerifyVersion(pGpu, pKernelGsp,
+4854:             pGspFw->pBuf,
+4855:             pGspFw->size,
+4856:             "GSP firmware image"));
+4857:
+4858:     NV_CHECK_OK_OR_RETURN(LEVEL_ERROR,
+4859:         _kgspFwContainerGetSection(pGpu, pKernelGsp,
+4860:             pGspFw->pBuf,
+4861:             pGspFw->size,
+4862:             GSP_IMAGE_SECTION_NAME,
+4863:             &pGspFw->pImageData,
+4864:             &pGspFw->imageSize));
+4865:
+4866:     NV_CHECK_OK_OR_RETURN(LEVEL_ERROR,
+4867:         _kgspGetSectionNameForPrefix(pGpu, pKernelGsp,
+4868:             signatureSectionName, sizeof(signatureSectionName),
+4869:             kgspGetSignatureSectionNamePrefix_HAL(pGpu, pKernelGsp)));
+4870:
+4871:     NV_CHECK_OK_OR_RETURN(LEVEL_ERROR,
+4872:         _kgspFwContainerGetSection(pGpu, pKernelGsp,
+4873:             pGspFw->pBuf,
+4874:             pGspFw->size,
+4875:             signatureSectionName,
+4876:             &pGspFw->pSignatureData,
+4877:             &pGspFw->signatureSize));
+4878:
+4879:     NV_CHECK_OK_OR_RETURN(LEVEL_ERROR,
+4880:         _kgspCreateSignatureMemdesc(pGpu, pKernelGsp,
+4881:             pGspFw));
+4882:
+4883:     NV_CHECK_OK_OR_RETURN(LEVEL_ERROR,
+4884:         kgspCreateRadix3(pGpu, pKernelGsp, &pKernelGsp->pGspUCodeRadix3Descriptor,
+4885:             NULL, pGspFw->pImageData, pGspFw->imageSize));
+4886:
+4887:     {
+4888:         // read build-id
+4889:         const void *pBuildIdSectionData = NULL;
+4890:         NvU64 buildIdSectionSize = 0;
+4891:
+4892:         NV_ASSERT_OK_OR_RETURN(
+4893:             _kgspFwContainerGetSection(pGpu, pKernelGsp,
+4894:                 pGspFw->pBuf,
+4895:                 pGspFw->size,
+4896:                 GSP_BUILD_ID_SECTION_NAME,
+4897:                 &pBuildIdSectionData,
+4898:                 &buildIdSectionSize));
+4899:
+4900:         pKernelGsp->pBuildIdSection = portMemAllocNonPaged(buildIdSectionSize);
+4901:
+4902:         NV_ASSERT_OR_RETURN(pKernelGsp->pBuildIdSection != NULL, NV_ERR_NO_MEMORY);
+4903:
+4904:         pKernelGsp->buildIdSectionSize = buildIdSectionSize;
+4905:
+
+FILE src/nvidia/src/kernel/gpu/gsp/arch/blackwell/kernel_gsp_gb100.c sha256 605d5bdcb85dd6f3c0dcabd5dda72bb34014fe3a1e3ece4ce01e3cd5298f6919
+90:  * Get signature section prefix
+91:  *
+92:  * @return const char* to the section name prefix
+93:  */
+94: const char*
+95: kgspGetSignatureSectionNamePrefix_GB100
+96: (
+97:     OBJGPU    *pGpu,
+98:     KernelGsp *pKernelGsp
+99: )
+100: {
+101:     ConfidentialCompute *pCC = GPU_GET_CONF_COMPUTE(pGpu);
+102:     if (pCC != NULL && pCC->getProperty(pCC, PDB_PROP_CONFCOMPUTE_CC_FEATURE_ENABLED))
+103:     {
+104:         return GSP_CC_SIGNATURE_SECTION_NAME_PREFIX;
+105:     }
+106:
+107:     return GSP_SIGNATURE_SECTION_NAME_PREFIX;
+108: }
+109:
+110: /*!
+
+FILE src/nvidia/arch/nvalloc/common/inc/nv-firmware-chip-family-select.h sha256 153c1c9174a55f9e22fb94fed89712034943ce3417ee7ba43058dd3b1ba8769e
+47:             if (gpuImpl == GPU_IMPLEMENTATION_GA100)
+48:                 return NV_FIRMWARE_CHIP_FAMILY_GA100;
+49:             else
+50:                 return NV_FIRMWARE_CHIP_FAMILY_GA10X;
+51:
+52:         case GPU_ARCHITECTURE_ADA:
+53:             return NV_FIRMWARE_CHIP_FAMILY_AD10X;
+54:
+55:         case GPU_ARCHITECTURE_HOPPER:
+56:             return NV_FIRMWARE_CHIP_FAMILY_GH100;
+57:
+58:         case GPU_ARCHITECTURE_BLACKWELL_GB1XX:
+59:             if (gpuImpl == GPU_IMPLEMENTATION_GB10B)
+60:                 return NV_FIRMWARE_CHIP_FAMILY_GB10Y;
+61:             else
+62:                 return NV_FIRMWARE_CHIP_FAMILY_GB10X;
+63:
+64:         case GPU_ARCHITECTURE_BLACKWELL_GB2XX:
+65:             if (gpuImpl >= GPU_IMPLEMENTATION_GB20B)
+66:                 return NV_FIRMWARE_CHIP_FAMILY_GB20Y;
+67:             else
+
+FILE kernel-open/common/inc/nv-firmware.h sha256 4a17b52b3c5a332fd8e5dd422d52956a13b3574779c50c286b86347eea11a46d
+50:     NV_FIRMWARE_CHIP_FAMILY_GB10X = 8,
+51:     NV_FIRMWARE_CHIP_FAMILY_GB20X = 9,
+52:     NV_FIRMWARE_CHIP_FAMILY_GB10Y = 11,
+53:     NV_FIRMWARE_CHIP_FAMILY_GB20Y = 12,
+54:     NV_FIRMWARE_CHIP_FAMILY_END,
+55: } nv_firmware_chip_family_t;
+56:
+57: static inline const char *nv_firmware_chip_family_to_string(
+58:     nv_firmware_chip_family_t fw_chip_family
+59: )
+60: {
+61:     switch (fw_chip_family) {
+62:         case NV_FIRMWARE_CHIP_FAMILY_GB10X: return "gb10x";
+63:         case NV_FIRMWARE_CHIP_FAMILY_GB10Y: return "gb10y";
+64:         case NV_FIRMWARE_CHIP_FAMILY_GB20Y: return "gb20y";
+65:         case NV_FIRMWARE_CHIP_FAMILY_GB20X: return "gb20x";
+66:         case NV_FIRMWARE_CHIP_FAMILY_GH100: return "gh100";
+67:         case NV_FIRMWARE_CHIP_FAMILY_AD10X: return "ad10x";
+68:         case NV_FIRMWARE_CHIP_FAMILY_GA10X: return "ga10x";
+85: #if defined(NV_FIRMWARE_FOR_NAME)
+86: static inline const char *nv_firmware_for_chip_family(
+87:     nv_firmware_type_t fw_type,
+88:     nv_firmware_chip_family_t fw_chip_family
+89: )
+90: {
+91:     if (fw_type == NV_FIRMWARE_TYPE_GSP)
+92:     {
+93:         switch (fw_chip_family)
+94:         {
+95:             case NV_FIRMWARE_CHIP_FAMILY_GB10X:  // fall through
+96:             case NV_FIRMWARE_CHIP_FAMILY_GB10Y:  // fall through
+97:             case NV_FIRMWARE_CHIP_FAMILY_GB20Y:  // fall through
+98:             case NV_FIRMWARE_CHIP_FAMILY_GB20X:  // fall through
+99:             case NV_FIRMWARE_CHIP_FAMILY_GH100:  // fall through
+100:             case NV_FIRMWARE_CHIP_FAMILY_AD10X:  // fall through
+101:             case NV_FIRMWARE_CHIP_FAMILY_GA10X:
+102:                 return NV_FIRMWARE_FOR_NAME("gsp_ga10x");
+103:
+104:             case NV_FIRMWARE_CHIP_FAMILY_GA100:  // fall through
+105:             case NV_FIRMWARE_CHIP_FAMILY_TU11X:  // fall through
+106:             case NV_FIRMWARE_CHIP_FAMILY_TU10X:
+107:                 return NV_FIRMWARE_FOR_NAME("gsp_tu10x");
+108:
+109:             case NV_FIRMWARE_CHIP_FAMILY_END:  // fall through

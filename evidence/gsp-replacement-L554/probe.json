@@ -1,0 +1,237 @@
+{
+  "utc_start": "2026-10-22T21:23:35.019911+00:00",
+  "scope": "host/source inspection only; no custom-firmware boot attempted",
+  "probe_sha256": "6a727c6de5cbb59e7689eccf3ca41aad70a0f3ddd8f041583f78183044f06c08",
+  "records": [
+    {
+      "label": "branch",
+      "argv": [
+        "git",
+        "branch",
+        "--show-current"
+      ],
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "stdout": "research/gsp-replacement-L554\n",
+      "stderr": ""
+    },
+    {
+      "label": "base_present",
+      "argv": [
+        "git",
+        "merge-base",
+        "--is-ancestor",
+        "18e276590424593647cd7c39c6d16c2f9f8d6027",
+        "HEAD"
+      ],
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "label": "nvidia_source_pin",
+      "argv": [
+        "git",
+        "-C",
+        "/home/drakestapleton/workspace/_ext/open-gpu-kernel-modules-580.173.02",
+        "rev-parse",
+        "HEAD"
+      ],
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "stdout": "20e4e6e19cc26ba47b5cbe23130a396be100c427\n",
+      "stderr": ""
+    },
+    {
+      "label": "nvidia_source_clean",
+      "argv": [
+        "git",
+        "-C",
+        "/home/drakestapleton/workspace/_ext/open-gpu-kernel-modules-580.173.02",
+        "status",
+        "--porcelain"
+      ],
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "label": "uname",
+      "argv": [
+        "uname",
+        "-a"
+      ],
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "stdout": "Linux spark-b87b 7.0.0-1019-nvidia #19~24.04.2-Ubuntu SMP PREEMPT_DYNAMIC Sun Sep  6 18:35:11 UTC 2 aarch64 aarch64 aarch64 GNU/Linux\n",
+      "stderr": ""
+    },
+    {
+      "label": "gpu_before",
+      "argv": [
+        "nvidia-smi",
+        "--query-gpu=name,driver_version,pci.bus_id",
+        "--format=csv"
+      ],
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "stdout": "name, driver_version, pci.bus_id\nNVIDIA GB10, 580.173.02, 0000000F:01:00.0\n",
+      "stderr": ""
+    },
+    {
+      "label": "gsp_before",
+      "argv": [
+        "nvidia-smi",
+        "-q",
+        "-d",
+        "GSP_FIRMWARE_VERSION"
+      ],
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "stdout": "\n==============NVSMI LOG==============\n\nTimestamp                                              : Thu Oct 22 16:23:35 2026\nDriver Version                                         : 580.173.02\nCUDA Version                                           : 13.0\n\nAttached GPUs                                          : 1\nGPU 0000000F:01:00.0\n    GSP Firmware Version                               : 580.173.02\n\n",
+      "stderr": ""
+    },
+    {
+      "label": "service_before",
+      "argv": [
+        "curl",
+        "--fail",
+        "--silent",
+        "--show-error",
+        "--max-time",
+        "10",
+        "http://127.0.0.1:18091/v1/models"
+      ],
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "stdout": "{\"object\":\"list\",\"data\":[{\"id\":\"qwen3.6-35b-a3b-fp8\",\"object\":\"model\",\"created\":1792639071,\"owned_by\":\"aien/omega-qwen36-batch\"}]}",
+      "stderr": ""
+    },
+    {
+      "label": "inspector_selftest_and_real_pin",
+      "argv": [
+        "/home/drakestapleton/.local/bin/quiet-build",
+        "make",
+        "-C",
+        "native/kernel",
+        "OUT=/home/drakestapleton/workspace/aienux-gsp-replacement-L554/target/gsp-replacement-L554",
+        "gsp-fw-inspect-test"
+      ],
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "stdout": "make: Entering directory '/home/drakestapleton/workspace/aienux-gsp-replacement-L554/native/kernel'\n/home/drakestapleton/workspace/aienux-gsp-replacement-L554/target/gsp-replacement-L554/host/ck_gsp_fw_inspect selftest\nPASS valid fixture accepted (version 580.173.02, build id 000102030405060708090a0b0c0d0e0f10111213)\nPASS family gb10x refused: missing section: no signature section for this chip family\nPASS every truncation 0..639 refused\nPASS bad ELF magic: ELF magic missing\nPASS 32-bit class: not ELF64 (EI_CLASS)\nPASS big-endian: not little-endian (EI_DATA)\nPASS e_type EXEC: e_type is not ET_REL (the pinned container is a relocatable object)\nPASS e_machine x86-64: e_machine is not RISC-V (243)\nPASS e_shentsize 40: e_shentsize is not 64\nPASS e_shnum 0: e_shnum is 0: no section header table\nPASS e_shstrndx == shnum: e_shstrndx out of range\nPASS section header table past end: section header table outside the file\nPASS string table not NUL-terminated: section string table not NUL-terminated\nPASS section name index past string table: section name index outside the string table\nPASS .fwimage size past end of file: section bounds: offset+size outside the file\nPASS .fwimage offset near UINT64_MAX (overflow): section bounds: offset+size outside the file\nPASS .fwimage empty: .fwimage empty\nPASS .fwversion without NUL: version string not NUL-terminated\nPASS .fwversion text differs from pin: version mismatch against the pinned driver version\nPASS .fwversion 64 bytes: version section size not in 1..63\nPASS signature section empty: signature section empty\nPASS signature section for another family only: missing section: no signature section for this chip family\nPASS build-id note wrong type: build-id note is not an NT_GNU_BUILD_ID note\nPASS build-id descriptor past section: build-id note descriptor size out of range\nPASS build-id note truncated: build-id note too short\nCK_GSP_FW_INSPECT_SELFTEST: PASS (22 mutations)\nfwversion 580.173.02\nbuild_id b96f53b91f7ff27613d8afe25762756a42a4dc1e\nsignature_section .fwsignature_gb10y size=4096\nsha256_file 32cb7cf3e77f97e92f6e92135939ccb3ba382748144569c0dfccf3338d43d963\nRESULT OK\nCK_GSP_FW_INSPECT_PIN: PASS\nmake: Leaving directory '/home/drakestapleton/workspace/aienux-gsp-replacement-L554/native/kernel'\n",
+      "stderr": ""
+    },
+    {
+      "label": "real_firmware",
+      "argv": [
+        "/home/drakestapleton/workspace/aienux-gsp-replacement-L554/target/gsp-replacement-L554/host/ck_gsp_fw_inspect",
+        "inspect",
+        "/lib/firmware/nvidia/580.173.02/gsp_ga10x.bin",
+        "--family",
+        "gb10y",
+        "--expect-version",
+        "580.173.02"
+      ],
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "stdout": "file /lib/firmware/nvidia/580.173.02/gsp_ga10x.bin bytes=75012080 family=gb10y expect_version=580.173.02\nsection 0 (null) type=0 offset=0 size=0\nsection 1 .fwimage type=1 offset=64 size=74969088\nsection 2 .note.gnu.build-id type=7 offset=74969152 size=36\nsection 3 .fwversion type=1 offset=74969188 size=11\nsection 4 .fwsignature_gb20y type=1 offset=74969199 size=4096\nsection 5 .fwsignature_cc_gb20x type=1 offset=74973295 size=4096\nsection 6 .fwsignature_gb20x type=1 offset=74977391 size=4096\nsection 7 .fwsignature_cc_gb10x type=1 offset=74981487 size=4096\nsection 8 .fwsignature_gb10y type=1 offset=74985583 size=4096\nsection 9 .fwsignature_gb10x type=1 offset=74989679 size=4096\nsection 10 .fwsignature_cc_gh100 type=1 offset=74993775 size=4096\nsection 11 .fwsignature_gh100 type=1 offset=74997871 size=4096\nsection 12 .fwsignature_ad10x type=1 offset=75001967 size=4096\nsection 13 .fwsignature_ga10x type=1 offset=75006063 size=4096\nsection 14 .symtab type=2 offset=75010160 size=96\nsection 15 .strtab type=3 offset=75010256 size=466\nsection 16 .shstrtab type=3 offset=75010722 size=265\nfwversion 580.173.02\nbuild_id b96f53b91f7ff27613d8afe25762756a42a4dc1e\nsignature_section .fwsignature_gb10y size=4096\nsha256_file 32cb7cf3e77f97e92f6e92135939ccb3ba382748144569c0dfccf3338d43d963\nsha256_fwimage 931add19204a5f0240442272f58fb2bc5db6cec4dd6f6341c1d888754146aa07 size=74969088\nsha256_signature 08541c3a909f8fd21c3eaf55fbe6c6c30ff2b7729e885417f3fcb06a4d108f2d\nRESULT OK\n",
+      "stderr": ""
+    },
+    {
+      "label": "negative_missing_family",
+      "argv": [
+        "/home/drakestapleton/workspace/aienux-gsp-replacement-L554/target/gsp-replacement-L554/host/ck_gsp_fw_inspect",
+        "inspect",
+        "/lib/firmware/nvidia/580.173.02/gsp_ga10x.bin",
+        "--family",
+        "l554-nonexistent",
+        "--expect-version",
+        "580.173.02"
+      ],
+      "exit_code": 2,
+      "expected_exit_code": 2,
+      "stdout": "file /lib/firmware/nvidia/580.173.02/gsp_ga10x.bin bytes=75012080 family=l554-nonexistent expect_version=580.173.02\nsection 0 (null) type=0 offset=0 size=0\nsection 1 .fwimage type=1 offset=64 size=74969088\nsection 2 .note.gnu.build-id type=7 offset=74969152 size=36\nsection 3 .fwversion type=1 offset=74969188 size=11\nsection 4 .fwsignature_gb20y type=1 offset=74969199 size=4096\nsection 5 .fwsignature_cc_gb20x type=1 offset=74973295 size=4096\nsection 6 .fwsignature_gb20x type=1 offset=74977391 size=4096\nsection 7 .fwsignature_cc_gb10x type=1 offset=74981487 size=4096\nsection 8 .fwsignature_gb10y type=1 offset=74985583 size=4096\nsection 9 .fwsignature_gb10x type=1 offset=74989679 size=4096\nsection 10 .fwsignature_cc_gh100 type=1 offset=74993775 size=4096\nsection 11 .fwsignature_gh100 type=1 offset=74997871 size=4096\nsection 12 .fwsignature_ad10x type=1 offset=75001967 size=4096\nsection 13 .fwsignature_ga10x type=1 offset=75006063 size=4096\nsection 14 .symtab type=2 offset=75010160 size=96\nsection 15 .strtab type=3 offset=75010256 size=466\nsection 16 .shstrtab type=3 offset=75010722 size=265\nRESULT REFUSED missing section: no signature section for this chip family\n",
+      "stderr": ""
+    },
+    {
+      "label": "negative_wrong_version",
+      "argv": [
+        "/home/drakestapleton/workspace/aienux-gsp-replacement-L554/target/gsp-replacement-L554/host/ck_gsp_fw_inspect",
+        "inspect",
+        "/lib/firmware/nvidia/580.173.02/gsp_ga10x.bin",
+        "--family",
+        "gb10y",
+        "--expect-version",
+        "l554-wrong-version"
+      ],
+      "exit_code": 2,
+      "expected_exit_code": 2,
+      "stdout": "file /lib/firmware/nvidia/580.173.02/gsp_ga10x.bin bytes=75012080 family=gb10y expect_version=l554-wrong-version\nsection 0 (null) type=0 offset=0 size=0\nsection 1 .fwimage type=1 offset=64 size=74969088\nsection 2 .note.gnu.build-id type=7 offset=74969152 size=36\nsection 3 .fwversion type=1 offset=74969188 size=11\nsection 4 .fwsignature_gb20y type=1 offset=74969199 size=4096\nsection 5 .fwsignature_cc_gb20x type=1 offset=74973295 size=4096\nsection 6 .fwsignature_gb20x type=1 offset=74977391 size=4096\nsection 7 .fwsignature_cc_gb10x type=1 offset=74981487 size=4096\nsection 8 .fwsignature_gb10y type=1 offset=74985583 size=4096\nsection 9 .fwsignature_gb10x type=1 offset=74989679 size=4096\nsection 10 .fwsignature_cc_gh100 type=1 offset=74993775 size=4096\nsection 11 .fwsignature_gh100 type=1 offset=74997871 size=4096\nsection 12 .fwsignature_ad10x type=1 offset=75001967 size=4096\nsection 13 .fwsignature_ga10x type=1 offset=75006063 size=4096\nsection 14 .symtab type=2 offset=75010160 size=96\nsection 15 .strtab type=3 offset=75010256 size=466\nsection 16 .shstrtab type=3 offset=75010722 size=265\nRESULT REFUSED version mismatch against the pinned driver version\n",
+      "stderr": ""
+    },
+    {
+      "label": "gpu_after",
+      "argv": [
+        "nvidia-smi",
+        "--query-gpu=name,driver_version,pci.bus_id",
+        "--format=csv"
+      ],
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "stdout": "name, driver_version, pci.bus_id\nNVIDIA GB10, 580.173.02, 0000000F:01:00.0\n",
+      "stderr": ""
+    },
+    {
+      "label": "gsp_after",
+      "argv": [
+        "nvidia-smi",
+        "-q",
+        "-d",
+        "GSP_FIRMWARE_VERSION"
+      ],
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "stdout": "\n==============NVSMI LOG==============\n\nTimestamp                                              : Thu Oct 22 16:23:36 2026\nDriver Version                                         : 580.173.02\nCUDA Version                                           : 13.0\n\nAttached GPUs                                          : 1\nGPU 0000000F:01:00.0\n    GSP Firmware Version                               : 580.173.02\n\n",
+      "stderr": ""
+    },
+    {
+      "label": "service_after",
+      "argv": [
+        "curl",
+        "--fail",
+        "--silent",
+        "--show-error",
+        "--max-time",
+        "10",
+        "http://127.0.0.1:18091/v1/models"
+      ],
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "stdout": "{\"object\":\"list\",\"data\":[{\"id\":\"qwen3.6-35b-a3b-fp8\",\"object\":\"model\",\"created\":1792639070,\"owned_by\":\"aien/omega-qwen36-batch\"}]}",
+      "stderr": ""
+    }
+  ],
+  "firmware_before": {
+    "path": "/lib/firmware/nvidia/580.173.02/gsp_ga10x.bin",
+    "bytes": 75012080,
+    "sha256": "32cb7cf3e77f97e92f6e92135939ccb3ba382748144569c0dfccf3338d43d963"
+  },
+  "oracle": {
+    "language": "pre-existing C, external inspection oracle only",
+    "source_commit": "18e276590424593647cd7c39c6d16c2f9f8d6027",
+    "binary_sha256": "2e7ac84d65c23e20e622af90a344e579e806c13f6efb15c0bc900f7be2913799",
+    "source_sha256": "a336cdc1b875722f6889f64fcb58628bea1693e775ce3ee31ff24d7fd89cdf6e",
+    "sha256_source_sha256": "716b6d0e4e15a1c5696252d831f7e2cf2a287f2e64f7a2417f6f4908eefc56bd"
+  },
+  "source_excerpts_sha256": "d02330e98bfeb7fc468a15296eeda70c2204e23542b281764112cec1a55e15b5",
+  "firmware_after": {
+    "path": "/lib/firmware/nvidia/580.173.02/gsp_ga10x.bin",
+    "bytes": 75012080,
+    "sha256": "32cb7cf3e77f97e92f6e92135939ccb3ba382748144569c0dfccf3338d43d963"
+  },
+  "result": "INSPECTION_PASS; CUSTOM_FIRMWARE_NOT_BUILT_OR_BOOTED; CUTOVER_BLOCKED",
+  "utc_end": "2026-10-22T21:23:36.860730+00:00"
+}
