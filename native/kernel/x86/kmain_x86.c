@@ -818,6 +818,15 @@ static void night_tick(void)
  * the frame core once its frame has put the dark screen up, the helpers at
  * once (the frame core draws any strip they leave). park.gen is read before
  * the state it guards, so a wake between the two is never missed. */
+/* Every pass of a drawing core ends in a PAUSE, a frame drawn or not. When the
+ * water came (f913a63) a frame under QEMU TCG took longer than FRAME_MS, so the
+ * frame core drew frame after frame and never reached its PAUSE: a virtual CPU
+ * that never leaves its translated code never passes an RCU quiescent point,
+ * and QEMU's device_add waits for one (drain_call_rcu). The keyboard replug test
+ * then hung inside device_add with the monitor blocked, and the keys it types
+ * afterwards never arrived (L411, 2026-10-22, gdb stacks: main thread in
+ * qmp_device_add > drain_call_rcu, vCPU 1 in code_gen_buffer). On the iMac a
+ * PAUSE per frame or strip costs nothing. */
 static void draw_loop(void)
 {
     __atomic_store_n(&draw_on, 1, __ATOMIC_RELEASE);
@@ -825,13 +834,13 @@ static void draw_loop(void)
         uint32_t g = __atomic_load_n(&park.gen, __ATOMIC_ACQUIRE);
         while (__atomic_test_and_set(&draw_lock, __ATOMIC_ACQUIRE))
             ck_pause();
-        int drew = ck_allen_ui_tick(ck_rdtsc());
+        (void)ck_allen_ui_tick(ck_rdtsc()); /* drawn or not, the pass ends in a PAUSE */
         int dark = ck_allen_ui_asleep();
         __atomic_clear(&draw_lock, __ATOMIC_RELEASE);
         if (dark)
             rest_wait(g);
-        else if (!drew)
-            ck_pause();
+        else
+            ck_pause(); /* also after a frame: see above */
     }
     __atomic_store_n(&draw_on, 0, __ATOMIC_RELEASE);
 }
@@ -840,8 +849,10 @@ static void help_loop(void)
     __atomic_fetch_add(&draw_helpers, 1, __ATOMIC_ACQ_REL);
     while (__atomic_load_n(&draw_run, __ATOMIC_ACQUIRE)) {
         uint32_t g = __atomic_load_n(&park.gen, __ATOMIC_ACQUIRE);
-        if (ck_allen_ui_help())
+        if (ck_allen_ui_help()) {
+            ck_pause(); /* one PAUSE per strip: see draw_loop */
             continue;
+        }
         if (__atomic_load_n(&allen_asleep, __ATOMIC_ACQUIRE))
             rest_wait(g);
         else
