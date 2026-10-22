@@ -1,6 +1,7 @@
 note Host-native behavioral reconstruction of raw GSP routine offset 0x28.
 note Input records: a,n,b,m as four u64 little-endian; output u64 0 or 1.
-note Complete records stream independently. Short final record exit2; IO exit3.
+note Bounded stream: 4096 batches of 512 records; completed records retain output.
+note Short final record exit2; IO exit3; any extra input after capacity exit4.
 note No GPU interface. This is NOT GSP firmware or a RISC-V artifact.
 global req uchar 32
 global out uchar 8
@@ -60,7 +61,8 @@ ret 0
 end
 
 fn main to int
-while true
+for batch ulong 4096
+for slot ulong 512
 n = fill
 if lt n 0
 ret 3
@@ -77,5 +79,13 @@ if ne status 0
 ret status
 end
 end
+end
+more = fill
+if lt more 0
 ret 3
+end
+if eq more 0
+ret 0
+end
+ret 4
 end
