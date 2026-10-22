@@ -1,6 +1,6 @@
 # Contributing to AIENOS
 
-Thank you for considering it. AIENOS is experimental and pre-alpha; we welcome
+Thank you for considering it. AIENOS is experimental and pre-alpha; I welcome
 contributions of code, review, design and testing.
 
 ## Find something to work on

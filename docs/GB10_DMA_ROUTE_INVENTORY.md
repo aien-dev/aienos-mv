@@ -24,7 +24,7 @@ lines cited below match the pinned lines in that map).
   window this kernel can program at all is not established. [UNKNOWN]
   (dependency map section 8 item 6, docs/GB10_NATIVE_DEPENDENCY_MAP.md:248.)
 
-## 2. What the platform tells us about the GB10 stream
+## 2. What the platform tells me about the GB10 stream
 
 | Fact | Tag |
 |---|---|
@@ -50,7 +50,7 @@ and the topology address. Whether the IORT has a mapping for segment 15 is [UNKN
 | R1 | CPU to GB10 registers (BAR0 reads) | Yes, read only. [SOURCE native/kernel/dev/mmio_window.c:63-95] | A capability with READ, DERIVE, REVOKE only; WRITE, MAP, GRANT refused at creation. Pages are owned by the window, mapped exclusively, unmapped on revoke. Mapping is Device RW even though the accessor is read only. [SOURCE native/kernel/dev/mmio_window.h:17-47] | Any write accessor. Any doorbell mapping (USERMODE 64 KiB region). Read-only mapping type. |
 | R2 | GB10 to system memory (device reads/writes host RAM: ring contents, pushbuffer, data, completion flag writes) | No. | Mechanism exists in general: `ck_dma_confine(segment, rid, phys, len)` gives that requester one stage-1 table mapping only [phys, phys+len); everything else faults and aborts. [SOURCE native/kernel/include/ck.h:98-126; native/kernel/core/smmu_svc.c:134-145,172-208] | Stream id for the GB10 [UNKNOWN]; a caller; a capability tie (below); a decision whether this route should be the SMMU at all. |
 | R3 | CPU to GB10-visible memory (CPU fills GPFIFO, pushbuffer, QMD; polls completion flag) | Only as the generic DMA pool `ck_dma_alloc`: contiguous, zeroed, Normal Non-cacheable, never freed, 8 MiB. [SOURCE native/kernel/include/ck.h:38-42; native/kernel/mm/mmu.c:198-211,319-336] | The pool is fixed; confinement window must be a sub-range of it by convention of the existing callers (xhci_fence.c:261-268, net_bind.c:27-30). Nothing enforces that a window lies inside the pool. [INFERRED] ck_dma_confine accepts any 4 KiB aligned phys/len (smmu_svc.c:134-139) | A pool large enough for GPU use [UNKNOWN: required size], freeing, per-capability ownership of pages. |
-| R4 | GB10 internal page tables (GPU VA to physical) | No. | Linux RM/UVM builds these; our code only asks. [SOURCE docs/GB10_NATIVE_DEPENDENCY_MAP.md:136] | Whole thing. GPU MMU format [UNKNOWN] (map section 8 item 2). |
+| R4 | GB10 internal page tables (GPU VA to physical) | No. | Linux RM/UVM builds these; today's code only asks. [SOURCE docs/GB10_NATIVE_DEPENDENCY_MAP.md:136] | Whole thing. GPU MMU format [UNKNOWN] (map section 8 item 2). |
 | R5 | GPFIFO ring and USERD | No native. In the Linux path: one allocation, ring 1024 entries x 8 bytes, USERD at offset 8192 in the same allocation, handed to RM as system memory. [SOURCE physics:nvrm/nvrm.c:631-640] | n/a natively | Layout owner, doorbell/work-submit token derivation [UNKNOWN] (map item 3). |
 | R6 | Pushbuffer and kernel/QMD buffers | No native. Linux path: ordinary `nvrm_alloc` buffers. [INFERRED] from physics:nvrm/nvrm.c:465-467 | n/a natively | As R3. |
 | R7 | Completion flags (host-polled markers) | No native. Linux path: GPU writes a marker via release methods; host polls with usleep; a second marker follows an L2 flush; no interrupt. [SOURCE docs/GB10_NATIVE_DEPENDENCY_MAP.md:139] | n/a natively | Wait service, and the cache rule in section 5. |
@@ -97,7 +97,7 @@ system memory. YES - Enable gpu caching if supported on this surface type. For
 system memory this will not be coherent with direct CPU mappings."
 [SOURCE nvidia-open-580.173.02/src/common/sdk/nvidia/inc/nvos.h:1113-1126]
 
-Our layer: `nvrm_alloc` forces `GPU_CACHEABLE_YES`; `nvrm_alloc_gpu_uncached`
+My layer: `nvrm_alloc` forces `GPU_CACHEABLE_YES`; `nvrm_alloc_gpu_uncached`
 forces `NO` and says it is "for memory both sides poll, not for bulk data".
 [SOURCE physics:nvrm/nvrm.c:465-474,500] On physics main `9f96f25` the GPFIFO
 ring plus USERD are allocated with `nvrm_alloc_gpu_uncached` (comment: a

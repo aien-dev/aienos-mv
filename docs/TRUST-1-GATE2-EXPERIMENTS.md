@@ -5,13 +5,13 @@ Companion to `docs/TRUST-1-OPERATOR-STEPS.md` (Steps 1, 2, 7) and Gate 2 in
 `docs/TRUST-1-IMPLEMENTATION-PLAN.md`. Baseline evidence is in
 `evidence/trust1_gate2_baseline_2026-10-03/`.
 
-## Where we are
+## Where things stand
 
 Four boots are captured (see the README in that evidence folder). Cold boots
 (powered fully off, then the power button) gave identical measurements. One warm
 restart (`sudo reboot`) gave a different PCR1 and PCR10. A "PCR" is one of the
-TPM chip's numbered logbook slots that record what started up. We now change
-exactly ONE thing at a time and see which slots move. That tells us which slots
+TPM chip's numbered logbook slots that record what started up. I now change
+exactly ONE thing at a time and see which slots move. That tells me which slots
 mean something about security and which just wobble.
 
 ## What Gate 2 requires (from the plan)
@@ -60,7 +60,7 @@ bash scripts/tpm_measurement_campaign.sh compare ~/trust1-evidence/EXPn-before ~
 
 *What it does:* reads the startup measurements and saves them in a folder.
 *Changes:* nothing on the machine. *Success:* each `compare` ends with
-`compared=... changed=...`; for the rollback compare we want `changed=0` apart
+`compared=... changed=...`; for the rollback compare I want `changed=0` apart
 from clearly named non-PCR items (event log bytes, timer state).
 Optionally the orchestrator builds the signed receipt with the tool's `receipt`
 subcommand (`--variable EXPn --before ... --after ... --post-rollback ...`, and
@@ -132,5 +132,5 @@ each, send the compare lines to the orchestrator. If any rollback compare shows
 a PCR that does not return to its "before" value, STOP: that is the plan's
 UnexpectedState case, no PCR is chosen, and the orchestrator writes it up.
 The Q15 list in the plan has more variables (kernel, init image, loader
-and so on); those are not in this first set because they change software we
+and so on); those are not in this first set because they change software I
 build, and need their own written steps.

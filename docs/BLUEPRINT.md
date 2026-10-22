@@ -221,7 +221,7 @@ It may choose:
 * whether a component should initially be replaced, wrapped, emulated or rewritten;
 * the fastest technically sound path to the milestone.
 
-The agent should not be forced to implement something merely because we previously imagined one implementation.
+The agent should not be forced to implement something merely because I previously imagined one implementation.
 
 The architecture is defined by behavior and boundaries, not by arbitrary code layout.
 
@@ -754,7 +754,7 @@ Capture:
 
 Produce a verified reference bundle.
 
-After this phase we can answer:
+After this phase I can answer:
 
 > What exactly did native AIENOS replace?
 
@@ -889,7 +889,7 @@ AIEN translates intent into capabilities rather than requiring the user to manua
 
 # 19. Phase 5 — Native hardware acceleration
 
-Only after native AIENOS itself exists do we aggressively optimize.
+Only after native AIENOS itself exists do I aggressively optimize.
 
 AIENOS progressively takes ownership of hot paths:
 

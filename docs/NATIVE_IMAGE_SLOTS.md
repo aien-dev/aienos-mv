@@ -54,7 +54,7 @@ if both slots are invalid, or both are below the security floor, the loader
 can only report `recovery_required` and return to the firmware. Covering that
 case without a Linux USB is the known-good AIENOS recovery image of P11
 (a third, read-only copy of the loader plus a slot image on recovery media
-built by our own tools), which is a later cut. Dual-invalid cannot happen by
+built by my own tools), which is a later cut. Dual-invalid cannot happen by
 update alone under the rules below (the active slot is never written while
 it is active), only by media failure or a deliberate wipe.
 
@@ -215,7 +215,7 @@ nothing and to re-release anything.
    tampered images, failed candidates and authorized rollback (the P11 list).
    **Cut 3 (done, QEMU; section 9).**
 4. **Known-good recovery image.** The same loader plus a slot image on
-   recovery media built by our tools, for the dual-invalid case. Then N7 is
+   recovery media built by my tools, for the dual-invalid case. Then N7 is
    run on the physical candidate inside an attended window.
 
    **Cut 2b (done, QEMU; section 8): kernel-side promote.** After its health milestone the

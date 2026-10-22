@@ -164,7 +164,7 @@ and hardware-test ledger ([#124](https://github.com/aien-spark/aien-sovereign-co
 
 ## Help build it
 
-AIENOS is a lot of low-level Rust, and most of it does not need our hardware.
+AIENOS is a lot of low-level Rust, and most of it does not need my hardware.
 Everything labelled [`emulator-ok`](https://github.com/aien-spark/aienos/labels/emulator-ok)
 can be built and tested in QEMU on any machine. Good places to start:
 

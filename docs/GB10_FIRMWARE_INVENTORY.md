@@ -38,7 +38,7 @@ the driver on the box; fetched read-only into a scratch directory, not vendored)
 - Two more hosted tools, same rule (nothing is ever sent to the chip):
   `ck_gsp_cot_encode` builds and checks the exact message the driver sends to
   SEC2 (section 10), and `ck_gsp_bindata_extract` reads the eight GB10B
-  firmware arrays out of the public driver source with our own inflater and
+  firmware arrays out of the public driver source with my own inflater and
   hash code, cross-checks every size, record and digest, and writes them as
   files (section 11). A fourth, `ck_gsp_boot_args_encode`, builds and checks
   the five memory blocks the driver hands to the GSP-RM boot (the 256-byte
@@ -136,7 +136,7 @@ it with its own zlib-style decoder (`utilGzAllocate`/`utilGzGetData`,
 bin_data.c:36-45,96); the nouveau extractor prepends exactly that header
 before `gzip.decompress` [nouveau/extract-firmware-nouveau.py:107-108].
 The 28-byte descriptor is 20 bytes of fixed-Huffman DEFLATE plus the two
-trailers [OBSERVED]; our decoder verifies both.
+trailers [OBSERVED]; my decoder verifies both.
 
 Source files: `src/nvidia/generated/g_bindata_kgspGetBinArchiveGspRmBoot_GB10B.c`
 (2,466,261 bytes of C) and
@@ -176,7 +176,7 @@ payload (section 10).
   from these sources.
 - ACR (the access-control ucode that sets up the protected region WPR2) and
   anything inside GSP-FMC and GSP-RM: NVIDIA binaries, run on the chip, not
-  readable by us (licence section 6).
+  readable by me (licence section 6).
 - Booter Load/Unload ucodes (older dGPU path) and VBIOS FWSEC: not used on
   GB10B (section 4).
 
@@ -265,7 +265,7 @@ so CI runs the self-test on every PR; the real-file step prints NOT_RUN when
   (22 mutations)`; `CK_GSP_FW_INSPECT_PIN: PASS` with the file digest equal to
   the pin in the Makefile (`GSP_FW_SHA256`).
 - It does not verify NVIDIA's signature over `.fwimage` (that is the chip's
-  job; format and keys are not ours) and it never loads anything.
+  job; format and keys are not mine) and it never loads anything.
 
 ## 6. Licence limits [DOCUMENTED]
 
@@ -284,7 +284,7 @@ Firmware package: `/usr/share/doc/nvidia-firmware-580-580.173.02/copyright`,
   disassembly of binaries. 2.3: no derivative works of binaries. 2.6: no
   bypassing authentication or security mechanisms. 2.9: may not cause the
   SOFTWARE to become subject to an open source licence.
-- Consequence for this project: we may ship and load the bytes as they are,
+- Consequence for this project: I may ship and load the bytes as they are,
   parse their public container format (the driver does exactly that, in MIT
   source), and must never patch, unpack `.fwimage`, or work around the
   signature checks. A SEC2 refusal is final and is reported, never bypassed.
@@ -504,7 +504,7 @@ under ASan/UBSan.
 ## 11. Extracted arrays and the GB10B boot decision [SOURCE]
 
 Tool: `native/kernel/tools/ck_gsp_bindata_extract.c` (hosted C, no
-dependencies beyond our own `native/argus/sha256.c`; SHA-384, CRC-32 and the
+dependencies beyond my own `native/argus/sha256.c`; SHA-384, CRC-32 and the
 raw-DEFLATE decoder, stored/fixed/dynamic blocks, are in the tool).
 `make -C native/kernel gsp-bindata-extract` builds it;
 `make -C native/kernel gsp-bindata-test` runs the self-test and, when the two

@@ -9,7 +9,7 @@ unlocks, and what has not been built yet. Terms, each in one everyday sentence:
 - **TPM**: a small security chip on the board that keeps secrets and locks them to the machine's startup state.
 - **PCR**: one numbered logbook slot inside the TPM that records what started up (PCR 7 records the Secure Boot state).
 - **Unseal**: the TPM handing a locked secret back, which only works if the logbook matches what it was locked to.
-- **Relock script**: our helper that re-locks the three stored passwords to the current Secure Boot state, using spare copies kept on the MacBook.
+- **Relock script**: my helper that re-locks the three stored passwords to the current Secure Boot state, using spare copies kept on the MacBook.
 - **Shim**: the small signed starter program Ubuntu uses to boot under Secure Boot.
 - **BootNext**: a one-time firmware instruction "start from this entry next time only".
 - **MOK**: the extra list of trusted keys that Ubuntu's shim keeps beside the firmware's own list.

@@ -260,7 +260,7 @@ second time, change `BootOrder`, change firmware settings or Secure Boot, or
 
 **What does not exist yet.** The known-good AIENOS recovery image (P11 cut 4
 in `docs/NATIVE_IMAGE_SLOTS.md` section 6, item 4: "the same loader plus a slot
-image on recovery media built by our tools, for the dual-invalid case") is
+image on recovery media built by my tools, for the dual-invalid case") is
 not built, and the slot loader (cut 2a) is not merged.
 
 **So, for this session, the recovery path is the firmware BootNext rule back

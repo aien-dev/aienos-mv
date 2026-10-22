@@ -55,7 +55,7 @@ only the two pcsc actions).
 PIV Ed25519 is pure Ed25519 (RFC 8032): the YubiKey signs the message it is sent, with no hash wrapper, and returns the 64-byte
 signature. `yubico-piv-tool --sign -A ED25519` sends the raw input file and refuses input of 3072 bytes or more
 (`YKPIV_OBJ_MAX_SIZE`, "File too big"). A real manifest is longer than that, and the card's own limit is not documented in
-what we could read. So the key signs a small FIXED STATEMENT that binds the manifest. Exactly four lines, each ending in LF:
+what I could read. So the key signs a small FIXED STATEMENT that binds the manifest. Exactly four lines, each ending in LF:
 
 ```
 AIENOS-OWNER-STATEMENT-V1

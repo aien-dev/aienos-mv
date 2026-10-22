@@ -88,7 +88,7 @@ pi5_net: done: rp1 bus-master off unless the line above says otherwise
 
 ## UNVERIFIED
 
-- Confinement B is inferred from "marker frame not received". The run does not prove what the read returned (zeros, all ones, or an error response were not captured), so it does not prove the device never saw our bytes, only that they were not delivered as the frame. A wire-side capture would settle it.
+- Confinement B is inferred from "marker frame not received". The run does not prove what the read returned (zeros, all ones, or an error response were not captured), so it does not prove the device never saw the test's bytes, only that they were not delivered as the frame. A wire-side capture would settle it.
 - Confinement A and B each ran once on one board.
 - What GEM NCR.LLB does at the RGMII pins was not measured; the result only shows the frame returned.
 - Whether the TX frame in the wire test reached the partner (no capture on the partner side). TX complete only means the MAC finished sending.

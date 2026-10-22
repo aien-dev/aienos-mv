@@ -10,7 +10,7 @@ The evaluation protocol was written and committed before any model code (plan am
 2. Modes: `reflex` (hypervector core), `nearest` (nearest exemplar over the same features, no hypervectors), `perceptron` (linear classifier over the same features).
    All three share the same front end (turn roles, pending-task state, request ordering, policy layer, span copy, output check) and differ only in the label scorer.
 3. Inference sees only the turns of a case. Ids, categories, expected actions and expected texts are read by the host harness for the record, never passed to the core.
-4. Training data: `cases-train.psv` plus `cases-reflex-extra.psv` (cases we write ourselves from the action contract and the train split, each tagged with a paraphrase family and its source). Nothing is written from dev or held-out.
+4. Training data: `cases-train.psv` plus `cases-reflex-extra.psv` (my own cases, written from the action contract and the train split, each tagged with a paraphrase family and its source). Nothing is written from dev or held-out.
 5. Tuning (feature weights, k, thresholds, retraining passes, zero band) uses dev and a leave-one-family-out check on the training pool. Every dev-driven change is logged in this file.
 6. The held-out files (`cases-heldout.*`, any `results/*heldout*`) are not opened, searched or printed until code, data, thresholds and seeds are committed and that commit is recorded here.
    Then held-out is scored exactly once with learning disabled, and the number is reported as it comes out. After that, only documentation changes.
@@ -61,7 +61,7 @@ Inputs are bounded too: 2048 bytes for the scored message (longer: `clarify`), 2
 
 ## Tuning log (dev and cross-validation only)
 
-The full log is `docs/native/pi5-8/orchestrator-exam/results/allen-reflex.tune.txt` (produced by `cargo run --release -p allen-reflex --example tune`). Rule, our own judgment: move one knob at a time from the current config; adopt the best change only if dev exact plus cross-validation exact rises by 3 or more; stop when none does. Every k, pass count, weight and threshold below is our own choice made this way, not a published value.
+The full log is `docs/native/pi5-8/orchestrator-exam/results/allen-reflex.tune.txt` (produced by `cargo run --release -p allen-reflex --example tune`). Rule, my own judgment: move one knob at a time from the current config; adopt the best change only if dev exact plus cross-validation exact rises by 3 or more; stop when none does. Every k, pass count, weight and threshold below is my own choice made this way, not a published value.
 
 Changes made while looking at dev or cross-validation results:
 
@@ -223,8 +223,8 @@ Reading, with the small sample in mind (26 cases; one case is 3.8 points):
 
 ## Limits and UNVERIFIED items
 
-- The data are small: 79 train cases, 203 of our own, 23 dev, 26 held-out. A gain of one or two held-out cases is within noise; no claim of superiority over the borrowed models rests on it.
-- The extra cases were written by the same agent that built the core, from the contract and train only. They widen phrasing but share our idea of how operators talk.
+- The data are small: 79 train cases, 203 of my own, 23 dev, 26 held-out. A gain of one or two held-out cases is within noise; no claim of superiority over the borrowed models rests on it.
+- The extra cases were written by the same agent that built the core, from the contract and train only. They widen phrasing but share my idea of how operators talk.
 - The comparison with the borrowed models is **task-trained vs fixed-prompt**: REFLEX learned from labelled examples of this exact task; the borrowed models only read one fixed system prompt. It says which approach fits the Pi decision job, not which system understands language better.
 - The hand lexicon (concept classes, forbidden verbs, devices, frames) and the policy rules are written from `agent_cmd.c`, `lifecycle_fsm.c`, the system prompt and train. They are visible in `lexicon.rs` and `policy.rs` and are the most brittle part: an unseen synonym for a forbidden verb is not refused by rule and depends on the learned scorer.
 - Span copy only cuts at the two ends of the first request; a text that the operator splits around a command word is not reassembled.

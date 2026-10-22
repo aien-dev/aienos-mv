@@ -67,7 +67,7 @@ QEMU does **not** ignore it. In `hw/nvme/ctrl.c` (upstream, v1.4-capable):
 - `nvme_flush_ns_cb()` issues `blk_aio_flush(ns->blkconf.blk, ...)` against the
   namespace's `BlockBackend` (`ctrl.c:3582`). If the backend returns an error,
   `nvme_flush_ns_cb` sets `req->status = NVME_WRITE_FAULT` (`ctrl.c:3570 - 3573`),
-  which is returned as a **nonzero completion status**  -  exactly what our driver
+  which is returned as a **nonzero completion status**  -  exactly what the AIENOS driver
   maps to `BlockError::DeviceError`.
 
 So a successful Flush completion in QEMU means the flush reached the block backend
@@ -83,7 +83,7 @@ the drive's cache mode:
   successful Flush then does **not** guarantee host persistence.
 
 Net: emulated Flush is real and reaches the backend; host-level durability is only as
-strong as the drive's cache configuration. Our driver correctly treats a nonzero
+strong as the drive's cache configuration. The AIENOS driver correctly treats a nonzero
 completion as failure.
 
 ## 4. Flush must not be faked as a no-op

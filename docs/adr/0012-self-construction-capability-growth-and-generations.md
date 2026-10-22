@@ -72,7 +72,7 @@ Generations.
 5. **No native admission without enforcement.** Generated native components
    run on the physical machine only after enforceable memory, DMA (SMMU), and
    capability isolation exist (M3). Before that, a candidate can prove only
-   that it passed every test we know how to run.
+   that it passed every test I know how to run.
 6. **Generations.** Every accepted system state is an immutable, numbered
    Generation recording: parent, source provenance, build provenance, code
    hashes, tests, proof receipts, capability grants, hardware target,

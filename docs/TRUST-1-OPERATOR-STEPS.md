@@ -82,8 +82,8 @@ link was removed, or nothing. *To undo later (after Gate 2 ends):*
 ## Step 3. Create the harmless test file (Gate 1 round trip, part 1)
 
 Why: Gate 1 must prove the recovery stick can open the encrypted private
-storage *without* Ubuntu, using the offline spare. We prove it with a
-throwaway file whose fingerprint we know, never with real data.
+storage *without* Ubuntu, using the offline spare. This step proves it with a
+throwaway file whose fingerprint is known, never with real data.
 
 ```bash
 sudo -u atlas sh -c 'date -u > /home/atlas/atlas-runtime-setup-20260905/private-data/trust1-roundtrip-test.txt'
@@ -127,7 +127,7 @@ first proven, is recorded in
 
 ## Step 5. Decide where the recovery key lives (decision for you)
 
-**Where we are.** The stick can now open the encrypted storage on its own. To
+**Where things stand.** The stick can now open the encrypted storage on its own. To
 do that it needs two things: the *spare* (a locked copy of the storage
 password, already kept on the Spark at
 `~/.config/atlas/offline-spares/atlas-private-storage.passfile.age`) and the
@@ -243,7 +243,7 @@ report.
 
 ## Step 8. The offline key ceremony (Gate 3; after Steps 1-7)
 
-**Where we are.** The tool that creates your owner keys
+**Where things stand.** The tool that creates your owner keys
 (`scripts/trust1_key_ceremony.sh`) is written and tested with throwaway keys.
 It creates four keys: the Owner Root (the master key that never touches the
 Spark), the Boot Signer (signs the small startup loader), the Release Signer
@@ -302,7 +302,7 @@ runbook for the next three sittings: Experiment 1, Experiment 2 and Experiment 4
 that need no extra hardware. Experiments 3 (USB stick) and 5 (boot order) wait for their own
 written steps and are not part of this run.
 
-**Where we are.** On 2026-10-03 four boots were captured with Secure Boot OFF
+**Where things stand.** On 2026-10-03 four boots were captured with Secure Boot OFF
 (`evidence/trust1_gate2_baseline_2026-10-03/`). Two cold boots were identical on all 35
 items [OBSERVED]. One warm restart (`sudo reboot`) differed in PCR1 and PCR10 [OBSERVED].
 A "PCR" is one numbered logbook slot in the TPM chip that records what started up.

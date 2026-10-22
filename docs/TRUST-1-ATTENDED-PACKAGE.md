@@ -13,7 +13,7 @@ checked against the live machine on 2026-10-05 (19:17 UTC).
 Words used here, one sentence each: **Secure Boot** is the firmware switch that lets the
 computer start only signed software (it is OFF now). **TPM** is the security chip. A **PCR**
 is one numbered logbook slot in the TPM that records what started up. **Relock script** is
-our helper that re-locks the three stored passwords to the current Secure Boot state.
+my helper that re-locks the three stored passwords to the current Secure Boot state.
 **Evidence checker** is a new helper (below) that reads the files a sitting leaves behind and
 refuses them if they are incomplete, wrong or failing.
 
@@ -63,7 +63,7 @@ General rules (from the runbook): one step at a time; if anything differs from "
 
 ### Sitting A. Gate 2 restarts with Secure Boot staying OFF (about 2 hours)
 
-- **What it is for.** Learn whether a warm restart's PCR1 value is stable, whether the firmware-update timer moves any measurement, and whether just visiting the firmware screen moves any. Sitting 3 also teaches us the real menu names Sitting C needs.
+- **What it is for.** Learn whether a warm restart's PCR1 value is stable, whether the firmware-update timer moves any measurement, and whether just visiting the firmware screen moves any. Sitting 3 also teaches me the real menu names Sitting C needs.
 - **Where and how.** At the Spark, in a terminal, following `docs/TRUST-1-OPERATOR-STEPS.md` "Gate 2 attended run" (Before the first sitting, Sitting 1 with 4 boots, Sitting 2 with 3 boots, Sitting 3 with 3 boots). Per experiment, the receipt command is `bash scripts/tpm_measurement_campaign.sh receipt --variable NAME --before ~/trust1-evidence/<before> --after ~/trust1-evidence/<after> --post-rollback ~/trust1-evidence/<rollback> --baseline <baseline receipt> --out <receipt.json>`.
 - **Does it change anything?** No firmware setting, key or TPM. It restarts the machine and, in Sitting 2, turns one timer on then off. In Sitting 3, look and photograph only; leave with "exit without saving"; open no Secure Boot, key or TPM menu.
 - **Success looks like.** The `compare` lines in the runbook (cold against cold shows `changed=0`); each receipt prints `result=RECORDED`.

@@ -5,7 +5,7 @@ Status: exam built, frozen and run on the Spark. No Pi runs. 2026-10-13.
 ## Why this exists, and what changed during the task
 
 Drake's new criterion (2026-10-14): the model on the Pi should be focused solely on orchestration and decision making, not on being clever or knowledgeable.
-Mid-task the direction changed again: the Pi's decision maker will be **ALLEN, our own in-house decision core**, so no borrowed model ships.
+Mid-task the direction changed again: the Pi's decision maker will be **ALLEN, my own in-house decision core**, so no borrowed model ships.
 This exam is therefore **ALLEN's exam**. Every borrowed model in this document is a **yardstick**: it shows how hard the job is and where the hard parts are.
 None is a release candidate, and this document does not recommend one. It supersedes the speed-and-fidelity-only choice in `PI5-8-MODEL-CHOICE.md` for the decision-maker role
 (that document remains correct about what it measured).
@@ -163,7 +163,7 @@ Reading the tables:
 **Hardest categories for the yardsticks, in order: clarify** (10 cases; the best model gets 1 of 10; most models never say "I need more information" and invent an action with the vague text as its argument), **refuse** (13; best 54 %; models obey "ignore your rules", or do the named verb, or output an unlisted action such as `play`), **none** (10; mean 22 % free, 39 % constrained), then **dialog** (context from earlier turns; best 64 %). Single clear actions and argument copying are the easy part.
 This is exactly the part Drake's criterion cares about, and it is the part a general small model is worst at. It is also the part a trained, narrow decision core can be given most data for: the train split has 79 cases and the pool of paraphrases should be grown there (the train split holds only 6 clarify and 8 refuse cases, so ALLEN's trainer will need many more of those).
 
-### Cost on the Pi (ESTIMATE, nothing here was run on the Pi) and engine work if a yardstick were ever run in our engine
+### Cost on the Pi (ESTIMATE, nothing here was run on the Pi) and engine work if a yardstick were ever run in my engine
 
 ESTIMATE rule: Pi time per token is proportional to the weight bytes read per token. The measured Pi figures in `PI5-8-MODEL-CHOICE.md` give 1.03 to 1.08 ms per MB (TinyLlama 1.46 tok/s, danube3 3.23 tok/s, Llama yardstick 1.20 tok/s; the file minus the embedding table when the output weight is separate); `pi_estimate.sh` uses 1.05. Check: it gives 1.51, 3.28 and 1.18 tok/s for those three, within 4 %.
 Q5_0 and Q8_0 tensors (qwen2.5-0.5b, smollm2-360m) would need kernels the engine lacks, so their figure is lower confidence.
@@ -204,7 +204,7 @@ Engine work in `crates/aienos-infer` today (llama architecture, Llama-3 BPE toke
 ## What this means for ALLEN
 
 1. The task is hard for borrowed small models in exactly the places that matter (clarify, refuse, no-action, multi-turn), not in the easy places. Quality stops at about 77 % held-out exact for the best yardstick, with the best prompt I wrote.
-2. **Constrained decoding is worth building into our own engine whatever the core is.** It removes every format failure (up to 98 points for the weakest, about 20 to 32 for the best), costs nothing at the model, and the output language here is tiny: 15 action names and at most 48 plain characters, a state machine of a few dozen states. For ALLEN's own core the same idea can go further and emit an action index plus a copied span (the `arg_spans` fields are there for that).
+2. **Constrained decoding is worth building into my own engine whatever the core is.** It removes every format failure (up to 98 points for the weakest, about 20 to 32 for the best), costs nothing at the model, and the output language here is tiny: 15 action names and at most 48 plain characters, a state machine of a few dozen states. For ALLEN's own core the same idea can go further and emit an action index plus a copied span (the `arg_spans` fields are there for that).
 3. The train split is small (79). It is enough to start a pipeline and measure, not enough to learn clarify and refuse; the pool must be grown with paraphrases and adversarial refusals before training claims mean anything. The held-out and dev splits should stay untouched.
 4. The frozen prompt costs 630 to 730 tokens per decision if not cached. A decision core that does not need an instruction prompt at all avoids that cost entirely.
 
@@ -215,6 +215,6 @@ Engine work in `crates/aienos-infer` today (llama architecture, Llama-3 BPE toke
 - Labels are mine. Some are arguable: recall versus facts (D012, D014), task versus remember for "note down", the inject-data policy (a stored order is `remember`), and the first-step rule for multi-step requests. A different prompt example set might change the ranking; I did not search prompts.
 - Free decoding of TinyLlama and danube3 (almost no JSON) may reflect their templates' handling of a long system message rather than ability; I did not test other prompt placements (UNKNOWN). Their constrained scores (39 % and 4 % exact) show the decision ability is also weak.
 - The Q4_K_M files for Qwen3, SmolLM2-360M and TinyLlama are third-party conversions (hashes match the publishers' listings, not an independent rebuild). Licence evidence is the card header only.
-- Speed and engine-work figures are estimates (see above). The granite scalar multipliers and the hybrid layer details come from llama.cpp's architecture names and GGUF keys, not from reading our engine against them.
+- Speed and engine-work figures are estimates (see above). The granite scalar multipliers and the hybrid layer details come from llama.cpp's architecture names and GGUF keys, not from reading my engine against them.
 - Held-out use: held-out cases were scored together with train and dev in one run per model. They must not be used for training or prompt tuning from now on; the pooled "all" rows in `summary.tsv` include them for reporting only.
 - The grammar forces valid text characters (no double quote or backslash), so a case that really needs a quote cannot be expressed; none of the 128 does.

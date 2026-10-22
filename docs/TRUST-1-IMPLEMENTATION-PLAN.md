@@ -49,7 +49,7 @@ Evidence required: Baseline `EvidenceReceiptV1` with fields per Q21 (receipt typ
 
 Rollback: N/A (read-only). If any Q26 item unanswerable, Gate 0 FAILS: nothing else starts.
 
-Stop condition: If Spark does not unlock tomorrow we must know what protects data, what changed, and which independent path restores access. Otherwise not frozen.
+Stop condition: If Spark does not unlock tomorrow I must know what protects data, what changed, and which independent path restores access. Otherwise not frozen.
 
 ---
 
