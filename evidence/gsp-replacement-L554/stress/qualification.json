@@ -41,7 +41,7 @@
     "wolfram-boundaries.json": "584e5e37d5c9fcf6640cd7fb5c939d91fbc958bcbb4b93fc027ce167f15d9943",
     "wolfram-capacity.json": "d90e4f1dbc7d0dbe0df6ecebc4474a23f0fceac0e2ebefcc7db6e99ab67c84b0"
   },
-  "independent_review": "L578 pending; not represented as completed",
+  "independent_review": {"ledger": "L578", "verdict": "No blocking issues found in scope", "reviewed_source_commit": "c5192f25cab953dcdf04657c4a555d9f4d712fc7", "report": "review-L578.md", "sha256": "f08a40c2471683e54a19c31a5783c529072ecc2818ba1bfde0b5854d6a528e51", "scope": "Source and receipt review; not a fresh full stress run or hardware qualification"},
   "limitations": [
     "No GSP replacement firmware built or booted",
     "No hardware-admission or full-GPU-function qualification",
