@@ -1,5 +1,22 @@
 # Expanded offline GSP reconstruction qualification
 
+> [!WARNING]
+> **UNQUALIFIED FOR REAL HARDWARE. OFFLINE RESEARCH ONLY.**
+>
+> This is a partial behavioral reconstruction, not a complete or bootable GSP
+> firmware replacement. Do not install or flash it, replace the working GPU
+> firmware, or use it to reset or reconfigure a live GPU.
+>
+> Unqualified hardware experiments can cause GPU failure, system hangs, loss of
+> display, data loss, or an unbootable system. Recovery is not guaranteed;
+> failures involving persistent boot firmware or security state may require
+> vendor repair or replacement.
+>
+> Boot admission, full GPU functionality, power/thermal safety, and hardware
+> recovery/rollback have **not** been qualified. Passing host, emulator, symbolic,
+> or code-review checks does not establish hardware safety. Live hardware testing
+> on the development Spark is not authorized.
+
 **PASS for the named host-only scope. Not replacement firmware or a GPU cutover.**
 
 Tested source: `c5192f25cab953dcdf04657c4a555d9f4d712fc7`.

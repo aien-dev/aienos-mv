@@ -1,5 +1,22 @@
 # GB10 GSP replacement in seed-native Omega — L554
 
+> [!WARNING]
+> **UNQUALIFIED FOR REAL HARDWARE. OFFLINE RESEARCH ONLY.**
+>
+> This is a partial behavioral reconstruction, not a complete or bootable GSP
+> firmware replacement. Do not install or flash it, replace the working GPU
+> firmware, or use it to reset or reconfigure a live GPU.
+>
+> Unqualified hardware experiments can cause GPU failure, system hangs, loss of
+> display, data loss, or an unbootable system. Recovery is not guaranteed;
+> failures involving persistent boot firmware or security state may require
+> vendor repair or replacement.
+>
+> Boot admission, full GPU functionality, power/thermal safety, and hardware
+> recovery/rollback have **not** been qualified. Passing host, emulator, symbolic,
+> or code-review checks does not establish hardware safety. Live hardware testing
+> on the development Spark is not authorized.
+
 **Verdict: NOT IMPLEMENTED / CUTOVER BLOCKED.** This directory is prerequisite
 inspection evidence, not replacement firmware and not permission to load one.
 The running GPU and firmware were not reconfigured.
