@@ -12,6 +12,8 @@ BIN=$1 SHIM=$2 NATIVE=${3:?seed-native trace checker required}
 # Bind direct script invocation to the same reviewed shim as the native builder.
 shim_hash=$(sha256sum "$SHIM") || exit 2
 [[ ${shim_hash%% *} == 10990a78ff93af70f8a7c2f36fb92fa05d8a53f787f70df77dfd73f28db6d5d6 ]] || exit 2
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd) || exit 2
+python3 "$ROOT/native/omega/tests/regtrace.py" "$ROOT" "${OMEGA_CC:-$HOME/workspace/omega-osc-manual-migration/seed/out/omc}" "$NATIVE" --verify-only || exit 2
 T=$(mktemp -d)
 trap 'rm -r "$T"' EXIT
 fail=0

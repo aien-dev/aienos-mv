@@ -33,8 +33,8 @@ $(OUT)/aien_gsp_boot_sim_san: $(BOOT_SRCS) $(CORE)/gpu/gsp_sim.c
 $(OUT)/regtrace: $(NATIVE_ROOT)/native/omega/regcore.om $(NATIVE_ROOT)/native/omega/regtrace.om $(NATIVE_ROOT)/native/omega/tests/regtrace.py aien_gpu.c $(OMEGA_CC)
 	python3 $(NATIVE_ROOT)/native/omega/tests/regtrace.py $(NATIVE_ROOT) $(OMEGA_CC) $@ --build-only
 sim-test: $(OUT)/aien_gsp_boot_sim $(OUT)/aien_gsp_boot_sim_san $(OUT)/regtrace
-	bash $(SIM_TEST) $(OUT)/aien_gsp_boot_sim $(CURDIR)/aien_gpu.c $(OUT)/regtrace
-	bash $(SIM_TEST) $(OUT)/aien_gsp_boot_sim_san $(CURDIR)/aien_gpu.c $(OUT)/regtrace
+	OMEGA_CC="$(OMEGA_CC)" bash $(SIM_TEST) $(OUT)/aien_gsp_boot_sim $(CURDIR)/aien_gpu.c $(OUT)/regtrace
+	OMEGA_CC="$(OMEGA_CC)" bash $(SIM_TEST) $(OUT)/aien_gsp_boot_sim_san $(CURDIR)/aien_gpu.c $(OUT)/regtrace
 clean:
 	$(MAKE) -C $(KDIR) M=$(CURDIR) clean
 	rm -rf $(OUT)

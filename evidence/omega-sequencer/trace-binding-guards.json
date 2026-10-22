@@ -1,0 +1,37 @@
+{
+  "cases": 8,
+  "results": [
+    {
+      "case": "closed-input",
+      "pass": true
+    },
+    {
+      "case": "read-after-progress-error",
+      "pass": true
+    },
+    {
+      "case": "symlink",
+      "pass": true
+    },
+    {
+      "case": "hardlink",
+      "pass": true
+    },
+    {
+      "case": "source-overlap",
+      "pass": true
+    },
+    {
+      "case": "no-stale-output-on-missing-compiler",
+      "pass": true
+    },
+    {
+      "case": "verify-fifo-refused",
+      "pass": true
+    },
+    {
+      "case": "verify-missing-compiler-preserves-checker",
+      "pass": true
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "cases": 5,
+  "failures": 0,
+  "results": [
+    {
+      "case": "qualified-native",
+      "exit": 0,
+      "expected_exit": 0,
+      "pass": true,
+      "reported_pass": true
+    },
+    {
+      "case": "draining-shell-noop",
+      "exit": 2,
+      "expected_exit": 2,
+      "pass": true,
+      "reported_pass": false
+    },
+    {
+      "case": "draining-native-noop",
+      "exit": 2,
+      "expected_exit": 2,
+      "pass": true,
+      "reported_pass": false
+    },
+    {
+      "case": "optimized-native-noop",
+      "exit": 2,
+      "expected_exit": 2,
+      "pass": true,
+      "reported_pass": false
+    },
+    {
+      "case": "changed-compiler",
+      "exit": 2,
+      "expected_exit": 2,
+      "pass": true,
+      "reported_pass": false
+    }
+  ]
+}

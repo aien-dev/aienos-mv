@@ -1,0 +1,50 @@
+{
+  "cases": 6,
+  "results": [
+    {
+      "case": "old-ignores-native",
+      "exit": 0,
+      "pass": true
+    },
+    {
+      "case": "new-refuses-native-failure",
+      "exit": 2,
+      "pass": true
+    },
+    {
+      "case": "changed-shim-refused",
+      "exit": 2,
+      "pass": true
+    },
+    {
+      "case": "qualified-checker-rejects-tampered-trace",
+      "exit": 1,
+      "pass": true
+    },
+    {
+      "case": "old-needs-host-allowlist",
+      "exit": 1,
+      "denied_tools": [
+        "sed",
+        "sed",
+        "sed",
+        "sort",
+        "sed",
+        "sed",
+        "sort",
+        "sort",
+        "sort",
+        "comm",
+        "comm",
+        "comm"
+      ],
+      "pass": true
+    },
+    {
+      "case": "native-no-host-allowlist",
+      "exit": 0,
+      "denied_tools": [],
+      "pass": true
+    }
+  ]
+}

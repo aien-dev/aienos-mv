@@ -16,6 +16,16 @@ An initial source attempt used unsupported `break` and received compiler error9;
 
 `bash evidence/omega-sequencer/trace-replay.sh` exports frozen sources, reconstructs the compiler from the existing qualified seed pin, runs direct native tests and the real Make target in fresh output space. Receipts under `trace-*` retain negative controls, source/binary identities and real caller output. Historical GSQ3/RGP1 receipts remain unchanged.
 
+## Checker identity binding (L606 correction)
+
+The first direct-entry implementation trusted any successful checker. Independent review identified that gap; two real reproductions supplied a draining shell no-op and a different seeded native no-op, and both incorrectly reported PASS. `trace-binding-red.json` preserves those failures. Prior candidate04901f60755ecdb8395a9ee5c75905fe1ccd5a3a is superseded and must not be accepted as the qualified binding.
+
+The shell entry now invokes the builder's read-only `--verify-only` mode before making test fixtures. It rebuilds the exact current `regcore.om` + LF + `regtrace.om` input through the SHA-pinned compiler in memory, checks static AArch64 ELF shape and compares all resulting bytes with the supplied checker. No sidecar or claimed hash is trusted. A mismatch, nonregular checker, missing/changed compiler, changed shim or verification failure exits2. Verification never overwrites the supplied checker. Make explicitly propagates OMEGA_CC to both script invocations.
+
+Critical checks use explicit exceptions, not Python assert, so PYTHONOPTIMIZE cannot disable identity/pin/output-safety enforcement. Five binding controls cover the valid checker, shell/native no-ops, optimized-Python no-op and changed compiler. Current caller controls retain the original five cases and add a valid checker rejecting tampered actual simulator traces. False executables are now rejected up front with2 instead of failing later with1. Eight guard controls include verification FIFO refusal and preserving the checker when the compiler is missing. The23 native parser fixtures still pass, with unchanged native source/binary identities. New results use `trace-binding-*`; historical failures and results remain intact.
+
+This binds current local source bytes under a trusted single-user host, not hostile concurrent filesystem mutation. It does not lock the executable inode between verification and invocation or authenticate arbitrary edits to the source/verifier itself. Native logic is unchanged; Python remains external verification infrastructure.
+
 ## Review and limits
 
 Independent L604 review of the prior GSQ3/shared-policy source found no blockers. Parent verified both reviewed composed hashes before closing it; reviewer did not execute tests. This does not review the subsequently added trace parser/build integration.

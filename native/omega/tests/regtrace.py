@@ -1,17 +1,27 @@
 import pathlib,subprocess,sys,hashlib,struct,json
+def require(ok,reason):
+ if not ok:raise ValueError(reason)
 w=pathlib.Path(sys.argv[1]).resolve();cc=pathlib.Path(sys.argv[2]).resolve();out=pathlib.Path(sys.argv[3]).absolute()
-assert not any(x.is_symlink() for x in [out,*out.parents]),'unsafe output symlink'
+verify='--verify-only' in sys.argv[4:]
+require(set(sys.argv[4:]) <= {'--verify-only','--build-only'} and len(sys.argv[4:])<=1,'invalid mode')
+require(not any(x.is_symlink() for x in [out,*out.parents]),'unsafe output symlink')
 out=out.resolve()
-assert out not in [pathlib.Path(__file__).resolve(),cc,w/'native/omega/regcore.om',w/'native/omega/regtrace.om',w/'native/linux/aien-gpu/aien_gpu.c'],'output overlaps input'
-if out.exists():
- assert out.is_file() and out.stat().st_nlink==1,'unsafe output file'
- out.unlink()
-out.parent.mkdir(parents=True,exist_ok=True)
-assert hashlib.sha256(cc.read_bytes()).hexdigest()=='01b1545b23e8ff40cb5691e20b5df910ea4acaefde3495f0d62d270465b98cd6'
-assert hashlib.sha256((w/'native/linux/aien-gpu/aien_gpu.c').read_bytes()).hexdigest()=='10990a78ff93af70f8a7c2f36fb92fa05d8a53f787f70df77dfd73f28db6d5d6'
-s=b'\n'.join((w/'native/omega'/x).read_bytes() for x in ['regcore.om','regtrace.om']);p=subprocess.run([str(cc)],input=s,capture_output=True);assert p.returncode==0,p.stderr
-assert p.stdout[:6]==b'\x7fELF\x02\x01' and struct.unpack_from('<HH',p.stdout,16)==(2,183)
-ph=struct.unpack_from('<Q',p.stdout,32)[0];ps,pn=struct.unpack_from('<HH',p.stdout,54);assert ps==56 and pn and ph+ps*pn<=len(p.stdout);assert not {2,3}.intersection(struct.unpack_from('<I',p.stdout,ph+i*ps)[0] for i in range(pn))
+require(out not in [pathlib.Path(__file__).resolve(),cc,w/'native/omega/regcore.om',w/'native/omega/regtrace.om',w/'native/linux/aien-gpu/aien_gpu.c'],'output overlaps input')
+if verify:
+ require(out.is_file(),'checker is not a regular file')
+if not verify:
+ if out.exists():
+  require(out.is_file() and out.stat().st_nlink==1,'unsafe output file')
+  out.unlink()
+ out.parent.mkdir(parents=True,exist_ok=True)
+require(hashlib.sha256(cc.read_bytes()).hexdigest()=='01b1545b23e8ff40cb5691e20b5df910ea4acaefde3495f0d62d270465b98cd6','compiler pin mismatch')
+require(hashlib.sha256((w/'native/linux/aien-gpu/aien_gpu.c').read_bytes()).hexdigest()=='10990a78ff93af70f8a7c2f36fb92fa05d8a53f787f70df77dfd73f28db6d5d6','shim pin mismatch')
+s=b'\n'.join((w/'native/omega'/x).read_bytes() for x in ['regcore.om','regtrace.om']);p=subprocess.run([str(cc)],input=s,capture_output=True);require(p.returncode==0,p.stderr)
+require(len(p.stdout)>=64 and p.stdout[:6]==b'\x7fELF\x02\x01' and struct.unpack_from('<HH',p.stdout,16)==(2,183),'not AArch64 EXEC')
+ph=struct.unpack_from('<Q',p.stdout,32)[0];ps,pn=struct.unpack_from('<HH',p.stdout,54);require(ps==56 and pn and ph+ps*pn<=len(p.stdout),'bad program headers');require(not {2,3}.intersection(struct.unpack_from('<I',p.stdout,ph+i*ps)[0] for i in range(pn)),'dynamic ELF')
+if verify:
+ require(out.read_bytes()==p.stdout,'native checker does not match pinned-compiler source build')
+ sys.exit(0)
 out.write_bytes(p.stdout);out.chmod(0o700)
 if '--build-only' in sys.argv:sys.exit(0)
 def line(op,addr,value=0,t='0'):return f'{op} {addr:06x} {value:08x} t={t}\n'.encode()

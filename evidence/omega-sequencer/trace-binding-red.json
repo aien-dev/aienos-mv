@@ -1,0 +1,27 @@
+{
+  "cases": 3,
+  "failures": 2,
+  "results": [
+    {
+      "case": "qualified-native",
+      "exit": 0,
+      "expected_exit": 0,
+      "pass": true,
+      "reported_pass": true
+    },
+    {
+      "case": "draining-shell-noop",
+      "exit": 0,
+      "expected_exit": 2,
+      "pass": false,
+      "reported_pass": true
+    },
+    {
+      "case": "draining-native-noop",
+      "exit": 0,
+      "expected_exit": 2,
+      "pass": false,
+      "reported_pass": true
+    }
+  ]
+}
