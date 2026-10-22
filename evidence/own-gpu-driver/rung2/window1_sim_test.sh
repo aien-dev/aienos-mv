@@ -5,9 +5,13 @@
 #      plan only, a package with a wrong-size file, an arena too small for the plan;
 #   2. every register the tool touched in those runs is on the module's allowlist (aien_gpu.c AIEN-GPU-ALLOW block):
 #      reads on the read list, writes on the write list, and one SEC2 doorbell per start-up.
-# Usage: window1_sim_test.sh SIM_BINARY AIEN_GPU_C
+# Usage: window1_sim_test.sh SIM_BINARY AIEN_GPU_C NATIVE_REGTRACE
 set -u
-BIN=$1 SHIM=$2
+set -o pipefail
+BIN=$1 SHIM=$2 NATIVE=${3:?seed-native trace checker required}
+# Bind direct script invocation to the same reviewed shim as the native builder.
+shim_hash=$(sha256sum "$SHIM") || exit 2
+[[ ${shim_hash%% *} == 10990a78ff93af70f8a7c2f36fb92fa05d8a53f787f70df77dfd73f28db6d5d6 ]] || exit 2
 T=$(mktemp -d)
 trap 'rm -r "$T"' EXIT
 fail=0
@@ -64,17 +68,12 @@ cp -r "$P" "$T/pkg2"; head -c 935 "$P/system_info.bin" > "$T/pkg2/system_info.bi
 out=$("$BIN" --pkg "$T/pkg2" --app-version 7 --out "$T/short" 2>/dev/null); rc=$?
 [[ "$out" == *"PACKAGE-REFUSED"* && $rc -eq 2 && ! -s "$T/short/regs.txt" ]] && ok "935-byte GspSystemInfo refused, no register touched" || bad "short system_info: '$out' rc $rc"
 
-# allowlist: the module must let through what the tool uses, and nothing else it writes
-sed -n '/AIEN-GPU-ALLOW-BEGIN/,/AIEN-GPU-ALLOW-END/p' "$SHIM" > "$T/allow.c"
-rdl=$(sed -n '/aien_gpu_rd_ok/,/};/p' "$T/allow.c" | grep -o '0x[0-9a-f]\{8\}' | sed 's/^0x00//' | sort -u)
-wrl=$(sed -n '/aien_gpu_wr_ok/,/};/p' "$T/allow.c" | grep -o '0x[0-9a-f]\{8\}' | sed 's/^0x00//' | sort -u)
-used_r=$(cat "$T"/*/regs.txt | awk '$1=="R"{print $2}' | sort -u)
-used_w=$(cat "$T"/*/regs.txt | awk '$1=="W"{print $2}' | sort -u)
-miss_r=$(comm -23 <(echo "$used_r") <(echo "$rdl")); miss_w=$(comm -23 <(echo "$used_w") <(echo "$wrl"))
-[[ -n "$rdl" && -z "$miss_r" ]] && ok "every read the tool made is on the module read list ($(echo "$used_r" | wc -l) registers)" || bad "reads not allowed: $miss_r"
-[[ -n "$wrl" && -z "$miss_w" ]] && ok "every write the tool made is on the module write list ($(echo "$used_w" | wc -l) registers)" || bad "writes not allowed: $miss_w"
-extra_w=$(comm -13 <(echo "$used_w") <(echo "$wrl") | tr '\n' ' ')
-[[ -z "$extra_w" ]] && ok "every write-allowlist register is used by some path" || bad "write list extras: '$extra_w'"
+# Native policy gate: NUL-delimited trace files retain per-startup latch boundaries.
+if { for trace in "$T"/*/regs.txt; do cat "$trace" || exit 2; printf '\0'; done; } | "$NATIVE"; then
+    ok "Omega trace policy: every access permitted, every write-list entry exercised"
+else
+    bad "Omega trace policy refused simulator traces"
+fi
 init_qh=$(awk '$1=="W" && $2=="110c00"' "$T/init/regs.txt" | wc -l)
 [[ $init_qh -eq 0 ]] && ok "start-up itself does not write GSP QHEAD0" || bad "init wrote QHEAD0 $init_qh times"
 seq_qh=$(awk '$1=="W" && $2=="110c00"' "$T/seqregs/regs.txt" | wc -l)

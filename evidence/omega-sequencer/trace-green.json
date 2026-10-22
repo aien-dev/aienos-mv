@@ -1,0 +1,146 @@
+{
+  "cases": 23,
+  "failures": 0,
+  "source_sha256": "8a97b5489752d9b4f9444e5f133ba984c26c090e9d378374356055cd53cada67",
+  "binary_sha256": "cc22fc9229a45324e85fec309cb18f764d7d45bfded051b05e4d96429c5ebde6",
+  "results": [
+    {
+      "case": "all-writes",
+      "pass": true,
+      "exit": 0,
+      "expected": 0
+    },
+    {
+      "case": "all-reads",
+      "pass": true,
+      "exit": 0,
+      "expected": 0
+    },
+    {
+      "case": "two-startups",
+      "pass": true,
+      "exit": 0,
+      "expected": 0
+    },
+    {
+      "case": "empty-traces",
+      "pass": true,
+      "exit": 0,
+      "expected": 0
+    },
+    {
+      "case": "missing-coverage",
+      "pass": true,
+      "exit": 1,
+      "expected": 1
+    },
+    {
+      "case": "double-doorbell",
+      "pass": true,
+      "exit": 1,
+      "expected": 1
+    },
+    {
+      "case": "read-writeonly",
+      "pass": true,
+      "exit": 1,
+      "expected": 1
+    },
+    {
+      "case": "unknown-read",
+      "pass": true,
+      "exit": 1,
+      "expected": 1
+    },
+    {
+      "case": "unaligned-write",
+      "pass": true,
+      "exit": 1,
+      "expected": 1
+    },
+    {
+      "case": "empty",
+      "pass": true,
+      "exit": 2,
+      "expected": 2
+    },
+    {
+      "case": "unterminated",
+      "pass": true,
+      "exit": 2,
+      "expected": 2
+    },
+    {
+      "case": "refused-marker",
+      "pass": true,
+      "exit": 2,
+      "expected": 2
+    },
+    {
+      "case": "bad-hex",
+      "pass": true,
+      "exit": 2,
+      "expected": 2
+    },
+    {
+      "case": "short-address",
+      "pass": true,
+      "exit": 2,
+      "expected": 2
+    },
+    {
+      "case": "long-address",
+      "pass": true,
+      "exit": 2,
+      "expected": 2
+    },
+    {
+      "case": "short-value",
+      "pass": true,
+      "exit": 2,
+      "expected": 2
+    },
+    {
+      "case": "no-time",
+      "pass": true,
+      "exit": 2,
+      "expected": 2
+    },
+    {
+      "case": "long-time",
+      "pass": true,
+      "exit": 2,
+      "expected": 2
+    },
+    {
+      "case": "twenty-digits",
+      "pass": true,
+      "exit": 0,
+      "expected": 0
+    },
+    {
+      "case": "crlf",
+      "pass": true,
+      "exit": 2,
+      "expected": 2
+    },
+    {
+      "case": "nul-mid-record",
+      "pass": true,
+      "exit": 2,
+      "expected": 2
+    },
+    {
+      "case": "capacity",
+      "pass": true,
+      "exit": 0,
+      "expected": 0
+    },
+    {
+      "case": "over-capacity",
+      "pass": true,
+      "exit": 2,
+      "expected": 2
+    }
+  ]
+}

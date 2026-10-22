@@ -1,0 +1,154 @@
+note Offline trace-policy gate. Compile after regcore.om.
+note Input LF lines R or W space hex6..8 space hex8 space t=digits1..20 LF.
+note NUL separates complete trace files and resets only the one-shot latch.
+note Exit0 all writes covered and all accesses permitted,1 policy/coverage,2 format/IO/capacity.
+global In uchar 65537
+global Pos ulong 1
+global Bad int 1
+global Seen uint 1
+fn nibble ch uchar to uint
+if and ge ch uchar 48 le ch uchar 57
+ret sub uint ch uint 48
+end
+if and ge ch uchar 97 le ch uchar 102
+ret add sub uint ch uint 97 uint 10
+end
+ret uint 16
+end
+fn need ch uchar n ulong to bool
+p = get Pos 0
+if ge p n
+ret false
+end
+if ne get In p ch
+ret false
+end
+put Pos 0 add p 1
+ret true
+end
+fn number n ulong low ulong high ulong to uint
+v = uint 0
+k = ulong 0
+active = true
+while and active lt get Pos 0 n
+x = nibble get In get Pos 0
+if eq x uint 16
+active = false
+else
+k = add k 1
+if gt k high
+put Bad 0 int 1
+ret uint 0
+end
+v = or shl v uint 4 x
+put Pos 0 add get Pos 0 1
+end
+end
+if lt k low
+put Bad 0 int 1
+end
+ret v
+end
+fn stamp n ulong to bool
+k = ulong 0
+active = true
+while and active lt get Pos 0 n
+ch = get In get Pos 0
+if or lt ch uchar 48 gt ch uchar 57
+active = false
+else
+k = add k 1
+if gt k 20
+ret false
+end
+put Pos 0 add get Pos 0 1
+end
+end
+if eq k 0
+ret false
+end
+ret need uchar 10 n
+end
+fn record n ulong to int
+ch = get In get Pos 0
+op = uint 0
+if eq ch uchar 87
+op = uint 1
+else
+if ne ch uchar 82
+ret 2
+end
+end
+put Pos 0 add get Pos 0 1
+if not need uchar 32 n
+ret 2
+end
+addr = number n 6 8
+if or ne get Bad 0 0 not need uchar 32 n
+ret 2
+end
+value = number n 8 8
+if or ne get Bad 0 0 not need uchar 32 n
+ret 2
+end
+if not need uchar 116 n
+ret 2
+end
+if not need uchar 61 n
+ret 2
+end
+if not stamp n
+ret 2
+end
+if ne allow op addr uint 0
+ret 1
+end
+if eq op uint 1
+for i ulong len W
+if eq addr get W i
+put Seen 0 or get Seen 0 shl uint 1 uint i
+end
+end
+end
+ret 0
+end
+fn run n ulong to int
+if eq n 0
+ret 2
+end
+if ne get In sub n 1 uchar 0
+ret 2
+end
+init
+put C 0 uint 1
+put C 1 uint 0
+while lt get Pos 0 n
+if eq get In get Pos 0 uchar 0
+put C 1 uint 0
+put Pos 0 add get Pos 0 1
+else
+status = record n
+if ne status 0
+ret status
+end
+end
+end
+if ne get Seen 0 uint 63
+ret 1
+end
+ret 0
+end
+fn main to int
+used = ulong 0
+while lt used len In
+r = read 0 In used sub len In used
+if lt r 0
+ret 2
+end
+if eq r 0
+ret run used
+end
+used = add used ulong r
+end
+ret 2
+end

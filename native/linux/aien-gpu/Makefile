@@ -8,6 +8,8 @@ KDIR ?= /lib/modules/$(shell uname -r)/build
 CORE := $(CURDIR)/../../kernel
 OUT ?= $(CURDIR)/build
 CC ?= cc
+OMEGA_CC ?= $(HOME)/workspace/omega-osc-manual-migration/seed/out/omc
+NATIVE_ROOT := $(CURDIR)/../../..
 TCFLAGS := -std=c11 -D_POSIX_C_SOURCE=200809L -D_DEFAULT_SOURCE -O2 -g -Wall -Wextra -Werror \
 	-I$(CORE)/gpu -I$(CORE)/dev -I$(CURDIR)
 BOOT_SRCS := aien_gsp_boot.c $(CORE)/gpu/gsp_mmio.c $(CORE)/gpu/gsp_seq.c $(CORE)/dev/gb10_gsp_boot.c
@@ -28,9 +30,11 @@ $(OUT)/aien_gsp_boot_sim_san: $(BOOT_SRCS) $(CORE)/gpu/gsp_sim.c
 	@mkdir -p $(OUT)
 	$(CC) $(TCFLAGS) -O1 -fsanitize=address,undefined -fno-sanitize-recover=all -DAIEN_GSP_BOOT_SIM -o $@ \
 		$(BOOT_SRCS) $(CORE)/gpu/gsp_sim.c
-sim-test: $(OUT)/aien_gsp_boot_sim $(OUT)/aien_gsp_boot_sim_san
-	bash $(SIM_TEST) $(OUT)/aien_gsp_boot_sim $(CURDIR)/aien_gpu.c
-	bash $(SIM_TEST) $(OUT)/aien_gsp_boot_sim_san $(CURDIR)/aien_gpu.c
+$(OUT)/regtrace: $(NATIVE_ROOT)/native/omega/regcore.om $(NATIVE_ROOT)/native/omega/regtrace.om $(NATIVE_ROOT)/native/omega/tests/regtrace.py aien_gpu.c $(OMEGA_CC)
+	python3 $(NATIVE_ROOT)/native/omega/tests/regtrace.py $(NATIVE_ROOT) $(OMEGA_CC) $@ --build-only
+sim-test: $(OUT)/aien_gsp_boot_sim $(OUT)/aien_gsp_boot_sim_san $(OUT)/regtrace
+	bash $(SIM_TEST) $(OUT)/aien_gsp_boot_sim $(CURDIR)/aien_gpu.c $(OUT)/regtrace
+	bash $(SIM_TEST) $(OUT)/aien_gsp_boot_sim_san $(CURDIR)/aien_gpu.c $(OUT)/regtrace
 clean:
 	$(MAKE) -C $(KDIR) M=$(CURDIR) clean
 	rm -rf $(OUT)

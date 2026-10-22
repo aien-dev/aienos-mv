@@ -1,0 +1,1 @@
+{"inputCode":"ExportString[<|\"writeCoverageMask\"->Total[2^Range[0,5]],\"inputCap\"->2^16,\"bufferBytes\"->2^16+1,\"maxOffset\"->16^8-1|>,\"RawJSON\"]","result":{"writeCoverageMask":63,"inputCap":65536,"bufferBytes":65537,"maxOffset":4294967295}}

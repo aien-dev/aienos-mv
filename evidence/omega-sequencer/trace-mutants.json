@@ -1,0 +1,22 @@
+[
+  {
+    "mutant": "bypass-policy",
+    "compiled": true,
+    "failures": 4
+  },
+  {
+    "mutant": "skip-coverage",
+    "compiled": true,
+    "failures": 1
+  },
+  {
+    "mutant": "no-trace-reset",
+    "compiled": true,
+    "failures": 1
+  },
+  {
+    "mutant": "empty-time",
+    "compiled": true,
+    "failures": 1
+  }
+]
