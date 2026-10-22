@@ -530,7 +530,7 @@ int main(int argc, char **argv)
     timing = &t_start;
     now_us = 0;
     run_to(16500);
-    ck_allen_ui_wake("Type goodbye to restart this computer", now_us);
+    ck_allen_ui_wake("Type goodbye and this computer rests; any key wakes it", now_us);
     run_to(17800);
     timing = 0;
     /* plain answers first: the cost of the frames without things */

@@ -60,7 +60,7 @@ pids=()
 cleanup() {
     local p
     for p in "${pids[@]}"; do kill "${p}" 2>/dev/null || true; done
-    rm -rf "${work}"
+    if [[ -n "${AIENOS_KEEP_WORK:-}" ]]; then echo "work kept: ${work}"; else rm -rf "${work}"; fi
     gh_lock_release
 }
 trap cleanup EXIT

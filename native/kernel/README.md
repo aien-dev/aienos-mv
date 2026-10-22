@@ -463,10 +463,11 @@ Spark), `scripts/ck_allen_ui_test.sh` (panel pictures `wizard-*.png`) and
 `scripts/qemu_ck_allen_wizard_test.sh` (QEMU end to end: power-cut resume, the
 three model sources, the key in no log, relay file or disk; screenshots in
 `target/native-kernel-allen-wizard/`).
-The wizard opens on its own only when Allen's memory section can keep its record
-(the first start on that computer); with nowhere to keep it the start says
-`wizard: not shown, nowhere to keep it this start` and Allen's window is left
-alone, so it never takes over the window at every start.
+The wizard opens on its own only at Allen's first start with his memory section,
+or to resume a setup saved part way (a power cut); a later start with nothing
+saved says `wizard: not shown, start N and nothing half done`, and with nowhere to
+keep its record it says `wizard: not shown, nowhere to keep it this start`. Either
+way Allen's window is left to him, so the wizard never takes it over at every start.
 
 **Code from the Spark.** Any coding request in Allen's chat ("make me a
 calculator", "write a snake game in python") is answered at once with "I need to

@@ -1003,7 +1003,7 @@ static void allen_window(void)
     boot_times();
     night_stats("before Allen woke");
     allen_map(); /* the notes loaded from disk, before the first word */
-    setup_facts = (struct ck_x86_setup_facts){hand->rsdp, ram_bytes, allen_facts.cores, w, h};
+    setup_facts = (struct ck_x86_setup_facts){hand->rsdp, ram_bytes, allen_facts.cores, w, h, allen_mind.mem.starts};
     ck_x86_kbd_keys(line_key);
     if (ck_x86_setup_open(&setup_facts, courier, tsc_hz, 0))
         return; /* the setup wizard says hello in its own words */

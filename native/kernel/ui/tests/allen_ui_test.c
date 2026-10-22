@@ -668,7 +668,7 @@ int main(int argc, char **argv)
         png(path, fb, W, 1, cx - 600, cy - 500, 1200, 1000, 1);
     }
     /* awake: the bar comes up */
-    ck_allen_ui_wake("Type goodbye to restart this computer", now_us);
+    ck_allen_ui_wake("Type goodbye and this computer rests; any key wakes it", now_us);
     run_to(17800);
     CHECK(ck_allen_ui_on(), "ui: on");
     unsigned bar0 = added(&P, sky, bx, by, bw, bh);

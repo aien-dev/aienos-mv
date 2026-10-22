@@ -360,8 +360,9 @@ static void announce_ready(void)
     if (said || !bench_dev_ready)
         return;
     said = 1;
-    ck_printf("bench: GPU bench console ready port=%u (HMAC-SHA256, %s bound in image)\n",
-              (unsigned)CK_X86_BENCH_PORT, BENCH_KEY_KIND);
+    /* one format string, so the line goes out whole (the test tool's requests share the wire) */
+    ck_printf("bench: GPU bench console ready port=%u (HMAC-SHA256, " BENCH_KEY_KIND " bound in image)\n",
+              (unsigned)CK_X86_BENCH_PORT);
 }
 
 void ck_x86_bench_init(volatile uint8_t *gpu_cfg, volatile uint32_t *gpu_bar5,

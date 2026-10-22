@@ -241,6 +241,7 @@ struct ck_x86_setup_facts {
     uint64_t rsdp, ram_bytes;
     unsigned cores;
     uint32_t screen_w, screen_h;
+    uint32_t starts; /* Allen's starts with this memory, this one counted (1: the first) */
 };
 int ck_x86_setup_open(const struct ck_x86_setup_facts *f, const struct ck_courier *c, uint64_t tsc_hz, int again);
 int ck_x86_setup_on(void);

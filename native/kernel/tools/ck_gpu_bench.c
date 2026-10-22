@@ -163,13 +163,21 @@ static int serial_fill(int timeout_ms)
     return (int)n;
 }
 
+/* The needle and the end of its line: a request sent while the kernel is still
+ * printing the line would land inside it in the transcript. */
+static int text_line_done(const char *needle)
+{
+    const char *at = strstr(rx + rxpos, needle);
+    return at && strchr(at, '\n') != NULL;
+}
+
 static int wait_for_text(const char *needle, int seconds)
 {
     for (int i = 0; i < seconds * 5; i++) {
-        if (strstr(rx + rxpos, needle)) return 1;
+        if (text_line_done(needle)) return 1;
         serial_fill(200);
     }
-    return strstr(rx + rxpos, needle) != NULL;
+    return text_line_done(needle);
 }
 
 static void hex_encode(const uint8_t *b, size_t n, char *out)

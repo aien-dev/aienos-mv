@@ -193,6 +193,13 @@ int ck_x86_setup_open(const struct ck_x86_setup_facts *f, const struct ck_courie
         ck_puts("wizard: not shown, nowhere to keep it this start (\"set up again\" opens it)\n");
         return 0;
     }
+    /* By itself only at the first start, or to resume a setup saved part way
+     * (a power cut); a later start with nothing saved leaves Allen's window to him. */
+    if (rc == 1 && !again && f->starts > 1) {
+        ck_printf("wizard: not shown, start %u and nothing half done (\"set up again\" opens it)\n",
+                  (unsigned)f->starts);
+        return 0;
+    }
     if (rc == 0 && !again && sw_saved_done(text, n)) {
         ck_printf("wizard: setup finished on an earlier start (generation %llu); not shown\n",
                   (unsigned long long)store.gen);
