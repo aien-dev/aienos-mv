@@ -2,7 +2,7 @@
 
 This candidate connects the previously separate native sequencer and register policy **inside one Omega executable**. `regcore.om` is the shared source for `gsq3.om` and the existing RGP1 `regpolicy.om` adapter. Source files are concatenated byte-for-byte with one LF between them, core first, and passed to the pinned seeded compiler. There is no C translation, linked foreign runtime, Python subprocess or RGP1 protocol bridge inside the executable. Python/shell remain external build/test orchestration; Linux supplies stdin/stdout syscalls.
 
-GSQ3 replaces the eight numeric register slots with actual pinned BAR0 offsets mapped to14 simulated registers. The first13 slots follow the C shim's read-list order; slot13 is write-only SEC2 INTRMCLR0 (0x00840ac4). Both native consumers use the same policy functions and lists; the duplicate policy implementation was removed from the RGP1 adapter. GSQ2 remains unchanged for historical compatibility and regression, not as a hardware backend.
+GSQ3 replaces the eight numeric register slots with actual pinned BAR0 offsets mapped to14 simulated registers. The first13 slots follow the C shim's read-list order; slot13 is write-only SEC2 EMEMD0 (0x00840ac4). Both native consumers use the same policy functions and lists; the duplicate policy implementation was removed from the RGP1 adapter. GSQ2 remains unchanged for historical compatibility and regression, not as a hardware backend.
 
 ## Contract
 

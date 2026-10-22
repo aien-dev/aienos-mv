@@ -1,0 +1,264 @@
+note Seed-native GB10 GSP boot steps1-11 with recorded reads, NOT hardware.
+note Compile after regcore.om. BTP1 header10 u32, packet bytes, offset/value read pairs.
+global In uchar 10285
+global Out uchar 19268
+global Config uint 10
+global Meta uint 13
+global State uint 4
+global Trace uint 4800
+fn raw pos ulong to uint
+v = uint 0
+for j ulong 4
+v = or v shl uint get In add pos j mul uint j 8
+end
+ret v
+end
+fn event op uint addr uint value uint to void
+count = ulong get State 1
+if ge count 1600
+put State 3 uint 11
+ret
+end
+pos = mul count 3
+put Trace pos op
+put Trace add pos 1 addr
+put Trace add pos 2 value
+put State 1 add uint count uint 1
+end
+fn rd addr uint to uint
+if ne get State 3 uint 0
+ret uint 0
+end
+if ne allow uint 0 addr uint 0
+put State 3 uint 10
+ret uint 0
+end
+index = get State 0
+if ge index get Config 1
+put State 3 uint 9
+ret uint 0
+end
+pos = add add 44 ulong get Config 0 mul ulong index 8
+if ne raw pos addr
+put State 3 uint 9
+ret uint 0
+end
+v = raw add pos 4
+put State 0 add index uint 1
+event uint 0 addr v
+ret v
+end
+fn wr addr uint value uint to void
+if ne get State 3 uint 0
+ret
+end
+if ne allow uint 1 addr uint 0
+put State 3 uint 10
+ret
+end
+event uint 1 addr value
+end
+fn emem v uint to uint
+ret add mul and shr v uint 8 uint 255 uint 64 and shr v uint 2 uint 63
+end
+fn ready kind uint to bool
+if eq kind uint 0
+head = rd uint 8653824
+tail = rd uint 8653828
+ret eq head tail
+end
+if eq kind uint 1
+put Meta 7 rd uint 8650816
+ret ne get Meta 7 uint 3221342974
+end
+if eq kind uint 2
+put Meta 9 rd uint 1114356
+ret and ne get Meta 9 uint 0 ne and get Meta 9 uint 4294967040 uint 3135193344
+end
+put Meta 10 rd uint 1114176
+if and ne get Meta 10 uint 0 eq get Meta 10 get Config 2
+put Meta 11 rd uint 1114180
+if eq get Meta 11 get Config 3
+ret false
+end
+end
+put Meta 9 rd uint 1114356
+ret or eq and get Meta 9 uint 8192 uint 0 ne get Meta 10 uint 0
+end
+fn waitfor kind uint to int
+n = uint 0
+budget = get Config add 5 ulong kind
+while true
+ok = ready kind
+put Meta add 1 ulong kind n
+if ne get State 3 uint 0
+ret int get State 3
+end
+if ok
+ret 0
+end
+if ge n budget
+if eq kind uint 1
+put Meta 8 rd uint 8650820
+end
+if eq kind uint 3
+put Meta 11 rd uint 1114180
+end
+if eq kind uint 0
+ret 2
+end
+ret int add kind uint 3
+end
+if ne get Config 9 uint 0
+put State 2 add get State 2 uint 1
+end
+n = add n uint 1
+end
+ret 1
+end
+fn packword i ulong to uint
+v = uint 0
+for k ulong 4
+if lt add i k ulong get Config 0
+v = or v shl uint get In add 44 add i k mul uint k 8
+end
+end
+ret v
+end
+fn upload to int
+wr uint 8653504 uint 16777216
+start = emem rd uint 8653504
+size = ulong get Config 0
+i = ulong 0
+count = uint 0
+while lt i size
+wr uint 8653508 packword i
+count = add count uint 1
+i = add i 4
+end
+put Meta 5 count
+put Meta 6 rd uint 8653504
+if ne sub emem get Meta 6 start count
+ret 3
+end
+wr uint 8653828 sub mul count uint 4 uint 4
+wr uint 8653824 uint 0
+ret 0
+end
+fn boot to int
+if or eq get Config 0 uint 0 gt get Config 0 uint 1024
+ret 1
+end
+status = waitfor uint 0
+if ne status 0
+ret status
+end
+status = upload
+if ne status 0
+ret status
+end
+for kind uint 3
+status = waitfor add kind uint 1
+if ne status 0
+ret status
+end
+end
+put Meta 10 rd uint 1114176
+if ne get Meta 10 uint 0
+ret 7
+end
+wr uint 1114240 get Config 4
+put Meta 12 rd uint 1119112
+if eq and get Meta 12 uint 128 uint 0
+ret 8
+end
+ret 0
+end
+fn field i ulong to uint
+if lt i 13
+ret get Meta i
+end
+if eq i 13
+ret get C 1
+end
+if eq i 14
+ret get State 0
+end
+if eq i 15
+ret get State 1
+end
+if eq i 16
+ret get State 2
+end
+ret get Trace sub i 17
+end
+fn putword i ulong v uint to void
+for j ulong 4
+put Out add mul i 4 j uchar and shr v mul uint j 8 uint 255
+end
+end
+fn emit to int
+count = add 17 mul ulong get State 1 3
+for i ulong count
+putword i field i
+end
+size = mul count 4
+sent = ulong 0
+while lt sent size
+r = write 1 Out sent sub size sent
+if le r 0
+ret 2
+end
+sent = add sent ulong r
+end
+ret 0
+end
+fn decode n ulong to int
+if lt n 44
+ret 2
+end
+if ne raw 0 uint 827348034
+ret 2
+end
+for i ulong 10
+put Config i raw add 4 mul i 4
+end
+size = ulong get Config 0
+reads = ulong get Config 1
+if or gt size 2048 gt reads 1024
+ret 2
+end
+if ne n add add 44 size mul reads 8
+ret 2
+end
+for i ulong 4
+if gt get Config add i 5 uint 128
+ret 2
+end
+end
+if gt get Config 9 uint 1
+ret 2
+end
+init
+put C 0 uint 1
+put C 1 uint 0
+put Meta 0 uint boot
+if ne get State 3 uint 0
+put Meta 0 get State 3
+end
+ret emit
+end
+fn main to int
+used = ulong 0
+while lt used len In
+r = read 0 In used sub len In used
+if lt r 0
+ret 2
+end
+if eq r 0
+ret decode used
+end
+used = add used ulong r
+end
+ret 2
+end
