@@ -1,0 +1,11 @@
+{
+  "pin": "f52f17a9e9520c1d16ba4d30aa8ee3bda8ee12a5",
+  "core_files": 20,
+  "verified_build_and_test_files": 23,
+  "focused_checks": 85,
+  "extended_probe_total_checks": 89,
+  "new_probe_checks": 4,
+  "parent_binary_sha256": "8d5e1c03af491bc89e629c10d4df3bb87a8fbc4ec942254e717d79d3bcf79ce9",
+  "report_sha256": "6379757b57cb6facac2584532dd6126101a5b6920eae68ed3a4ee7d58204ff9a",
+  "scope": "host-native surface only; no hosted app/live model/iMac qualification"
+}
