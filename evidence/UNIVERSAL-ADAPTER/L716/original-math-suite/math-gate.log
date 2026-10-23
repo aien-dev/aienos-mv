@@ -1,0 +1,43 @@
+{"input":"eval 1/3+1/6","want":"OK 1/2","got":"OK 1/2","ok":true}
+{"input":"eval (-7/9)*(27/14)","want":"OK -3/2","got":"OK -3/2","ok":true}
+{"input":"eval (2^100+3)*(2^80+5)","want":"OK 1532495540865888858358353365406937102224590493223747599","got":"OK 1532495540865888858358353365406937102224590493223747599","ok":true}
+{"input":"expand (x+1)^5","want":"OK 1+5*x+10*x^2+10*x^3+5*x^4+x^5","got":"OK 1+5*x+10*x^2+10*x^3+5*x^4+x^5","ok":true}
+{"input":"collect x+2*x-x","want":"OK 2*x","got":"OK 2*x","ok":true}
+{"input":"diff 3*x^5-7*x^2+2","want":"OK -14*x+15*x^4","got":"OK -14*x+15*x^4","ok":true}
+{"input":"integ 6*x^2-4*x+1","want":"OK x-2*x^2+2*x^3","got":"OK x-2*x^2+2*x^3","ok":true}
+{"input":"subst x^3-2*x+1 ; -2/3","want":"OK 55/27","got":"OK 55/27","ok":true}
+{"input":"solve 3*x+7 ; 22","want":"OK 5","got":"OK 5","ok":true}
+{"input":"gcd x^4-1 ; x^3-x","want":"OK -1+x^2","got":"OK -1+x^2","ok":true}
+{"input":"linear 2;1;1;-1;5;1","want":"OK 2;1","got":"OK 2;1","ok":true}
+{"input":"eval 0/-3","want":"OK 0","got":"OK 0","ok":true}
+{"input":"eval 7/-9","want":"OK -7/9","got":"OK -7/9","ok":true}
+{"input":"eval -2^2","want":"OK -4","got":"OK -4","ok":true}
+{"input":"eval 2^3^2","want":"OK 512","got":"OK 512","ok":true}
+{"input":"eval (2/3)^-2","want":"OK 9/4","got":"OK 9/4","ok":true}
+{"input":"eval 18446744073709551615+1","want":"OK 18446744073709551616","got":"OK 18446744073709551616","ok":true}
+{"input":"expand (x-1)*(x+1)","want":"OK -1+x^2","got":"OK -1+x^2","ok":true}
+{"input":"diff 9","want":"OK 0","got":"OK 0","ok":true}
+{"input":"integ 1","want":"OK x","got":"OK x","ok":true}
+{"input":"subst (x+1)^2 ; 2/3","want":"OK 25/9","got":"OK 25/9","ok":true}
+{"input":"solve x ; x","want":"REFUSED 7","got":"REFUSED 7","ok":true}
+{"input":"solve x+1 ; x","want":"REFUSED 8","got":"REFUSED 8","ok":true}
+{"input":"linear 1;2;2;4;3;6","want":"REFUSED 7","got":"REFUSED 7","ok":true}
+{"input":"linear 1;2;2;4;3;7","want":"REFUSED 8","got":"REFUSED 8","ok":true}
+{"input":"eval 1/0","want":"REFUSED 2","got":"REFUSED 2","ok":true}
+{"input":"eval x/x","want":"REFUSED 3","got":"REFUSED 3","ok":true}
+{"input":"eval 0/x","want":"REFUSED 3","got":"REFUSED 3","ok":true}
+{"input":"eval sqrt(x^2)","want":"REFUSED 3","got":"REFUSED 3","ok":true}
+{"input":"eval sin(x)","want":"REFUSED 3","got":"REFUSED 3","ok":true}
+{"input":"eval 1+","want":"REFUSED 1","got":"REFUSED 1","ok":true}
+{"input":"eval (1+2","want":"REFUSED 1","got":"REFUSED 1","ok":true}
+{"input":"eval 2 3","want":"REFUSED 1","got":"REFUSED 1","ok":true}
+{"input":"eval y","want":"REFUSED 3","got":"REFUSED 3","ok":true}
+{"input":"eval x^17","want":"REFUSED 4","got":"REFUSED 4","ok":true}
+{"input":"eval 10^128","want":"REFUSED 4","got":"REFUSED 4","ok":true}
+{"input":"eval 0^0","want":"REFUSED 2","got":"REFUSED 2","ok":true}
+{"input":"eval x^-1","want":"REFUSED 3","got":"REFUSED 3","ok":true}
+{"input":"integ x^16","want":"REFUSED 4","got":"REFUSED 4","ok":true}
+{"input":"solve x^2 ; 1","want":"REFUSED 3","got":"REFUSED 3","ok":true}
+{"input":"eval 9999+1","want":"OK 10000","got":"OK 10000","ok":true}
+{"input":"eval 10000-1","want":"OK 9999","got":"OK 9999","ok":true}
+{"requested":42,"executed":42,"passed":42}

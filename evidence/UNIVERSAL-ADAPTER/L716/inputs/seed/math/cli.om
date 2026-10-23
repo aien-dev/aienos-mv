@@ -1,0 +1,63 @@
+note SPDX-License-Identifier: AGPL-3.0-only
+text refusal "REFUSED "
+global one uchar 1
+fn sendout n ulong to void
+o = ulong 0
+while lt o n
+w = write 1 res o sub n o
+if le w 0
+exit 2
+end
+o = add o ulong w
+end
+end
+fn reply n ulong to void
+s = mathrun n
+if ne s 0
+for i ulong len refusal
+put res i get refusal i
+end
+put res len refusal uchar add s 48
+put reslen 0 add len refusal 1
+end
+put res get reslen 0 10
+put reslen 0 add get reslen 0 1
+sendout get reslen 0
+end
+note Each input loop has a separate fixed bound, independent of earlier requests.
+note Return 0 line, 1 EOF, 2 oversized transport, 3 input error.
+fn readreq to ulong
+n = ulong 0
+for i ulong 65536
+r = read 0 one 0 1
+if lt r 0
+ret 3
+end
+if eq r 0
+if gt n 0
+reply n
+end
+ret 1
+end
+c = get one 0
+if eq c 10
+reply n
+ret 0
+end
+if lt n 4096
+put req n c
+n = add n 1
+end
+end
+reply 4096
+ret 2
+end
+fn main to int
+for i ulong 65536
+s = readreq
+if ne s 0
+ret int sub s 1
+end
+end
+ret 3
+end

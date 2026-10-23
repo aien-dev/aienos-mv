@@ -1,0 +1,6 @@
+read(0, "e", 1)                         = 1
+read(0, "v", 1)                         = 1
+read(0, "a", 1)                         = 1
+read(0, "l", 1)                         = 1
+read(0, "", 1)                          = 0
+write(1, "REFUSED 1\n", 10)             = 10

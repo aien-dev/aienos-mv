@@ -1,0 +1,108 @@
+{
+  "abi_ruling": "Pinned compiler source lines 2221/2295: view/edit array params use fixed T N; unsized reports error 16; global array args report error 19. No compiler changes.",
+  "branch": "ua/services-L716",
+  "captured_utc": "2026-10-23T12:12:32Z",
+  "controls": {
+    "mutants": {
+      "premature-eof": {
+        "binary_sha256": "7d7ea37fdf2c349f553d7211bca038000684710f6631c21fba249fc129f9b489",
+        "exit_status": 21,
+        "source_sha256": "124319eb8761c832e2c209c7392326038765db22b604656d313114a52217d153"
+      },
+      "wrong-rights": {
+        "binary_sha256": "a266aed24466766ba682053472276a78662c0ec7872fd1cc87174e8014b6afae",
+        "exit_status": 11,
+        "source_sha256": "ef92564581f3ac291c1762f519a81a75cafee04ab1d1d00b3367a87e1dd0e511"
+      }
+    },
+    "red_old_stub_exit": 10,
+    "shortwrite_receipt_tdd": {
+      "binary_sha256": "8844cf7cb99797e8a6958586dea6b89dac618c4fe9cbd832bb85543189c1513f",
+      "green_exit_status": 0,
+      "red_exit_status": 72,
+      "source_sha256": "9eef134e3675664f2e94b43612445a3c9c434d8a700b00a06765675f6f3b4b4d"
+    }
+  },
+  "hosted_replay": {
+    "pi5": {
+      "aarch64_static_elf": true,
+      "app_sha256": "01d1f5be0c653f7f281d3fce7831ebc122f0caaf30db82c7e1baf9c3696871a0",
+      "exit_status": 0,
+      "host": "hub\nLinux hub 7.0.0-1020-raspi #20-Ubuntu SMP PREEMPT_DYNAMIC Fri Sep 11 16:02:28 UTC 2026 aarch64 GNU/Linux\nRaspberry Pi 5 Model B Rev 1.0",
+      "log_sha256": "2619ff35abcbc5c6a53a6cc4763eb1db0d6ed75c787305aa5ecfd9960efdffb9",
+      "measurement": {
+        "derived_user_space_copy_bytes": 98,
+        "input_bytes": 37,
+        "input_bytes_observed": 37,
+        "lf_bytes": 3,
+        "matches_original_cli": true,
+        "output_bytes": 32,
+        "output_bytes_observed": 32,
+        "output_sha256": "07b61e89b44620ea2c9f91dedc3185cd40befcbb1ed6e6465ba74b2fe441969d",
+        "peak_rss_kib": 400,
+        "read_calls": 38,
+        "read_eof_or_errors": 1,
+        "write_calls": 4
+      },
+      "pass_lines": [
+        "PASS nonblocking 4096-byte pipe: Omega verified 4096-byte prefix and EOF; facade reported short write then -3",
+        "PASS USV1 hosted facade + exact math streaming, recovery, syscall errors and 2 compiled mutants"
+      ],
+      "reference_cli_sha256": "aa7906f534ffb63575f5b59be15e3ed93a02fe56d103aa35298beed5a35d7ac6",
+      "source_manifest_sha256": "03da469c54deaf1f76aa5997870b43fd17e5e19e1f678e293ac468dd22915983"
+    },
+    "spark": {
+      "aarch64_static_elf": true,
+      "app_sha256": "01d1f5be0c653f7f281d3fce7831ebc122f0caaf30db82c7e1baf9c3696871a0",
+      "exit_status": 0,
+      "host": "spark-b87b\nLinux spark-b87b 7.0.0-1019-nvidia #19~24.04.2-Ubuntu SMP PREEMPT_DYNAMIC Sun Sep  6 18:35:11 UTC 2 aarch64 aarch64 aarch64 GNU/Linux",
+      "log_sha256": "2619ff35abcbc5c6a53a6cc4763eb1db0d6ed75c787305aa5ecfd9960efdffb9",
+      "measurement": {
+        "derived_user_space_copy_bytes": 98,
+        "input_bytes": 37,
+        "input_bytes_observed": 37,
+        "lf_bytes": 3,
+        "matches_original_cli": true,
+        "output_bytes": 32,
+        "output_bytes_observed": 32,
+        "output_sha256": "07b61e89b44620ea2c9f91dedc3185cd40befcbb1ed6e6465ba74b2fe441969d",
+        "peak_rss_kib": 192,
+        "read_calls": 38,
+        "read_eof_or_errors": 1,
+        "write_calls": 4
+      },
+      "pass_lines": [
+        "PASS nonblocking 4096-byte pipe: Omega verified 4096-byte prefix and EOF; facade reported short write then -3",
+        "PASS USV1 hosted facade + exact math streaming, recovery, syscall errors and 2 compiled mutants"
+      ],
+      "reference_cli_sha256": "aa7906f534ffb63575f5b59be15e3ed93a02fe56d103aa35298beed5a35d7ac6",
+      "source_manifest_sha256": "03da469c54deaf1f76aa5997870b43fd17e5e19e1f678e293ac468dd22915983"
+    }
+  },
+  "limits": {
+    "latency_timing": "NOT RUN; no quiet-measure authorization",
+    "native_aienux": "NOT_RUN",
+    "scope": "only native/omega/universal-services and evidence/UNIVERSAL-ADAPTER/L716; no compiler/kernel/installer/Allen/boot/service/global installation or model/GPU change",
+    "workflow": "aien-verification pull_request and push main only; copilot-setup workflow_dispatch only; no PR or workflow run"
+  },
+  "measurement_method": "strace counts actual syscalls; derived copies count input bytes except LF copied into request plus two copies per output byte, following Omega staging code. time %M records peak RSS only; no elapsed-time claim.",
+  "original_math_suite": {
+    "checks": 0,
+    "gate": 0,
+    "oracle": 0,
+    "robustness": 0,
+    "sign-fixtures": 0,
+    "whitespace": 0
+  },
+  "pins": {
+    "math_cli": "145db7e5184efbc5076ce27e93ddc7822e3f509c793f04f2413e0fd29f3343d0",
+    "math_core": "b70391a7a38464cd63ff796748565baf3dc2f73afaed90cbc2b94774dba02db6",
+    "omc": "191b776ef98821597c3e30655da6d680a9b66edbc9ceaca3c39c61ea6df098e9",
+    "public_source_manifest": "3afb591631dfa5202c59e8406cf1822c1a08385fb28d362de579ff2d24009fa3"
+  },
+  "source_commit": "f91754159061b387b85328a570fd8c1b1bd32043",
+  "source_commit_remote_readback": "f91754159061b387b85328a570fd8c1b1bd32043",
+  "source_files": 16,
+  "source_manifest_sha256": "03da469c54deaf1f76aa5997870b43fd17e5e19e1f678e293ac468dd22915983",
+  "task": "L716 hosted Omega facade and exact-math stream"
+}

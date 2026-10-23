@@ -1,0 +1,867 @@
+note SPDX-License-Identifier: AGPL-3.0-only
+note Native bounded exact math. See CONTRACT.md for capacities and invariants.
+note Big magnitudes: 32 little-endian base-10000 limbs. Slots 0..31 scratch.
+note Immutable rationals: two big slots per handle, separate sign; handles >=16.
+global req uchar 4096
+global res uchar 8192
+global reslen ulong 1
+global err ulong 1
+global fuel ulong 1
+global bn ulong 262144
+global sg ulong 4096
+global nr ulong 1
+global pc ulong 8704
+global np ulong 1
+global pos ulong 1
+global ilen ulong 1
+global domain ulong 1
+global variable ulong 1
+global assume ulong 1
+global lin ulong 6
+global second ulong 1
+fn refuse e ulong to void
+if eq get err 0 0
+put err 0 e
+end
+end
+fn tick to void
+f = get fuel 0
+if eq f 0
+refuse 6
+else
+put fuel 0 sub f 1
+end
+end
+fn bg a ulong i ulong to ulong
+ret get bn add mul a 32 i
+end
+fn bs a ulong i ulong v ulong to void
+put bn add mul a 32 i v
+end
+fn bz a ulong to void
+for i ulong 32
+bs a i 0
+end
+end
+fn bc d ulong a ulong to void
+for i ulong 32
+bs d i bg a i
+end
+end
+fn bl a ulong to ulong
+n = ulong 32
+while gt n 0
+if ne bg a sub n 1 0
+ret n
+end
+n = sub n 1
+end
+ret 0
+end
+fn bcmp a ulong b ulong to ulong
+n = ulong 32
+while gt n 0
+n = sub n 1
+if gt bg a n bg b n
+ret 1
+end
+if lt bg a n bg b n
+ret 2
+end
+end
+ret 0
+end
+fn bset a ulong v ulong to void
+bz a
+bs a 0 v
+end
+fn badd d ulong a ulong b ulong to void
+carry = ulong 0
+for i ulong 32
+v = add add bg a i bg b i carry
+bs d i rem v 10000
+carry = div v 10000
+end
+if ne carry 0
+refuse 4
+end
+end
+note bsub requires a >= b; permits d==a or d==b.
+fn bsub d ulong a ulong b ulong to void
+borrow = ulong 0
+for i ulong 32
+v = sub add bg a i 10000 add bg b i borrow
+bs d i rem v 10000
+borrow = 0
+if lt v 10000
+borrow = 1
+end
+end
+if ne borrow 0
+refuse 9
+end
+end
+note bsmall permits d==a. Returns overflow instead of poisoning trial division.
+fn bsmall d ulong a ulong m ulong to ulong
+carry = ulong 0
+for i ulong 32
+v = add mul bg a i m carry
+bs d i rem v 10000
+carry = div v 10000
+end
+ret carry
+end
+note Schoolbook multiply, d must differ from a,b. No intermediate exceeds 99999999.
+fn bmul d ulong a ulong b ulong to void
+bz d
+for i ulong 32
+carry = ulong 0
+for j ulong 32
+k = add i j
+if lt k 32
+v = add add mul bg a i bg b j bg d k carry
+bs d k rem v 10000
+carry = div v 10000
+else
+if ne mul bg a i bg b j 0
+refuse 4
+end
+end
+end
+if ne carry 0
+refuse 4
+end
+end
+end
+note Base long division with binary search of each quotient digit. Scratch 30.
+fn bdiv q ulong r ulong a ulong b ulong to void
+bz q
+bz r
+if eq bl b 0
+refuse 2
+ret
+end
+i = bl a
+while and gt i 0 eq get err 0 0
+tick
+i = sub i 1
+j = ulong 31
+while gt j 0
+bs r j bg r sub j 1
+j = sub j 1
+end
+bs r 0 bg a i
+lo = ulong 0
+hi = ulong 10000
+while gt sub hi lo 1
+mid = div add hi lo 2
+ov = bsmall 30 b mid
+if or ne ov 0 eq bcmp 30 r 1
+hi = mid
+else
+lo = mid
+end
+end
+ov = bsmall 30 b lo
+bsub r r 30
+bs q i lo
+end
+end
+note Euclid: gcd copied to slot 25. Preserves inputs; scratch 25..30.
+fn bgcd a ulong b ulong to void
+bc 25 a
+bc 26 b
+while and ne bl 26 0 eq get err 0 0
+bdiv 27 28 25 26
+bc 25 26
+bc 26 28
+end
+end
+fn ralloc to ulong
+tick
+r = get nr 0
+if or ge r 4096 ne get err 0 0
+refuse 5
+ret 16
+end
+put nr 0 add r 1
+ret r
+end
+note Reduced positive denominator. Zero always 0/1 and nonnegative.
+fn rmake n ulong d ulong s ulong to ulong
+if ne get err 0 0
+ret 16
+end
+if eq bl d 0
+refuse 2
+ret 16
+end
+if eq bl n 0
+ret 16
+end
+r = ralloc
+if ne get err 0 0
+ret 16
+end
+bgcd n d
+bdiv mul r 2 29 n 25
+bdiv add mul r 2 1 29 d 25
+put sg r s
+ret r
+end
+fn rint v ulong to ulong
+bset 0 v
+bset 1 1
+ret rmake 0 1 0
+end
+fn rneg a ulong to ulong
+if eq a 16
+ret 16
+end
+r = ralloc
+if ne get err 0 0
+ret 16
+end
+bc mul r 2 mul a 2
+bc add mul r 2 1 add mul a 2 1
+put sg r sub 1 get sg a
+ret r
+end
+fn radd a ulong b ulong to ulong
+if eq a 16
+ret b
+end
+if eq b 16
+ret a
+end
+bmul 0 mul a 2 add mul b 2 1
+bmul 1 mul b 2 add mul a 2 1
+bmul 2 add mul a 2 1 add mul b 2 1
+s = get sg a
+if eq s get sg b
+badd 3 0 1
+else
+if eq bcmp 0 1 2
+bsub 3 1 0
+s = get sg b
+else
+bsub 3 0 1
+end
+end
+ret rmake 3 2 s
+end
+fn rsub a ulong b ulong to ulong
+ret radd a rneg b
+end
+note Cross cancellation before multiply extends useful bounded range.
+fn rmul a ulong b ulong to ulong
+if or eq a 16 eq b 16
+ret 16
+end
+bgcd mul a 2 add mul b 2 1
+bdiv 0 29 mul a 2 25
+bdiv 1 29 add mul b 2 1 25
+bgcd mul b 2 add mul a 2 1
+bdiv 2 29 mul b 2 25
+bdiv 3 29 add mul a 2 1 25
+bmul 4 0 2
+bmul 5 1 3
+ret rmake 4 5 xor get sg a get sg b
+end
+fn rinv a ulong to ulong
+ret rmake add mul a 2 1 mul a 2 get sg a
+end
+fn rdiv a ulong b ulong to ulong
+ret rmul a rinv b
+end
+fn reqrat a ulong b ulong to bool
+if ne get sg a get sg b
+ret false
+end
+if ne bcmp mul a 2 mul b 2 0
+ret false
+end
+ret eq bcmp add mul a 2 1 add mul b 2 1 0
+end
+note Canonical polynomial nodes: ascending 17 rational coefficients, degree <=16.
+fn cg p ulong i ulong to ulong
+ret get pc add mul p 17 i
+end
+fn cs p ulong i ulong r ulong to void
+put pc add mul p 17 i r
+end
+fn pnew to ulong
+tick
+p = get np 0
+if or ge p 512 ne get err 0 0
+refuse 5
+ret 0
+end
+put np 0 add p 1
+for i ulong 17
+cs p i 16
+end
+ret p
+end
+fn deg p ulong to ulong
+i = ulong 16
+while gt i 0
+if ne cg p i 16
+ret i
+end
+i = sub i 1
+end
+ret 0
+end
+note Intern the last private node, comparing exact coefficients, no hash collisions.
+fn intern p ulong to ulong
+if ne get err 0 0
+ret 0
+end
+for q ulong p
+same = true
+for i ulong 17
+if not reqrat cg p i cg q i
+same = false
+end
+end
+if same
+put np 0 p
+ret q
+end
+end
+ret p
+end
+fn pconst r ulong to ulong
+p = pnew
+if ne get err 0 0
+ret 0
+end
+cs p 0 r
+ret intern p
+end
+fn pneg a ulong to ulong
+p = pnew
+if ne get err 0 0
+ret 0
+end
+for i ulong 17
+cs p i rneg cg a i
+end
+ret intern p
+end
+fn padd a ulong b ulong to ulong
+p = pnew
+if ne get err 0 0
+ret 0
+end
+for i ulong 17
+cs p i radd cg a i cg b i
+end
+ret intern p
+end
+fn psub a ulong b ulong to ulong
+ret padd a pneg b
+end
+fn pmul a ulong b ulong to ulong
+if or eq a 0 eq b 0
+ret 0
+end
+if gt add deg a deg b 16
+refuse 4
+ret 0
+end
+p = pnew
+if ne get err 0 0
+ret 0
+end
+for i ulong add deg a 1
+for j ulong add deg b 1
+k = add i j
+cs p k radd cg p k rmul cg a i cg b j
+end
+end
+ret intern p
+end
+fn pdiv a ulong b ulong to ulong
+if ne deg b 0
+refuse 3
+ret 0
+end
+r = rinv cg b 0
+p = pnew
+if ne get err 0 0
+ret 0
+end
+for i ulong 17
+cs p i rmul cg a i r
+end
+ret intern p
+end
+fn ppow a ulong b ulong to ulong
+if ne deg b 0
+refuse 3
+ret 0
+end
+r = cg b 0
+if ne bcmp add mul r 2 1 35 0
+refuse 3
+ret 0
+end
+if or gt bl mul r 2 1 gt bg mul r 2 0 1024
+refuse 4
+ret 0
+end
+n = bg mul r 2 0
+if and eq a 0 eq n 0
+refuse 2
+ret 0
+end
+v = a
+if ne get sg r 0
+v = pdiv 1 a
+end
+p = ulong 1
+while and gt n 0 eq get err 0 0
+if ne rem n 2 0
+p = pmul p v
+end
+n = div n 2
+if gt n 0
+v = pmul v v
+end
+end
+ret p
+end
+fn pdiff a ulong to ulong
+p = pnew
+if ne get err 0 0
+ret 0
+end
+for i ulong 16
+cs p i rmul cg a add i 1 rint add i 1
+end
+ret intern p
+end
+fn pinteg a ulong to ulong
+if ne cg a 16 16
+refuse 4
+ret 0
+end
+p = pnew
+if ne get err 0 0
+ret 0
+end
+for i ulong 16
+cs p add i 1 rdiv cg a i rint add i 1
+end
+ret intern p
+end
+fn psubst a ulong b ulong to ulong
+if ne deg b 0
+refuse 3
+ret 0
+end
+r = ulong 16
+i = add deg a 1
+while and gt i 0 eq get err 0 0
+i = sub i 1
+r = radd cg a i rmul r cg b 0
+end
+ret pconst r
+end
+fn psolve a ulong b ulong to ulong
+p = psub a b
+if gt deg p 1
+refuse 3
+ret 0
+end
+if eq cg p 1 16
+if eq cg p 0 16
+refuse 7
+else
+refuse 8
+end
+ret 0
+end
+ret pconst rdiv rneg cg p 0 cg p 1
+end
+note Polynomial Euclid over Q, remainder by leading-term subtraction.
+fn prem a ulong b ulong to ulong
+if eq b 0
+refuse 2
+ret 0
+end
+p = a
+while and ne p 0 and ge deg p deg b eq get err 0 0
+tick
+d = sub deg p deg b
+r = rdiv cg p deg p cg b deg b
+t = pnew
+if ne get err 0 0
+ret 0
+end
+cs t d r
+t = intern t
+p = psub p pmul b t
+end
+ret p
+end
+fn pgcd a ulong b ulong to ulong
+p = a
+q = b
+while and ne q 0 eq get err 0 0
+r = prem p q
+p = q
+q = r
+end
+if eq p 0
+ret 0
+end
+ret pdiv p pconst cg p deg p
+end
+fn reset to void
+put err 0 0
+put fuel 0 200000
+put nr 0 18
+put np 0 3
+put domain 0 1
+put variable 0 120
+put assume 0 0
+put second 0 0
+bset 32 0
+bset 33 1
+bset 34 1
+bset 35 1
+put sg 16 0
+put sg 17 0
+for p ulong 3
+for i ulong 17
+cs p i 16
+end
+end
+cs 1 0 17
+cs 2 1 17
+end
+fn peek to ulong
+if ge get pos 0 get ilen 0
+ret 0
+end
+ret ulong get req get pos 0
+end
+fn step to void
+put pos 0 add get pos 0 1
+end
+fn space to void
+while or eq peek 32 or eq peek 9 eq peek 13
+step
+end
+end
+fn need c ulong to void
+space
+if ne peek c
+refuse 1
+else
+step
+end
+end
+note Literal integer, decimal digits only. Each step checked before storing.
+fn literal to ulong
+bset 0 0
+bset 1 1
+while and ge peek 48 le peek 57
+v = bsmall 0 0 10
+if ne v 0
+refuse 4
+end
+bs 0 0 add bg 0 0 sub peek 48
+step
+end
+ret pconst rmake 0 1 0
+end
+fn prec c ulong to ulong
+if or eq c 43 eq c 45
+ret 10
+end
+if or eq c 42 eq c 47
+ret 20
+end
+if eq c 94
+ret 40
+end
+ret 0
+end
+note Bounded Pratt parser, unary sign below exponentiation; power right associative.
+fn parse minp ulong depth ulong to ulong
+if or ge depth 32 ne get err 0 0
+refuse 6
+ret 0
+end
+tick
+space
+c = peek
+p = ulong 0
+if or eq c 43 eq c 45
+step
+p = parse 30 add depth 1
+if eq c 45
+p = pneg p
+end
+else
+if eq c 40
+step
+p = parse 0 add depth 1
+need 41
+else
+if and ge c 48 le c 57
+p = literal
+else
+if eq c 120
+step
+p = 2
+else
+if and ge c 65 le c 122
+refuse 3
+else
+refuse 1
+end
+ret 0
+end
+end
+end
+end
+space
+c = peek
+pr = prec c
+while and gt pr minp eq get err 0 0
+step
+rhs = pr
+if eq c 94
+rhs = sub pr 1
+end
+q = parse rhs add depth 1
+if eq c 43
+p = padd p q
+end
+if eq c 45
+p = psub p q
+end
+if eq c 42
+p = pmul p q
+end
+if eq c 47
+p = pdiv p q
+end
+if eq c 94
+p = ppow p q
+end
+space
+c = peek
+pr = prec c
+end
+ret p
+end
+fn emit c ulong to void
+n = get reslen 0
+if ge n 8192
+refuse 4
+ret
+end
+put res n uchar c
+put reslen 0 add n 1
+end
+fn unum v ulong to void
+d = new ulong 20 0
+n = ulong 0
+x = v
+put d n rem x 10
+n = add n 1
+x = div x 10
+while gt x 0
+put d n rem x 10
+n = add n 1
+x = div x 10
+end
+while gt n 0
+n = sub n 1
+emit add get d n 48
+end
+end
+fn bprint a ulong to void
+n = bl a
+if eq n 0
+emit 48
+ret
+end
+n = sub n 1
+unum bg a n
+while gt n 0
+n = sub n 1
+v = bg a n
+emit add div v 1000 48
+emit add rem div v 100 10 48
+emit add rem div v 10 10 48
+emit add rem v 10 48
+end
+end
+fn rprint r ulong to void
+bprint mul r 2
+if ne bcmp add mul r 2 1 35 0
+emit 47
+bprint add mul r 2 1
+end
+end
+fn pprint p ulong to void
+seen = false
+for i ulong 17
+r = cg p i
+if ne r 16
+if ne get sg r 0
+emit 45
+else
+if seen
+emit 43
+end
+end
+if or eq i 0 not and eq bcmp mul r 2 34 0 eq bcmp add mul r 2 1 35 0
+rprint r
+if gt i 0
+emit 42
+end
+end
+if gt i 0
+emit get variable 0
+if gt i 1
+emit 94
+unum i
+end
+end
+seen = true
+end
+end
+if not seen
+emit 48
+end
+end
+note The command is a packed <=7-byte ASCII word; input length carried separately.
+fn command to ulong
+v = ulong 0
+n = ulong 0
+while and ge peek 97 le peek 122
+if ge n 7
+refuse 3
+ret 0
+end
+v = add mul v 256 peek
+n = add n 1
+step
+end
+if not or eq peek 32 or eq peek 9 eq peek 13
+refuse 1
+end
+ret v
+end
+note Exact 2 by 2 system [a b;c d][x;y]=[e;f], determinants and rank minors.
+fn linear to ulong
+for i ulong 6
+if gt i 0
+need 59
+end
+p = parse 0 0
+if ne deg p 0
+refuse 3
+end
+put lin i cg p 0
+end
+d = rsub rmul get lin 0 get lin 3 rmul get lin 1 get lin 2
+x = rsub rmul get lin 4 get lin 3 rmul get lin 1 get lin 5
+y = rsub rmul get lin 0 get lin 5 rmul get lin 4 get lin 2
+if eq d 16
+if or ne x 16 ne y 16
+refuse 8
+else
+zero = true
+for j ulong 4
+if ne get lin j 16
+zero = false
+end
+end
+if zero
+if or ne get lin 4 16 ne get lin 5 16
+refuse 8
+end
+end
+refuse 7
+end
+ret 0
+end
+put second 0 pconst rdiv y d
+ret pconst rdiv x d
+end
+fn mathrun n ulong to ulong
+reset
+put reslen 0 0
+put pos 0 0
+put ilen 0 n
+if ge n 4096
+refuse 4
+ret get err 0
+end
+for i ulong n
+c = ulong get req i
+if not or eq c 9 or eq c 13 and ge c 32 le c 126
+refuse 1
+end
+end
+cmd = command
+p = ulong 0
+q = ulong 0
+if eq cmd 119200079503730
+p = linear
+else
+p = parse 0 0
+if eq cmd 1684629094
+p = pdiff p
+else
+if eq cmd 452824687975
+p = pinteg p
+else
+if or eq cmd 495890625396 or eq cmd 495790618213 eq cmd 6775652
+need 59
+q = parse 0 0
+if eq cmd 495890625396
+p = psubst p q
+end
+if eq cmd 495790618213
+p = psolve p q
+end
+if eq cmd 6775652
+p = pgcd p q
+end
+else
+if not or eq cmd 1702257004 or eq cmd 111567955914340 eq cmd 27988534160089972
+refuse 3
+end
+end
+end
+end
+end
+space
+if ne peek 0
+refuse 1
+end
+if eq get err 0 0
+emit 79
+emit 75
+emit 32
+pprint p
+if eq cmd 119200079503730
+emit 59
+pprint get second 0
+end
+end
+if ne get err 0 0
+put reslen 0 0
+end
+ret get err 0
+end

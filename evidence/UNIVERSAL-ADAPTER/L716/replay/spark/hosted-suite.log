@@ -1,0 +1,2 @@
+PASS nonblocking 4096-byte pipe: Omega verified 4096-byte prefix and EOF; facade reported short write then -3
+PASS USV1 hosted facade + exact math streaming, recovery, syscall errors and 2 compiled mutants

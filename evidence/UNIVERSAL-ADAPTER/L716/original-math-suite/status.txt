@@ -1,0 +1,6 @@
+gate=0
+oracle=0
+sign-fixtures=0
+whitespace=0
+checks=0
+robustness=0

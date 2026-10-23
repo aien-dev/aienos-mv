@@ -1,0 +1,64 @@
+note USV1 hosted borrowed-stream adapter. Fixed extents are part of this seed compiler ABI.
+note Error values: -1 bad handle/rights, -2 invalid range, -3 native syscall failure.
+note Handle 1 stdin (fd0) read-only; 2 stdout (fd1) write-only; 3 stderr (fd2) write-only.
+fn usread h ulong b edit uchar 4096 off ulong n ulong to long
+if ne h 1
+ret -1
+end
+if or gt off 4096 gt n sub 4096 off
+ret -2
+end
+if eq n 0
+ret 0
+end
+r = read 0 b off n
+if lt r 0
+ret -3
+end
+ret r
+end
+fn uswrite h ulong b view uchar 8192 off ulong n ulong to long
+fd = int 0
+if eq h 2
+fd = int 1
+else
+if eq h 3
+fd = int 2
+else
+ret -1
+end
+end
+if or gt off 8192 gt n sub 8192 off
+ret -2
+end
+if eq n 0
+ret 0
+end
+tmp = new uchar 8192 0
+for i ulong n
+put tmp i get b add off i
+end
+r = write fd tmp 0 n
+if lt r 0
+ret -3
+end
+ret r
+end
+note Omega verifies exact bytes committed to the nonblocking short-write pipe and following EOF.
+fn main to int
+b = new uchar 4096 0
+r = usread 1 b 0 4096
+if ne r 4096
+exit 71
+end
+for i ulong 4096
+if ne get b i 65
+exit 72
+end
+end
+r = usread 1 b 0 1
+if ne r 0
+exit 73
+end
+ret 0
+end
