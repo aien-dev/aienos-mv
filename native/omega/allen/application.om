@@ -173,6 +173,9 @@ end
 if or ineq 0 83 ineq 0 87
 status = saytake now
 if eq status 1
+if eq get R 1 0
+put A 1 0
+end
 if ne get S 1 0
 put A 2 1
 end

@@ -316,5 +316,31 @@ test not appask 32122
 test samewire
 test eq get R 9 n
 test appsent 32122 true
+note Late CODE may complete the original job before queued AGAIN is sent.
+prompt true
+test appask 32123
+test eq get R 0 8
+test eq get Q 1 10
+test apppoll 32123 true
+test appsent 32123 true
+incoming 1 8 0
+test appreceive 32124
+test gt get A 1 0
+test apppoll 32124 true
+test appsent 32124 true
+incoming 2 8 2
+test appreceive 32125
+test eq codestat 2
+test apppoll 32125 true
+test appsent 32125 true
+incoming 3 8 0
+test appreceive 32126
+test eq get A 2 1
+test eq get R 1 0
+test eq get A 1 0
+test apppoll 32126 true
+test appsent 32126 true
+test not apppoll 32127 true
+test eq get Q 1 10
 ret int get Fails 0
 end
