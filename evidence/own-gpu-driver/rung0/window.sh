@@ -12,7 +12,7 @@ mkdir -p "$OUT"
 while [ ! -x "$BIN" ]; do sleep 30; done
 sha256sum "$BIN" > "$OUT/bin.sha256"
 ledger note L332 "measure: in line for spark-window l332-rung0 ($OUT)" >/dev/null 2>&1
-spark-window open l332-rung0 --ledger L332 --gb10 exclusive --lease 60 --wait > "$OUT/window.open" 2>&1 || { echo "window open failed" >> "$OUT/window.open"; exit 1; }
+spark-window open l332-rung0 --ledger L332 --gb10 exclusive --lease 20 --wait > "$OUT/window.open" 2>&1 || { echo "window open failed" >> "$OUT/window.open"; exit 1; }
 R="spark-window run $here/rung0.sh $OUT"
 $R idle idle1 30
 $R run  run-r3  -- "$BIN" --reps 3
@@ -23,7 +23,7 @@ $R strace strace-r3 -- "$BIN" --reps 3
 $R idle idle2 30
 spark-window close > "$OUT/window.close" 2>&1
 # cell (b): own window without the chip lock (the server takes /tmp/aien-gb10.lock per request itself), quiet lock for timing
-spark-window open l332-rung0b --ledger L332 --gb10 none --lease 30 --wait > "$OUT/window-b.open" 2>&1 || { echo "window b open failed" >> "$OUT/window-b.open"; exit 1; }
+spark-window open l332-rung0b --ledger L332 --gb10 none --lease 20 --wait > "$OUT/window-b.open" 2>&1 || { echo "window b open failed" >> "$OUT/window-b.open"; exit 1; }
 # cell (b): 35B decode on the live server
 SPID=$(ss -ltnpH "sport = :$PORT" | grep -o "pid=[0-9]*" | head -1 | cut -d= -f2)
 if [ -n "$SPID" ]; then
