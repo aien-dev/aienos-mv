@@ -14,7 +14,11 @@ EXPECTED_CLI=145db7e5184efbc5076ce27e93ddc7822e3f509c793f04f2413e0fd29f3343d0
 [ "$(sha256sum "$CLI" | cut -d" " -f1)" = "$EXPECTED_CLI" ]
 TMP=$(mktemp -d "${TMPDIR:-/home/drakestapleton/handoffs/universal-adapter-L707/L716}/l716-hosted.XXXXXX")
 trap 'rm -rf "$TMP"' EXIT HUP INT TERM
-compile() { "$COMPILER" < "$1" > "$2"; chmod 700 "$2"; }
+compile() {
+    [ "$(sha256sum "$COMPILER" | cut -d" " -f1)" = "$EXPECTED_COMPILER" ]
+    "$COMPILER" < "$1" > "$2"
+    chmod 700 "$2"
+}
 cat "$HERE/services.om" "$HERE/tests/facade-test.om" > "$TMP/facade-test.om"
 compile "$TMP/facade-test.om" "$TMP/facade-test"
 "$TMP/facade-test" </dev/null
