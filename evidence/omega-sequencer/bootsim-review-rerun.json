@@ -1,0 +1,57 @@
+{
+  "reviewed_source": "5697de6e201499cd5e1db8717109c0bb317bfe66",
+  "published_candidate": "8fc965a23b80cdb713c0c5dc7812adee10bc0a50",
+  "reviewed_source_unchanged": true,
+  "binary_sha256": "f06498477cc1eb8fe988ee1cd4b6d3512ae2740e9dd7059c1ef788391b519911",
+  "cases": 6,
+  "results": [
+    {
+      "case": "happy",
+      "pass": true,
+      "exit": 0,
+      "input_sha256": "61e7ea24a494f815eb4b1d27a60927357a3589329acc980abb1885bf046a0d61",
+      "output_sha256": "fc42f16857e930c7c00c31a63c2314a65cf0de8611d4cb1f0350f2d0f32f8ade",
+      "expected_sha256": "fc42f16857e930c7c00c31a63c2314a65cf0de8611d4cb1f0350f2d0f32f8ade"
+    },
+    {
+      "case": "fault-5",
+      "pass": true,
+      "exit": 0,
+      "input_sha256": "ded6d446e55edab6b09416bfcd47ff4d77153caf16517a57d59d6449a7d6b563",
+      "output_sha256": "8b167a0c79e839b5b0e37cd044f49479294d205a4a0db211007c8565677e6a71",
+      "expected_sha256": "8b167a0c79e839b5b0e37cd044f49479294d205a4a0db211007c8565677e6a71"
+    },
+    {
+      "case": "fault-6",
+      "pass": true,
+      "exit": 0,
+      "input_sha256": "2ce1d70346b35d29cf4c43851de7f60bbc89151b45d299f1435f0f932920d46e",
+      "output_sha256": "666011e8d3e785f7e3b812c2a8879377d87dc6e74f62f8075201674c0c658ffd",
+      "expected_sha256": "666011e8d3e785f7e3b812c2a8879377d87dc6e74f62f8075201674c0c658ffd"
+    },
+    {
+      "case": "fault-7",
+      "pass": true,
+      "exit": 0,
+      "input_sha256": "8ad2d50552fe759c572444a6588b78af94f9697c18f8fe2bc70ecccc7cbd6646",
+      "output_sha256": "a42d4da5e3527f1e6061bf9b46926c39c91b9420aa4d0e0547efcd3dcd94303b",
+      "expected_sha256": "a42d4da5e3527f1e6061bf9b46926c39c91b9420aa4d0e0547efcd3dcd94303b"
+    },
+    {
+      "case": "bad-header-4",
+      "pass": true,
+      "exit": 0,
+      "input_sha256": "1c3d8792c87055fa8a3fc9694d4314753b7a96e441b0a69042fe90688d187331",
+      "output_sha256": "9dcb450811fc55b19c6397da0d566862a43a5abaf7d55132e5c44fcae8a8d1ee",
+      "expected_sha256": "9dcb450811fc55b19c6397da0d566862a43a5abaf7d55132e5c44fcae8a8d1ee"
+    },
+    {
+      "case": "zero-low-pa",
+      "pass": true,
+      "exit": 0,
+      "input_sha256": "77ce43d843e6095a3a4cebea525d2f52276d54e7019d67e7aeee5227f76a1635",
+      "output_sha256": "15c2ac9d987b78dbff03bcf975ba6873491c8fe295dbcec4d75c8eecefbe1c85",
+      "expected_sha256": "15c2ac9d987b78dbff03bcf975ba6873491c8fe295dbcec4d75c8eecefbe1c85"
+    }
+  ]
+}
