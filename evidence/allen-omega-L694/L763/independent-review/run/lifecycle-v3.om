@@ -1,0 +1,4271 @@
+note L694 fixed-buffer utilities. No platform effects in product functions.
+global In uchar 8192
+global Inlen ulong 1
+global Outb uchar 8192
+global Outlen ulong 1
+global Err ulong 1
+text Digits "0123456789abcdef"
+fn emitb c uchar to void
+n = get Outlen 0
+if ge n len Outb
+put Err 0 1
+else
+put Outb n c
+put Outlen 0 add n 1
+end
+end
+fn emitn v ulong to void
+d = new uchar 20 0
+n = ulong 0
+x = v
+put d n uchar add rem x 10 48
+n = add n 1
+x = div x 10
+while gt x 0
+put d n uchar add rem x 10 48
+n = add n 1
+x = div x 10
+end
+while gt n 0
+n = sub n 1
+emitb get d n
+end
+end
+fn outreset to void
+put Outlen 0 0
+put Err 0 0
+end
+fn ineq at ulong c uchar to bool
+if ge at get Inlen 0
+ret false
+end
+ret eq get In at c
+end
+fn isdigit c uchar to bool
+ret and ge c 48 le c 57
+end
+note Parser cursor P0, number P1, error P2. Never wraps a u32.
+global P ulong 3
+fn number to void
+v = ulong 0
+n = ulong 0
+p = get P 0
+while lt p get Inlen 0
+c = get In p
+if not isdigit c
+put P 0 p
+put P 1 v
+if eq n 0
+put P 2 1
+end
+ret
+end
+if or ge n 10 gt v 429496729
+put P 2 1
+ret
+end
+v = add mul v 10 sub ulong c 48
+if gt v 4294967295
+put P 2 1
+ret
+end
+n = add n 1
+p = add p 1
+end
+put P 0 p
+put P 1 v
+if eq n 0
+put P 2 1
+end
+end
+fn expect c uchar to void
+p = get P 0
+if not ineq p c
+put P 2 1
+else
+put P 0 add p 1
+end
+end
+fn crc off ulong count ulong to uint
+c = uint 4294967295
+for i ulong count
+c = xor c uint get In add off i
+for k ulong 8
+if ne and c 1 0
+c = xor shr c 1 3988292384
+else
+c = shr c 1
+end
+end
+end
+ret not c
+end
+note SPDX-License-Identifier: AGPL-3.0-or-later
+note SHA256 core reused byte-for-byte from native Omega TRN1 at 12251e3403d42931ada27dc1c54b3b610954be5d.
+note Reads stdin up to 8 MiB and emits lowercase hex plus LF only after successful EOF.
+global Buf uchar 8192
+global H uint 8
+global Vv uint 8
+global W uint 64
+global K uint 64
+global Hb uchar 64
+global Hs ulong 2
+global Hash uchar 32
+global Out uchar 65
+text Hex "0123456789abcdef"
+
+fn rotate x uint n uint to uint
+ret or shr x n shl x sub 32 n
+end
+
+fn round i ulong to void
+e = get Vv 4
+a = get Vv 0
+s = xor xor rotate e 6 rotate e 11 rotate e 25
+c = xor and e get Vv 5 and not e get Vv 6
+t = add add get Vv 7 s add c add get K i get W i
+s = xor xor rotate a 2 rotate a 13 rotate a 22
+c = and a get Vv 1
+c = xor c and a get Vv 2
+c = xor c and get Vv 1 get Vv 2
+u = add s c
+put Vv 7 get Vv 6
+put Vv 6 get Vv 5
+put Vv 5 e
+put Vv 4 add get Vv 3 t
+put Vv 3 get Vv 2
+put Vv 2 get Vv 1
+put Vv 1 a
+put Vv 0 add t u
+end
+
+fn block to void
+for i ulong 16
+x = uint 0
+for j ulong 4
+x = or shl x 8 uint get Hb add mul i 4 j
+end
+put W i x
+end
+for j ulong 48
+i = add j 16
+x = get W sub i 15
+y = get W sub i 2
+s = xor xor rotate x 7 rotate x 18 shr x 3
+t = xor xor rotate y 17 rotate y 19 shr y 10
+put W i add add get W sub i 16 s add get W sub i 7 t
+end
+for i ulong 8
+put Vv i get H i
+end
+for i ulong 64
+round i
+end
+for i ulong 8
+put H i add get H i get Vv i
+end
+end
+
+fn hinit to void
+put H 0 1779033703
+put H 1 3144134277
+put H 2 1013904242
+put H 3 2773480762
+put H 4 1359893119
+put H 5 2600822924
+put H 6 528734635
+put H 7 1541459225
+put Hs 0 0
+put Hs 1 0
+end
+
+fn hbyte c uchar to void
+p = get Hs 0
+put Hb p c
+p = add p 1
+put Hs 1 add get Hs 1 1
+if eq p 64
+block
+p = 0
+end
+put Hs 0 p
+end
+
+fn update off ulong count ulong to void
+for i ulong count
+hbyte get Buf add off i
+end
+end
+
+fn finish to void
+bits = mul get Hs 1 8
+hbyte 128
+while ne get Hs 0 56
+hbyte 0
+end
+for i ulong 8
+hbyte uchar and shr bits mul sub 7 i 8 255
+end
+for i ulong 32
+x = get H div i 4
+put Hash i uchar and shr x uint mul sub 3 rem i 4 8 255
+end
+end
+
+fn constants to void
+put K 0 1116352408
+put K 1 1899447441
+put K 2 3049323471
+put K 3 3921009573
+put K 4 961987163
+put K 5 1508970993
+put K 6 2453635748
+put K 7 2870763221
+put K 8 3624381080
+put K 9 310598401
+put K 10 607225278
+put K 11 1426881987
+put K 12 1925078388
+put K 13 2162078206
+put K 14 2614888103
+put K 15 3248222580
+put K 16 3835390401
+put K 17 4022224774
+put K 18 264347078
+put K 19 604807628
+put K 20 770255983
+put K 21 1249150122
+put K 22 1555081692
+put K 23 1996064986
+put K 24 2554220882
+put K 25 2821834349
+put K 26 2952996808
+put K 27 3210313671
+put K 28 3336571891
+put K 29 3584528711
+put K 30 113926993
+put K 31 338241895
+put K 32 666307205
+put K 33 773529912
+put K 34 1294757372
+put K 35 1396182291
+put K 36 1695183700
+put K 37 1986661051
+put K 38 2177026350
+put K 39 2456956037
+put K 40 2730485921
+put K 41 2820302411
+put K 42 3259730800
+put K 43 3345764771
+put K 44 3516065817
+put K 45 3600352804
+put K 46 4094571909
+put K 47 275423344
+put K 48 430227734
+put K 49 506948616
+put K 50 659060556
+put K 51 883997877
+put K 52 958139571
+put K 53 1322822218
+put K 54 1537002063
+put K 55 1747873779
+put K 56 1955562222
+put K 57 2024104815
+put K 58 2227730452
+put K 59 2361852424
+put K 60 2428436474
+put K 61 2756734187
+put K 62 3204031479
+put K 63 3329325298
+end
+
+note R: seq, active, kind (1 chat 2 code 3 more), asked, heard, slow,
+note code-visible, prompt length, answer length, history count, session.
+global R ulong 16
+global Prompt uchar 160
+global Answer uchar 160
+global Hist uchar 5120
+global Hlen ulong 32
+text Ack "I need to code that. Let me send it off to the Spark."
+text Ackmore "Let me take that change to the Spark."
+fn textok to bool
+n = get Inlen 0
+if or eq n 0 gt n 159
+ret false
+end
+for i ulong n
+c = get In i
+if or lt c 32 gt c 126
+ret false
+end
+end
+ret true
+end
+fn histadd which ulong to void
+n = get R 9
+if eq n 32
+for i ulong 4960
+put Hist i get Hist add i 160
+end
+for i ulong 31
+put Hlen i get Hlen add i 1
+end
+n = 31
+end
+size = get R add which 7
+for i ulong size
+if eq which 0
+put Hist add mul n 160 i get Prompt i
+else
+put Hist add mul n 160 i get Answer i
+end
+end
+put Hlen n size
+put R 9 add n 1
+end
+fn start kind ulong now ulong to bool
+if or ne get R 1 0 ge get R 0 4294967295
+ret false
+end
+if or lt kind 1 gt kind 3
+ret false
+end
+if and eq kind 3 eq get R 6 0
+ret false
+end
+if not textok
+ret false
+end
+for i ulong get Inlen 0
+put Prompt i get In i
+end
+put R 7 get Inlen 0
+put R 0 add get R 0 1
+put R 1 1
+put R 2 kind
+put R 3 now
+put R 4 now
+put R 5 0
+put R 8 0
+put R 11 0
+put R 13 0
+if eq kind 2
+for i ulong len Ack
+put Answer i get Ack i
+end
+put R 8 len Ack
+end
+if eq kind 3
+for i ulong len Ackmore
+put Answer i get Ackmore i
+end
+put R 8 len Ackmore
+end
+histadd 0
+ret true
+end
+fn answer seq ulong now ulong to bool
+if or eq get R 1 0 ne seq get R 0
+ret false
+end
+if or lt now get R 4 not textok
+ret false
+end
+for i ulong get Inlen 0
+put Answer i get In i
+end
+put R 8 get Inlen 0
+put R 4 now
+put R 1 0
+histadd 1
+ret true
+end
+fn cancel to void
+put R 1 0
+end
+fn heard seq ulong now ulong to bool
+if or eq get R 1 0 ne seq get R 0
+ret false
+end
+if lt now get R 4
+ret false
+end
+put R 4 now
+ret true
+end
+fn tick now ulong to ulong
+if or eq get R 1 0 lt now get R 4
+ret 0
+end
+if ge sub now get R 4 30000
+cancel
+ret 2
+end
+if and eq get R 5 0 ge sub now get R 3 20000
+put R 5 1
+ret 1
+end
+ret 0
+end
+fn reset to void
+for i ulong 9
+put R add i 1 0
+end
+end
+note Restore one externally decoded transcript line. No live job or ID reuse.
+fn restore to bool
+if or ne get R 1 0 not textok
+ret false
+end
+for i ulong get Inlen 0
+put Answer i get In i
+end
+put R 8 get Inlen 0
+histadd 1
+ret true
+end
+note CODE protocol: C seq, parts, bytes, crc, got. D parsed header.
+global C ulong 8
+global D ulong 8
+global Code uchar 32769
+global Have uchar 256
+global Piece uchar 128
+global Lang uchar 16
+global Newlang uchar 16
+fn codebeg seq ulong to void
+for i ulong 8
+put C i 0
+end
+put C 0 seq
+for i ulong 256
+put Have i 0
+end
+put Code 0 0
+end
+fn decfield slot ulong sep uchar to void
+number
+put D slot get P 1
+expect sep
+end
+fn hexread to void
+v = ulong 0
+for i ulong 8
+p = get P 0
+if ge p get Inlen 0
+put P 2 1
+ret
+end
+c = get In p
+d = ulong 16
+if isdigit c
+d = sub ulong c 48
+else
+if and ge c 97 le c 102
+d = sub ulong c 87
+end
+end
+if ge d 16
+put P 2 1
+ret
+end
+v = add mul v 16 d
+put P 0 add p 1
+end
+put D 4 v
+expect 32
+end
+fn codehead to bool
+put P 0 0
+put P 2 0
+expect 67
+expect 79
+expect 68
+expect 69
+expect 32
+decfield 0 32
+decfield 1 47
+decfield 2 32
+decfield 3 32
+hexread
+if ne get P 2 0
+ret false
+end
+if or ne get D 0 get C 0 eq get D 3 0
+ret false
+end
+if gt get D 3 32768
+ret false
+end
+if ne get D 2 div add get D 3 127 128
+ret false
+end
+if or lt get D 1 1 gt get D 1 get D 2
+ret false
+end
+if ne get C 1 0
+if or ne get C 1 get D 2 ne get C 2 get D 3
+ret false
+end
+if ne get C 3 get D 4
+ret false
+end
+end
+ret true
+end
+fn langread to bool
+for i ulong 16
+put Newlang i 0
+end
+n = ulong 0
+p = get P 0
+while lt p get Inlen 0
+c = get In p
+if eq c 32
+if eq n 0
+ret false
+end
+put P 0 add p 1
+put D 5 n
+ret true
+end
+ok = or and ge c 97 le c 122 isdigit c
+ok = or ok or eq c 43 eq c 35
+ok = or ok or eq c 46 or eq c 95 eq c 45
+if or not ok ge n 15
+ret false
+end
+put Newlang n c
+p = add p 1
+n = add n 1
+end
+ret false
+end
+fn pieceread to ulong
+p = get P 0
+n = ulong 0
+while lt p get Inlen 0
+c = get In p
+p = add p 1
+if eq c 92
+if ge p get Inlen 0
+ret 129
+end
+c = get In p
+p = add p 1
+if eq c 110
+c = 10
+else
+if ne c 92
+ret 129
+end
+end
+else
+if or lt c 32 gt c 126
+ret 129
+end
+end
+if ge n 128
+ret 129
+end
+put Piece n c
+n = add n 1
+end
+ret n
+end
+fn codetake to bool
+if gt get Inlen 0 320
+ret false
+end
+if not codehead
+ret false
+end
+if not langread
+ret false
+end
+n = pieceread
+want = ulong 128
+if eq get D 1 get D 2
+want = sub get D 3 mul sub get D 2 1 128
+end
+if ne n want
+ret false
+end
+slot = sub get D 1 1
+off = mul slot 128
+if ne get C 1 0
+for i ulong 16
+if ne get Lang i get Newlang i
+ret false
+end
+end
+end
+if ne get Have slot 0
+for i ulong n
+if ne get Code add off i get Piece i
+ret false
+end
+end
+ret true
+end
+put C 1 get D 2
+put C 2 get D 3
+put C 3 get D 4
+for i ulong 16
+put Lang i get Newlang i
+end
+for i ulong n
+put Code add off i get Piece i
+end
+put Have slot 1
+put C 4 add get C 4 1
+ret true
+end
+fn codecrc to uint
+c = uint 4294967295
+for i ulong get C 2
+c = xor c uint get Code i
+for k ulong 8
+if ne and c 1 0
+c = xor shr c 1 3988292384
+else
+c = shr c 1
+end
+end
+end
+ret not c
+end
+fn codestat to ulong
+if eq get C 1 0
+ret 0
+end
+if lt get C 4 get C 1
+ret 1
+end
+if ne ulong codecrc get C 3
+ret 3
+end
+lines = ulong 0
+for i ulong get C 2
+c = get Code i
+if eq c 0
+ret 3
+end
+if eq c 10
+lines = add lines 1
+end
+end
+if ne get Code sub get C 2 1 10
+lines = add lines 1
+end
+if gt lines 800
+ret 3
+end
+put Code get C 2 0
+ret 2
+end
+fn missing to ulong
+if eq get C 1 0
+ret 1
+end
+for i ulong get C 1
+if eq get Have i 0
+ret add i 1
+end
+end
+ret 0
+end
+note Display admission is distinct from a model's closing sentence.
+fn codeshow seq ulong to bool
+if eq get R 1 0
+ret false
+end
+if or ne seq get R 0 ne seq get C 0
+ret false
+end
+if ne codestat 2
+ret false
+end
+put R 6 1
+ret true
+end
+note Pure courier datagrams. Q session, current seq, last LINE, head, count.
+global Q ulong 8
+global N ulong 8
+global Queue uchar 2560
+global Qlens ulong 8
+global Jbuf uchar 4096
+global Jhave uchar 5
+global J ulong 3
+text Keys "ALLEN-COURIER v=1 run= kind= seq= part= bytes="
+text Kinds "JOBLINEGOTACKHELLOHI"
+fn keyread off ulong count ulong to void
+for i ulong count
+expect get Keys add off i
+end
+end
+fn keyemit off ulong count ulong to void
+for i ulong count
+emitb get Keys add off i
+end
+end
+fn kindoff k ulong to ulong
+if eq k 1
+ret 0
+end
+if eq k 2
+ret 3
+end
+if eq k 3
+ret 7
+end
+if eq k 4
+ret 10
+end
+if eq k 5
+ret 13
+end
+ret 18
+end
+fn kindlen k ulong to ulong
+if eq k 2
+ret 4
+end
+if eq k 5
+ret 5
+end
+if eq k 6
+ret 2
+end
+ret 3
+end
+fn qbegin run ulong seq ulong to void
+for i ulong 8
+put Q i 0
+end
+put Q 0 run
+put Q 1 seq
+for i ulong 5
+put Jhave i 0
+end
+for i ulong 3
+put J i 0
+end
+end
+note Serializer takes body In/Inlen; Outb/Outlen are published only on success.
+fn packet k ulong seq ulong part ulong total ulong bytes ulong to bool
+if or lt k 1 gt k 6
+ret false
+end
+if gt get Inlen 0 1000
+ret false
+end
+outreset
+keyemit 0 22
+for i ulong 16
+d = and shr get Q 0 mul sub 15 i 4 15
+emitb get Digits d
+end
+keyemit 22 6
+off = kindoff k
+for i ulong kindlen k
+emitb get Kinds add off i
+end
+keyemit 28 5
+emitn seq
+keyemit 33 6
+emitn part
+emitb 47
+emitn total
+keyemit 39 7
+emitn bytes
+emitb 10
+for i ulong get Inlen 0
+emitb get In i
+end
+ret eq get Err 0 0
+end
+fn pkparse to bool
+if or gt get Inlen 0 1200 lt get Inlen 0 65
+ret false
+end
+put P 0 0
+put P 2 0
+keyread 0 22
+run = ulong 0
+for i ulong 16
+p = get P 0
+c = get In p
+d = ulong 16
+if isdigit c
+d = sub ulong c 48
+else
+if and ge c 97 le c 102
+d = sub ulong c 87
+end
+end
+if ge d 16
+ret false
+end
+run = or shl run 4 d
+put P 0 add p 1
+end
+if ne run get Q 0
+ret false
+end
+keyread 22 6
+kind = ulong 0
+for k ulong 6
+at = get P 0
+off = kindoff add k 1
+size = kindlen add k 1
+ok = true
+for i ulong size
+if not ineq add at i get Kinds add off i
+ok = false
+end
+end
+if and ok ineq add at size 32
+kind = add k 1
+end
+end
+if eq kind 0
+ret false
+end
+put N 0 kind
+put P 0 add get P 0 kindlen kind
+keyread 28 5
+number
+put N 1 get P 1
+keyread 33 6
+number
+put N 2 get P 1
+expect 47
+number
+put N 3 get P 1
+keyread 39 7
+number
+put N 4 get P 1
+expect 10
+put N 5 get P 0
+put N 6 sub get Inlen 0 get P 0
+ret eq get P 2 0
+end
+fn jobtake to ulong
+note n via N4
+note part via N2
+note total via N3
+if or eq get N 4 0 gt get N 4 4096
+ret 0
+end
+if ne get N 3 div add get N 4 999 1000
+ret 0
+end
+if or eq get N 2 0 gt get N 2 get N 3
+ret 0
+end
+want = ulong 1000
+if eq get N 2 get N 3
+want = sub get N 4 mul sub get N 3 1 1000
+end
+if ne want get N 6
+ret 0
+end
+if ne get J 0 0
+if or ne get J 0 get N 4 ne get J 1 get N 3
+ret 0
+end
+end
+slot = sub get N 2 1
+off = mul slot 1000
+if ne get Jhave slot 0
+for i ulong want
+if ne get Jbuf add off i get In add get N 5 i
+ret 0
+end
+end
+ret 2
+end
+for i ulong want
+put Jbuf add off i get In add get N 5 i
+end
+put Jhave slot 1
+put J 0 get N 4
+put J 1 get N 3
+put J 2 add get J 2 1
+ret 1
+end
+note Return0 refused,1 accepted,2 duplicate requiring GOT/ACK again.
+fn qreceive to ulong
+if not pkparse
+ret 0
+end
+if ne get N 1 get Q 1
+ret 0
+end
+kind = get N 0
+if eq kind 1
+ret jobtake
+end
+if ne kind 2
+if ne get N 6 0
+ret 0
+end
+ret 1
+end
+note part via N2
+if eq get N 2 0
+ret 0
+end
+if le get N 2 get Q 2
+ret 2
+end
+if or ne get N 2 add get Q 2 1 eq get Q 4 8
+ret 0
+end
+n = get N 6
+if or eq n 0 gt n 319
+ret 0
+end
+slot = rem add get Q 3 get Q 4 8
+for i ulong n
+put Queue add mul slot 320 i get In add get N 5 i
+end
+put Qlens slot n
+put Q 4 add get Q 4 1
+put Q 2 get N 2
+ret 1
+end
+fn qtake to bool
+if eq get Q 4 0
+ret false
+end
+slot = get Q 3
+n = get Qlens slot
+for i ulong n
+put In i get Queue add mul slot 320 i
+end
+put Inlen 0 n
+put Q 3 rem add slot 1 8
+put Q 4 sub get Q 4 1
+ret true
+end
+note Courier client lifecycle; injected monotonic milliseconds, no host clock/socket.
+note T lastclock, HIvalid, HIat, HELLOvalid, HELLOat, active, acked, jobat,
+note joblength, cursor, pendingkind, pendingpart, reserved, GOTpart, reserved, reserved.
+note Serialized API: qnext publishes one datagram; qsent records actual send result.
+note Consume Outb before another serializer; failed sends leave retries due.
+global T ulong 16
+global JobOut uchar 4096
+fn qstart run ulong now ulong to bool
+if eq run 0
+ret false
+end
+qbegin run 0
+for i ulong 16
+put T i 0
+end
+put T 0 now
+ret true
+end
+fn qready now ulong to bool
+if or eq get Q 0 0 lt now get T 0
+ret false
+end
+if eq get T 1 0
+ret false
+end
+ret lt sub now get T 2 30000
+end
+fn qsubmit now ulong to bool
+if or eq get Q 0 0 lt now get T 0
+ret false
+end
+if ne get T 10 0
+ret false
+end
+if and ne get T 5 0 eq get T 6 0
+ret false
+end
+n = get Inlen 0
+if or eq n 0 gt n 4096
+ret false
+end
+if ge get Q 1 4294967295
+ret false
+end
+seq = add get Q 1 1
+qbegin get Q 0 seq
+for i ulong n
+c = get In i
+if or eq c 10 eq c 13
+c = uchar 32
+end
+put JobOut i c
+end
+put T 0 now
+put T 5 1
+put T 6 0
+put T 7 now
+put T 8 n
+put T 9 1
+put T 13 0
+ret true
+end
+fn qnext now ulong link bool to bool
+if or eq get Q 0 0 lt now get T 0
+ret false
+end
+if ne get T 10 0
+ret false
+end
+put T 0 now
+if not link
+ret false
+end
+if ne get T 13 0
+put Inlen 0 0
+if not packet 3 get Q 1 get T 13 0 0
+ret false
+end
+put T 10 3
+put T 11 get T 13
+ret true
+end
+delay = ulong 2000
+if qready now
+delay = ulong 10000
+end
+if or eq get T 3 0 ge sub now get T 4 delay
+put Inlen 0 0
+if not packet 5 0 0 0 0
+ret false
+end
+put T 10 5
+put T 11 0
+ret true
+end
+if or eq get T 5 0 ne get T 6 0
+ret false
+end
+part = get T 9
+if eq part 0
+if lt sub now get T 7 2000
+ret false
+end
+part = ulong 1
+end
+n = get T 8
+total = div add n 999 1000
+off = mul sub part 1 1000
+size = sub n off
+if gt size 1000
+size = ulong 1000
+end
+for i ulong size
+put In i get JobOut add off i
+end
+put Inlen 0 size
+if not packet 1 get Q 1 part total n
+ret false
+end
+put T 10 1
+put T 11 part
+ret true
+end
+fn qsent now ulong ok bool to bool
+if or eq get T 10 0 lt now get T 0
+ret false
+end
+kind = get T 10
+part = get T 11
+put T 0 now
+put T 10 0
+put T 11 0
+if not ok
+ret true
+end
+if eq kind 5
+put T 3 1
+put T 4 now
+end
+if eq kind 3
+if eq get T 13 part
+put T 13 0
+end
+end
+if eq kind 1
+if or ne get T 6 0 ge part div add get T 8 999 1000
+put T 9 0
+put T 7 now
+else
+put T 9 add part 1
+end
+end
+ret true
+end
+fn qincoming now ulong to ulong
+if or eq get Q 0 0 lt now get T 0
+ret 0
+end
+if not pkparse
+ret 0
+end
+kind = get N 0
+if eq kind 6
+if or ne get N 1 0 ne get N 2 0
+ret 0
+end
+if or ne get N 3 0 ne get N 4 0
+ret 0
+end
+if ne get N 6 0
+ret 0
+end
+put T 0 now
+put T 1 1
+put T 2 now
+ret 1
+end
+if or eq get T 5 0 ne get N 1 get Q 1
+ret 0
+end
+if eq kind 4
+if or ne get N 2 0 ne get N 3 0
+ret 0
+end
+if or ne get N 4 0 ne get N 6 0
+ret 0
+end
+put T 0 now
+put T 6 1
+put T 9 0
+ret 1
+end
+if ne kind 2
+ret 0
+end
+if or ne get N 3 0 ne get N 4 0
+ret 0
+end
+if and ne get T 13 0 ne get T 13 get N 2
+ret 0
+end
+result = qreceive
+if eq result 0
+ret 0
+end
+put T 0 now
+put T 6 1
+put T 9 0
+put T 13 get N 2
+ret result
+end
+fn qcancel to void
+put T 5 0
+put T 6 0
+put T 8 0
+put T 9 0
+put T 10 0
+put T 11 0
+put T 13 0
+put Q 3 0
+put Q 4 0
+end
+note Legacy application record codec; SHA is unkeyed integrity ONLY.
+global Unit uchar 4096
+global Enc uchar 4096
+global Mem uchar 3692
+global Md ulong 3
+global Note uchar 128
+global Ns ulong 4
+text Magic "AIENALM1"
+text Nmagic "AIENNOT1"
+fn get32 off ulong to ulong
+v = ulong 0
+for i ulong 4
+v = or v shl ulong get Unit add off i mul i 8
+end
+ret v
+end
+fn get64 off ulong to ulong
+ret or get32 off shl get32 add off 4 32
+end
+fn put32 off ulong v ulong to void
+for i ulong 4
+put Unit add off i uchar and shr v mul i 8 255
+end
+end
+fn put64 off ulong v ulong to void
+put32 off and v 4294967295
+put32 add off 4 shr v 32
+end
+fn mem32 off ulong to ulong
+v = ulong 0
+for i ulong 4
+v = or v shl ulong get Mem add off i mul i 8
+end
+ret v
+end
+fn mset32 off ulong v ulong to void
+for i ulong 4
+put Mem add off i uchar and shr v mul i 8 255
+end
+end
+fn zeroend off ulong to bool
+for i ulong sub ulong 4096 off
+if ne get Unit add off i 0
+ret false
+end
+end
+ret true
+end
+fn fieldok off ulong cap ulong name bool to bool
+n = ulong 0
+while lt n cap
+if eq get Unit add off n 0
+for j ulong sub cap n
+if ne get Unit add add off n j 0
+ret false
+end
+end
+ret true
+end
+c = get Unit add off n
+lower = and ge c 97 le c 122
+digit = isdigit c
+if name
+if eq n 0
+if not or and ge c 65 le c 90 digit
+ret false
+end
+else
+if not or lower digit
+ret false
+end
+end
+else
+if eq c 32
+if or eq n 0 eq n sub cap 1
+ret false
+end
+if eq get Unit add off add n 1 0
+ret false
+end
+if eq get Unit add off sub n 1 32
+ret false
+end
+else
+if not or lower digit
+ret false
+end
+end
+end
+n = add n 1
+end
+ret false
+end
+fn digest count ulong to void
+hinit
+for i ulong 32
+hbyte get Unit i
+end
+for i ulong count
+hbyte get Unit add i 64
+end
+finish
+end
+fn hashok count ulong to bool
+digest count
+d = uchar 0
+for i ulong 32
+d = or d xor get Hash i get Unit add i 32
+end
+ret eq d 0
+end
+fn seal count ulong to void
+digest count
+for i ulong 32
+put Unit add i 32 get Hash i
+end
+end
+fn memvalid to bool
+for i ulong 8
+if ne get Unit i get Magic i
+ret false
+end
+end
+ver = get32 8
+if or lt ver 2 gt ver 4
+ret false
+end
+n = get32 96
+if or gt n 32 gt get32 100 512
+ret false
+end
+size = add 40 mul n 113
+if ge ver 3
+size = add size 24
+end
+if eq ver 4
+size = add size 12
+end
+if or ne size get32 12 eq get64 16 0
+ret false
+end
+for i ulong 8
+if ne get Unit add i 24 0
+ret false
+end
+end
+if not zeroend add 64 size
+ret false
+end
+if not hashok size
+ret false
+end
+if not fieldok 72 24 true
+ret false
+end
+for i ulong n
+off = add 104 mul i 113
+if or eq get Unit off 0 eq get Unit add off 48 0
+ret false
+end
+if not fieldok off 48 false
+ret false
+end
+if not fieldok add off 48 64 false
+ret false
+end
+if gt get Unit add off 112 1
+ret false
+end
+end
+off = add 104 mul n 113
+if ge ver 3
+if not fieldok off 24 true
+ret false
+end
+end
+if eq ver 4
+if ne get Unit add off 27 0
+ret false
+end
+end
+ret true
+end
+fn memdec to bool
+if not memvalid
+ret false
+end
+size = get32 12
+for i ulong 3692
+put Mem i 0
+end
+for i ulong size
+put Mem i get Unit add i 64
+end
+put Md 0 get64 16
+put Md 1 get32 8
+put Md 2 size
+ret true
+end
+fn memenc gen ulong to bool
+n = mem32 32
+if or gt n 32 eq gen 0
+ret false
+end
+size = add 76 mul n 113
+for i ulong 4096
+put Unit i 0
+end
+for i ulong 8
+put Unit i get Magic i
+end
+put32 8 4
+put32 12 size
+put64 16 gen
+for i ulong size
+put Unit add i 64 get Mem i
+end
+seal size
+if not memvalid
+ret false
+end
+for i ulong 4096
+put Enc i get Unit i
+end
+ret true
+end
+fn noteval index ulong to bool
+for i ulong 8
+if ne get Unit i get Nmagic i
+ret false
+end
+end
+n = get32 12
+if or eq n 0 ge n 128
+ret false
+end
+if or ne get32 8 1 ne get32 16 index
+ret false
+end
+if or gt get32 24 1 ne get32 28 0
+ret false
+end
+if not zeroend add n 64
+ret false
+end
+for i ulong n
+c = get Unit add i 64
+if or lt c 32 gt c 126
+ret false
+end
+end
+ret hashok n
+end
+fn notedec index ulong to bool
+if not noteval index
+ret false
+end
+n = get32 12
+for i ulong 128
+put Note i 0
+end
+for i ulong n
+put Note i get Unit add i 64
+end
+put Ns 0 n
+put Ns 1 index
+put Ns 2 get32 20
+put Ns 3 get32 24
+ret true
+end
+fn noteenc to bool
+n = get Ns 0
+if or eq n 0 ge n 128
+ret false
+end
+if or gt get Ns 1 511 gt get Ns 2 4294967295
+ret false
+end
+if gt get Ns 3 1
+ret false
+end
+for i ulong n
+c = get Note i
+if or lt c 32 gt c 126
+ret false
+end
+end
+for i ulong 4096
+put Unit i 0
+end
+for i ulong 8
+put Unit i get Nmagic i
+end
+put32 8 1
+put32 12 n
+put32 16 get Ns 1
+put32 20 get Ns 2
+put32 24 get Ns 3
+for i ulong n
+put Unit add i 64 get Note i
+end
+seal n
+for i ulong 4096
+put Enc i get Unit i
+end
+ret true
+end
+note Store St gen,newest,valid. Tx phase,target,newgen. Provider owns actual I/O.
+global St ulong 3
+global Nt ulong 2
+global Load ulong 1
+global Tx ulong 3
+fn txbegin to bool
+if ne get Nt 0 0
+ret false
+end
+if or ne get Tx 0 0 eq get St 0 18446744073709551615
+ret false
+end
+if not memenc add get St 0 1
+ret false
+end
+put Tx 1 0
+if ne get St 0 0
+put Tx 1 sub ulong 1 get St 1
+end
+put Tx 2 add get St 0 1
+put Tx 0 1
+ret true
+end
+fn txwrite ok bool to bool
+if ne get Tx 0 1
+ret false
+end
+if not ok
+put Tx 0 0
+ret false
+end
+put Tx 0 2
+ret true
+end
+fn txflush ok bool to bool
+if ne get Tx 0 2
+ret false
+end
+if not ok
+put Tx 0 0
+ret false
+end
+put Tx 0 3
+ret true
+end
+fn txread ok bool to bool
+if ne get Tx 0 3
+ret false
+end
+put Tx 0 0
+if not ok
+ret false
+end
+d = uchar 0
+for i ulong 4096
+d = or d xor get Unit i get Enc i
+end
+if ne d 0
+ret false
+end
+put St 0 get Tx 2
+put St 1 get Tx 1
+if lt get St 2 2
+put St 2 add get St 2 1
+end
+ret true
+end
+note Load each copy once into Unit. Caller resets St and calls loadcopy0,1.
+fn loadbeg to void
+for i ulong 3
+put St i 0
+end
+put Load 0 0
+end
+fn loadcopy slot ulong to bool
+if gt slot 1
+ret false
+end
+if ne and get Load 0 shl ulong 1 slot 0
+ret false
+end
+if not memvalid
+ret false
+end
+put Load 0 or get Load 0 shl ulong 1 slot
+put St 2 add get St 2 1
+if gt get64 16 get St 0
+b = memdec
+put St 0 get Md 0
+put St 1 slot
+end
+ret true
+end
+note Note transaction completes before the parent copy may publish its count.
+fn nbegin to bool
+if or ne get Nt 0 0 ne get Tx 0 0
+ret false
+end
+if not noteenc
+ret false
+end
+put Nt 1 get Ns 1
+put Nt 0 1
+ret true
+end
+fn nwrite ok bool to bool
+if ne get Nt 0 1
+ret false
+end
+if not ok
+put Nt 0 0
+ret false
+end
+put Nt 0 2
+ret true
+end
+fn nflush ok bool to bool
+if ne get Nt 0 2
+ret false
+end
+if not ok
+put Nt 0 0
+ret false
+end
+put Nt 0 3
+ret true
+end
+fn nread ok bool to bool
+if ne get Nt 0 3
+ret false
+end
+put Nt 0 0
+if not ok
+ret false
+end
+d = uchar 0
+for i ulong 4096
+d = or d xor get Enc i get Unit i
+end
+if ne d 0
+ret false
+end
+ret noteval get Nt 1
+end
+note Intent vocabulary frozen from svc/allen_intent.c. It selects jobs, never answers.
+global Fold uchar 160
+global Fn ulong 2
+text Lists "please|can you|could you|would you|will you|i d like you to|i want you to|i need you to|allen|hey allen|ok|okay\nwrite|make|build|create|code|program|generate|implement|develop|give me a|i need a|i want a\ncode|program|programs|script|scripts|function|functions|app|apps|application|game|games|website|web page|webpage|calculator|converter|parser|compiler|interpreter|algorithm|class|api|server|bot|regex|unit test|unit tests|cli|command line tool|snake|tetris|pong|todo app|to do app|to do list app|timer app|stopwatch|python|javascript|typescript|rust|golang|java|kotlin|swift|ruby|php|html|css|sql|bash|shell script|c program|c code|in c|c plus plus|cpp|mojo|zig|haskell|lua|perl\npoem|poems|haiku|story|stories|song|songs|letter|email|essay|joke|jokes|limerick|speech\ncode|program|script\nnow|add|also|and|change|make it|make the|rename|remove|delete|replace|use|fix|put|give it|let it|instead|then|next|can it|could it|it should|the|move|turn|show|split|convert it|rewrite|port it|translate it|explain it\nwrite|make|build|create|code|program|draft|compose|generate|design|implement|invent|name|give me a|i need a|i want a\na poem|a haiku|a story|a song|a script|a function|a program|a list of|some code|a letter|an email|a plan for|a name for\nexplain|what is|what are|whats|what s|why|how does|how do|how is|how are|describe|tell me about|what does|who was|who is|define|when was|when did|where is|is it true\ndifference between|mean|means\ndo|run|fix|find|search|look up|check|open|send|start|stop|install|set up|plan|schedule|calculate|work out|convert|translate|summarize|summarise|list|sort|count|compare|turn|go\n"
+fn foldin to void
+n = ulong 0
+space = false
+for i ulong get Inlen 0
+c = get In i
+if and ge c 65 le c 90
+c = add sub c 65 97
+end
+if or and ge c 97 le c 122 isdigit c
+if and space gt n 0
+put Fold n uchar 32
+n = add n 1
+end
+put Fold n c
+n = add n 1
+space = false
+else
+space = true
+end
+end
+put Fn 0 n
+put Fn 1 0
+end
+fn phrase at ulong off ulong size ulong to bool
+if gt add at size get Fn 0
+ret false
+end
+for i ulong size
+if ne get Fold add at i get Lists add off i
+ret false
+end
+end
+if lt add at size get Fn 0
+if ne get Fold add at size 32
+ret false
+end
+end
+ret true
+end
+fn inphrase off ulong size ulong anypos bool to bool
+if not anypos
+ret phrase get Fn 1 off size
+end
+count = sub get Fn 0 get Fn 1
+for i ulong count
+at = add i get Fn 1
+ok = eq at get Fn 1
+if gt at 0
+ok = or ok eq get Fold sub at 1 32
+end
+if ok
+if phrase at off size
+ret true
+end
+end
+end
+ret false
+end
+fn listed group ulong anypos bool to ulong
+g = ulong 0
+s = ulong 0
+for p ulong len Lists
+c = get Lists p
+if or eq c 124 eq c 10
+if eq g group
+if inphrase s sub p s anypos
+ret sub p s
+end
+end
+s = add p 1
+if eq c 10
+g = add g 1
+end
+end
+end
+ret 0
+end
+fn classify to ulong
+if not textok
+ret 0
+end
+foldin
+skip = listed 0 false
+while gt skip 0
+if ge add get Fn 1 skip get Fn 0
+skip = 0
+else
+put Fn 1 add add get Fn 1 skip 1
+skip = listed 0 false
+end
+end
+if and ne get R 6 0 gt listed 5 false 0
+ret 3
+end
+plain = listed 4 false
+if or eq plain 4 eq plain 7
+ret 2
+end
+if and gt listed 3 true 0 eq listed 4 true 0
+ret 1
+end
+if and gt listed 1 false 0 gt listed 2 true 0
+ret 2
+end
+ret 1
+end
+note Ordinary want enum0chat,1make,2explain,3do.
+fn jobwant to ulong
+if gt listed 8 false 0
+ret 2
+end
+if or gt listed 6 false 0 gt listed 7 true 0
+ret 1
+end
+if gt listed 10 false 0
+ret 3
+end
+if gt listed 9 true 0
+ret 2
+end
+ret 0
+end
+text Job "JOB "
+text Codeask " asked "
+text Forcode " for code.\t"
+text Formore " to change the code just shown.\t"
+text Wantstr "chatmakeexplaindo"
+text Intro "You are the far hands of "
+text Home ", a quiet presence living in AIENOS on "
+text Comp "'s computer. You answer as "
+text Sees "; "
+text Words " sees only your words, as if "
+text Said " said them. Plain English, short sentences, no headings, no lists, no greetings, no apologies. Plain letters and punctuation only: no dashes, no curly quotes, no symbols. Never mention a model, a prompt or instructions. "
+text Make " asked for something to be made. Make it whole and correct. Begin with one short sentence saying what you made, then the work itself."
+text Explain " asked to understand something. Explain it in three plain sentences at most, the heart of it first, no more than is needed."
+text Doing " asked for something to be done. "
+text Cannot " cannot yet act outside this computer, so say in two or three short sentences what you would do, in order, and what you would need."
+text Chat " said something in passing. Answer in one or two warm, plain sentences."
+text Allen "Allen"
+text Person "the person"
+fn selfemit to void
+off = add 40 mul mem32 32 113
+if eq get Mem off 0
+for i ulong len Allen
+emitb get Allen i
+end
+else
+for i ulong 24
+c = get Mem add off i
+if eq c 0
+ret
+end
+emitb c
+end
+end
+end
+fn whoemit to void
+if eq get Mem 8 0
+for i ulong len Person
+emitb get Person i
+end
+else
+for i ulong 24
+c = get Mem add i 8
+if eq c 0
+ret
+end
+emitb c
+end
+end
+end
+fn jobbuild kind ulong seq ulong to bool
+if or lt kind 1 gt kind 3
+ret false
+end
+if or eq seq 0 gt seq 4294967295
+ret false
+end
+if not textok
+ret false
+end
+outreset
+for i ulong len Job
+emitb get Job i
+end
+emitn seq
+emitb 32
+if gt kind 1
+emitb 99
+emitb 111
+emitb 100
+emitb 101
+if eq kind 3
+emitb 45
+emitb 109
+emitb 111
+emitb 114
+emitb 101
+end
+emitb 32
+whoemit
+for i ulong len Codeask
+emitb get Codeask i
+end
+selfemit
+if eq kind 3
+for i ulong len Formore
+emitb get Formore i
+end
+else
+for i ulong len Forcode
+emitb get Forcode i
+end
+end
+else
+w = jobwant
+off = ulong 0
+size = ulong 4
+if eq w 1
+off = 4
+end
+if eq w 2
+off = 8
+size = 7
+end
+if eq w 3
+off = 15
+size = 2
+end
+for i ulong size
+emitb get Wantstr add off i
+end
+emitb 32
+for i ulong len Intro
+emitb get Intro i
+end
+selfemit
+for i ulong len Home
+emitb get Home i
+end
+whoemit
+for i ulong len Comp
+emitb get Comp i
+end
+selfemit
+for i ulong len Sees
+emitb get Sees i
+end
+whoemit
+for i ulong len Words
+emitb get Words i
+end
+selfemit
+for i ulong len Said
+emitb get Said i
+end
+whoemit
+if eq w 0
+for i ulong len Chat
+emitb get Chat i
+end
+end
+if eq w 1
+for i ulong len Make
+emitb get Make i
+end
+end
+if eq w 2
+for i ulong len Explain
+emitb get Explain i
+end
+end
+if eq w 3
+for i ulong len Doing
+emitb get Doing i
+end
+selfemit
+for i ulong len Cannot
+emitb get Cannot i
+end
+end
+emitb 9
+end
+for i ulong get Inlen 0
+emitb get In i
+end
+ret le get Outlen 0 4096
+end
+note SAY/WAIT parser, staged folded bytes. Native CODE receive remains separate.
+global Say uchar 160
+global S ulong 5
+fn sayhead to bool
+put P 0 0
+put P 2 0
+if ineq 0 87
+expect 87
+expect 65
+expect 73
+expect 84
+expect 32
+number
+put S 0 get P 1
+put S 1 0
+put S 2 0
+if ne get P 0 get Inlen 0
+ret false
+end
+ret eq get P 2 0
+end
+expect 83
+expect 65
+expect 89
+expect 32
+number
+put S 0 get P 1
+expect 32
+if ne get P 2 0
+ret false
+end
+put S 1 1
+put S 2 1
+save = get P 0
+number
+part = get P 1
+if ineq get P 0 47
+expect 47
+number
+put S 2 get P 1
+expect 32
+if or ne get P 2 0 eq part 0
+ret false
+end
+put S 1 part
+else
+put P 0 save
+put P 2 0
+end
+put S 3 get P 0
+ret eq get P 2 0
+end
+fn sayfold to bool
+n = ulong 0
+p = get S 3
+space = true
+while lt p get Inlen 0
+c = get In p
+p = add p 1
+if eq c 92
+if or ineq p 110 ineq p 116
+c = 32
+p = add p 1
+end
+end
+if or lt c 32 ge c 127
+c = 32
+end
+if eq c 32
+if not space
+if ge n 159
+ret false
+end
+put Say n c
+n = add n 1
+end
+space = true
+else
+if ge n 159
+ret false
+end
+put Say n c
+n = add n 1
+space = false
+end
+end
+if gt n 0
+if eq get Say sub n 1 32
+n = sub n 1
+end
+end
+put S 4 n
+ret true
+end
+note Return1 accepted,2 request AGAIN,3 give up after retry;0 rejected.
+fn saytake now ulong to ulong
+if or eq get R 1 0 gt get Inlen 0 319
+ret 0
+end
+if not sayhead
+ret 0
+end
+if or ne get S 0 get R 0 lt now get R 4
+ret 0
+end
+if eq get S 1 0
+b = heard get S 0 now
+ret 1
+end
+if not sayfold
+ret 0
+end
+if gt get R 2 1
+if eq get S 2 0
+ret 0
+end
+if ne get C 0 get R 0
+ret 0
+end
+if ne codestat 2
+if eq get R 13 0
+put R 13 1
+outreset
+emitb 65
+emitb 71
+emitb 65
+emitb 73
+emitb 78
+emitb 32
+emitn get R 0
+ret 2
+end
+cancel
+ret 3
+end
+else
+if ne get S 1 add get R 11 1
+ret 0
+end
+if and ne get S 2 0 ne get S 2 get S 1
+ret 0
+end
+end
+n = get R 8
+if or eq get S 1 1 gt get R 2 1
+n = 0
+end
+join = ulong 0
+if and gt n 0 gt get S 4 0
+join = 1
+end
+if gt add add n join get S 4 159
+ret 0
+end
+if gt get R 2 1
+if not codeshow get R 0
+ret 0
+end
+end
+if eq join 1
+put Answer n uchar 32
+n = add n 1
+end
+for i ulong get S 4
+put Answer add n i get Say i
+end
+put R 8 add n get S 4
+put R 11 get S 1
+put R 4 now
+if ne get S 2 0
+put R 1 0
+histadd 1
+end
+ret 1
+end
+note Exact legacy code row wrapping, at most4096 rows; full code retained.
+global Rowst ulong 4096
+global Rowlen ulong 4096
+global Rowline ulong 4096
+global View ulong 4
+global Vwork ulong 6
+note Vwork cols,maxrows,line,start,end.
+fn onerow s ulong first bool to ulong
+take = sub get Vwork 4 s
+cols = get Vwork 0
+if gt take cols
+take = cols
+j = cols
+while gt j div cols 2
+if eq get Code sub add s j 1 32
+take = j
+j = 0
+else
+j = sub j 1
+end
+end
+end
+slot = get View 0
+put Rowst slot s
+put Rowlen slot take
+put Rowline slot 0
+if first
+put Rowline slot get Vwork 2
+end
+put View 0 add slot 1
+ret add s take
+end
+fn rowroom pos ulong to bool
+ret and lt pos get C 2 lt get View 0 get Vwork 1
+end
+fn moreline s ulong to bool
+ret and lt s get Vwork 4 lt get View 0 get Vwork 1
+end
+fn rows cols ulong maxrows ulong to bool
+if or eq cols 0 gt maxrows 4096
+ret false
+end
+if ne codestat 2
+ret false
+end
+put Vwork 0 cols
+put Vwork 1 maxrows
+put Vwork 2 1
+put View 0 0
+put View 1 0
+pos = ulong 0
+while rowroom pos
+stop = pos
+while lt stop get C 2
+if eq get Code stop 10
+put Vwork 4 stop
+stop = get C 2
+else
+stop = add stop 1
+put Vwork 4 stop
+end
+end
+s = pos
+if lt get View 0 maxrows
+s = onerow s true
+end
+while moreline s
+s = onerow s false
+end
+pos = add get Vwork 4 1
+put Vwork 2 add get Vwork 2 1
+end
+ret true
+end
+fn scroll delta long page ulong to ulong
+last = ulong 0
+if gt get View 0 page
+last = sub get View 0 page
+end
+if gt get View 1 last
+put View 1 last
+end
+top = long get View 1
+if lt delta 0
+if lt delta neg top
+put View 1 0
+ret 0
+end
+else
+if gt ulong delta sub last get View 1
+put View 1 last
+ret last
+end
+end
+top = add top delta
+put View 1 ulong top
+ret ulong top
+end
+note Scene state: tone,water,has-say,nthings,used,lines,rejected,over.
+global Sc ulong 8
+global Things ulong 64
+global Stext uchar 2304
+global Sw ulong 4
+global Fields uchar 1536
+global Flens ulong 6
+global Soffs ulong 6
+text Vocab "mood|say|note|list|number|quote|person|timer|picture|video|left|right|above|warm|quiet|bloom|rise|fade|to|from|night|dawn|deep|clear|slow|still|lively|"
+fn scword beg ulong size ulong to ulong
+s = ulong 0
+word = ulong 1
+for i ulong len Vocab
+if eq get Vocab i 124
+if eq sub i s size
+same = true
+for j ulong size
+if ne get In add beg j get Vocab add s j
+same = false
+end
+end
+if same
+ret word
+end
+end
+word = add word 1
+s = add i 1
+end
+end
+ret 0
+end
+fn fieldcap kind ulong field ulong to ulong
+if eq kind 2
+if eq field 0
+ret 48
+end
+ret 64
+end
+if eq kind 1
+if eq field 0
+ret 48
+end
+ret 240
+end
+if eq kind 3
+if eq field 0
+ret 16
+end
+ret 64
+end
+if eq kind 4
+if eq field 0
+ret 220
+end
+ret 48
+end
+if eq kind 5
+if eq field 0
+ret 32
+end
+ret 200
+end
+if eq kind 6
+if eq field 0
+ret 24
+end
+ret 64
+end
+if eq field 0
+ret 120
+end
+ret 64
+end
+fn scfield slot ulong beg ulong stop ulong kind ulong to bool
+s = beg
+e = stop
+while lt s e
+if eq get In s 32
+s = add s 1
+else
+ret fieldend slot s e kind
+end
+end
+put Flens slot 0
+ret true
+end
+fn fieldend slot ulong s ulong stop ulong kind ulong to bool
+e = stop
+while gt e s
+if eq get In sub e 1 32
+e = sub e 1
+else
+n = sub e s
+if gt n fieldcap kind slot
+ret false
+end
+for i ulong n
+c = get In add s i
+if or lt c 32 gt c 126
+ret false
+end
+put Fields add mul slot 256 i c
+end
+put Flens slot n
+ret true
+end
+end
+put Flens slot 0
+ret true
+end
+fn scfields beg ulong stop ulong kind ulong to ulong
+slot = ulong 0
+s = beg
+for i ulong sub stop beg
+p = add beg i
+if eq get In p 124
+if ge slot 5
+ret 0
+end
+if not scfield slot s p kind
+ret 0
+end
+slot = add slot 1
+s = add p 1
+end
+end
+if not scfield slot s stop kind
+ret 0
+end
+n = add slot 1
+if and ne kind 2 gt n 2
+ret 0
+end
+if eq get Flens 0 0
+ret 0
+end
+if eq kind 5
+if or lt n 2 eq get Flens 1 0
+ret 0
+end
+end
+if eq kind 3
+hasdigit = false
+for i ulong get Flens 0
+if isdigit get Fields i
+hasdigit = true
+end
+end
+if not hasdigit
+ret 0
+end
+end
+ret n
+end
+fn scput slot ulong to ulong
+off = get Sc 4
+n = get Flens slot
+for i ulong n
+put Stext add off i get Fields add mul slot 256 i
+end
+put Stext add off n 0
+put Sc 4 add add off n 1
+ret off
+end
+fn scmod word ulong base ulong to void
+if and ge word 11 le word 13
+put Things add base 1 sub word 10
+end
+if and ge word 16 le word 18
+put Things add base 2 sub word 16
+end
+if and ge word 19 le word 20
+put Things add base 3 sub word 18
+end
+if eq word 14
+put Things add base 4 1
+end
+if eq word 15
+put Things add base 5 1
+end
+end
+fn scsay beg ulong stop ulong to bool
+if ne get Sc 2 0
+ret false
+end
+n = sub stop beg
+if or eq n 0 gt n 159
+ret false
+end
+for i ulong n
+c = get In add beg i
+if or lt c 32 gt c 126
+ret false
+end
+put Fields i c
+end
+put Flens 0 n
+put Sc 2 1
+put Sw 3 scput 0
+ret true
+end
+fn scln beg ulong stop ulong to bool
+p = beg
+while lt p stop
+if or eq get In p 32 eq get In p 58
+ret scbody beg p stop
+end
+p = add p 1
+end
+ret false
+end
+fn scbody beg ulong wordend ulong stop ulong to bool
+word = scword beg sub wordend beg
+if eq word 2
+s = add wordend 1
+if lt s stop
+if eq get In s 58
+s = add s 1
+end
+end
+while lt s stop
+if eq get In s 32
+s = add s 1
+else
+ret scsay s stop
+end
+end
+ret false
+end
+if eq word 1
+s = add wordend 1
+for p ulong sub stop s
+at = add add wordend 1 p
+if eq get In at 32
+w = scword s sub at s
+if and ge w 21 le w 24
+put Sc 0 sub w 21
+end
+if and ge w 25 le w 27
+put Sc 1 sub w 25
+end
+s = add at 1
+end
+end
+w = scword s sub stop s
+if and ge w 21 le w 24
+put Sc 0 sub w 21
+end
+if and ge w 25 le w 27
+put Sc 1 sub w 25
+end
+ret true
+end
+if or lt word 3 gt word 10
+ret false
+end
+if ge get Sc 3 4
+put Sc 7 add get Sc 7 1
+ret false
+end
+put Sw 0 sub word 2
+colon = wordend
+while lt colon stop
+if eq get In colon 58
+put Sw 1 wordend
+put Sw 2 colon
+ret scthing add colon 1 stop
+end
+colon = add colon 1
+end
+ret false
+end
+fn scthing beg ulong stop ulong to bool
+n = scfields beg stop get Sw 0
+if eq n 0
+ret false
+end
+need = n
+for i ulong n
+need = add need get Flens i
+end
+if gt add get Sc 4 need 2304
+ret false
+end
+base = mul get Sc 3 16
+put Things base get Sw 0
+put Things add base 6 n
+s = get Sw 1
+for p ulong sub get Sw 2 s
+at = add get Sw 1 p
+if eq get In at 32
+w = scword s sub at s
+scmod w base
+s = add at 1
+end
+end
+w = scword s sub get Sw 2 s
+scmod w base
+for i ulong n
+put Things add add base 7 i scput i
+end
+put Sc 3 add get Sc 3 1
+ret true
+end
+fn scene to bool
+for i ulong 8
+put Sc i 0
+end
+for i ulong 64
+put Things i 0
+end
+put Sw 3 0
+n = get Inlen 0
+if gt n 2048
+n = 2048
+end
+s = ulong 0
+for p ulong n
+if eq get In p 10
+if gt p s
+if lt get Sc 5 12
+put Sc 5 add get Sc 5 1
+if not scln s p
+put Sc 6 add get Sc 6 1
+end
+else
+put Sc 7 add get Sc 7 1
+end
+end
+s = add p 1
+end
+end
+if and lt s n lt get Sc 5 12
+put Sc 5 add get Sc 5 1
+if not scln s n
+put Sc 6 add get Sc 6 1
+end
+end
+ret or ne get Sc 2 0 ne get Sc 3 0
+end
+note Handwritten Omega port of paint.h ck_add, ck_scale, ck_mix and paint.c ck_glow.
+note Bounded192x128 RAM canvas. This is rendering core, not full sky/font/device UI.
+global Frame uint 24576
+global G ulong 6
+global Fb uchar 73728
+fn channel c uint shift uint to uint
+ret and shr c shift 255
+end
+fn addcolor d uint c uint a uint to uint
+v = uint 0
+for i uint 3
+s = mul i 8
+n = add channel d s shr mul channel c s a 8
+if gt n 255
+n = 255
+end
+v = or v shl n s
+end
+ret v
+end
+fn scale c uint f uint to uint
+ret or and shr mul and c 16711935 f 8 16711935 and shr mul and c 65280 f 8 65280
+end
+fn mix d uint c uint a uint to uint
+if ge a 256
+ret c
+end
+ret add scale d sub uint 256 a scale c a
+end
+fn distance x ulong y ulong to ulong
+dx = sub add mul long x 16 8 long get G 0
+dy = sub add mul long y 16 8 long get G 1
+ret ulong add mul dx dx mul dy dy
+end
+fn weight d2 ulong r2 ulong to ulong
+inv = div ulong 1099511627776 r2
+f = sub ulong 256 shr mul d2 inv 32
+w = shr mul shr mul f f 8 f 8
+ret shr mul w get G 4 8
+end
+fn glowpix x ulong y ulong to void
+d2 = distance x y
+r2 = mul get G 2 get G 2
+if ge d2 r2
+ret
+end
+a = uint weight d2 r2
+at = add mul y 192 x
+put Frame at addcolor get Frame at uint get G 3 a
+end
+fn glow cx ulong cy ulong radius ulong color ulong alpha ulong to bool
+if or eq radius 0 gt radius 8192
+ret false
+end
+if or gt cx 8192 gt cy 8192
+ret false
+end
+if or gt color 16777215 gt alpha 512
+ret false
+end
+put G 0 cx
+put G 1 cy
+put G 2 radius
+put G 3 color
+put G 4 alpha
+for y ulong 128
+for x ulong 192
+glowpix x y
+end
+end
+ret true
+end
+fn render to void
+for i ulong 24576
+put Frame i 0
+end
+note Frozen component pose; same halo and heart colors/weights as ck_mind_draw.
+b = glow 1536 1024 1088 3951314 68
+b = glow 1536 1024 640 7363839 46
+b = glow 1536 1024 400 16765610 89
+b = glow 1536 1024 160 16772310 218
+b = glow 1536 1024 50 16775920 230
+end
+fn frameout to bool
+for i ulong 24576
+c = get Frame i
+put Fb mul i 3 uchar channel c 16
+put Fb add mul i 3 1 uchar channel c 8
+put Fb add mul i 3 2 uchar channel c 0
+end
+n = ulong 0
+while lt n len Fb
+w = write 1 Fb n sub len Fb n
+if le w 0
+ret false
+end
+n = add n ulong w
+end
+ret true
+end
+note Native application binding: conversation state, courier lifecycle and reply/code.
+note A initialized, queued AGAIN bytes, per-call event, reserved.
+note Events:0 none,1 visible answer/ack,2 AGAIN queued,3 code give-up,
+note 4 refused LINE payload,5 slow notice,6 silence timeout.
+note Transport acceptance is separate from payload acceptance: appreceive true
+note means envelope accepted; inspect A2 for malformed payload, never invent text.
+global A ulong 4
+global Appjob uchar 4096
+global Appwire uchar 8192
+global Askin uchar 160
+fn appinit run ulong now ulong to bool
+if or ne get A 0 0 ne get R 0 0
+ret false
+end
+if ne get Q 0 0
+ret false
+end
+if not qstart run now
+ret false
+end
+constants
+put A 0 1
+put A 1 0
+put A 2 0
+ret true
+end
+fn appclock now ulong to bool
+if eq get A 0 0
+ret false
+end
+ret and ge now get T 0 ge now get R 4
+end
+fn appask now ulong to bool
+if not appclock now
+ret false
+end
+if or ne get R 1 0 ne get A 1 0
+ret false
+end
+if or ne get T 10 0 ne get T 13 0
+ret false
+end
+if and ne get T 5 0 eq get T 6 0
+ret false
+end
+if or ge get R 0 4294967295 ge get Q 1 4294967295
+ret false
+end
+if not textok
+ret false
+end
+kind = classify
+if or lt kind 1 gt kind 3
+ret false
+end
+if and eq kind 3 eq get R 6 0
+ret false
+end
+note Validate restored context before jobbuild reads its variable-layout names.
+if not ctxmeta 6
+ret false
+end
+if not jobbuild kind add get R 0 1
+ret false
+end
+if not ctxappend
+ret false
+end
+n = get Inlen 0
+size = get Outlen 0
+for i ulong n
+put Askin i get In i
+end
+for i ulong size
+put Appjob i get Outb i
+end
+for i ulong size
+put In i get Appjob i
+end
+put Inlen 0 size
+queued = qsubmit now
+for i ulong n
+put In i get Askin i
+end
+put Inlen 0 n
+if not queued
+ret false
+end
+note start preconditions were checked before qsubmit; no concurrent calls permitted.
+if not start kind now
+qcancel
+ret false
+end
+put A 2 0
+if gt kind 1
+codebeg get R 0
+put A 2 1
+end
+ret true
+end
+fn appcancel to void
+cancel
+qcancel
+put A 1 0
+put A 2 0
+end
+fn appreset to void
+appcancel
+reset
+end
+note First acknowledge the triggering LINE, then submit AGAIN with a new wire
+note sequence while retaining the original conversation ID in its body.
+fn appqueue now ulong to bool
+if eq get A 1 0
+ret true
+end
+if or ne get T 10 0 ne get T 13 0
+ret true
+end
+put Inlen 0 get A 1
+for i ulong get A 1
+put In i get Appjob i
+end
+if not qsubmit now
+ret false
+end
+put A 1 0
+ret true
+end
+fn apppoll now ulong link bool to bool
+if not appclock now
+ret false
+end
+put A 2 0
+put T 0 now
+status = tick now
+if eq status 1
+put A 2 5
+end
+if eq status 2
+qcancel
+put A 1 0
+put A 2 6
+end
+if not appqueue now
+appcancel
+put A 2 3
+ret false
+end
+ret qnext now link
+end
+fn appsent now ulong ok bool to bool
+if not appclock now
+ret false
+end
+if not qsent now ok
+ret false
+end
+put A 2 0
+ret true
+end
+fn appbody now ulong to bool
+if eq get R 1 0
+put A 2 4
+ret true
+end
+if ineq 0 67
+if or le get R 2 1 ne get C 0 get R 0
+put A 2 4
+ret true
+end
+if codetake
+if heard get C 0 now
+ret true
+end
+end
+put A 2 4
+ret true
+end
+if or ineq 0 83 ineq 0 87
+status = saytake now
+if eq status 1
+if eq get R 1 0
+put A 1 0
+end
+if ne get S 1 0
+put A 2 1
+end
+ret true
+end
+if eq status 2
+n = get Outlen 0
+if or eq n 0 gt n 4096
+cancel
+put A 1 0
+put A 2 3
+ret true
+end
+for i ulong n
+put Appjob i get Outb i
+end
+put A 1 n
+put A 2 2
+ret true
+end
+if eq status 3
+put A 1 0
+put A 2 3
+ret true
+end
+end
+put A 2 4
+ret true
+end
+note Reply parsing can serialize AGAIN internally. Preserve the already offered
+note datagram until the provider records its send result, including on refusal.
+fn appreceive now ulong to bool
+if not appclock now
+ret false
+end
+result = qincoming now
+if eq result 0
+ret false
+end
+put A 2 0
+if not qtake
+ret true
+end
+n = get Outlen 0
+e = get Err 0
+for i ulong n
+put Appwire i get Outb i
+end
+ok = appbody now
+for i ulong n
+put Outb i get Appwire i
+end
+put Outlen 0 n
+put Err 0 e
+ret ok
+end
+note Bounded model scene input. Existing scene stays the strict canonical parser.
+note Nm thinking,normalized bytes,tidying count,hidden lines,line bytes,mood seen,
+note invalid/overflow,plain candidate bytes,canonical line count. Input restored.
+global Nm ulong 9
+global Nraw uchar 2048
+global Nline uchar 2048
+global Nnorm uchar 2048
+global Nplain uchar 160
+text Ntags "<think></think>"
+fn nlow c uchar to uchar
+if and ge c 65 le c 90
+ret add sub c 65 97
+end
+ret c
+end
+fn nalpha c uchar to bool
+v = nlow c
+ret and ge v 97 le v 122
+end
+fn nmatch at ulong off ulong size ulong to bool
+if gt add at size get Nm 4
+ret false
+end
+for i ulong size
+if ne nlow get Nline add at i get Ntags add off i
+ret false
+end
+end
+ret true
+end
+fn nemit c uchar to void
+n = get Nm 1
+if ge n 2048
+put Nm 6 1
+ret
+end
+put Nnorm n c
+put Nm 1 add n 1
+end
+fn nmark c uchar to bool
+if or eq c 45 eq c 42
+ret true
+end
+if or eq c 35 eq c 62
+ret true
+end
+ret eq c 34
+end
+fn nlead c uchar to bool
+if or eq c 32 eq c 42
+ret true
+end
+if eq c 35
+ret true
+end
+ret nalpha c
+end
+fn ndigits p ulong to ulong
+while lt p get Nm 4
+if not isdigit get Nline p
+ret p
+end
+p = add p 1
+end
+ret p
+end
+fn nspaces p ulong to ulong
+while lt p get Nm 4
+if ne get Nline p 32
+ret p
+end
+p = add p 1
+end
+ret p
+end
+fn npstep s ulong to ulong
+n = get Nm 4
+c = get Nline s
+if nmark c
+if eq add s 1 n
+ret n
+end
+if nlead get Nline add s 1
+ret add s 1
+end
+ret s
+end
+if not isdigit c
+ret s
+end
+p = ndigits s
+if ge add p 1 n
+ret s
+end
+if not or eq get Nline p 46 eq get Nline p 41
+ret s
+end
+if ne get Nline add p 1 32
+ret s
+end
+ret add p 2
+end
+fn nprefix to ulong
+s = ulong 0
+while lt s get Nm 4
+next = npstep s
+if eq next s
+ret s
+end
+put Nm 2 add get Nm 2 1
+s = nspaces next
+end
+ret s
+end
+fn nfinish to void
+n = get Nm 4
+while gt n 0
+if eq get Nline sub n 1 32
+n = sub n 1
+else
+nprocess n
+ret
+end
+end
+end
+fn nprocess n ulong to void
+put Nm 4 n
+hide = ne get Nm 0 0
+for i ulong n
+if nmatch i 0 7
+put Nm 0 1
+hide = true
+end
+if nmatch i 7 8
+put Nm 0 0
+hide = true
+end
+end
+if hide
+put Nm 3 add get Nm 3 1
+ret
+end
+if ge n 3
+if and eq get Nline 0 96 eq get Nline 1 96
+if eq get Nline 2 96
+put Nm 2 add get Nm 2 1
+ret
+end
+end
+end
+s = nprefix
+if ge s n
+ret
+end
+w = s
+while lt w n
+if nalpha get Nline w
+w = add w 1
+else
+nword s w n
+ret
+end
+end
+nword s w n
+end
+fn nword s ulong w ulong n ulong to void
+for i ulong sub w s
+put In add s i nlow get Nline add s i
+end
+word = scword s sub w s
+if gt word 10
+word = 0
+end
+r = w
+while lt r n
+c = get Nline r
+if or eq c 42 eq c 34
+r = add r 1
+put Nm 2 add get Nm 2 1
+else
+nappend s w r n word
+ret
+end
+end
+nappend s w r n word
+end
+fn nappend s ulong w ulong r ulong n ulong word ulong to void
+if lt r n
+if not or eq get Nline r 32 eq get Nline r 58
+word = 0
+end
+end
+if eq word 0
+size = sub n s
+if and eq get Nm 7 0 le size 159
+if lt get Nm 8 12
+for i ulong size
+put Nplain i get Nline add s i
+end
+put Nm 7 size
+end
+end
+for i ulong size
+nemit get Nline add s i
+end
+else
+if eq word 1
+if lt get Nm 8 12
+put Nm 5 1
+end
+end
+for i ulong sub w s
+nemit nlow get Nline add s i
+end
+head = ne word 2
+for i ulong sub n r
+c = get Nline add r i
+if eq c 58
+if ne word 1
+head = false
+end
+end
+if head
+c = nlow c
+end
+nemit c
+end
+end
+nemit 10
+put Nm 8 add get Nm 8 1
+end
+fn nclear to void
+for i ulong 8
+put Sc i 0
+end
+for i ulong 64
+put Things i 0
+end
+put Sw 3 0
+end
+fn scdecode to bool
+for i ulong 9
+put Nm i 0
+end
+nclear
+n = get Inlen 0
+if gt n 2048
+put Nm 6 1
+ret false
+end
+for i ulong n
+if eq get In i 0
+put Nm 6 1
+ret false
+end
+put Nraw i get In i
+end
+for i ulong n
+c = get Nraw i
+if eq c 10
+nfinish
+put Nm 4 0
+else
+if eq c 9
+c = uchar 32
+put Nm 2 add get Nm 2 1
+end
+if and ge c 32 le c 126
+p = get Nm 4
+keep = true
+if eq c 32
+if eq p 0
+keep = false
+else
+if eq get Nline sub p 1 32
+keep = false
+end
+end
+end
+if keep
+put Nline p c
+put Nm 4 add p 1
+else
+put Nm 2 add get Nm 2 1
+end
+else
+put Nm 2 add get Nm 2 1
+end
+end
+end
+nfinish
+ok = false
+if eq get Nm 6 0
+for i ulong get Nm 1
+put In i get Nnorm i
+end
+put Inlen 0 get Nm 1
+ok = scene
+if ne get Nm 5 0
+ok = true
+end
+if not ok
+if gt get Nm 7 0
+for i ulong get Nm 7
+put In i get Nplain i
+end
+put Inlen 0 get Nm 7
+ok = scsay 0 get Nm 7
+end
+end
+else
+nclear
+end
+for i ulong n
+put In i get Nraw i
+end
+put Inlen 0 n
+ret ok
+end
+note Restored note catalog and bounded model-job context. No storage provider.
+note Cx declared count,visited count,ready,damaged,loading. Damaged notes stay gone.
+global Cx ulong 5
+global Ctxtext uchar 65536
+global Ctxlen ulong 512
+global Ctxgone uchar 512
+global Ctxseen uchar 512
+global Ctxstart ulong 512
+global Meta uchar 4096
+global Mx ulong 2
+global Mdigits uchar 20
+text Mtself "\tself="
+text Mtname "\tname="
+text Mtstart "\tstarts="
+text Mtfact "\tfact "
+text Mtis " is "
+text Mtare " are "
+text Mtnote "\tnote "
+fn ctxidle to bool
+if ne get R 1 0
+ret false
+end
+ret and eq get Tx 0 0 eq get Nt 0 0
+end
+fn ctxbegin to bool
+if not ctxidle
+ret false
+end
+n = mem32 36
+if gt n 512
+ret false
+end
+for i ulong 512
+put Ctxlen i 0
+put Ctxgone i 1
+put Ctxseen i 0
+put Ctxstart i 0
+end
+put Cx 0 n
+put Cx 1 0
+put Cx 2 0
+put Cx 3 0
+put Cx 4 1
+if eq n 0
+put Cx 2 1
+put Cx 4 0
+end
+ret true
+end
+note Returns0 refused without visit,1 valid record retained,2 damaged visit retained.
+fn ctxtake index ulong to ulong
+if not ctxidle
+ret 0
+end
+if or eq get Cx 4 0 ge index get Cx 0
+ret 0
+end
+if ne get Ctxseen index 0
+ret 0
+end
+status = ulong 2
+if notedec index
+n = get Ns 0
+for i ulong n
+put Ctxtext add mul index 128 i get Note i
+end
+put Ctxlen index n
+put Ctxgone index uchar get Ns 3
+put Ctxstart index get Ns 2
+status = 1
+else
+put Cx 3 add get Cx 3 1
+end
+put Ctxseen index 1
+put Cx 1 add get Cx 1 1
+if eq get Cx 1 get Cx 0
+put Cx 2 1
+put Cx 4 0
+end
+ret status
+end
+fn mtemit c uchar to void
+if ne get Mx 1 0
+ret
+end
+n = get Mx 0
+if ge n 4096
+put Mx 1 1
+ret
+end
+put Meta n c
+put Mx 0 add n 1
+end
+fn mtnum v ulong to void
+n = ulong 0
+while gt v 9
+put Mdigits n uchar rem v 10
+v = div v 10
+n = add n 1
+end
+put Mdigits n uchar v
+n = add n 1
+for i ulong n
+mtemit add uchar 48 get Mdigits sub sub n 1 i
+end
+end
+note Memory fields are length-bounded; require a terminator and printable bytes.
+fn mtfield off ulong cap ulong to bool
+for i ulong cap
+c = get Mem add off i
+if eq c 0
+if eq i 0
+put Mx 1 1
+ret false
+end
+ret true
+end
+if or lt c 32 gt c 126
+put Mx 1 1
+ret false
+end
+mtemit c
+end
+put Mx 1 1
+ret false
+end
+fn mtfacts count ulong to bool
+for k ulong count
+off = add 40 mul k 113
+for i ulong len Mtfact
+mtemit get Mtfact i
+end
+if not mtfield off 48
+ret false
+end
+are = get Mem add off 112
+if gt are 1
+put Mx 1 1
+ret false
+end
+if eq are 1
+for i ulong len Mtare
+mtemit get Mtare i
+end
+else
+for i ulong len Mtis
+mtemit get Mtis i
+end
+end
+if not mtfield add off 48 64
+ret false
+end
+end
+ret eq get Mx 1 0
+end
+fn mtnotes count ulong limit ulong to void
+given = ulong 0
+for k ulong count
+index = sub sub count 1 k
+if and eq get Ctxgone index 0 lt given limit
+for i ulong len Mtnote
+mtemit get Mtnote i
+end
+for i ulong get Ctxlen index
+mtemit get Ctxtext add mul index 128 i
+end
+given = add given 1
+end
+end
+end
+fn ctxmeta limit ulong to bool
+put Mx 0 0
+put Mx 1 1
+facts = mem32 32
+notes = mem32 36
+if or gt facts 32 gt notes 512
+ret false
+end
+if gt limit 512
+ret false
+end
+if gt notes 0
+if or eq get Cx 2 0 ne get Cx 0 notes
+ret false
+end
+end
+put Mx 1 0
+for i ulong len Mtself
+mtemit get Mtself i
+end
+off = add 40 mul facts 113
+if eq get Mem off 0
+for i ulong len Allen
+mtemit get Allen i
+end
+else
+if not mtfield off 24
+ret false
+end
+end
+if ne get Mem 8 0
+for i ulong len Mtname
+mtemit get Mtname i
+end
+if not mtfield 8 24
+ret false
+end
+end
+for i ulong len Mtstart
+mtemit get Mtstart i
+end
+mtnum mem32 0
+if not mtfacts facts
+ret false
+end
+mtnotes notes limit
+ret eq get Mx 1 0
+end
+note Publish all metadata or none; preserve outgoing bytes/length/error on refusal.
+fn ctxappend to bool
+if or ne get Mx 1 0 ne get Err 0 0
+ret false
+end
+n = get Outlen 0
+size = get Mx 0
+if or gt n 4096 gt size 4096
+ret false
+end
+if gt add n size 4096
+ret false
+end
+for i ulong size
+put Outb add n i get Meta i
+end
+put Outlen 0 add n size
+ret true
+end
+note Stable application presentation; see PRESENTATION.md for scope and ownership.
+global Ds ulong 8
+global Dt ulong 64
+global Dtext uchar 2304
+global Dsay ulong 1
+global Dm ulong 3
+global Dcode uchar 32768
+global Dstart ulong 4096
+global Dlen ulong 4096
+global Dline ulong 4096
+global Dview ulong 3
+global Din uchar 8192
+fn dscene to bool
+n = get Inlen 0
+for i ulong 8192
+put Din i get In i
+end
+for i ulong get R 8
+put In i get Answer i
+end
+put Inlen 0 get R 8
+ok = scdecode
+for i ulong 8192
+put In i get Din i
+end
+put Inlen 0 n
+if not ok
+ret false
+end
+for i ulong 8
+put Ds i get Sc i
+end
+for i ulong 64
+put Dt i get Things i
+end
+for i ulong 2304
+put Dtext i 0
+end
+for i ulong get Sc 4
+put Dtext i get Stext i
+end
+put Dsay 0 get Sw 3
+put Dm 0 1
+ret true
+end
+fn dcode to bool
+if or le get R 2 1 ne get R 1 0
+ret false
+end
+if or eq get R 6 0 ne get C 0 get R 0
+ret false
+end
+if not rows 80 4096
+ret false
+end
+for i ulong 32768
+put Dcode i 0
+end
+for i ulong get C 2
+put Dcode i get Code i
+end
+for i ulong 4096
+put Dstart i 0
+put Dlen i 0
+put Dline i 0
+end
+for i ulong get View 0
+put Dstart i get Rowst i
+put Dlen i get Rowlen i
+put Dline i get Rowline i
+end
+put Dview 0 get View 0
+put Dview 1 0
+put Dview 2 get C 2
+put Dm 1 1
+ret true
+end
+fn dpresent to bool
+if or eq get A 0 0 ne get A 2 1
+ret false
+end
+if or gt get R 8 159 gt get Inlen 0 8192
+ret false
+end
+shown = dscene
+coded = dcode
+if or shown coded
+put Dm 2 get R 0
+ret true
+end
+ret false
+end
+fn dask now ulong to bool
+if not appask now
+ret false
+end
+b = dpresent
+ret true
+end
+fn drecv now ulong to bool
+if not appreceive now
+ret false
+end
+b = dpresent
+ret true
+end
+fn dreset to void
+appreset
+for i ulong 8
+put Ds i 0
+end
+for i ulong 64
+put Dt i 0
+end
+for i ulong 2304
+put Dtext i 0
+end
+put Dsay 0 0
+for i ulong 3
+put Dm i 0
+put Dview i 0
+end
+for i ulong 32768
+put Dcode i 0
+end
+for i ulong 4096
+put Dstart i 0
+put Dlen i 0
+put Dline i 0
+end
+for i ulong 8192
+put Din i 0
+end
+end
+note Host provider stream core. PROVIDER.md is the framing/state contract.
+global Ph uchar 40
+global Pb uchar 4096
+global Pv ulong 4
+global Pc ulong 2
+global Pe ulong 2
+global Pout uchar 65536
+global Pn ulong 1
+text Prmagic "ALNPRV01"
+fn prshape to bool
+op = get Pv 0
+now = get Pv 1
+arg = get Pv 2
+n = get Pv 3
+if eq op 1
+ret and gt arg 0 eq n 0
+end
+if eq op 2
+if ne arg 0
+ret false
+end
+ret and gt n 0 le n 159
+end
+if or eq op 3 eq op 4
+ret and le arg 1 eq n 0
+end
+if eq op 5
+if ne arg 0
+ret false
+end
+ret and ge n 65 le n 1200
+end
+if ne now 0
+ret false
+end
+if or eq op 6 eq op 7
+ret and eq arg 0 eq n 0
+end
+if eq op 8
+ret and le arg 1 eq n 4096
+end
+if eq op 9
+ret and le arg 511 eq n 4096
+end
+if eq op 10
+ret and eq arg 0 eq n 0
+end
+ret false
+end
+fn prparse to bool
+for i ulong 8
+if ne get Ph i get Prmagic i
+ret false
+end
+end
+for k ulong 4
+v = ulong 0
+for i ulong 8
+off = add add 8 mul k 8 i
+v = or v shl ulong get Ph off mul i 8
+end
+put Pv k v
+end
+ret prshape
+end
+fn prbyte c uchar to void
+put Pout get Pn 0 c
+put Pn 0 add get Pn 0 1
+end
+fn prword v ulong to void
+for i ulong 8
+prbyte uchar and shr v mul i 8 255
+end
+end
+fn prhead op ulong status ulong event ulong size ulong to void
+for i ulong 8
+prbyte get Prmagic i
+end
+prword op
+prword status
+prword event
+prword size
+end
+fn prreply status ulong to void
+put Pn 0 0
+kind = get Pe 1
+size = ulong 0
+if eq kind 1
+size = get Outlen 0
+end
+if eq kind 2
+size = get R 8
+end
+prhead get Pv 0 status get Pe 0 size
+for i ulong size
+if eq kind 1
+prbyte get Outb i
+else
+prbyte get Answer i
+end
+end
+if eq kind 2
+if and gt get R 2 1 eq get R 1 0
+if and ne get R 6 0 eq codestat 2
+prhead 11 1 1 get C 2
+for i ulong get C 2
+prbyte get Code i
+end
+end
+end
+end
+end
+fn prevent to void
+put Pe 0 get A 2
+if eq get A 2 1
+put Pe 1 2
+end
+end
+fn prload to ulong
+if or ne get A 0 0 not ctxidle
+ret 0
+end
+constants
+for i ulong 3692
+put Mem i 0
+end
+loadbeg
+b = ctxbegin
+put Pc 0 1
+put Pc 1 0
+ret 1
+end
+fn prcopy to ulong
+if or ne get A 0 0 ne get Pc 0 1
+ret 0
+end
+if not ctxidle
+ret 0
+end
+slot = get Pv 2
+bit = shl ulong 1 slot
+if ne and get Pc 1 bit 0
+ret 0
+end
+for i ulong 4096
+put Unit i get Pb i
+end
+status = ulong 2
+if loadcopy slot
+status = 1
+end
+put Pc 1 or get Pc 1 bit
+if eq get Pc 1 3
+if not ctxbegin
+ret 0
+end
+put Pc 0 2
+if ne get Cx 2 0
+put Pc 0 3
+end
+end
+ret status
+end
+fn prnote to ulong
+if or ne get A 0 0 ne get Pc 0 2
+ret 0
+end
+if not ctxidle
+ret 0
+end
+for i ulong 4096
+put Unit i get Pb i
+end
+status = ctxtake get Pv 2
+if ne get Cx 2 0
+put Pc 0 3
+end
+ret status
+end
+fn prapply to ulong
+op = get Pv 0
+now = get Pv 1
+arg = get Pv 2
+if eq op 10
+ret prload
+end
+if eq op 8
+ret prcopy
+end
+if eq op 9
+ret prnote
+end
+if eq op 1
+if or eq get Pc 0 1 eq get Pc 0 2
+ret 0
+end
+if appinit arg now
+ret 1
+end
+ret 0
+end
+if eq get A 0 0
+ret 0
+end
+if eq op 6
+appcancel
+ret 1
+end
+if eq op 7
+dreset
+ret 1
+end
+if not appclock now
+ret 0
+end
+if eq op 3
+offer = apppoll now ne arg 0
+prevent
+if offer
+put Pe 1 1
+ret 3
+end
+ret 1
+end
+if eq op 4
+if appsent now ne arg 0
+ret 1
+end
+ret 0
+end
+for i ulong get Pv 3
+put In i get Pb i
+end
+put Inlen 0 get Pv 3
+if eq op 2
+if not dask now
+ret 0
+end
+else
+if not drecv now
+ret 0
+end
+end
+prevent
+ret 1
+end
+fn prdo to bool
+if not prparse
+ret false
+end
+put Pe 0 0
+put Pe 1 0
+status = prapply
+prreply status
+ret true
+end
+note Declarative Allen glyph designs and integer sine samples, retained from
+note native/kernel/ui/allen_font.c at4c7888f. No foreign executable implementation.
+text Afdata "w6|w6 M3,0 L3,14 D3,20|w10 M3,0 L3,5 M7,0 L7,5|w15 M6,2 L4,20 M11,2 L9,20 M2,8 L13,8 M1,14 L12,14|w15 A8,5,5,5,-30,-270 A8,15,5,5,270,510 M8,-2 L8,22|w16 A4,4,2,3,0,360 A12,16,2,3,0,360 M13,1 L3,19|w16 M14,20 L5,9 A7,5,3,4,150,400 L3,14 A7,15,4,5,180,60 L13,11|w6 M3,0 L3,5|w9 A10,10,6,12,240,120|w9 A-1,10,6,12,-60,60|w14 M7,2 L7,10 M3,4 L11,8 M11,4 L3,8|w14 M2,12 L12,12 M7,7 L7,17|w6 M3,19 L2,23|w11 M2,13 L9,13|w6 D3,20|w12 M10,0 L2,20|w14 A7,10,5,10,0,360|w14 M3,4 L8,0 L8,20|w14 A7,6,5,6,200,400 L2,20 L12,20|w14 A7,5,5,5,200,450 A7,15,5,5,270,520|w14 M10,20 L10,0 L1,14 L13,14|w14 M12,0 L4,0 L4,9 A7,14,5,6,235,520|w14 A7,14,5,6,0,360 M10,0 L3,11|w14 M2,0 L12,0 L5,20|w14 A7,5,4,5,0,360 A7,15,5,5,0,360|w14 A7,6,5,6,0,360 M4,20 L11,9|w6 D3,8 D3,20|w6 D3,8 M3,19 L2,23|w14 M12,6 L2,12 L12,18|w14 M2,10 L12,10 M2,15 L12,15|w14 M2,6 L12,12 L2,18|w14 A7,5,5,5,190,450 L7,14 D7,20|w19 A9,12,3,4,0,360 M12,8 L12,14 A14,14,2,2,180,0 A9,11,7,9,0,-300|w16 M2,20 L8,0 L14,20 M4,13 L12,13|w15 M2,0 L2,20 M2,0 L8,0 A8,5,4,5,270,450 L2,10 M2,10 L9,10 A9,15,4,5,270,450 L2,20|w17 A9,10,7,10,45,315|w16 M2,0 L2,20 M2,0 L6,0 A6,10,8,10,270,450 L2,20|w14 M12,0 L2,0 L2,20 L12,20 M2,10 L10,10|w13 M12,0 L2,0 L2,20 M2,10 L10,10|w18 A9,10,7,10,-45,-360 M11,10 L16,10|w16 M2,0 L2,20 M14,0 L14,20 M2,10 L14,10|w6 M3,0 L3,20|w13 M10,0 L10,14 A6,14,4,6,0,180|w15 M2,0 L2,20 M13,0 L2,12 M6,8 L14,20|w13 M2,0 L2,20 L12,20|w20 M2,20 L2,0 L10,14 L18,0 L18,20|w16 M2,20 L2,0 L14,20 L14,0|w20 A10,10,8,10,0,360|w15 M2,20 L2,0 L8,0 A8,5,5,5,270,450 L2,10|w20 A10,10,8,10,0,360 M12,14 L18,21|w15 M2,20 L2,0 L8,0 A8,5,5,5,270,450 L2,10 M8,10 L14,20|w16 A8,5,5,5,-30,-270 A8,15,5,5,270,510|w16 M1,0 L15,0 M8,0 L8,20|w16 M2,0 L2,13 A8,13,6,7,180,0 L14,0|w16 M1,0 L8,20 L15,0|w22 M1,0 L6,20 L11,0 L16,20 L21,0|w16 M2,0 L14,20 M14,0 L2,20|w16 M1,0 L8,10 L15,0 M8,10 L8,20|w16 M2,0 L14,0 L2,20 L14,20|w9 M7,-1 L3,-1 L3,21 L7,21|w12 M2,0 L10,20|w9 M2,-1 L6,-1 L6,21 L2,21|w12 M2,8 L6,1 L10,8|w14 M1,23 L13,23|w7 M2,0 L4,4|w15 A7,14,5,6,0,360 M12,8 L12,20|w15 M2,0 L2,20 A7,14,5,6,0,360|w13 A7,14,5,6,40,320|w15 A7,14,5,6,0,360 M12,0 L12,20|w14 M2,14 L12,14 A7,14,5,6,0,-320|w11 M5,20 L5,4 A9,4,4,4,180,300 M2,8 L10,8|w15 A7,14,5,6,0,360 M12,8 L12,22 A7,22,5,5,0,150|w15 M2,0 L2,20 A7,13,5,5,180,360 L12,20|w6 M3,8 L3,20 D3,3|w7 M4,8 L4,22 A0,22,4,5,0,120 D4,3|w13 M2,0 L2,20 M11,8 L2,15 M5,13 L12,20|w6 M3,0 L3,20|w21 M2,8 L2,20 A6,12,4,4,180,360 L10,20 A14,12,4,4,180,360 L18,20|w15 M2,8 L2,20 A7,13,5,5,180,360 L12,20|w14 A7,14,5,6,0,360|w15 M2,8 L2,27 A7,14,5,6,0,360|w15 A7,14,5,6,0,360 M12,8 L12,27|w10 M2,8 L2,20 A7,13,5,5,180,290|w14 A7,11,4,3,-30,-270 A7,17,4,3,270,510|w11 M5,2 L5,17 A8,17,3,3,180,40 M2,8 L10,8|w15 M2,8 L2,15 A7,15,5,5,180,0 M12,8 L12,20|w14 M2,8 L7,20 L12,8|w20 M2,8 L6,20 L10,8 L14,20 L18,8|w14 M2,8 L12,20 M12,8 L2,20|w14 M2,8 L7,20 M12,8 L4,27|w14 M2,8 L12,8 L2,20 L12,20|w10 M8,-1 L6,0 L6,8 L4,10 L6,12 L6,20 L8,21|w6 M3,-1 L3,23|w10 M2,-1 L4,0 L4,8 L6,10 L4,12 L4,20 L2,21|w14 M2,13 L5,11 L9,14 L12,12|"
+text Afsines "0 286 572 857 1143 1428 1713 1997 2280 2563 2845 3126 3406 3686 3964 4240 4516 4790 5063 5334 5604 5872 6138 6402 6664 6924 7182 7438 7692 7943 8192 8438 8682 8923 9162 9397 9630 9860 10087 10311 10531 10749 10963 11174 11381 11585 11786 11982 12176 12365 12551 12733 12911 13085 13255 13421 13583 13741 13894 14044 14189 14330 14466 14598 14726 14849 14968 15082 15191 15296 15396 15491 15582 15668 15749 15826 15897 15964 16026 16083 16135 16182 16225 16262 16294 16322 16344 16362 16374 16382 16384 "
+note Handwritten bounded Allen stroke rasterizer. Legacy C is an external oracle only.
+global Af ulong 6
+global Ab long 4
+global Ag long 640
+global Alpha uchar 65536
+global Asin long 91
+global Afpos ulong 2
+global Apen long 2
+global Arc long 6
+fn afsqrt value ulong to ulong
+r = ulong 0
+bit = shl ulong 1 62
+while gt bit value
+bit = shr bit 2
+end
+while ne bit 0
+if ge value add r bit
+value = sub value add r bit
+r = add shr r 1 bit
+else
+r = shr r 1
+end
+bit = shr bit 2
+end
+ret r
+end
+fn afsin deg long to long
+a = rem deg 360
+if lt a 0
+a = add a 360
+end
+if le a 90
+ret get Asin ulong a
+end
+if le a 180
+ret get Asin ulong sub long 180 a
+end
+if le a 270
+ret neg get Asin ulong sub a 180
+end
+ret neg get Asin ulong sub long 360 a
+end
+fn afcos deg long to long
+ret afsin add rem deg 360 90
+end
+fn afinit cap ulong wt ulong to bool
+if or eq cap 0 gt cap 64
+ret false
+end
+if or eq wt 0 gt wt 2500
+ret false
+end
+for i ulong 6
+put Af i 0
+end
+put Af 0 div mul cap 256 20
+put Af 1 div mul wt get Af 0 1000
+v = long 0
+slot = ulong 0
+for i ulong len Afsines
+c = get Afsines i
+if eq c 32
+put Asin slot v
+slot = add slot 1
+v = 0
+else
+v = add mul v 10 sub long c 48
+end
+end
+ret eq slot 91
+end
+fn afpick c uchar to bool
+if or lt c 32 gt c 126
+c = 63
+end
+wanted = sub ulong c 32
+slot = ulong 0
+startat = ulong 0
+for i ulong len Afdata
+if eq get Afdata i 124
+if eq slot wanted
+put Afpos 0 startat
+put Afpos 1 i
+ret true
+end
+slot = add slot 1
+startat = add i 1
+end
+end
+ret false
+end
+fn afnum to long
+p = get Afpos 0
+minus = false
+if eq get Afdata p 45
+minus = true
+p = add p 1
+end
+v = long 0
+go = true
+while and lt p get Afpos 1 go
+c = get Afdata p
+if and ge c 48 le c 57
+v = add mul v 10 sub long c 48
+p = add p 1
+else
+go = false
+end
+end
+if lt p get Afpos 1
+if eq get Afdata p 44
+p = add p 1
+end
+end
+put Afpos 0 p
+if minus
+ret neg v
+end
+ret v
+end
+fn afseg nx long ny long to bool
+n = get Af 2
+if ge n 160
+ret false
+end
+at = mul n 4
+put Ag at get Apen 0
+put Ag add at 1 get Apen 1
+put Ag add at 2 nx
+put Ag add at 3 ny
+put Apen 0 nx
+put Apen 1 ny
+put Af 2 add n 1
+ret true
+end
+fn afpoint a long first bool to bool
+s = long get Af 0
+x = mul get Arc 0 s
+x = add x div mul mul get Arc 2 s afcos a 16384
+y = mul sub get Arc 1 20 s
+y = add y div mul mul get Arc 3 s afsin a 16384
+if first
+put Apen 0 x
+put Apen 1 y
+ret true
+end
+ret afseg x y
+end
+fn afarc to bool
+for i ulong 6
+put Arc i afnum
+end
+span = sub get Arc 5 get Arc 4
+if lt span 0
+span = neg span
+end
+steps = div span 9
+if lt steps 2
+steps = 2
+end
+for k ulong ulong add steps 1
+a = sub get Arc 5 get Arc 4
+a = add get Arc 4 div mul a long k steps
+if not afpoint a eq k 0
+ret false
+end
+end
+ret true
+end
+fn afcmd cmd uchar to bool
+if eq cmd 32
+ret true
+end
+if eq cmd 119
+put Af 5 mul ulong afnum get Af 0
+ret true
+end
+if eq cmd 65
+ret afarc
+end
+x = mul afnum long get Af 0
+y = mul sub afnum 20 long get Af 0
+if or eq cmd 77 eq cmd 68
+put Apen 0 x
+put Apen 1 y
+end
+if eq cmd 77
+ret true
+end
+if or eq cmd 76 eq cmd 68
+ret afseg x y
+end
+ret false
+end
+fn affloor value long to long
+if ge value 0
+ret div value 256
+end
+ret neg div add neg value 255 256
+end
+fn afbound x long y long to void
+if lt x get Ab 0
+put Ab 0 x
+end
+if lt y get Ab 1
+put Ab 1 y
+end
+if gt x get Ab 2
+put Ab 2 x
+end
+if gt y get Ab 3
+put Ab 3 y
+end
+end
+fn afbox to bool
+put Ab 0 get Ag 0
+put Ab 2 get Ag 0
+put Ab 1 get Ag 1
+put Ab 3 get Ag 1
+for i ulong get Af 2
+at = mul i 4
+afbound get Ag at get Ag add at 1
+afbound get Ag add at 2 get Ag add at 3
+end
+pad = add long get Af 1 256
+x0 = affloor sub get Ab 0 pad
+y0 = affloor sub get Ab 1 pad
+x1 = add affloor add get Ab 2 pad 1
+y1 = add affloor add get Ab 3 pad 1
+put Ab 0 x0
+put Ab 1 y0
+put Af 3 ulong sub x1 x0
+put Af 4 ulong sub y1 y0
+ret le mul get Af 3 get Af 4 len Alpha
+end
+fn afproj qx long qy long dx long dy long to ulong
+len2 = add mul dx dx mul dy dy
+ex = qx
+ey = qy
+if ne len2 0
+t = add mul qx dx mul qy dy
+if gt t 0
+if ge t len2
+ex = sub qx dx
+ey = sub qy dy
+else
+ex = sub qx div mul dx t len2
+ey = sub qy div mul dy t len2
+end
+end
+end
+ret ulong add mul ex ex mul ey ey
+end
+fn afdist slot ulong px long py long to ulong
+at = mul slot 4
+dx = sub get Ag add at 2 get Ag at
+dy = sub get Ag add at 3 get Ag add at 1
+qx = sub px get Ag at
+qy = sub py get Ag add at 1
+ret afproj qx qy dx dy
+end
+fn afalpha px long py long to uchar
+best = ulong 18446744073709551615
+for i ulong get Af 2
+d2 = afdist i px py
+if lt d2 best
+best = d2
+end
+end
+d = long afsqrt best
+cov = sub add long get Af 1 128 d
+if le cov 0
+ret 0
+end
+if ge cov 256
+ret 255
+end
+ret uchar div mul cov 255 256
+end
+fn afrow y ulong to void
+py = add mul add get Ab 1 long y 256 128
+for x ulong get Af 3
+px = add mul add get Ab 0 long x 256 128
+at = add mul y get Af 3 x
+put Alpha at afalpha px py
+end
+end
+fn afpaint to void
+for y ulong get Af 4
+afrow y
+end
+end
+fn afglyph c uchar to bool
+if eq get Af 0 0
+ret false
+end
+if not afpick c
+ret false
+end
+for i ulong 65536
+put Alpha i 0
+end
+put Af 2 0
+put Af 3 0
+put Af 4 1
+put Af 5 0
+put Ab 0 0
+put Ab 1 0
+put Apen 0 0
+put Apen 1 0
+while lt get Afpos 0 get Afpos 1
+cmd = get Afdata get Afpos 0
+put Afpos 0 add get Afpos 0 1
+if not afcmd cmd
+ret false
+end
+end
+if eq get Af 2 0
+ret true
+end
+if not afbox
+ret false
+end
+afpaint
+ret true
+end
+note Independent L764 provider attachment lifecycle probe; handwritten Omega assertions.
+text Lmagic "ALNPRV01"
+text Lhi "hi"
+text Lreply "SAY 1 1/1 hello"
+global Lchecks ulong 1
+global Lfails ulong 1
+global Lheld uchar 8192
+fn lcheck ok bool to void
+put Lchecks 0 add get Lchecks 0 1
+if not ok
+put Lfails 0 add get Lfails 0 1
+end
+end
+fn lhword off ulong v ulong to void
+for i ulong 8
+put Ph add off i uchar and shr v mul i 8 255
+end
+end
+fn lframe op ulong now ulong arg ulong size ulong to void
+for i ulong 8
+put Ph i get Lmagic i
+end
+lhword 8 op
+lhword 16 now
+lhword 24 arg
+lhword 32 size
+end
+fn lstatus to ulong
+v = ulong 0
+for i ulong 8
+v = or v shl ulong get Pout add 16 i mul i 8
+end
+ret v
+end
+fn lreceive part ulong size ulong to void
+note Construct an actual courier LINE payload through existing packet logic.
+n = get Outlen 0
+e = get Err 0
+for i ulong n
+put Lheld i get Outb i
+end
+put Inlen 0 size
+b = packet 2 get Q 1 part 0 0
+size = get Outlen 0
+for i ulong size
+put Pb i get Outb i
+end
+for i ulong n
+put Outb i get Lheld i
+end
+put Outlen 0 n
+put Err 0 e
+lframe 5 4294967297 0 size
+end
+fn main to int
+lframe 1 4294967296 77 0
+lcheck prdo
+lcheck eq lstatus 1
+lframe 2 4294967297 0 len Lhi
+for i ulong len Lhi
+put Pb i get Lhi i
+end
+lcheck prdo
+lcheck eq lstatus 1
+lframe 3 4294967297 1 0
+lcheck prdo
+lcheck eq lstatus 3
+lframe 4 4294967297 1 0
+lcheck prdo
+for i ulong len Lreply
+put In i get Lreply i
+end
+lreceive 1 len Lreply
+lcheck prdo
+lcheck eq lstatus 1
+lcheck eq get Dm 0 1
+lcheck eq get Dm 2 1
+lcheck eq get Dtext get Dsay 0 104
+lframe 6 0 0 0
+lcheck prdo
+lcheck eq lstatus 1
+lcheck eq get Dm 0 1
+lcheck eq get Dm 2 1
+lcheck eq get Dtext get Dsay 0 104
+lframe 1 4294967296 88 0
+lcheck prdo
+lcheck eq lstatus 0
+lcheck eq get Dm 2 1
+lframe 3 4294967296 1 0
+lcheck prdo
+lcheck eq lstatus 0
+lcheck eq get Dm 0 1
+lcheck eq get Dtext get Dsay 0 104
+lframe 5 4294967297 0 65
+for i ulong 65
+put Pb i 0
+end
+lcheck prdo
+lcheck eq lstatus 0
+lcheck eq get Dm 2 1
+lcheck eq get Dtext get Dsay 0 104
+lframe 7 0 0 0
+lcheck prdo
+lcheck eq lstatus 1
+lcheck eq get Dm 0 0
+lcheck eq get Dm 1 0
+lcheck eq get Dm 2 0
+lcheck eq get Dtext get Dsay 0 0
+if ne get Lfails 0 0
+outreset
+emitn get Lchecks 0
+emitb 32
+emitn get Lfails 0
+emitb 10
+w = write 1 Outb 0 get Outlen 0
+ret 1
+end
+outreset
+emitn get Lchecks 0
+emitb 32
+emitn get Lfails 0
+emitb 10
+w = write 1 Outb 0 get Outlen 0
+ret 0
+end

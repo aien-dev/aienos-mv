@@ -11,10 +11,10 @@ cat native/omega/allen/base.om native/omega/allen/vendor/sha256-core.om \
  native/omega/allen/runtime.om native/omega/allen/code.om \
  native/omega/allen/courier.om native/omega/allen/scheduler.om native/omega/allen/memory.om \
  native/omega/allen/intent.om native/omega/allen/reply.om \
- native/omega/allen/view.om native/omega/allen/scene.om native/omega/allen/paint.om native/omega/allen/application.om native/omega/allen/scene-input.om native/omega/allen/context.om native/omega/allen/presentation.om native/omega/allen/provider-core.om native/omega/allen/font-data.om native/omega/allen/font.om > "$core"
-for name in runtime code courier scheduler application provider-core presentation font memory context intent reply view scene scene-input paint edges fixture golden render font-output font-render; do
+ native/omega/allen/view.om native/omega/allen/scene.om native/omega/allen/paint.om native/omega/allen/application.om native/omega/allen/scene-input.om native/omega/allen/context.om native/omega/allen/presentation.om native/omega/allen/provider-core.om native/omega/allen/font-data.om native/omega/allen/font.om native/omega/allen/surface.om > "$core"
+for name in runtime code courier scheduler application provider-core presentation font surface memory context intent reply view scene scene-input paint edges fixture golden render font-output font-render surface-render; do
  cat "$core" > "$out/$name.om"
- case "$name" in golden|render|font-output|font-render) ;; *) cat native/omega/allen/tests/check.om >> "$out/$name.om" ;; esac
+ case "$name" in golden|render|font-output|font-render|surface-render) ;; *) cat native/omega/allen/tests/check.om >> "$out/$name.om" ;; esac
  cat "native/omega/allen/tests/$name.om" >> "$out/$name.om"
  native/omega/allen/build-one.sh "$out/$name.om" "$out/$name"
  case "$name" in
@@ -26,6 +26,7 @@ for name in runtime code courier scheduler application provider-core presentatio
  render) "$out/$name" > "$out/mind-component.ppm" ;;
  font-output) "$out/$name" > "$out/font.bin" ;;
  font-render) "$out/$name" > "$out/font-specimen.ppm" ;;
+ surface-render) "$out/$name" > "$out/provider-surface.ppm" ;;
  *) "$out/$name" > "$out/$name.log" ;;
  esac
  printf '%s compile=0 native-exit=0\n' "$name"
@@ -142,7 +143,12 @@ cat native/omega/allen/tests/check.om native/omega/allen/tests/provider-core.om 
 cat native/omega/allen/tests/check.om native/omega/allen/tests/provider-core.om >> "$out/rawrecv-mutant.om"
 { printf 2; cat "$core"; } | "$out/provider-display-mutants" > "$out/rawreset-mutant.om"
 cat native/omega/allen/tests/check.om native/omega/allen/tests/provider-core.om >> "$out/rawreset-mutant.om"
-for name in stale crc hash readback session keepalive ackstop pendingwire appcode thinking scenecap contextnote contextjob autosent framecheck staleview inputtail fontroot fontalpha rawask rawrecv rawreset; do
+native/omega/allen/build-one.sh native/omega/allen/tests/surface-mutants.om "$out/surface-mutants"
+{ printf 0; cat "$core"; } | "$out/surface-mutants" > "$out/clipright-mutant.om"
+cat native/omega/allen/tests/check.om native/omega/allen/tests/surface.om >> "$out/clipright-mutant.om"
+{ printf 1; cat "$core"; } | "$out/surface-mutants" > "$out/blendbg-mutant.om"
+cat native/omega/allen/tests/check.om native/omega/allen/tests/surface.om >> "$out/blendbg-mutant.om"
+for name in stale crc hash readback session keepalive ackstop pendingwire appcode thinking scenecap contextnote contextjob autosent framecheck staleview inputtail fontroot fontalpha rawask rawrecv rawreset clipright blendbg; do
  native/omega/allen/build-one.sh "$out/$name-mutant.om" "$out/$name-mutant"
  set +e
  "$out/$name-mutant" > "$out/$name-mutant.log"

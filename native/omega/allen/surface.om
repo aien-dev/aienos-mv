@@ -1,0 +1,131 @@
+note Bounded RGB text surface, no device effects. See SURFACE.md.
+global Canvas uchar 884736
+global Cv ulong 8
+global Cvpose long 2
+fn cvinit w ulong h ulong to bool
+if or eq w 0 gt w 768
+ret false
+end
+if or eq h 0 gt h 384
+ret false
+end
+for i ulong 8
+put Cv i 0
+end
+put Cv 0 w
+put Cv 1 h
+put Cv 4 w
+put Cv 5 h
+put Cv 6 1
+for i ulong len Canvas
+put Canvas i 0
+end
+for i ulong mul w h
+at = mul i 3
+put Canvas at 6
+put Canvas add at 1 8
+put Canvas add at 2 18
+end
+ret true
+end
+fn cvclip x ulong y ulong w ulong h ulong to bool
+if eq get Cv 6 0
+ret false
+end
+if or gt x get Cv 0 gt y get Cv 1
+ret false
+end
+if gt w sub get Cv 0 x
+ret false
+end
+if gt h sub get Cv 1 y
+ret false
+end
+put Cv 2 x
+put Cv 3 y
+put Cv 4 w
+put Cv 5 h
+ret true
+end
+fn cvblend bg ulong fg ulong a ulong to uchar
+v = mul bg sub ulong 255 a
+v = add v mul fg a
+ret uchar div v 255
+end
+fn cvpixel x long y long a uchar color ulong to void
+if or lt x long get Cv 2 lt y long get Cv 3
+ret
+end
+if ge x long add get Cv 2 get Cv 4
+ret
+end
+if ge y long add get Cv 3 get Cv 5
+ret
+end
+at = mul add mul ulong y get Cv 0 ulong x 3
+for k ulong 3
+s = mul sub ulong 2 k 8
+fg = and shr color s 255
+put Canvas add at k cvblend ulong get Canvas add at k fg ulong a
+end
+end
+fn cvrow yy ulong color ulong to void
+y = add get Cvpose 1 long yy
+at = mul yy get Af 3
+for x ulong get Af 3
+px = add get Cvpose 0 long x
+cvpixel px y get Alpha add at x color
+end
+end
+fn cvblit x long y long color ulong to void
+put Cvpose 0 add x get Ab 0
+put Cvpose 1 add y get Ab 1
+for yy ulong get Af 4
+cvrow yy color
+end
+end
+fn cvargs x long y long color ulong to bool
+if or eq get Cv 6 0 eq get Af 0 0
+ret false
+end
+if or lt x -4096 gt x 4096
+ret false
+end
+if or lt y -4096 gt y 4096
+ret false
+end
+ret le color 16777215
+end
+fn cvglyph c uchar x long y long color ulong to bool
+if not cvargs x y color
+ret false
+end
+if not afglyph c
+ret false
+end
+cvblit x y color
+put Cv 7 get Af 5
+ret true
+end
+fn cvspan beg ulong size ulong x long y long color ulong to bool
+if not cvargs x y color
+ret false
+end
+if gt beg len Dtext
+ret false
+end
+if gt size sub len Dtext beg
+ret false
+end
+pen = mul x 256
+origin = pen
+for i ulong size
+if not afglyph get Dtext add beg i
+ret false
+end
+cvblit affloor pen y color
+pen = add pen long get Af 5
+end
+put Cv 7 ulong sub pen origin
+ret true
+end

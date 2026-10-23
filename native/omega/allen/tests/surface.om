@@ -1,0 +1,229 @@
+note Surface tests: removing clipping, using constant background or bypassing drawing must fail.
+global Csave uchar 4096
+global Cmeta ulong 8
+fn test ok bool to void
+check ok add get Checks 0 1
+end
+fn cvkeep to void
+for i ulong 3072
+put Csave i get Canvas i
+end
+for i ulong 8
+put Cmeta i get Cv i
+end
+end
+fn cvsame to bool
+for i ulong 3072
+if ne get Canvas i get Csave i
+ret false
+end
+end
+for i ulong 8
+if ne get Cv i get Cmeta i
+ret false
+end
+end
+ret true
+end
+fn cvrefclip to bool
+ink = ulong 0
+for y ulong 32
+for x ulong 32
+at = mul add mul y 32 x 3
+inside = and ge x 8 lt x 16
+inside = and inside and ge y 8 lt y 16
+for k ulong 3
+v = uchar 6
+if eq k 1
+v = 8
+end
+if eq k 2
+v = 18
+end
+if inside
+v = get Csave add at k
+if ne v get Canvas add at k
+ret false
+end
+if gt v 18
+ink = add ink 1
+end
+else
+if ne get Canvas add at k v
+ret false
+end
+end
+end
+end
+end
+ret gt ink 0
+end
+fn cvfrac to bool
+b = cvinit 32 32
+b = afinit 14 900
+for i ulong 3
+put Dtext i 65
+end
+if not cvspan 0 3 -1 20 15528188
+ret false
+end
+one = get Af 5
+if ne get Cv 7 mul one 3
+ret false
+end
+cvkeep
+b = cvinit 32 32
+for i ulong 3
+x = affloor add long -256 long mul one i
+if not cvglyph 65 x 20 15528188
+ret false
+end
+end
+for i ulong 3072
+if ne get Canvas i get Csave i
+ret false
+end
+end
+ret true
+end
+fn main to int
+test not cvglyph 65 0 0 15528188
+test not cvinit 0 32
+test not cvinit 32 0
+test not cvinit 769 32
+test not cvinit 32 385
+test cvinit 32 32
+test eq get Cv 0 32
+test eq get Cv 1 32
+test eq get Cv 4 32
+test eq get Cv 5 32
+test eq get Canvas 0 6
+test eq get Canvas 1 8
+test eq get Canvas 2 18
+test eq get Canvas 3071 18
+test eq get Canvas 3072 0
+test not cvglyph 65 0 0 15528188
+test afinit 20 1000
+note Exact alpha arithmetic and repeated overlap must use current destination.
+cvpixel 0 0 0 15528188
+test eq get Canvas 0 6
+cvpixel 0 0 128 15528188
+test eq get Canvas 0 121
+test eq get Canvas 1 124
+test eq get Canvas 2 135
+cvpixel 0 0 128 15528188
+test eq get Canvas 0 178
+test eq get Canvas 1 182
+test eq get Canvas 2 193
+cvpixel 0 0 255 15528188
+test eq get Canvas 0 236
+test eq get Canvas 1 240
+test eq get Canvas 2 252
+cvkeep
+cvpixel -1 0 255 0
+cvpixel 0 -1 255 0
+cvpixel 32 0 255 0
+cvpixel 0 32 255 0
+test cvsame
+test not cvinit 18446744073709551615 1
+test cvsame
+test not cvclip 33 0 0 0
+test not cvclip 0 33 0 0
+test not cvclip 0 0 33 1
+test not cvclip 0 0 1 33
+test not cvclip 1 1 18446744073709551615 1
+test cvsame
+test not cvglyph 65 -4097 0 15528188
+test not cvglyph 65 4097 0 15528188
+test not cvglyph 65 0 -4097 15528188
+test not cvglyph 65 0 4097 15528188
+test not cvglyph 65 0 0 16777216
+test cvsame
+note Independent reference crop of the already rendered glyph.
+test cvinit 32 32
+test cvglyph 65 4 24 15528188
+test gt get Cv 7 0
+cvkeep
+test cvinit 32 32
+test cvclip 8 8 8 8
+put Canvas 3072 165
+test cvglyph 65 4 24 15528188
+test cvrefclip
+test eq get Canvas 3072 165
+note Zero-area and edge clips cannot draw any pixel.
+test cvinit 32 32
+test cvclip 32 32 0 0
+cvkeep
+test cvglyph 65 -8 6 15528188
+put Cmeta 7 get Cv 7
+test cvsame
+note A negative origin that intersects the surface must draw without wrapping.
+test cvclip 0 0 32 32
+test cvglyph 65 -8 6 15528188
+ink = ulong 0
+for i ulong 3072
+if gt get Canvas i 18
+ink = add ink 1
+end
+end
+test gt ink 0
+test eq get Canvas 3072 0
+note Explicit retained-text span agrees with two separately positioned glyphs.
+put Dtext 0 65
+put Dtext 1 65
+test cvinit 32 32
+put Outb 0 88
+put Outlen 0 1
+put Err 0 7
+put In 8191 99
+ok = cvspan 0 2 1 24 15528188
+clean = and eq get Outb 0 88 eq get Outlen 0 1
+clean = and clean eq get Err 0 7
+test ok
+test clean
+test eq get In 8191 99
+advance = get Cv 7
+cvkeep
+test cvinit 32 32
+test cvglyph 65 1 24 15528188
+one = get Cv 7
+x = add long 1 long div one 256
+test cvglyph 65 x 24 15528188
+test eq advance mul one 2
+same = true
+for i ulong 3072
+if ne get Canvas i get Csave i
+same = false
+end
+end
+test same
+note Refused spans and extreme offsets preserve pixels and all surface metadata.
+cvkeep
+test not cvspan 2305 0 0 0 0
+test not cvspan 2304 1 0 0 0
+test not cvspan 1 18446744073709551615 0 0 0
+test not cvspan 0 1 0 0 18446744073709551615
+test not cvspan 0 1 -4097 0 0
+test cvsame
+test cvspan 2304 0 0 0 0
+test eq get Cv 7 0
+test eq get Dtext 0 65
+test eq get Dtext 1 65
+test cvfrac
+for i ulong 2304
+put Dtext i 65
+end
+test cvinit 32 32
+cvkeep
+test cvspan 0 2304 4096 0 15528188
+put Cmeta 7 get Cv 7
+test cvsame
+test cvinit 768 384
+test eq get Cv 0 768
+test eq get Cv 1 384
+test eq get Canvas 884735 18
+if ne get Fails 0 0
+ret 1
+end
+ret 0
+end

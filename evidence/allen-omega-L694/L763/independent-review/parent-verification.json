@@ -1,0 +1,10 @@
+{
+  "pin": "92b405477cfdff40dda25c5afcac5b65cb04122a",
+  "source_files": 63,
+  "focused_checks": 136,
+  "independent_checks": 34,
+  "parent_binary_sha256": "c1b25a69bab4ea86076dab5b37f48a4431c87e2a8752791fe50c96da0d720c64",
+  "report_sha256": "36ef969350082ec14c3ab0e3e8396f5588eab28055802901ef08b3ddab92541b",
+  "findings": "none in scoped provider/presentation attachment",
+  "scope": "host only"
+}

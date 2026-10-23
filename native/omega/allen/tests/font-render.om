@@ -1,5 +1,5 @@
 note Actual native 768x384 printable-ASCII specimen; no image generator.
-global Canvas uchar 884736
+note Uses the shared bounded RGB surface storage.
 global Fpose long 2
 text Fontppm "P6\n768 384\n255\n"
 fn fblend bg ulong fg ulong a ulong to uchar

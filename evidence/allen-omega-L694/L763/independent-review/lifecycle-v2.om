@@ -1,0 +1,117 @@
+note Independent L764 provider attachment lifecycle probe; handwritten Omega assertions.
+text Lmagic "ALNPRV01"
+text Lhi "hi"
+text Lreply "SAY 1 1/1 hello"
+global Lchecks ulong 1
+global Lfails ulong 1
+global Lheld uchar 8192
+fn lcheck ok bool to void
+put Lchecks 0 add get Lchecks 0 1
+if not ok
+put Lfails 0 add get Lfails 0 1
+end
+end
+fn lhword off ulong v ulong to void
+for i ulong 8
+put Ph add off i uchar and shr v mul i 8 255
+end
+end
+fn lframe op ulong now ulong arg ulong size ulong to void
+for i ulong 8
+put Ph i get Lmagic i
+end
+lhword 8 op
+lhword 16 now
+lhword 24 arg
+lhword 32 size
+end
+fn lstatus to ulong
+v = ulong 0
+for i ulong 8
+v = or v shl ulong get Pout add 16 i mul i 8
+end
+ret v
+end
+fn lreceive part ulong size ulong to void
+note Construct an actual courier LINE payload through existing packet logic.
+n = get Outlen 0
+e = get Err 0
+for i ulong n
+put Lheld i get Outb i
+end
+put Inlen 0 size
+b = packet 2 get Q 1 part 0 0
+size = get Outlen 0
+for i ulong size
+put Pb i get Outb i
+end
+for i ulong n
+put Outb i get Lheld i
+end
+put Outlen 0 n
+put Err 0 e
+lframe 5 4294967297 0 size
+end
+fn main to int
+lframe 1 4294967296 77 0
+lcheck prdo
+lcheck eq lstatus 1
+lframe 2 4294967297 0 len Lhi
+for i ulong len Lhi
+put Pb i get Lhi i
+end
+lcheck prdo
+lcheck eq lstatus 1
+lframe 3 4294967297 1 0
+lcheck prdo
+lcheck eq lstatus 3
+lframe 4 4294967297 1 0
+lcheck prdo
+for i ulong len Lreply
+put In i get Lreply i
+end
+lreceive 1 len Lreply
+lcheck prdo
+lcheck eq lstatus 1
+lcheck eq get Dm 0 1
+lcheck eq get Dm 2 1
+lcheck eq get Dtext get Dsay 0 104
+lframe 6 0 0 0
+lcheck prdo
+lcheck eq lstatus 1
+lcheck eq get Dm 0 1
+lcheck eq get Dm 2 1
+lcheck eq get Dtext get Dsay 0 104
+lframe 1 4294967296 88 0
+lcheck prdo
+lcheck eq lstatus 0
+lcheck eq get Dm 2 1
+lframe 3 4294967296 1 0
+lcheck prdo
+lcheck eq lstatus 0
+lcheck eq get Dm 0 1
+lcheck eq get Dtext get Dsay 0 104
+lframe 7 0 0 0
+lcheck prdo
+lcheck eq lstatus 1
+lcheck eq get Dm 0 0
+lcheck eq get Dm 1 0
+lcheck eq get Dm 2 0
+lcheck eq get Dtext get Dsay 0 0
+if ne get Lfails 0 0
+outreset
+emitn get Lchecks 0
+emitb 32
+emitn get Lfails 0
+emitb 10
+w = write 1 Outb 0 get Outlen 0
+ret 1
+end
+outreset
+emitn get Lchecks 0
+emitb 32
+emitn get Lfails 0
+emitb 10
+w = write 1 Outb 0 get Outlen 0
+ret 0
+end

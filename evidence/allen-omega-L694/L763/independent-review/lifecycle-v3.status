@@ -1,0 +1,3 @@
+module_build=0 module_exit=0
+focused_build=0 focused_exec=0 assertions=136 failures=0
+source_membership=57/57 tracked_om_sh_present manifest_entries=63/63 git_and_export_hashes_match extra_manifest_non_om_sh=6

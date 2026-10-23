@@ -1,0 +1,104 @@
+note Native provider-to-pixels fixture. Reply is a labeled test input, not live inference.
+text Cvppm "P6\n768 384\n255\n"
+text Cvask "hello"
+text Cvanswer "SAY 1 1/1 note: Hello, Drake. | This text was drawn in Omega."
+fn svword off ulong v ulong to void
+for i ulong 8
+put Ph add off i uchar and shr v mul i 8 255
+end
+end
+fn svframe op ulong now ulong arg ulong size ulong to void
+for i ulong 8
+put Ph i get Prmagic i
+end
+svword 8 op
+svword 16 now
+svword 24 arg
+svword 32 size
+end
+fn svsize beg ulong to ulong
+if ge beg len Dtext
+ret 0
+end
+n = ulong 0
+while lt add beg n len Dtext
+if eq get Dtext add beg n 0
+ret n
+end
+n = add n 1
+end
+ret 0
+end
+fn svout to bool
+p = ulong 0
+while lt p len Cvppm
+n = write 1 Cvppm p sub len Cvppm p
+if le n 0
+ret false
+end
+p = add p ulong n
+end
+p = 0
+while lt p len Canvas
+n = write 1 Canvas p sub len Canvas p
+if le n 0
+ret false
+end
+p = add p ulong n
+end
+ret true
+end
+fn main to int
+svframe 1 0 77 0
+if not prdo
+ret 1
+end
+for i ulong len Cvask
+put Pb i get Cvask i
+end
+svframe 2 1 0 len Cvask
+if not prdo
+ret 2
+end
+for i ulong len Cvanswer
+put In i get Cvanswer i
+end
+put Inlen 0 len Cvanswer
+if not packet 2 get Q 1 1 0 0
+ret 3
+end
+for i ulong get Outlen 0
+put Pb i get Outb i
+end
+svframe 5 2 0 get Outlen 0
+if not prdo
+ret 4
+end
+if or ne get Dm 0 1 ne get Ds 3 1
+ret 5
+end
+if or ne get Dt 0 1 ne get Dt 6 2
+ret 6
+end
+if not cvinit 768 384
+ret 7
+end
+if not afinit 30 1250
+ret 8
+end
+a = get Dt 7
+if not cvspan a svsize a 48 166 15528188
+ret 9
+end
+if not afinit 18 900
+ret 10
+end
+a = get Dt 8
+if not cvspan a svsize a 48 210 13161215
+ret 11
+end
+if not svout
+ret 74
+end
+ret 0
+end
