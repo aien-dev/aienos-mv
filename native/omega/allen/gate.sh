@@ -11,8 +11,8 @@ cat native/omega/allen/base.om native/omega/allen/vendor/sha256-core.om \
  native/omega/allen/runtime.om native/omega/allen/code.om \
  native/omega/allen/courier.om native/omega/allen/scheduler.om native/omega/allen/memory.om \
  native/omega/allen/intent.om native/omega/allen/reply.om \
- native/omega/allen/view.om native/omega/allen/scene.om native/omega/allen/paint.om native/omega/allen/application.om native/omega/allen/scene-input.om native/omega/allen/context.om > "$core"
-for name in runtime code courier scheduler application memory context intent reply view scene scene-input paint edges fixture golden render; do
+ native/omega/allen/view.om native/omega/allen/scene.om native/omega/allen/paint.om native/omega/allen/application.om native/omega/allen/scene-input.om native/omega/allen/context.om native/omega/allen/provider-core.om > "$core"
+for name in runtime code courier scheduler application provider-core memory context intent reply view scene scene-input paint edges fixture golden render; do
  cat "$core" > "$out/$name.om"
  case "$name" in golden|render) ;; *) cat native/omega/allen/tests/check.om >> "$out/$name.om" ;; esac
  cat "native/omega/allen/tests/$name.om" >> "$out/$name.om"
@@ -48,6 +48,47 @@ set -e
 [ ! -s "$out/stdio-overflow.stdout" ] || { echo 'stdio overflow executed a later job' >&2; exit 1; }
 [ ! -s "$out/stdio-overflow.stderr" ] || { echo 'stdio overflow displayed a later answer' >&2; exit 1; }
 printf 'stdio overflow native-exit=65 no-later-command=PASS\n'
+# Real native provider entry, independent native input/output fixtures.
+cat "$core" native/omega/allen/provider.om > "$out/provider.om"
+native/omega/allen/build-one.sh "$out/provider.om" "$out/provider"
+for name in provider-input provider-output provider-process; do
+ cat "$core" native/omega/allen/tests/check.om "native/omega/allen/tests/$name.om" > "$out/$name.om"
+ native/omega/allen/build-one.sh "$out/$name.om" "$out/$name"
+done
+printf 0 | "$out/provider-input" > "$out/provider.input"
+"$out/provider" < "$out/provider.input" > "$out/provider.output" 2> "$out/provider.stderr"
+{ printf '7\n0\n'; stat -c %s "$out/provider.output" "$out/provider.stderr"; cat "$out/provider.output" "$out/provider.stderr"; } > "$out/provider-process.receipt"
+"$out/provider-process" < "$out/provider-process.receipt" > "$out/provider-process.log"
+"$out/provider-output" < "$out/provider.output" > "$out/provider-stream.log"
+# Byte-at-a-time native producer through a real pipe; collect both exits explicitly.
+printf 7 > "$out/provider.mode"
+mkfifo "$out/provider.pipe"
+"$out/provider-input" < "$out/provider.mode" > "$out/provider.pipe" 2> "$out/provider-producer.stderr" &
+producer=$!
+set +e
+"$out/provider" < "$out/provider.pipe" > "$out/provider-fragment.output" 2> "$out/provider-fragment.stderr"
+consumer_rc=$?
+wait "$producer"
+producer_rc=$?
+set -e
+{ printf '7\n%s\n' "$consumer_rc"; stat -c %s "$out/provider-fragment.output" "$out/provider-fragment.stderr"; cat "$out/provider-fragment.output" "$out/provider-fragment.stderr"; } > "$out/provider-consumer.receipt"
+"$out/provider-process" < "$out/provider-consumer.receipt" > "$out/provider-consumer.log"
+{ printf '7\n%s\n0\n' "$producer_rc"; stat -c %s "$out/provider-producer.stderr"; cat "$out/provider-producer.stderr"; } > "$out/provider-producer.receipt"
+"$out/provider-process" < "$out/provider-producer.receipt" > "$out/provider-producer.log"
+cmp "$out/provider.output" "$out/provider-fragment.output"
+"$out/provider-output" < "$out/provider-fragment.output" > "$out/provider-fragment.log"
+printf 8 | "$out/provider-input" > "$out/provider-boot.expected"
+for mode in 1 2 3 4 5 6; do
+ printf '%s' "$mode" | "$out/provider-input" > "$out/provider-bad-$mode.input"
+ set +e
+ "$out/provider" < "$out/provider-bad-$mode.input" > "$out/provider-bad-$mode.output" 2> "$out/provider-bad-$mode.stderr"
+ rc=$?
+ set -e
+ { printf '%s\n%s\n' "$mode" "$rc"; stat -c %s "$out/provider-bad-$mode.output" "$out/provider-bad-$mode.stderr"; cat "$out/provider-bad-$mode.output" "$out/provider-bad-$mode.stderr"; } > "$out/provider-bad-$mode.receipt"
+ "$out/provider-process" < "$out/provider-bad-$mode.receipt" > "$out/provider-bad-$mode.log"
+ printf 'provider malformed mode=%s exit=65 no-later-command=PASS\n' "$mode"
+done
+printf 'provider native-exit=0 fragmented-pipe=0 output-verifier=0\n'
 # Compiled behavioral mutants must be valid ELFs and fail the original gates.
 sed 's/if or eq get R 1 0 ne seq get R 0/if eq get R 1 0/' "$core" > "$out/stale-mutant.om"
 cat native/omega/allen/tests/check.om native/omega/allen/tests/runtime.om >> "$out/stale-mutant.om"
@@ -75,7 +116,12 @@ sed 's/if and eq get Ctxgone index 0 lt given limit/if lt given limit/' "$core" 
 cat native/omega/allen/tests/check.om native/omega/allen/tests/context.om >> "$out/contextnote-mutant.om"
 sed 's/if not ctxappend/if false/' "$core" > "$out/contextjob-mutant.om"
 cat native/omega/allen/tests/check.om native/omega/allen/tests/context.om >> "$out/contextjob-mutant.om"
-for name in stale crc hash readback session keepalive ackstop pendingwire appcode thinking scenecap contextnote contextjob; do
+native/omega/allen/build-one.sh native/omega/allen/tests/provider-mutants.om "$out/provider-mutants"
+{ printf 0; cat "$core"; } | "$out/provider-mutants" > "$out/autosent-mutant.om"
+cat native/omega/allen/tests/check.om native/omega/allen/tests/provider-core.om >> "$out/autosent-mutant.om"
+{ printf 1; cat "$core"; } | "$out/provider-mutants" > "$out/framecheck-mutant.om"
+cat native/omega/allen/tests/check.om native/omega/allen/tests/provider-core.om >> "$out/framecheck-mutant.om"
+for name in stale crc hash readback session keepalive ackstop pendingwire appcode thinking scenecap contextnote contextjob autosent framecheck; do
  native/omega/allen/build-one.sh "$out/$name-mutant.om" "$out/$name-mutant"
  set +e
  "$out/$name-mutant" > "$out/$name-mutant.log"

@@ -1,0 +1,70 @@
+note Native Linux stdin/stdout provider-stream entry. No fake clock or transport.
+fn prreadhead to int
+p = ulong 0
+while lt p 40
+n = read 0 Ph p sub ulong 40 p
+if lt n 0
+ret 74
+end
+if eq n 0
+if eq p 0
+ret 0
+end
+ret 65
+end
+p = add p ulong n
+end
+ret 1
+end
+fn prreadbody to int
+p = ulong 0
+size = get Pv 3
+while lt p size
+n = read 0 Pb p sub size p
+if lt n 0
+ret 74
+end
+if eq n 0
+ret 65
+end
+p = add p ulong n
+end
+ret 0
+end
+fn prwrite to bool
+p = ulong 0
+while lt p get Pn 0
+n = write 1 Pout p sub get Pn 0 p
+if le n 0
+ret false
+end
+p = add p ulong n
+end
+ret true
+end
+fn main to int
+constants
+while true
+status = prreadhead
+if eq status 0
+ret 0
+end
+if ne status 1
+ret status
+end
+if not prparse
+ret 65
+end
+status = prreadbody
+if ne status 0
+ret status
+end
+if not prdo
+ret 65
+end
+if not prwrite
+ret 74
+end
+end
+ret 0
+end

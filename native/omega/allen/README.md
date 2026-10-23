@@ -18,7 +18,7 @@ The output directory must be fresh. `build-one.sh` hashes the compiler before
 **every invocation**, rejects empty/wrong-machine/nonstatic ELF and marks only
 qualified output executable. The gate builds all modules together for every test,
 executes handwritten Omega test programs, compares a byte-exact independent memory
-fixture and rejects thirteen compiled behavioral mutants. The build uses POSIX shell,
+fixture and rejects fifteen compiled behavioral mutants. The build uses POSIX shell,
 Git (source reconstruction), GNU file/text utilities, readelf, dd, xxd and
 sha256sum as external development tools. Existing Rust courier `--split` was used
 once as a fixture oracle, never as an Omega runtime dependency.
@@ -158,6 +158,33 @@ WAIT updates the silence deadline without fabricating an answer. Silence timeout
 cancels courier retries as well as the conversation. Calls remain serialized;
 fixed global arrays are not thread-safe. Provider must not mix direct core queue
 operations with this application API.
+
+## Runnable bound provider entry
+
+`provider-core.om` and `provider.om` expose the actual bound application through
+versioned length-framed stdin/stdout. See [PROVIDER.md](PROVIDER.md) for the exact
+40-byte header, operations and status/event/body format. The gate produces the
+static native executable at `<output>/provider`, plus native input and output
+verification programs. For example the already-built fixture can drive it:
+
+```sh
+printf 0 | <output>/provider-input > /path/to/private/events.bin
+<output>/provider < /path/to/private/events.bin > /path/to/private/results.bin
+<output>/provider-output < /path/to/private/results.bin
+```
+
+These are deterministic test events, not a live model conversation. The entry
+actually calls the memory/catalog/application/scheduler/code functions, reads
+and writes real streams, and keeps offered datagrams pending until an explicit
+SENT outcome. It emits actual retained answers and completed code, never canned
+ordinary replies. Restore records are supplied by the caller, not read from disk.
+Malformed/oversized/truncated frames stop immediately with exit65; well-framed
+semantic refusals return status0. Real pipe replay with byte-at-a-time writes and
+six framing/refusal cases run in the full gate. The old line-oriented `main.om`
+remains separate and its byte-exact goldens are unchanged.
+
+This is an executable host integration boundary, **not** a qualified socket,
+monotonic clock, storage/device provider, live-model service or EFI/iMac build.
 
 ## Intentional refusals and unfinished compatibility
 

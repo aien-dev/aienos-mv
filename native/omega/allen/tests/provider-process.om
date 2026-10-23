@@ -1,0 +1,100 @@
+note Native assertions over host-collected process receipts.
+note Four decimal lines: mode, exit, stdout bytes, stderr bytes; then stdout+stderr.
+global Procbuf uchar 65536
+global Procnum ulong 4
+global Procpos ulong 1
+text Procmag "ALNPRV01"
+fn pcheck ok bool to void
+check ok add get Checks 0 1
+end
+fn pnumber n ulong to bool
+v = ulong 0
+digits = ulong 0
+while lt get Procpos 0 n
+c = get Procbuf get Procpos 0
+put Procpos 0 add get Procpos 0 1
+if eq c 10
+if eq digits 0
+ret false
+end
+put Procnum 3 v
+ret true
+end
+if or lt c 48 gt c 57
+ret false
+end
+if ge digits 8
+ret false
+end
+v = add mul v 10 sub ulong c 48
+digits = add digits 1
+end
+ret false
+end
+fn pword off ulong to ulong
+v = ulong 0
+for i ulong 8
+v = or v shl ulong get Procbuf add off i mul i 8
+end
+ret v
+end
+fn pverify n ulong to int
+for i ulong 3
+if not pnumber n
+ret 65
+end
+put Procnum i get Procnum 3
+end
+if not pnumber n
+ret 65
+end
+mode = get Procnum 0
+rc = get Procnum 1
+size = get Procnum 2
+err = get Procnum 3
+p = get Procpos 0
+pcheck eq n add add p size err
+pcheck eq err 0
+if le mode 6
+pcheck ge mode 1
+pcheck eq rc 65
+if eq mode 6
+pcheck eq size 40
+if ge sub n p 40
+for i ulong 8
+pcheck eq get Procbuf add p i get Procmag i
+end
+pcheck eq pword add p 8 1
+pcheck eq pword add p 16 1
+pcheck eq pword add p 24 0
+pcheck eq pword add p 32 0
+end
+else
+pcheck eq size 0
+end
+else
+if eq mode 7
+pcheck eq rc 0
+else
+ret 65
+end
+end
+if ne get Fails 0 0
+ret 1
+end
+ret 0
+end
+fn main to int
+n = ulong 0
+while lt n len Procbuf
+r = read 0 Procbuf n sub len Procbuf n
+if lt r 0
+ret 74
+end
+if eq r 0
+ret pverify n
+end
+n = add n ulong r
+end
+ret 65
+end

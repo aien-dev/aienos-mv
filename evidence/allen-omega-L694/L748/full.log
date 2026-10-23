@@ -1,0 +1,41 @@
+runtime compile=0 native-exit=0
+code compile=0 native-exit=0
+courier compile=0 native-exit=0
+scheduler compile=0 native-exit=0
+application compile=0 native-exit=0
+provider-core compile=0 native-exit=0
+memory compile=0 native-exit=0
+context compile=0 native-exit=0
+intent compile=0 native-exit=0
+reply compile=0 native-exit=0
+view compile=0 native-exit=0
+scene compile=0 native-exit=0
+scene-input compile=0 native-exit=0
+paint compile=0 native-exit=0
+edges compile=0 native-exit=0
+fixture compile=0 native-exit=0
+golden compile=0 native-exit=0
+render compile=0 native-exit=0
+stdio native-exit=0 golden-cmp=0
+stdio overflow native-exit=65 no-later-command=PASS
+provider malformed mode=1 exit=65 no-later-command=PASS
+provider malformed mode=2 exit=65 no-later-command=PASS
+provider malformed mode=3 exit=65 no-later-command=PASS
+provider malformed mode=4 exit=65 no-later-command=PASS
+provider malformed mode=5 exit=65 no-later-command=PASS
+provider malformed mode=6 exit=65 no-later-command=PASS
+provider native-exit=0 fragmented-pipe=0 output-verifier=0
+stale mutant compile=0 rejected-exit=3
+crc mutant compile=0 rejected-exit=2
+hash mutant compile=0 rejected-exit=2
+readback mutant compile=0 rejected-exit=7
+session mutant compile=0 rejected-exit=1
+keepalive mutant compile=0 rejected-exit=40
+ackstop mutant compile=0 rejected-exit=27
+pendingwire mutant compile=0 rejected-exit=1
+appcode mutant compile=0 rejected-exit=3
+thinking mutant compile=0 rejected-exit=6
+scenecap mutant compile=0 rejected-exit=3
+contextnote mutant compile=0 rejected-exit=5
+contextjob mutant compile=0 rejected-exit=36
+omc: line 3510: error 16

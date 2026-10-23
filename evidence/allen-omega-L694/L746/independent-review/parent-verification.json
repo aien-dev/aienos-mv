@@ -1,0 +1,8 @@
+{
+  "pin": "be28deb21721f54fc46b5402076c7e8ac8fde151",
+  "source_files": 43,
+  "parent_probe_sha256": "4a53ec429504131fd48a6f2931a7244053ab9013291d46841dc69545addcabd6",
+  "parent_checks": 150,
+  "report_sha256": "ce5862d96c8f8f2b6dd11596f1f16f8996b336aad88ef98051a5b7bf626385d3",
+  "verdict": "No findings; original failed probe retained as expectation error; host-only."
+}

@@ -1,0 +1,397 @@
+text Who "Drake"
+text Selfname "Allen"
+text Fkey "gate code"
+text Fval "4471"
+text Note0 "Meet at noon."
+text Note1 "Old private note."
+text Note3 "Bring tools."
+text MetaWant "\tself=Allen\tname=Drake\tstarts=7\tfact gate code is 4471\tnote Bring tools.\tnote Meet at noon."
+text NewOnly "\tself=Allen\tname=Drake\tstarts=7\tfact gate code is 4471\tnote Bring tools."
+text Emptyctx "\tself=Allen\tstarts=0"
+text Lastsix "\tself=Allen\tstarts=0\tnote N9\tnote N8\tnote N7\tnote N6\tnote N5\tnote N4"
+text Plural "\tself=Allen\tname=Drake\tstarts=4294967295\tfact gate code are 4471"
+global Unitsave uchar 8192
+global Saveout uchar 8192
+global Saveos ulong 2
+global Appsave ulong 16
+global Joblen ulong 1
+global Qsave ulong 2
+fn test ok bool to void
+put Saveos 0 get Outlen 0
+put Saveos 1 get Err 0
+for i ulong get Outlen 0
+put Saveout i get Outb i
+end
+check ok add get Checks 0 1
+for i ulong get Saveos 0
+put Outb i get Saveout i
+end
+put Outlen 0 get Saveos 0
+put Err 0 get Saveos 1
+end
+fn fixture index ulong gone ulong to void
+put Ns 0 len Note0
+put Ns 1 index
+put Ns 2 7
+put Ns 3 gone
+for i ulong len Note0
+put Note i get Note0 i
+end
+if eq index 1
+put Ns 0 len Note1
+for i ulong len Note1
+put Note i get Note1 i
+end
+end
+if eq index 3
+put Ns 0 len Note3
+for i ulong len Note3
+put Note i get Note3 i
+end
+end
+test noteenc
+for i ulong 4096
+put Unit i get Enc i
+end
+end
+fn memsetup to void
+for i ulong 3692
+put Mem i 0
+end
+mset32 0 7
+mset32 32 1
+mset32 36 4
+for i ulong len Who
+put Mem add i 8 get Who i
+end
+for i ulong len Fkey
+put Mem add i 40 get Fkey i
+end
+for i ulong len Fval
+put Mem add i 88 get Fval i
+end
+for i ulong len Selfname
+put Mem add i 153 get Selfname i
+end
+end
+fn prompt to void
+put Inlen 0 2
+put In 0 104
+put In 1 105
+end
+fn main to int
+test appinit 123 0
+test ctxmeta 6
+test eq get Mx 0 len Emptyctx
+same = true
+for i ulong len Emptyctx
+if ne get Meta i get Emptyctx i
+same = false
+end
+end
+test same
+memsetup
+test memenc 100
+for i ulong 4096
+put Unit i get Enc i
+end
+loadbeg
+test loadcopy 0
+test eq get St 0 100
+test ctxbegin
+test eq get Cx 0 4
+test eq get Cx 1 0
+test eq get Cx 2 0
+test not ctxmeta 6
+note Independent admission snapshot: incomplete catalog must not consume ids/history/job.
+for i ulong 16
+put Appsave i get R i
+end
+put Joblen 0 get T 8
+put Qsave 0 get Q 0
+put Qsave 1 get Q 1
+put Saveos 0 get Outlen 0
+put Saveos 1 get Err 0
+for i ulong get Saveos 0
+put Saveout i get Outb i
+end
+for i ulong get T 8
+put Unitsave i get JobOut i
+end
+prompt
+test not appask 0
+test eq get R 0 get Appsave 0
+test eq get R 1 get Appsave 1
+test eq get R 9 get Appsave 9
+test eq get Q 1 get Qsave 1
+test eq get Q 0 get Qsave 0
+test eq get T 8 get Joblen 0
+test eq get Outlen 0 get Saveos 0
+test eq get Err 0 get Saveos 1
+same = true
+for i ulong get Saveos 0
+if ne get Outb i get Saveout i
+same = false
+end
+end
+test same
+same = true
+for i ulong get Joblen 0
+if ne get JobOut i get Unitsave i
+same = false
+end
+end
+test same
+appcancel
+fixture 3 0
+test eq ctxtake 3 1
+test eq get Ctxlen 3 len Note3
+test eq get Ctxstart 3 7
+test eq ctxtake 3 0
+test eq get Cx 1 1
+fixture 1 1
+test eq ctxtake 1 1
+test eq get Ctxgone 1 1
+fixture 2 0
+put Unit 64 33
+test eq ctxtake 2 2
+test eq get Cx 3 1
+test eq get Ctxgone 2 1
+test not ctxmeta 6
+fixture 0 0
+test eq ctxtake 0 1
+test eq get Cx 1 4
+test eq get Cx 2 1
+test eq get Cx 4 0
+test eq ctxtake 4 0
+test ctxmeta 6
+test eq get Mx 0 len MetaWant
+same = true
+for i ulong len MetaWant
+if ne get Meta i get MetaWant i
+same = false
+end
+end
+test same
+test ctxmeta 1
+test eq get Mx 0 len NewOnly
+same = true
+for i ulong len NewOnly
+if ne get Meta i get NewOnly i
+same = false
+end
+end
+test same
+test not ctxmeta 513
+test not ctxappend
+test ctxmeta 6
+outreset
+emitb 120
+test ctxappend
+test eq get Outlen 0 add 1 len MetaWant
+test eq get Outb 0 120
+same = true
+for i ulong len MetaWant
+if ne get Outb add i 1 get MetaWant i
+same = false
+end
+end
+test same
+note Exercise the actual appask -> qsubmit job snapshot, not only metadata helpers.
+prompt
+test appask 1
+test eq get R 0 1
+test eq get Q 1 1
+test eq get R 9 1
+n = get T 8
+test ge n len MetaWant
+same = ge n len MetaWant
+if same
+for i ulong len MetaWant
+if ne get JobOut add sub n len MetaWant i get MetaWant i
+same = false
+end
+end
+end
+test same
+test not ctxbegin
+test eq ctxtake 0 0
+appcancel
+note Exact append capacity and one byte above, preserving Outb/length/error on refusal.
+test ctxmeta 6
+n = sub ulong 4096 get Mx 0
+put Outlen 0 n
+for i ulong n
+put Outb i 90
+end
+test ctxappend
+test eq get Outlen 0 4096
+put Outlen 0 add n 1
+put Outb n 88
+test not ctxappend
+test eq get Outlen 0 add n 1
+test eq get Outb n 88
+put Err 0 5
+test not ctxappend
+test eq get Err 0 5
+outreset
+mset32 36 5
+test not ctxmeta 6
+mset32 36 4
+mset32 32 33
+prompt
+test not appask 2
+test eq get R 0 1
+test eq get Q 1 1
+mset32 32 1
+note Deliberately full valid facts make metadata fit but the whole JOB exceed4096.
+for i ulong 3692
+put Mem i 0
+end
+mset32 32 32
+for k ulong 32
+off = add 40 mul k 113
+for i ulong 47
+put Mem add off i 107
+end
+for i ulong 63
+put Mem add add off 48 i 118
+end
+end
+test ctxmeta 6
+test le get Mx 0 4096
+prompt
+test not appask 2
+test eq get R 0 1
+test eq get Q 1 1
+test eq get R 9 1
+note Catalog capacity and transaction exclusion.
+mset32 36 512
+test ctxbegin
+test eq get Cx 0 512
+test eq ctxtake 512 0
+fixture 511 0
+test eq ctxtake 511 1
+test eq get Ctxlen 511 len Note0
+test not ctxmeta 6
+put Tx 0 1
+test not ctxbegin
+test eq ctxtake 0 0
+put Tx 0 0
+put Nt 0 1
+test not ctxbegin
+test eq ctxtake 0 0
+put Nt 0 0
+mset32 36 513
+test not ctxbegin
+test eq get Cx 0 512
+note Load ten real records, select exactly the newest six, and allow zero selected.
+for i ulong 3692
+put Mem i 0
+end
+mset32 36 10
+test ctxbegin
+for k ulong 10
+put Ns 0 2
+put Ns 1 k
+put Ns 2 7
+put Ns 3 0
+put Note 0 78
+put Note 1 uchar add 48 k
+test noteenc
+for i ulong 4096
+put Unit i get Enc i
+end
+test eq ctxtake k 1
+end
+test ctxmeta 6
+test eq get Mx 0 len Lastsix
+same = true
+for i ulong len Lastsix
+if ne get Meta i get Lastsix i
+same = false
+end
+end
+test same
+test ctxmeta 0
+test eq get Mx 0 len Emptyctx
+note Context construction cannot overwrite a staged memory/note transaction image.
+for i ulong 4096
+put Unitsave i get Unit i
+put Unitsave add i 4096 get Enc i
+end
+test ctxmeta 6
+same = true
+for i ulong 4096
+if ne get Unit i get Unitsave i
+same = false
+end
+if ne get Enc i get Unitsave add i 4096
+same = false
+end
+end
+test same
+memsetup
+mset32 36 0
+mset32 0 4294967295
+put Mem 152 1
+test ctxmeta 6
+test eq get Mx 0 len Plural
+same = true
+for i ulong len Plural
+if ne get Meta i get Plural i
+same = false
+end
+end
+test same
+put Mem 40 9
+test not ctxmeta 6
+test not ctxappend
+put Mem 40 103
+for i ulong 48
+put Mem add i 40 107
+end
+test not ctxmeta 6
+note Thirty-two full facts and six full notes overflow metadata itself, not only JOB.
+for i ulong 3692
+put Mem i 0
+end
+mset32 32 32
+mset32 36 6
+for k ulong 32
+off = add 40 mul k 113
+for i ulong 47
+put Mem add off i 107
+end
+for i ulong 63
+put Mem add add off 48 i 118
+end
+end
+test ctxbegin
+for k ulong 6
+put Ns 0 127
+put Ns 1 k
+put Ns 2 7
+put Ns 3 0
+for i ulong 127
+put Note i 110
+end
+test noteenc
+for i ulong 4096
+put Unit i get Enc i
+end
+test eq ctxtake k 1
+end
+test not ctxmeta 6
+test eq get Mx 1 1
+outreset
+emitb 90
+test not ctxappend
+test eq get Outlen 0 1
+test eq get Outb 0 90
+prompt
+test not appask 2
+test eq get R 0 1
+test eq get Q 1 1
+ret int get Fails 0
+end

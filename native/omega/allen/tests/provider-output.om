@@ -1,0 +1,104 @@
+note Independent stream-output assertions, not a captured/blessed output fixture.
+global Vbuf uchar 65536
+text Vmagic "ALNPRV01"
+text Ops "1234345343"
+text Hello "ALLEN-COURIER v=1 run=000000000000004d kind=HELLO seq=0 part=0/0 bytes=0\n"
+text Got "ALLEN-COURIER v=1 run=000000000000004d kind=GOT seq=1 part=1/0 bytes=0\n"
+text Jobtail "hi\tself=Allen\tstarts=0"
+text Wordsout "hello"
+fn test ok bool to void
+check ok add get Checks 0 1
+end
+fn vword off ulong to ulong
+v = ulong 0
+for i ulong 8
+v = or v shl ulong get Vbuf add off i mul i 8
+end
+ret v
+end
+fn vbyte at ulong expected uchar to void
+test eq get Vbuf at expected
+end
+fn verify n ulong to int
+p = ulong 0
+count = ulong 0
+while lt p n
+if or lt sub n p 40 ge count 10
+ret 65
+end
+for i ulong 8
+vbyte add p i get Vmagic i
+end
+op = vword add p 8
+status = vword add p 16
+event = vword add p 24
+size = vword add p 32
+p = add p 40
+if gt size sub n p
+ret 65
+end
+test eq op sub ulong get Ops count 48
+wanted = ulong 1
+if or eq count 2 eq count 4
+wanted = 3
+end
+if eq count 7
+wanted = 3
+end
+test eq status wanted
+if eq count 6
+test eq event 1
+test eq size len Wordsout
+for i ulong len Wordsout
+vbyte add p i get Wordsout i
+end
+else
+test eq event 0
+end
+if eq count 2
+test eq size len Hello
+for i ulong len Hello
+vbyte add p i get Hello i
+end
+end
+if eq count 7
+test eq size len Got
+for i ulong len Got
+vbyte add p i get Got i
+end
+end
+if eq count 4
+test ge size len Jobtail
+if ge size len Jobtail
+at = add p sub size len Jobtail
+for i ulong len Jobtail
+vbyte add at i get Jobtail i
+end
+end
+end
+if and ne wanted 3 ne count 6
+test eq size 0
+end
+p = add p size
+count = add count 1
+end
+test eq count 10
+if ne get Fails 0 0
+ret 1
+end
+ret 0
+end
+fn main to int
+n = ulong 0
+while lt n len Vbuf
+r = read 0 Vbuf n sub len Vbuf n
+if lt r 0
+ret 74
+end
+if eq r 0
+ret verify n
+end
+n = add n ulong r
+end
+ret 65
+end

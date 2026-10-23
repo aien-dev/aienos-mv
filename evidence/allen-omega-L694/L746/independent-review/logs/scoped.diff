@@ -1,0 +1,420 @@
+diff --git a/native/omega/allen/README.md b/native/omega/allen/README.md
+index dfaa4d1..3328043 100644
+--- a/native/omega/allen/README.md
++++ b/native/omega/allen/README.md
+@@ -13,17 +13,17 @@ Run from this checkout on Linux AArch64, with the brief's immutable compiler:
+ ```sh
+ quiet-build native/omega/allen/gate.sh target/allen-omega-L694/fresh-output
+ ```
+ 
+ The output directory must be fresh. `build-one.sh` hashes the compiler before
+ **every invocation**, rejects empty/wrong-machine/nonstatic ELF and marks only
+ qualified output executable. The gate builds all modules together for every test,
+ executes handwritten Omega test programs, compares a byte-exact independent memory
+-fixture and rejects eleven compiled behavioral mutants. The build uses POSIX shell,
++fixture and rejects thirteen compiled behavioral mutants. The build uses POSIX shell,
+ Git (source reconstruction), GNU file/text utilities, readelf, dd, xxd and
+ sha256sum as external development tools. Existing Rust courier `--split` was used
+ once as a fixture oracle, never as an Omega runtime dependency.
+ 
+ ## Modules and API boundary
+ 
+ * `runtime.om`: one outstanding job, chat/code/follow-up, immediate code ack,
+   ID exhaustion refusal, stale answer rejection, cancel/reset,20s slow-once and
+@@ -64,16 +64,35 @@ once as a fixture oracle, never as an Omega runtime dependency.
+  SHA256(header0:32 || payload) is **unkeyed integrity**, never authorization or
+  rollback freshness. Those independent proofs remain absent in this legacy format.
+  `loadbeg` resets load state, `loadcopy(slot)` considers each valid copy once.
+  `txbegin -> txwrite -> txflush -> txread` publishes store generation only after
+  exact readback. Provider reads back into Unit and writes Enc to Tx's target.
+  `nbegin -> nwrite -> nflush -> nread` verifies note writes before parent saves;
+  provider must update the parent's note count only after nread succeeds. No disk
+  syscall/driver is bound. Crash tests use explicit fixed simulated disk buffers.
++* `context.om`: restores a512-slot catalog from already committed note records
++ and appends bounded memory context to actual application JOBs. After loading
++ canonical Mem through the memory codec, call `ctxbegin`; for each declared slot,
++ place its4096-byte record in Unit and call `ctxtake(index)` exactly once, in any
++ order. Return0 means refused/no visit,1 valid retained,2 damaged visit retained
++ as gone. Deleted/damaged notes never enter model context. The catalog becomes
++ ready only after every declared slot was visited. Cx contains declared count,
++ visited count, readiness, damaged count and loading flag. Loading is refused
++ during a live conversation or note/parent write transaction. The provider must
++ keep the chosen Mem generation stable and restart catalog loading after any
++ memory reload; this is not an incremental concurrent store interface.
++ `ctxmeta(limit)` stages byte-exact legacy self/name/starts/fact and newest-live-
++ note metadata into Meta/Mx without touching Unit, Enc or outgoing bytes.
++ `ctxappend` appends all or none within the4096-byte JOB cap, preserving outgoing
++ bytes/length/error on refusal. `appask` validates context before reading its
++ variable-layout identity fields, includes the newest six live notes, and refuses
++ incomplete catalogs/oversized context before conversation or wire IDs advance.
++ SHA validation is still unkeyed integrity, not authentication. No physical disk
++ loader/writer, note search index or concurrent mutation/commit provider is bound.
+ * `view.om`: legacy code row wrapping, continuation numbering and saturated scroll,
+  bounded4096 rows. The full code remains held when the row index reaches capacity.
+ * `scene.om`: mood/say/eight thing kinds, placement/emphasis/arrival/direction,
+  typed field bounds, four things/six fields/2048-byte input/12 lines.
+ * `scene-input.om`: `scdecode` consumes In/Inlen through bounded scene cleanup,
+  restores the exact caller input and length, and fills the same Sc/Things/Stext
+  output as the strict `scene` parser. Input and normalized output each have a
+  2048-byte cap. NUL or normalization overflow refuses the whole scene and clears
+@@ -109,17 +128,18 @@ CODE assembly and SAY/WAIT handling. This is an executed native core entry path,
+ not a bound socket/device loop. The older development `main.om` stdio entry
+ remains separate; it does not exercise this datagram binding.
+ 
+ 1. `appinit(run,now)` initializes one boot session using a nonzero unique run ID
+    and actual monotonic milliseconds supplied by the future qualified provider.
+    Reinitialization is refused rather than reusing job IDs.
+ 2. Put a prompt into In/Inlen, then `appask(now)`. It validates admission before
+    adding a transcript entry, builds the real JOB text and queues it. Code requests
+-   expose the existing acknowledgement immediately. Busy, outstanding-send,
++   expose the existing acknowledgement immediately. Restored facts and up to six
++   newest live notes are included in the queued job. Busy, outstanding-send,
+    pending-receipt, invalid-prompt and ID-exhaustion cases refuse admission.
+ 3. `apppoll(now,link)` advances silence/slow deadlines and returns whether one
+    datagram is offered in Outb/Outlen. Send those exact bytes and call
+    `appsent(now,success)` with the real whole-datagram outcome. Do not call core
+    serializers yourself while a send is pending.
+ 4. Copy a received datagram into In/Inlen and call `appreceive(now)`. Its boolean
+    reports **transport acceptance**, not acceptance of the inner reply. A[2]
+    distinguishes visible text1, queued code recovery2, code give-up3, refused
+@@ -145,17 +165,17 @@ Overflow refuses whole prompts/answers/scene fields instead of silent truncation
+ Reply capacity159, prompt capacity159, code32768, job4096, note127. Conflicting
+ CODE duplicates and differing language headers are refused rather than overwriting.
+ Numeric overflow, backward timestamps, request ID wrap and v4 sky pad are refused.
+ Job instructions and record bytes retain legacy structure; envelope metadata is
+ never added to Store v1 superblocks. No identity migration fields are rewritten.
+ 
+ Remaining portable work: remaining scene aliases/missing-colon repairs, field
+ ellipsis, timer interpretation, transcript-to-notes restore,
+-full notes indexing/retrieval, full memory metadata job append, transport binding,
++full notes indexing/retrieval, catalog update/store integration, transport binding,
+ full sky/catalogue/font/animated-network/canvas visual parity, integration and
+ broader malformed-input coverage. Partial modules are not whole compatibility.
+ 
+ Required target gates: qualified seeded x86 EFI target (FR9), privileged/MMIO and
+ interrupt/native device access(FR8), durable I/O(FR1), bounded networking(FR16),
+ keyboard/framebuffer/disk/NIC providers, iMac QEMU boot/chat/keyboard/bootdisk,
+ then signed physical trial. No C bridge can satisfy these. L408 owns compiler
+ work; L690 owns Hermes JSON/WebSocket/admission. Neither tree was modified.
+diff --git a/native/omega/allen/application.om b/native/omega/allen/application.om
+index 3b79e6a..734efee 100644
+--- a/native/omega/allen/application.om
++++ b/native/omega/allen/application.om
+@@ -51,19 +51,26 @@ ret false
+ end
+ kind = classify
+ if or lt kind 1 gt kind 3
+ ret false
+ end
+ if and eq kind 3 eq get R 6 0
+ ret false
+ end
++note Validate restored context before jobbuild reads its variable-layout names.
++if not ctxmeta 6
++ret false
++end
+ if not jobbuild kind add get R 0 1
+ ret false
+ end
++if not ctxappend
++ret false
++end
+ n = get Inlen 0
+ size = get Outlen 0
+ for i ulong n
+ put Askin i get In i
+ end
+ for i ulong size
+ put Appjob i get Outb i
+ end
+diff --git a/native/omega/allen/context.om b/native/omega/allen/context.om
+new file mode 100644
+index 0000000..401d418
+--- /dev/null
++++ b/native/omega/allen/context.om
+@@ -0,0 +1,237 @@
++note Restored note catalog and bounded model-job context. No storage provider.
++note Cx declared count,visited count,ready,damaged,loading. Damaged notes stay gone.
++global Cx ulong 5
++global Ctxtext uchar 65536
++global Ctxlen ulong 512
++global Ctxgone uchar 512
++global Ctxseen uchar 512
++global Ctxstart ulong 512
++global Meta uchar 4096
++global Mx ulong 2
++global Mdigits uchar 20
++text Mtself "\tself="
++text Mtname "\tname="
++text Mtstart "\tstarts="
++text Mtfact "\tfact "
++text Mtis " is "
++text Mtare " are "
++text Mtnote "\tnote "
++fn ctxidle to bool
++if ne get R 1 0
++ret false
++end
++ret and eq get Tx 0 0 eq get Nt 0 0
++end
++fn ctxbegin to bool
++if not ctxidle
++ret false
++end
++n = mem32 36
++if gt n 512
++ret false
++end
++for i ulong 512
++put Ctxlen i 0
++put Ctxgone i 1
++put Ctxseen i 0
++put Ctxstart i 0
++end
++put Cx 0 n
++put Cx 1 0
++put Cx 2 0
++put Cx 3 0
++put Cx 4 1
++if eq n 0
++put Cx 2 1
++put Cx 4 0
++end
++ret true
++end
++note Returns0 refused without visit,1 valid record retained,2 damaged visit retained.
++fn ctxtake index ulong to ulong
++if not ctxidle
++ret 0
++end
++if or eq get Cx 4 0 ge index get Cx 0
++ret 0
++end
++if ne get Ctxseen index 0
++ret 0
++end
++status = ulong 2
++if notedec index
++n = get Ns 0
++for i ulong n
++put Ctxtext add mul index 128 i get Note i
++end
++put Ctxlen index n
++put Ctxgone index uchar get Ns 3
++put Ctxstart index get Ns 2
++status = 1
++else
++put Cx 3 add get Cx 3 1
++end
++put Ctxseen index 1
++put Cx 1 add get Cx 1 1
++if eq get Cx 1 get Cx 0
++put Cx 2 1
++put Cx 4 0
++end
++ret status
++end
++fn mtemit c uchar to void
++if ne get Mx 1 0
++ret
++end
++n = get Mx 0
++if ge n 4096
++put Mx 1 1
++ret
++end
++put Meta n c
++put Mx 0 add n 1
++end
++fn mtnum v ulong to void
++n = ulong 0
++while gt v 9
++put Mdigits n uchar rem v 10
++v = div v 10
++n = add n 1
++end
++put Mdigits n uchar v
++n = add n 1
++for i ulong n
++mtemit add uchar 48 get Mdigits sub sub n 1 i
++end
++end
++note Memory fields are length-bounded; require a terminator and printable bytes.
++fn mtfield off ulong cap ulong to bool
++for i ulong cap
++c = get Mem add off i
++if eq c 0
++if eq i 0
++put Mx 1 1
++ret false
++end
++ret true
++end
++if or lt c 32 gt c 126
++put Mx 1 1
++ret false
++end
++mtemit c
++end
++put Mx 1 1
++ret false
++end
++fn mtfacts count ulong to bool
++for k ulong count
++off = add 40 mul k 113
++for i ulong len Mtfact
++mtemit get Mtfact i
++end
++if not mtfield off 48
++ret false
++end
++are = get Mem add off 112
++if gt are 1
++put Mx 1 1
++ret false
++end
++if eq are 1
++for i ulong len Mtare
++mtemit get Mtare i
++end
++else
++for i ulong len Mtis
++mtemit get Mtis i
++end
++end
++if not mtfield add off 48 64
++ret false
++end
++end
++ret eq get Mx 1 0
++end
++fn mtnotes count ulong limit ulong to void
++given = ulong 0
++for k ulong count
++index = sub sub count 1 k
++if and eq get Ctxgone index 0 lt given limit
++for i ulong len Mtnote
++mtemit get Mtnote i
++end
++for i ulong get Ctxlen index
++mtemit get Ctxtext add mul index 128 i
++end
++given = add given 1
++end
++end
++end
++fn ctxmeta limit ulong to bool
++put Mx 0 0
++put Mx 1 1
++facts = mem32 32
++notes = mem32 36
++if or gt facts 32 gt notes 512
++ret false
++end
++if gt limit 512
++ret false
++end
++if gt notes 0
++if or eq get Cx 2 0 ne get Cx 0 notes
++ret false
++end
++end
++put Mx 1 0
++for i ulong len Mtself
++mtemit get Mtself i
++end
++off = add 40 mul facts 113
++if eq get Mem off 0
++for i ulong len Allen
++mtemit get Allen i
++end
++else
++if not mtfield off 24
++ret false
++end
++end
++if ne get Mem 8 0
++for i ulong len Mtname
++mtemit get Mtname i
++end
++if not mtfield 8 24
++ret false
++end
++end
++for i ulong len Mtstart
++mtemit get Mtstart i
++end
++mtnum mem32 0
++if not mtfacts facts
++ret false
++end
++mtnotes notes limit
++ret eq get Mx 1 0
++end
++note Publish all metadata or none; preserve outgoing bytes/length/error on refusal.
++fn ctxappend to bool
++if or ne get Mx 1 0 ne get Err 0 0
++ret false
++end
++n = get Outlen 0
++size = get Mx 0
++if or gt n 4096 gt size 4096
++ret false
++end
++if gt add n size 4096
++ret false
++end
++for i ulong size
++put Outb add n i get Meta i
++end
++put Outlen 0 add n size
++ret true
++end
+diff --git a/native/omega/allen/gate.sh b/native/omega/allen/gate.sh
+index d4171d2..326cb1c 100755
+--- a/native/omega/allen/gate.sh
++++ b/native/omega/allen/gate.sh
+@@ -6,18 +6,18 @@ cd "$root"
+ out=$1
+ mkdir -p "$out"
+ [ -z "$(ls -A "$out")" ] || { echo 'gate requires fresh output directory' >&2; exit 73; }
+ core="$out/core.om"
+ cat native/omega/allen/base.om native/omega/allen/vendor/sha256-core.om \
+  native/omega/allen/runtime.om native/omega/allen/code.om \
+  native/omega/allen/courier.om native/omega/allen/scheduler.om native/omega/allen/memory.om \
+  native/omega/allen/intent.om native/omega/allen/reply.om \
+- native/omega/allen/view.om native/omega/allen/scene.om native/omega/allen/paint.om native/omega/allen/application.om native/omega/allen/scene-input.om > "$core"
+-for name in runtime code courier scheduler application memory intent reply view scene scene-input paint edges fixture golden render; do
++ native/omega/allen/view.om native/omega/allen/scene.om native/omega/allen/paint.om native/omega/allen/application.om native/omega/allen/scene-input.om native/omega/allen/context.om > "$core"
++for name in runtime code courier scheduler application memory context intent reply view scene scene-input paint edges fixture golden render; do
+  cat "$core" > "$out/$name.om"
+  case "$name" in golden|render) ;; *) cat native/omega/allen/tests/check.om >> "$out/$name.om" ;; esac
+  cat "native/omega/allen/tests/$name.om" >> "$out/$name.om"
+  native/omega/allen/build-one.sh "$out/$name.om" "$out/$name"
+  case "$name" in
+  fixture)
+   "$out/$name" < evidence/allen-omega-L694/short.wire > "$out/short.log"
+   "$out/$name" < evidence/allen-omega-L694/long.wire > "$out/long.log"
+@@ -66,17 +66,21 @@ cat native/omega/allen/tests/check.om native/omega/allen/tests/scheduler.om >> "
+ sed 's/put Outb i get Appwire i/put Outb i get Outb i/' "$core" > "$out/pendingwire-mutant.om"
+ cat native/omega/allen/tests/check.om native/omega/allen/tests/application.om >> "$out/pendingwire-mutant.om"
+ sed 's/if or le get R 2 1 ne get C 0 get R 0/if false/' "$core" > "$out/appcode-mutant.om"
+ cat native/omega/allen/tests/check.om native/omega/allen/tests/application.om >> "$out/appcode-mutant.om"
+ sed 's/if hide/if false/' "$core" > "$out/thinking-mutant.om"
+ cat native/omega/allen/tests/check.om native/omega/allen/tests/scene-input.om >> "$out/thinking-mutant.om"
+ sed 's/if lt get Nm 8 12/if true/' "$core" > "$out/scenecap-mutant.om"
+ cat native/omega/allen/tests/check.om native/omega/allen/tests/scene-input.om >> "$out/scenecap-mutant.om"
+-for name in stale crc hash readback session keepalive ackstop pendingwire appcode thinking scenecap; do
++sed 's/if and eq get Ctxgone index 0 lt given limit/if lt given limit/' "$core" > "$out/contextnote-mutant.om"
++cat native/omega/allen/tests/check.om native/omega/allen/tests/context.om >> "$out/contextnote-mutant.om"
++sed 's/if not ctxappend/if false/' "$core" > "$out/contextjob-mutant.om"
++cat native/omega/allen/tests/check.om native/omega/allen/tests/context.om >> "$out/contextjob-mutant.om"
++for name in stale crc hash readback session keepalive ackstop pendingwire appcode thinking scenecap contextnote contextjob; do
+  native/omega/allen/build-one.sh "$out/$name-mutant.om" "$out/$name-mutant"
+  set +e
+  "$out/$name-mutant" > "$out/$name-mutant.log"
+  rc=$?
+  set -e
+  if [ "$rc" -le 0 ] || [ "$rc" -ge 100 ]; then echo "mutant did not fail behaviorally: $name exit=$rc" >&2; exit 1; fi
+  printf '%s mutant compile=0 rejected-exit=%s\n' "$name" "$rc"
+ done

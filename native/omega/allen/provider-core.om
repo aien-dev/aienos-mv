@@ -1,0 +1,256 @@
+note Host provider stream core. PROVIDER.md is the framing/state contract.
+global Ph uchar 40
+global Pb uchar 4096
+global Pv ulong 4
+global Pc ulong 2
+global Pe ulong 2
+global Pout uchar 65536
+global Pn ulong 1
+text Prmagic "ALNPRV01"
+fn prshape to bool
+op = get Pv 0
+now = get Pv 1
+arg = get Pv 2
+n = get Pv 3
+if eq op 1
+ret and gt arg 0 eq n 0
+end
+if eq op 2
+if ne arg 0
+ret false
+end
+ret and gt n 0 le n 159
+end
+if or eq op 3 eq op 4
+ret and le arg 1 eq n 0
+end
+if eq op 5
+if ne arg 0
+ret false
+end
+ret and ge n 65 le n 1200
+end
+if ne now 0
+ret false
+end
+if or eq op 6 eq op 7
+ret and eq arg 0 eq n 0
+end
+if eq op 8
+ret and le arg 1 eq n 4096
+end
+if eq op 9
+ret and le arg 511 eq n 4096
+end
+if eq op 10
+ret and eq arg 0 eq n 0
+end
+ret false
+end
+fn prparse to bool
+for i ulong 8
+if ne get Ph i get Prmagic i
+ret false
+end
+end
+for k ulong 4
+v = ulong 0
+for i ulong 8
+off = add add 8 mul k 8 i
+v = or v shl ulong get Ph off mul i 8
+end
+put Pv k v
+end
+ret prshape
+end
+fn prbyte c uchar to void
+put Pout get Pn 0 c
+put Pn 0 add get Pn 0 1
+end
+fn prword v ulong to void
+for i ulong 8
+prbyte uchar and shr v mul i 8 255
+end
+end
+fn prhead op ulong status ulong event ulong size ulong to void
+for i ulong 8
+prbyte get Prmagic i
+end
+prword op
+prword status
+prword event
+prword size
+end
+fn prreply status ulong to void
+put Pn 0 0
+kind = get Pe 1
+size = ulong 0
+if eq kind 1
+size = get Outlen 0
+end
+if eq kind 2
+size = get R 8
+end
+prhead get Pv 0 status get Pe 0 size
+for i ulong size
+if eq kind 1
+prbyte get Outb i
+else
+prbyte get Answer i
+end
+end
+if eq kind 2
+if and gt get R 2 1 eq get R 1 0
+if and ne get R 6 0 eq codestat 2
+prhead 11 1 1 get C 2
+for i ulong get C 2
+prbyte get Code i
+end
+end
+end
+end
+end
+fn prevent to void
+put Pe 0 get A 2
+if eq get A 2 1
+put Pe 1 2
+end
+end
+fn prload to ulong
+if or ne get A 0 0 not ctxidle
+ret 0
+end
+constants
+for i ulong 3692
+put Mem i 0
+end
+loadbeg
+b = ctxbegin
+put Pc 0 1
+put Pc 1 0
+ret 1
+end
+fn prcopy to ulong
+if or ne get A 0 0 ne get Pc 0 1
+ret 0
+end
+if not ctxidle
+ret 0
+end
+slot = get Pv 2
+bit = shl ulong 1 slot
+if ne and get Pc 1 bit 0
+ret 0
+end
+for i ulong 4096
+put Unit i get Pb i
+end
+status = ulong 2
+if loadcopy slot
+status = 1
+end
+put Pc 1 or get Pc 1 bit
+if eq get Pc 1 3
+if not ctxbegin
+ret 0
+end
+put Pc 0 2
+if ne get Cx 2 0
+put Pc 0 3
+end
+end
+ret status
+end
+fn prnote to ulong
+if or ne get A 0 0 ne get Pc 0 2
+ret 0
+end
+if not ctxidle
+ret 0
+end
+for i ulong 4096
+put Unit i get Pb i
+end
+status = ctxtake get Pv 2
+if ne get Cx 2 0
+put Pc 0 3
+end
+ret status
+end
+fn prapply to ulong
+op = get Pv 0
+now = get Pv 1
+arg = get Pv 2
+if eq op 10
+ret prload
+end
+if eq op 8
+ret prcopy
+end
+if eq op 9
+ret prnote
+end
+if eq op 1
+if or eq get Pc 0 1 eq get Pc 0 2
+ret 0
+end
+if appinit arg now
+ret 1
+end
+ret 0
+end
+if eq get A 0 0
+ret 0
+end
+if eq op 6
+appcancel
+ret 1
+end
+if eq op 7
+appreset
+ret 1
+end
+if not appclock now
+ret 0
+end
+if eq op 3
+offer = apppoll now ne arg 0
+prevent
+if offer
+put Pe 1 1
+ret 3
+end
+ret 1
+end
+if eq op 4
+if appsent now ne arg 0
+ret 1
+end
+ret 0
+end
+for i ulong get Pv 3
+put In i get Pb i
+end
+put Inlen 0 get Pv 3
+if eq op 2
+if not appask now
+ret 0
+end
+else
+if not appreceive now
+ret 0
+end
+end
+prevent
+ret 1
+end
+fn prdo to bool
+if not prparse
+ret false
+end
+put Pe 0 0
+put Pe 1 0
+status = prapply
+prreply status
+ret true
+end

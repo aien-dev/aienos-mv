@@ -1,0 +1,253 @@
+text Fmagic "ALNPRV01"
+text Hi "hi"
+text Reply "SAY 1 1/1 hello"
+text Askcode "write a calculator"
+text Tinycode "CODE 2 1/1 2 d8932aac text hi"
+text Done "SAY 2 1/1 Done."
+global Held uchar 8192
+global Holdn ulong 2
+global Before uchar 8192
+fn test ok bool to void
+note Direct write logger would clobber the very datagram being tested.
+put Holdn 0 get Outlen 0
+put Holdn 1 get Err 0
+for i ulong get Outlen 0
+put Held i get Outb i
+end
+check ok add get Checks 0 1
+for i ulong get Holdn 0
+put Outb i get Held i
+end
+put Outlen 0 get Holdn 0
+put Err 0 get Holdn 1
+end
+fn hword off ulong v ulong to void
+for i ulong 8
+put Ph add off i uchar and shr v mul i 8 255
+end
+end
+fn frame op ulong now ulong arg ulong size ulong to void
+for i ulong 8
+put Ph i get Fmagic i
+end
+hword 8 op
+hword 16 now
+hword 24 arg
+hword 32 size
+end
+fn oword off ulong to ulong
+v = ulong 0
+for i ulong 8
+v = or v shl ulong get Pout add off i mul i 8
+end
+ret v
+end
+fn receive part ulong size ulong to void
+note Caller placed LINE payload in In; packet overwrites Outb, so preserve it.
+n = get Outlen 0
+e = get Err 0
+for i ulong n
+put Held i get Outb i
+end
+put Inlen 0 size
+b = packet 2 get Q 1 part 0 0
+size = get Outlen 0
+for i ulong size
+put Pb i get Outb i
+end
+for i ulong n
+put Outb i get Held i
+end
+put Outlen 0 n
+put Err 0 e
+frame 5 4294967297 0 size
+end
+fn main to int
+frame 1 4294967296 77 0
+test prparse
+test eq get Pv 0 1
+test eq get Pv 1 4294967296
+test eq get Pv 2 77
+put Ph 0 88
+test not prparse
+frame 11 0 0 0
+test not prparse
+frame 1 0 77 1
+test not prparse
+frame 3 0 2 0
+test not prparse
+frame 2 0 0 160
+test not prparse
+frame 10 0 0 0
+test prdo
+test eq oword 16 1
+test eq get Pc 0 1
+mset32 0 3
+mset32 36 1
+test memenc 10
+for i ulong 4096
+put Pb i get Enc i
+end
+frame 8 0 1 4096
+test prdo
+test eq oword 16 1
+test eq get St 0 10
+test prdo
+test eq oword 16 0
+frame 1 4294967296 77 0
+test prdo
+test eq oword 16 0
+for i ulong 4096
+put Pb i 0
+end
+frame 8 0 0 4096
+test prdo
+test eq oword 16 2
+test eq get Pc 0 2
+test eq get St 0 10
+frame 1 4294967296 77 0
+test prdo
+test eq oword 16 0
+put Ns 0 2
+put Ns 1 0
+put Ns 2 3
+put Ns 3 0
+put Note 0 78
+put Note 1 48
+test noteenc
+for i ulong 4096
+put Pb i get Enc i
+end
+frame 9 0 1 4096
+test prdo
+test eq oword 16 0
+frame 9 0 0 4096
+test prdo
+test eq oword 16 1
+test eq get Pc 0 3
+frame 1 4294967296 77 0
+test prdo
+test eq oword 16 1
+test eq get A 0 1
+test prdo
+test eq oword 16 0
+frame 10 0 0 0
+test prdo
+test eq oword 16 0
+test eq mem32 0 3
+frame 2 4294967297 0 len Hi
+for i ulong len Hi
+put Pb i get Hi i
+end
+test prdo
+test eq oword 16 1
+test eq get R 0 1
+frame 3 4294967297 1 0
+test prdo
+test eq oword 16 3
+test eq oword 32 get Outlen 0
+test eq get T 10 5
+same = true
+for i ulong get Outlen 0
+if ne get Pout add i 40 get Outb i
+same = false
+end
+end
+test same
+test prdo
+test eq oword 16 1
+test eq get T 10 5
+frame 4 4294967297 0 0
+test prdo
+test eq get T 3 0
+frame 3 4294967297 1 0
+test prdo
+test eq oword 16 3
+frame 4 4294967297 1 0
+test prdo
+test eq get T 3 1
+frame 3 4294967297 1 0
+test prdo
+test eq get T 10 1
+for i ulong len Reply
+put In i get Reply i
+end
+receive 1 len Reply
+n = get Outlen 0
+e = get Err 0
+for i ulong n
+put Before i get Outb i
+end
+test prdo
+test eq get Outlen 0 n
+test eq get Err 0 e
+same = true
+for i ulong n
+if ne get Outb i get Before i
+same = false
+end
+end
+test same
+test eq oword 16 1
+test eq oword 24 1
+test eq oword 32 5
+test eq get Pout 40 104
+test eq get R 1 0
+test eq get T 10 1
+test eq get Outb 0 65
+frame 4 4294967297 1 0
+test prdo
+frame 3 4294967297 1 0
+test prdo
+test eq oword 16 3
+test eq get T 10 3
+frame 4 4294967297 1 0
+test prdo
+frame 3 4294967297 1 0
+test prdo
+test eq oword 16 1
+test eq oword 32 0
+frame 2 4294967297 0 len Askcode
+for i ulong len Askcode
+put Pb i get Askcode i
+end
+test prdo
+test eq oword 24 1
+test eq oword 32 len Ack
+for i ulong len Tinycode
+put In i get Tinycode i
+end
+receive 1 len Tinycode
+test prdo
+test eq oword 24 0
+frame 3 4294967297 1 0
+test prdo
+frame 4 4294967297 1 0
+test prdo
+for i ulong len Done
+put In i get Done i
+end
+receive 2 len Done
+test prdo
+test eq oword 24 1
+test eq oword 32 5
+off = ulong 45
+test eq oword add off 8 11
+test eq oword add off 32 2
+test eq get Pout add off 40 104
+test eq get Pout add off 41 105
+test eq get Pn 0 add off 42
+frame 3 4294967296 1 0
+test prdo
+test eq oword 16 0
+test eq oword 24 0
+frame 7 0 0 0
+test prdo
+test eq get R 9 0
+test eq get R 0 2
+test eq get Q 1 2
+if ne get Fails 0 0
+ret 1
+end
+ret 0
+end

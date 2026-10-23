@@ -1,0 +1,144 @@
+note Generates real framed stdin. Mode byte0 normal,1..5 malformed,6 fail-fast.
+text Iomagic "ALNPRV01"
+text Wireline "ALLEN-COURIER v=1 run=000000000000004d kind=LINE seq=1 part=1/0 bytes=0\nSAY 1 1/1 hello"
+global Ih uchar 40
+global Choice uchar 1
+fn iword off ulong v ulong to void
+for i ulong 8
+put Ih add off i uchar and shr v mul i 8 255
+end
+end
+fn ihead op ulong now ulong arg ulong size ulong to void
+for i ulong 8
+put Ih i get Iomagic i
+end
+iword 8 op
+iword 16 now
+iword 24 arg
+iword 32 size
+end
+fn ihwrite count ulong to bool
+p = ulong 0
+while lt p count
+size = sub count p
+if eq get Choice 0 55
+size = 1
+end
+n = write 1 Ih p size
+if le n 0
+ret false
+end
+p = add p ulong n
+end
+ret true
+end
+fn ibwrite count ulong to bool
+p = ulong 0
+while lt p count
+size = sub count p
+if eq get Choice 0 55
+size = 1
+end
+n = write 1 Pb p size
+if le n 0
+ret false
+end
+p = add p ulong n
+end
+ret true
+end
+fn iframe op ulong now ulong arg ulong size ulong to bool
+ihead op now arg size
+if not ihwrite 40
+ret false
+end
+ret ibwrite size
+end
+fn main to int
+n = read 0 Choice 0 1
+if ne n 1
+ret 65
+end
+mode = get Choice 0
+if eq mode 56
+ihead 1 1 0 0
+b = ihwrite 40
+ret 0
+end
+if eq mode 49
+ihead 1 0 77 0
+put Ih 0 88
+b = ihwrite 40
+ret 0
+end
+if eq mode 50
+ihead 2 0 0 160
+b = ihwrite 40
+ret 0
+end
+if eq mode 51
+ihead 1 0 77 0
+b = ihwrite 39
+ret 0
+end
+if eq mode 52
+ihead 2 0 0 2
+b = ihwrite 40
+put Pb 0 104
+b = ibwrite 1
+ret 0
+end
+if eq mode 53
+ihead 11 0 0 0
+b = ihwrite 40
+ret 0
+end
+if not iframe 1 0 77 0
+ret 74
+end
+if eq mode 54
+ihead 2 1 0 160
+b = ihwrite 40
+for i ulong 160
+put Pb i 120
+end
+b = ibwrite 160
+put Pb 0 104
+put Pb 1 105
+b = iframe 2 1 0 2
+ret 0
+end
+put Pb 0 104
+put Pb 1 105
+if not iframe 2 1 0 2
+ret 74
+end
+if not iframe 3 1 1 0
+ret 74
+end
+if not iframe 4 1 1 0
+ret 74
+end
+if not iframe 3 1 1 0
+ret 74
+end
+if not iframe 4 1 1 0
+ret 74
+end
+for i ulong len Wireline
+put Pb i get Wireline i
+end
+if not iframe 5 2 0 len Wireline
+ret 74
+end
+if not iframe 3 2 1 0
+ret 74
+end
+if not iframe 4 2 1 0
+ret 74
+end
+if not iframe 3 2 1 0
+ret 74
+end
+ret 0
+end
