@@ -56,7 +56,14 @@ end
 if and eq kind 3 eq get R 6 0
 ret false
 end
+note Validate restored context before jobbuild reads its variable-layout names.
+if not ctxmeta 6
+ret false
+end
 if not jobbuild kind add get R 0 1
+ret false
+end
+if not ctxappend
 ret false
 end
 n = get Inlen 0

@@ -1,0 +1,66 @@
+text Thought "<THINK>secret\nsay: hidden\n</tHiNk>\nsay: KeEp My CASE\n"
+text Bad "number: nope\n"
+text Fallback "Plain words survive.\n"
+global Saved uchar 2048
+fn test ok bool to void
+check ok get Checks 0
+end
+fn main to int
+put Inlen 0 len Thought
+for i ulong len Thought
+put In i get Thought i
+put Saved i get Thought i
+end
+test scdecode
+test eq get Nm 3 3
+test eq get Sc 2 1
+same = true
+for i ulong len Thought
+if ne get In i get Saved i
+same = false
+end
+end
+test same
+test eq get Inlen 0 len Thought
+test eq get Stext get Sw 3 75
+put Inlen 0 len Bad
+for i ulong len Bad
+put In i get Bad i
+end
+test not scdecode
+test eq get Sc 2 0
+test eq get Sc 3 0
+test eq get Nm 0 0
+test eq get Inlen 0 len Bad
+for i ulong len Bad
+test eq get In i get Bad i
+end
+put Inlen 0 len Fallback
+for i ulong len Fallback
+put In i get Fallback i
+end
+test scdecode
+test eq get Sc 2 1
+test eq get Stext get Sw 3 80
+put Inlen 0 2047
+for i ulong 2047
+put In i 120
+end
+test not scdecode
+test eq get Nm 6 0
+test eq get Nm 1 2048
+test eq get Inlen 0 2047
+put Inlen 0 2048
+for i ulong 2048
+put In i 120
+end
+test not scdecode
+test eq get Nm 6 1
+test eq get Sc 2 0
+test eq get Sc 3 0
+test eq get Inlen 0 2048
+for i ulong 2048
+test eq get In i 120
+end
+ret int get Fails 0
+end

@@ -1,0 +1,237 @@
+note Restored note catalog and bounded model-job context. No storage provider.
+note Cx declared count,visited count,ready,damaged,loading. Damaged notes stay gone.
+global Cx ulong 5
+global Ctxtext uchar 65536
+global Ctxlen ulong 512
+global Ctxgone uchar 512
+global Ctxseen uchar 512
+global Ctxstart ulong 512
+global Meta uchar 4096
+global Mx ulong 2
+global Mdigits uchar 20
+text Mtself "\tself="
+text Mtname "\tname="
+text Mtstart "\tstarts="
+text Mtfact "\tfact "
+text Mtis " is "
+text Mtare " are "
+text Mtnote "\tnote "
+fn ctxidle to bool
+if ne get R 1 0
+ret false
+end
+ret and eq get Tx 0 0 eq get Nt 0 0
+end
+fn ctxbegin to bool
+if not ctxidle
+ret false
+end
+n = mem32 36
+if gt n 512
+ret false
+end
+for i ulong 512
+put Ctxlen i 0
+put Ctxgone i 1
+put Ctxseen i 0
+put Ctxstart i 0
+end
+put Cx 0 n
+put Cx 1 0
+put Cx 2 0
+put Cx 3 0
+put Cx 4 1
+if eq n 0
+put Cx 2 1
+put Cx 4 0
+end
+ret true
+end
+note Returns0 refused without visit,1 valid record retained,2 damaged visit retained.
+fn ctxtake index ulong to ulong
+if not ctxidle
+ret 0
+end
+if or eq get Cx 4 0 ge index get Cx 0
+ret 0
+end
+if ne get Ctxseen index 0
+ret 0
+end
+status = ulong 2
+if notedec index
+n = get Ns 0
+for i ulong n
+put Ctxtext add mul index 128 i get Note i
+end
+put Ctxlen index n
+put Ctxgone index uchar get Ns 3
+put Ctxstart index get Ns 2
+status = 1
+else
+put Cx 3 add get Cx 3 1
+end
+put Ctxseen index 1
+put Cx 1 add get Cx 1 1
+if eq get Cx 1 get Cx 0
+put Cx 2 1
+put Cx 4 0
+end
+ret status
+end
+fn mtemit c uchar to void
+if ne get Mx 1 0
+ret
+end
+n = get Mx 0
+if ge n 4096
+put Mx 1 1
+ret
+end
+put Meta n c
+put Mx 0 add n 1
+end
+fn mtnum v ulong to void
+n = ulong 0
+while gt v 9
+put Mdigits n uchar rem v 10
+v = div v 10
+n = add n 1
+end
+put Mdigits n uchar v
+n = add n 1
+for i ulong n
+mtemit add uchar 48 get Mdigits sub sub n 1 i
+end
+end
+note Memory fields are length-bounded; require a terminator and printable bytes.
+fn mtfield off ulong cap ulong to bool
+for i ulong cap
+c = get Mem add off i
+if eq c 0
+if eq i 0
+put Mx 1 1
+ret false
+end
+ret true
+end
+if or lt c 32 gt c 126
+put Mx 1 1
+ret false
+end
+mtemit c
+end
+put Mx 1 1
+ret false
+end
+fn mtfacts count ulong to bool
+for k ulong count
+off = add 40 mul k 113
+for i ulong len Mtfact
+mtemit get Mtfact i
+end
+if not mtfield off 48
+ret false
+end
+are = get Mem add off 112
+if gt are 1
+put Mx 1 1
+ret false
+end
+if eq are 1
+for i ulong len Mtare
+mtemit get Mtare i
+end
+else
+for i ulong len Mtis
+mtemit get Mtis i
+end
+end
+if not mtfield add off 48 64
+ret false
+end
+end
+ret eq get Mx 1 0
+end
+fn mtnotes count ulong limit ulong to void
+given = ulong 0
+for k ulong count
+index = sub sub count 1 k
+if and eq get Ctxgone index 0 lt given limit
+for i ulong len Mtnote
+mtemit get Mtnote i
+end
+for i ulong get Ctxlen index
+mtemit get Ctxtext add mul index 128 i
+end
+given = add given 1
+end
+end
+end
+fn ctxmeta limit ulong to bool
+put Mx 0 0
+put Mx 1 1
+facts = mem32 32
+notes = mem32 36
+if or gt facts 32 gt notes 512
+ret false
+end
+if gt limit 512
+ret false
+end
+if gt notes 0
+if or eq get Cx 2 0 ne get Cx 0 notes
+ret false
+end
+end
+put Mx 1 0
+for i ulong len Mtself
+mtemit get Mtself i
+end
+off = add 40 mul facts 113
+if eq get Mem off 0
+for i ulong len Allen
+mtemit get Allen i
+end
+else
+if not mtfield off 24
+ret false
+end
+end
+if ne get Mem 8 0
+for i ulong len Mtname
+mtemit get Mtname i
+end
+if not mtfield 8 24
+ret false
+end
+end
+for i ulong len Mtstart
+mtemit get Mtstart i
+end
+mtnum mem32 0
+if not mtfacts facts
+ret false
+end
+mtnotes notes limit
+ret eq get Mx 1 0
+end
+note Publish all metadata or none; preserve outgoing bytes/length/error on refusal.
+fn ctxappend to bool
+if or ne get Mx 1 0 ne get Err 0 0
+ret false
+end
+n = get Outlen 0
+size = get Mx 0
+if or gt n 4096 gt size 4096
+ret false
+end
+if gt add n size 4096
+ret false
+end
+for i ulong size
+put Outb add n i get Meta i
+end
+put Outlen 0 add n size
+ret true
+end

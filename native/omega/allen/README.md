@@ -18,7 +18,7 @@ The output directory must be fresh. `build-one.sh` hashes the compiler before
 **every invocation**, rejects empty/wrong-machine/nonstatic ELF and marks only
 qualified output executable. The gate builds all modules together for every test,
 executes handwritten Omega test programs, compares a byte-exact independent memory
-fixture and rejects eleven compiled behavioral mutants. The build uses POSIX shell,
+fixture and rejects thirteen compiled behavioral mutants. The build uses POSIX shell,
 Git (source reconstruction), GNU file/text utilities, readelf, dd, xxd and
 sha256sum as external development tools. Existing Rust courier `--split` was used
 once as a fixture oracle, never as an Omega runtime dependency.
@@ -69,6 +69,25 @@ once as a fixture oracle, never as an Omega runtime dependency.
  `nbegin -> nwrite -> nflush -> nread` verifies note writes before parent saves;
  provider must update the parent's note count only after nread succeeds. No disk
  syscall/driver is bound. Crash tests use explicit fixed simulated disk buffers.
+* `context.om`: restores a512-slot catalog from already committed note records
+ and appends bounded memory context to actual application JOBs. After loading
+ canonical Mem through the memory codec, call `ctxbegin`; for each declared slot,
+ place its4096-byte record in Unit and call `ctxtake(index)` exactly once, in any
+ order. Return0 means refused/no visit,1 valid retained,2 damaged visit retained
+ as gone. Deleted/damaged notes never enter model context. The catalog becomes
+ ready only after every declared slot was visited. Cx contains declared count,
+ visited count, readiness, damaged count and loading flag. Loading is refused
+ during a live conversation or note/parent write transaction. The provider must
+ keep the chosen Mem generation stable and restart catalog loading after any
+ memory reload; this is not an incremental concurrent store interface.
+ `ctxmeta(limit)` stages byte-exact legacy self/name/starts/fact and newest-live-
+ note metadata into Meta/Mx without touching Unit, Enc or outgoing bytes.
+ `ctxappend` appends all or none within the4096-byte JOB cap, preserving outgoing
+ bytes/length/error on refusal. `appask` validates context before reading its
+ variable-layout identity fields, includes the newest six live notes, and refuses
+ incomplete catalogs/oversized context before conversation or wire IDs advance.
+ SHA validation is still unkeyed integrity, not authentication. No physical disk
+ loader/writer, note search index or concurrent mutation/commit provider is bound.
 * `view.om`: legacy code row wrapping, continuation numbering and saturated scroll,
  bounded4096 rows. The full code remains held when the row index reaches capacity.
 * `scene.om`: mood/say/eight thing kinds, placement/emphasis/arrival/direction,
@@ -114,7 +133,8 @@ remains separate; it does not exercise this datagram binding.
    Reinitialization is refused rather than reusing job IDs.
 2. Put a prompt into In/Inlen, then `appask(now)`. It validates admission before
    adding a transcript entry, builds the real JOB text and queues it. Code requests
-   expose the existing acknowledgement immediately. Busy, outstanding-send,
+   expose the existing acknowledgement immediately. Restored facts and up to six
+   newest live notes are included in the queued job. Busy, outstanding-send,
    pending-receipt, invalid-prompt and ID-exhaustion cases refuse admission.
 3. `apppoll(now,link)` advances silence/slow deadlines and returns whether one
    datagram is offered in Outb/Outlen. Send those exact bytes and call
@@ -150,7 +170,7 @@ never added to Store v1 superblocks. No identity migration fields are rewritten.
 
 Remaining portable work: remaining scene aliases/missing-colon repairs, field
 ellipsis, timer interpretation, transcript-to-notes restore,
-full notes indexing/retrieval, full memory metadata job append, transport binding,
+full notes indexing/retrieval, catalog update/store integration, transport binding,
 full sky/catalogue/font/animated-network/canvas visual parity, integration and
 broader malformed-input coverage. Partial modules are not whole compatibility.
 
