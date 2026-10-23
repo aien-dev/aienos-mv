@@ -1,0 +1,29 @@
+{
+  "source": "13d02ab4b7145579f6d3faa53442167bfcdcd7bc",
+  "source_closure_match": true,
+  "binary_sha256": "be4ff5265e6e46962c9a35008bcf8a9127c7d9fbcc00db58f9a40c8a4008fb5d",
+  "probes": {
+    "overflow": {
+      "exit": 65,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "input_bytes": 8201
+    },
+    "oversize-eof": {
+      "exit": 65,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "input_bytes": 8193
+    },
+    "exact-boundary": {
+      "exit": 65,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "input_bytes": 8200
+    },
+    "positive": {
+      "exit": 0,
+      "golden_cmp": 0
+    }
+  }
+}

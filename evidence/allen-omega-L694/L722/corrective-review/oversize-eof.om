@@ -1,0 +1,20 @@
+note L723 independent over-capacity line terminated by EOF, no newline.
+global Bytes uchar 8193
+fn main to int
+for i ulong len Bytes
+put Bytes i 120
+end
+put Bytes 0 65
+put Bytes 1 83
+put Bytes 2 75
+put Bytes 3 32
+sent = ulong 0
+while lt sent len Bytes
+n = write 1 Bytes sent sub len Bytes sent
+if le n 0
+ret 2
+end
+sent = add sent ulong n
+end
+ret 0
+end

@@ -1,0 +1,222 @@
+note Courier client lifecycle; injected monotonic milliseconds, no host clock/socket.
+note T lastclock, HIvalid, HIat, HELLOvalid, HELLOat, active, acked, jobat,
+note joblength, cursor, pendingkind, pendingpart, reserved, GOTpart, reserved, reserved.
+note Serialized API: qnext publishes one datagram; qsent records actual send result.
+note Consume Outb before another serializer; failed sends leave retries due.
+global T ulong 16
+global JobOut uchar 4096
+fn qstart run ulong now ulong to bool
+if eq run 0
+ret false
+end
+qbegin run 0
+for i ulong 16
+put T i 0
+end
+put T 0 now
+ret true
+end
+fn qready now ulong to bool
+if or eq get Q 0 0 lt now get T 0
+ret false
+end
+if eq get T 1 0
+ret false
+end
+ret lt sub now get T 2 30000
+end
+fn qsubmit now ulong to bool
+if or eq get Q 0 0 lt now get T 0
+ret false
+end
+if ne get T 10 0
+ret false
+end
+if and ne get T 5 0 eq get T 6 0
+ret false
+end
+n = get Inlen 0
+if or eq n 0 gt n 4096
+ret false
+end
+if ge get Q 1 4294967295
+ret false
+end
+seq = add get Q 1 1
+qbegin get Q 0 seq
+for i ulong n
+c = get In i
+if or eq c 10 eq c 13
+c = uchar 32
+end
+put JobOut i c
+end
+put T 0 now
+put T 5 1
+put T 6 0
+put T 7 now
+put T 8 n
+put T 9 1
+put T 13 0
+ret true
+end
+fn qnext now ulong link bool to bool
+if or eq get Q 0 0 lt now get T 0
+ret false
+end
+if ne get T 10 0
+ret false
+end
+put T 0 now
+if not link
+ret false
+end
+if ne get T 13 0
+put Inlen 0 0
+if not packet 3 get Q 1 get T 13 0 0
+ret false
+end
+put T 10 3
+put T 11 get T 13
+ret true
+end
+delay = ulong 2000
+if qready now
+delay = ulong 10000
+end
+if or eq get T 3 0 ge sub now get T 4 delay
+put Inlen 0 0
+if not packet 5 0 0 0 0
+ret false
+end
+put T 10 5
+put T 11 0
+ret true
+end
+if or eq get T 5 0 ne get T 6 0
+ret false
+end
+part = get T 9
+if eq part 0
+if lt sub now get T 7 2000
+ret false
+end
+part = ulong 1
+end
+n = get T 8
+total = div add n 999 1000
+off = mul sub part 1 1000
+size = sub n off
+if gt size 1000
+size = ulong 1000
+end
+for i ulong size
+put In i get JobOut add off i
+end
+put Inlen 0 size
+if not packet 1 get Q 1 part total n
+ret false
+end
+put T 10 1
+put T 11 part
+ret true
+end
+fn qsent now ulong ok bool to bool
+if or eq get T 10 0 lt now get T 0
+ret false
+end
+kind = get T 10
+part = get T 11
+put T 0 now
+put T 10 0
+put T 11 0
+if not ok
+ret true
+end
+if eq kind 5
+put T 3 1
+put T 4 now
+end
+if eq kind 3
+if eq get T 13 part
+put T 13 0
+end
+end
+if eq kind 1
+if or ne get T 6 0 ge part div add get T 8 999 1000
+put T 9 0
+put T 7 now
+else
+put T 9 add part 1
+end
+end
+ret true
+end
+fn qincoming now ulong to ulong
+if or eq get Q 0 0 lt now get T 0
+ret 0
+end
+if not pkparse
+ret 0
+end
+kind = get N 0
+if eq kind 6
+if or ne get N 1 0 ne get N 2 0
+ret 0
+end
+if or ne get N 3 0 ne get N 4 0
+ret 0
+end
+if ne get N 6 0
+ret 0
+end
+put T 0 now
+put T 1 1
+put T 2 now
+ret 1
+end
+if or eq get T 5 0 ne get N 1 get Q 1
+ret 0
+end
+if eq kind 4
+if or ne get N 2 0 ne get N 3 0
+ret 0
+end
+if or ne get N 4 0 ne get N 6 0
+ret 0
+end
+put T 0 now
+put T 6 1
+put T 9 0
+ret 1
+end
+if ne kind 2
+ret 0
+end
+if or ne get N 3 0 ne get N 4 0
+ret 0
+end
+if and ne get T 13 0 ne get T 13 get N 2
+ret 0
+end
+result = qreceive
+if eq result 0
+ret 0
+end
+put T 0 now
+put T 6 1
+put T 9 0
+put T 13 get N 2
+ret result
+end
+fn qcancel to void
+put T 5 0
+put T 6 0
+put T 8 0
+put T 9 0
+put T 10 0
+put T 11 0
+put T 13 0
+put Q 3 0
+put Q 4 0
+end

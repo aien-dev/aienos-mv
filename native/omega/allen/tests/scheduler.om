@@ -1,0 +1,258 @@
+note Native courier lifecycle regression. Clock values are injected milliseconds.
+text Lineone "SAY 1 1/1 Model text."
+note check writes through Outb; preserve the actual pending datagram around logging.
+global SavedOut uchar 8192
+fn test ok bool to void
+n = get Outlen 0
+e = get Err 0
+for i ulong n
+put SavedOut i get Outb i
+end
+check ok add get Checks 0 1
+for i ulong n
+put Outb i get SavedOut i
+end
+put Outlen 0 n
+put Err 0 e
+end
+fn tcopy to void
+put Inlen 0 get Outlen 0
+for i ulong get Outlen 0
+put In i get Outb i
+end
+end
+fn control kind ulong seq ulong to void
+put Inlen 0 0
+b = packet kind seq 0 0 0
+tcopy
+end
+fn linepkt part ulong to void
+put Inlen 0 len Lineone
+for i ulong len Lineone
+put In i get Lineone i
+end
+b = packet 2 get Q 1 part 0 0
+tcopy
+end
+fn jobinput to void
+put Inlen 0 1001
+for i ulong 1001
+put In i 120
+end
+put In 999 10
+put In 1000 121
+end
+fn main to int
+test qstart 42 100
+test not qready 100
+test not qnext 100 false
+test eq get T 3 0
+test qnext 100 true
+test eq get T 10 5
+test not qnext 100 true
+test qsent 100 false
+test eq get T 3 0
+test qnext 101 true
+test qsent 101 true
+test eq get T 3 1
+test not qnext 2100 true
+test qnext 2101 true
+test qsent 2101 true
+control 6 0
+test eq qincoming 2102 1
+test qready 2102
+test not qnext 12100 true
+test qnext 12101 true
+test eq get T 10 5
+test qsent 12101 true
+test qready 32101
+test not qready 32102
+test qnext 32102 true
+test qsent 32102 true
+test not qnext 32101 true
+test eq get T 0 32102
+jobinput
+test qsubmit 32103
+test eq get Q 1 1
+test eq get JobOut 999 32
+test eq get JobOut 1000 121
+test not qsubmit 32103
+test qnext 32103 true
+test eq get T 10 1
+test eq get T 11 1
+tcopy
+test pkparse
+test eq get N 6 1000
+test eq get In add get N 5 999 32
+test qsent 32103 false
+test eq get T 9 1
+test qnext 32104 true
+test eq get T 11 1
+test qsent 32104 true
+test qnext 32104 true
+test eq get T 11 2
+tcopy
+test pkparse
+test eq get N 6 1
+test eq get In get N 5 121
+test qsent 32104 true
+test eq get T 9 0
+control 6 0
+test eq qincoming 32105 1
+test qready 32105
+test not qnext 34103 true
+test qnext 34104 true
+test eq get T 10 1
+test eq get T 11 1
+test qsent 34104 true
+test qnext 34104 true
+test eq get T 11 2
+test qsent 34104 true
+control 4 2
+test eq qincoming 34105 0
+test eq get T 6 0
+control 4 1
+test eq qincoming 34105 1
+test eq get T 6 1
+test not qnext 36104 true
+linepkt 1
+test eq qincoming 36105 1
+test eq get Q 4 1
+test eq get T 13 1
+test qnext 36105 true
+test eq get T 10 3
+test qsent 36105 false
+test eq get T 13 1
+linepkt 1
+test eq qincoming 36106 2
+test eq get Q 4 1
+test qnext 36106 true
+test eq get T 10 3
+test qsent 36106 true
+test eq get T 13 0
+test qtake
+test eq get Inlen 0 len Lineone
+test not qtake
+linepkt 2
+test eq qincoming 36107 1
+linepkt 3
+test eq qincoming 36107 0
+test eq get Q 2 2
+test eq get Q 4 1
+test qnext 36108 true
+test qsent 36108 true
+linepkt 3
+test eq qincoming 36109 1
+test eq get Q 2 3
+qcancel
+test eq get T 5 0
+linepkt 4
+test eq qincoming 36110 0
+jobinput
+test qsubmit 36111
+test eq get Q 1 2
+test eq get Q 4 0
+control 6 0
+test eq qincoming 36112 1
+control 6 0
+put In 22 49
+test eq qincoming 36113 0
+test eq get T 2 36112
+control 4 2
+test eq qincoming 36110 0
+test eq get T 6 0
+qcancel
+put Q 1 4294967295
+jobinput
+test not qsubmit 36114
+test eq get Q 1 4294967295
+test not qstart 0 36114
+test eq get Q 0 42
+test qstart 43 0
+put Inlen 0 4097
+test not qsubmit 0
+test eq get Q 1 0
+put Inlen 0 0
+test not qsubmit 0
+test not qsent 0 true
+note Maximum payload crosses all five datagrams, preserving every byte except CR/LF.
+put Inlen 0 4096
+for i ulong 4096
+put In i uchar rem i 251
+end
+test qsubmit 0
+test qnext 0 true
+test eq get T 10 5
+test qsent 0 true
+for k ulong 5
+test qnext 0 true
+test eq get T 10 1
+tcopy
+test pkparse
+test eq get N 1 1
+test eq get N 2 add k 1
+test eq get N 3 5
+test eq get N 4 4096
+size = ulong 1000
+if eq k 4
+size = ulong 96
+end
+test eq get N 6 size
+bad = ulong 0
+for j ulong size
+want = uchar rem add mul k 1000 j 251
+if or eq want 10 eq want 13
+want = uchar 32
+end
+if ne get In add get N 5 j want
+bad = add bad 1
+end
+end
+test eq bad 0
+test qsent 0 true
+end
+note A first LINE also stops job retries without a preceding ACK.
+linepkt 1
+test eq qincoming 1 1
+test eq get T 6 1
+test qnext 1 true
+test eq get T 10 3
+test qsent 1 true
+control 6 0
+test eq qincoming 2 1
+test not qnext 2000 true
+note Fill the eight-line queue; no GOT until a ninth line can actually be kept.
+for k ulong 7
+linepkt add k 2
+test eq qincoming add k 2003 1
+test qnext add k 2003 true
+test eq get T 10 3
+test qsent add k 2003 true
+end
+linepkt 9
+test eq qincoming 2010 0
+test eq get Q 2 8
+test eq get T 13 0
+test qtake
+linepkt 9
+test eq qincoming 2011 1
+test eq get Q 2 9
+test qnext 2011 true
+test not qsent 2010 true
+test eq get T 10 3
+test qsent 2011 true
+note Malformed ACK and wrong kinds cannot advance the accepted clock.
+put Inlen 0 0
+b = packet 4 1 1 0 0
+tcopy
+test eq qincoming 2012 0
+test eq get T 0 2011
+control 5 0
+test eq qincoming 2012 0
+test eq get T 0 2011
+qcancel
+control 4 1
+test eq qincoming 2013 0
+test eq get Q 4 0
+ret int get Fails 0
+end

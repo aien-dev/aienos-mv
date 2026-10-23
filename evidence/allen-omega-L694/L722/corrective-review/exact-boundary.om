@@ -1,0 +1,29 @@
+note L723 independent exact-capacity command followed by valid positive control.
+global Bytes uchar 8192
+text Tail "\nASK hi\n"
+fn main to int
+for i ulong len Bytes
+put Bytes i 120
+end
+put Bytes 0 65
+put Bytes 1 83
+put Bytes 2 75
+put Bytes 3 32
+sent = ulong 0
+while lt sent len Bytes
+n = write 1 Bytes sent sub len Bytes sent
+if le n 0
+ret 2
+end
+sent = add sent ulong n
+end
+sent = ulong 0
+while lt sent len Tail
+n = write 1 Tail sent sub len Tail sent
+if le n 0
+ret 2
+end
+sent = add sent ulong n
+end
+ret 0
+end

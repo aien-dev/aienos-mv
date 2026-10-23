@@ -1,0 +1,979 @@
+note L694 fixed-buffer utilities. No platform effects in product functions.
+global In uchar 8192
+global Inlen ulong 1
+global Outb uchar 8192
+global Outlen ulong 1
+global Err ulong 1
+text Digits "0123456789abcdef"
+fn emitb c uchar to void
+n = get Outlen 0
+if ge n len Outb
+put Err 0 1
+else
+put Outb n c
+put Outlen 0 add n 1
+end
+end
+fn emitn v ulong to void
+d = new uchar 20 0
+n = ulong 0
+x = v
+put d n uchar add rem x 10 48
+n = add n 1
+x = div x 10
+while gt x 0
+put d n uchar add rem x 10 48
+n = add n 1
+x = div x 10
+end
+while gt n 0
+n = sub n 1
+emitb get d n
+end
+end
+fn outreset to void
+put Outlen 0 0
+put Err 0 0
+end
+fn ineq at ulong c uchar to bool
+if ge at get Inlen 0
+ret false
+end
+ret eq get In at c
+end
+fn isdigit c uchar to bool
+ret and ge c 48 le c 57
+end
+note Parser cursor P0, number P1, error P2. Never wraps a u32.
+global P ulong 3
+fn number to void
+v = ulong 0
+n = ulong 0
+p = get P 0
+while lt p get Inlen 0
+c = get In p
+if not isdigit c
+put P 0 p
+put P 1 v
+if eq n 0
+put P 2 1
+end
+ret
+end
+if or ge n 10 gt v 429496729
+put P 2 1
+ret
+end
+v = add mul v 10 sub ulong c 48
+if gt v 4294967295
+put P 2 1
+ret
+end
+n = add n 1
+p = add p 1
+end
+put P 0 p
+put P 1 v
+if eq n 0
+put P 2 1
+end
+end
+fn expect c uchar to void
+p = get P 0
+if not ineq p c
+put P 2 1
+else
+put P 0 add p 1
+end
+end
+fn crc off ulong count ulong to uint
+c = uint 4294967295
+for i ulong count
+c = xor c uint get In add off i
+for k ulong 8
+if ne and c 1 0
+c = xor shr c 1 3988292384
+else
+c = shr c 1
+end
+end
+end
+ret not c
+end
+note R: seq, active, kind (1 chat 2 code 3 more), asked, heard, slow,
+note code-visible, prompt length, answer length, history count, session.
+global R ulong 16
+global Prompt uchar 160
+global Answer uchar 160
+global Hist uchar 5120
+global Hlen ulong 32
+text Ack "I need to code that. Let me send it off to the Spark."
+text Ackmore "Let me take that change to the Spark."
+fn textok to bool
+n = get Inlen 0
+if or eq n 0 gt n 159
+ret false
+end
+for i ulong n
+c = get In i
+if or lt c 32 gt c 126
+ret false
+end
+end
+ret true
+end
+fn histadd which ulong to void
+n = get R 9
+if eq n 32
+for i ulong 4960
+put Hist i get Hist add i 160
+end
+for i ulong 31
+put Hlen i get Hlen add i 1
+end
+n = 31
+end
+size = get R add which 7
+for i ulong size
+if eq which 0
+put Hist add mul n 160 i get Prompt i
+else
+put Hist add mul n 160 i get Answer i
+end
+end
+put Hlen n size
+put R 9 add n 1
+end
+fn start kind ulong now ulong to bool
+if or ne get R 1 0 ge get R 0 4294967295
+ret false
+end
+if or lt kind 1 gt kind 3
+ret false
+end
+if and eq kind 3 eq get R 6 0
+ret false
+end
+if not textok
+ret false
+end
+for i ulong get Inlen 0
+put Prompt i get In i
+end
+put R 7 get Inlen 0
+put R 0 add get R 0 1
+put R 1 1
+put R 2 kind
+put R 3 now
+put R 4 now
+put R 5 0
+put R 8 0
+put R 11 0
+put R 13 0
+if eq kind 2
+for i ulong len Ack
+put Answer i get Ack i
+end
+put R 8 len Ack
+end
+if eq kind 3
+for i ulong len Ackmore
+put Answer i get Ackmore i
+end
+put R 8 len Ackmore
+end
+histadd 0
+ret true
+end
+fn answer seq ulong now ulong to bool
+if or eq get R 1 0 ne seq get R 0
+ret false
+end
+if or lt now get R 4 not textok
+ret false
+end
+for i ulong get Inlen 0
+put Answer i get In i
+end
+put R 8 get Inlen 0
+put R 4 now
+put R 1 0
+histadd 1
+ret true
+end
+fn cancel to void
+put R 1 0
+end
+fn heard seq ulong now ulong to bool
+if or eq get R 1 0 ne seq get R 0
+ret false
+end
+if lt now get R 4
+ret false
+end
+put R 4 now
+ret true
+end
+fn tick now ulong to ulong
+if or eq get R 1 0 lt now get R 4
+ret 0
+end
+if ge sub now get R 4 30000
+cancel
+ret 2
+end
+if and eq get R 5 0 ge sub now get R 3 20000
+put R 5 1
+ret 1
+end
+ret 0
+end
+fn reset to void
+for i ulong 9
+put R add i 1 0
+end
+end
+note Restore one externally decoded transcript line. No live job or ID reuse.
+fn restore to bool
+if or ne get R 1 0 not textok
+ret false
+end
+for i ulong get Inlen 0
+put Answer i get In i
+end
+put R 8 get Inlen 0
+histadd 1
+ret true
+end
+note CODE protocol: C seq, parts, bytes, crc, got. D parsed header.
+global C ulong 8
+global D ulong 8
+global Code uchar 32769
+global Have uchar 256
+global Piece uchar 128
+global Lang uchar 16
+global Newlang uchar 16
+fn codebeg seq ulong to void
+for i ulong 8
+put C i 0
+end
+put C 0 seq
+for i ulong 256
+put Have i 0
+end
+put Code 0 0
+end
+fn decfield slot ulong sep uchar to void
+number
+put D slot get P 1
+expect sep
+end
+fn hexread to void
+v = ulong 0
+for i ulong 8
+p = get P 0
+if ge p get Inlen 0
+put P 2 1
+ret
+end
+c = get In p
+d = ulong 16
+if isdigit c
+d = sub ulong c 48
+else
+if and ge c 97 le c 102
+d = sub ulong c 87
+end
+end
+if ge d 16
+put P 2 1
+ret
+end
+v = add mul v 16 d
+put P 0 add p 1
+end
+put D 4 v
+expect 32
+end
+fn codehead to bool
+put P 0 0
+put P 2 0
+expect 67
+expect 79
+expect 68
+expect 69
+expect 32
+decfield 0 32
+decfield 1 47
+decfield 2 32
+decfield 3 32
+hexread
+if ne get P 2 0
+ret false
+end
+if or ne get D 0 get C 0 eq get D 3 0
+ret false
+end
+if gt get D 3 32768
+ret false
+end
+if ne get D 2 div add get D 3 127 128
+ret false
+end
+if or lt get D 1 1 gt get D 1 get D 2
+ret false
+end
+if ne get C 1 0
+if or ne get C 1 get D 2 ne get C 2 get D 3
+ret false
+end
+if ne get C 3 get D 4
+ret false
+end
+end
+ret true
+end
+fn langread to bool
+for i ulong 16
+put Newlang i 0
+end
+n = ulong 0
+p = get P 0
+while lt p get Inlen 0
+c = get In p
+if eq c 32
+if eq n 0
+ret false
+end
+put P 0 add p 1
+put D 5 n
+ret true
+end
+ok = or and ge c 97 le c 122 isdigit c
+ok = or ok or eq c 43 eq c 35
+ok = or ok or eq c 46 or eq c 95 eq c 45
+if or not ok ge n 15
+ret false
+end
+put Newlang n c
+p = add p 1
+n = add n 1
+end
+ret false
+end
+fn pieceread to ulong
+p = get P 0
+n = ulong 0
+while lt p get Inlen 0
+c = get In p
+p = add p 1
+if eq c 92
+if ge p get Inlen 0
+ret 129
+end
+c = get In p
+p = add p 1
+if eq c 110
+c = 10
+else
+if ne c 92
+ret 129
+end
+end
+else
+if or lt c 32 gt c 126
+ret 129
+end
+end
+if ge n 128
+ret 129
+end
+put Piece n c
+n = add n 1
+end
+ret n
+end
+fn codetake to bool
+if gt get Inlen 0 320
+ret false
+end
+if not codehead
+ret false
+end
+if not langread
+ret false
+end
+n = pieceread
+want = ulong 128
+if eq get D 1 get D 2
+want = sub get D 3 mul sub get D 2 1 128
+end
+if ne n want
+ret false
+end
+slot = sub get D 1 1
+off = mul slot 128
+if ne get C 1 0
+for i ulong 16
+if ne get Lang i get Newlang i
+ret false
+end
+end
+end
+if ne get Have slot 0
+for i ulong n
+if ne get Code add off i get Piece i
+ret false
+end
+end
+ret true
+end
+put C 1 get D 2
+put C 2 get D 3
+put C 3 get D 4
+for i ulong 16
+put Lang i get Newlang i
+end
+for i ulong n
+put Code add off i get Piece i
+end
+put Have slot 1
+put C 4 add get C 4 1
+ret true
+end
+fn codecrc to uint
+c = uint 4294967295
+for i ulong get C 2
+c = xor c uint get Code i
+for k ulong 8
+if ne and c 1 0
+c = xor shr c 1 3988292384
+else
+c = shr c 1
+end
+end
+end
+ret not c
+end
+fn codestat to ulong
+if eq get C 1 0
+ret 0
+end
+if lt get C 4 get C 1
+ret 1
+end
+if ne ulong codecrc get C 3
+ret 3
+end
+lines = ulong 0
+for i ulong get C 2
+c = get Code i
+if eq c 0
+ret 3
+end
+if eq c 10
+lines = add lines 1
+end
+end
+if ne get Code sub get C 2 1 10
+lines = add lines 1
+end
+if gt lines 800
+ret 3
+end
+put Code get C 2 0
+ret 2
+end
+fn missing to ulong
+if eq get C 1 0
+ret 1
+end
+for i ulong get C 1
+if eq get Have i 0
+ret add i 1
+end
+end
+ret 0
+end
+note Display admission is distinct from a model's closing sentence.
+fn codeshow seq ulong to bool
+if eq get R 1 0
+ret false
+end
+if or ne seq get R 0 ne seq get C 0
+ret false
+end
+if ne codestat 2
+ret false
+end
+put R 6 1
+ret true
+end
+note Pure courier datagrams. Q session, current seq, last LINE, head, count.
+global Q ulong 8
+global N ulong 8
+global Queue uchar 2560
+global Qlens ulong 8
+global Jbuf uchar 4096
+global Jhave uchar 5
+global J ulong 3
+text Keys "ALLEN-COURIER v=1 run= kind= seq= part= bytes="
+text Kinds "JOBLINEGOTACKHELLOHI"
+fn keyread off ulong count ulong to void
+for i ulong count
+expect get Keys add off i
+end
+end
+fn keyemit off ulong count ulong to void
+for i ulong count
+emitb get Keys add off i
+end
+end
+fn kindoff k ulong to ulong
+if eq k 1
+ret 0
+end
+if eq k 2
+ret 3
+end
+if eq k 3
+ret 7
+end
+if eq k 4
+ret 10
+end
+if eq k 5
+ret 13
+end
+ret 18
+end
+fn kindlen k ulong to ulong
+if eq k 2
+ret 4
+end
+if eq k 5
+ret 5
+end
+if eq k 6
+ret 2
+end
+ret 3
+end
+fn qbegin run ulong seq ulong to void
+for i ulong 8
+put Q i 0
+end
+put Q 0 run
+put Q 1 seq
+for i ulong 5
+put Jhave i 0
+end
+for i ulong 3
+put J i 0
+end
+end
+note Serializer takes body In/Inlen; Outb/Outlen are published only on success.
+fn packet k ulong seq ulong part ulong total ulong bytes ulong to bool
+if or lt k 1 gt k 6
+ret false
+end
+if gt get Inlen 0 1000
+ret false
+end
+outreset
+keyemit 0 22
+for i ulong 16
+d = and shr get Q 0 mul sub 15 i 4 15
+emitb get Digits d
+end
+keyemit 22 6
+off = kindoff k
+for i ulong kindlen k
+emitb get Kinds add off i
+end
+keyemit 28 5
+emitn seq
+keyemit 33 6
+emitn part
+emitb 47
+emitn total
+keyemit 39 7
+emitn bytes
+emitb 10
+for i ulong get Inlen 0
+emitb get In i
+end
+ret eq get Err 0 0
+end
+fn pkparse to bool
+if or gt get Inlen 0 1200 lt get Inlen 0 65
+ret false
+end
+put P 0 0
+put P 2 0
+keyread 0 22
+run = ulong 0
+for i ulong 16
+p = get P 0
+c = get In p
+d = ulong 16
+if isdigit c
+d = sub ulong c 48
+else
+if and ge c 97 le c 102
+d = sub ulong c 87
+end
+end
+if ge d 16
+ret false
+end
+run = or shl run 4 d
+put P 0 add p 1
+end
+if ne run get Q 0
+ret false
+end
+keyread 22 6
+kind = ulong 0
+for k ulong 6
+at = get P 0
+off = kindoff add k 1
+size = kindlen add k 1
+ok = true
+for i ulong size
+if not ineq add at i get Kinds add off i
+ok = false
+end
+end
+if and ok ineq add at size 32
+kind = add k 1
+end
+end
+if eq kind 0
+ret false
+end
+put N 0 kind
+put P 0 add get P 0 kindlen kind
+keyread 28 5
+number
+put N 1 get P 1
+keyread 33 6
+number
+put N 2 get P 1
+expect 47
+number
+put N 3 get P 1
+keyread 39 7
+number
+put N 4 get P 1
+expect 10
+put N 5 get P 0
+put N 6 sub get Inlen 0 get P 0
+ret eq get P 2 0
+end
+fn jobtake to ulong
+note n via N4
+note part via N2
+note total via N3
+if or eq get N 4 0 gt get N 4 4096
+ret 0
+end
+if ne get N 3 div add get N 4 999 1000
+ret 0
+end
+if or eq get N 2 0 gt get N 2 get N 3
+ret 0
+end
+want = ulong 1000
+if eq get N 2 get N 3
+want = sub get N 4 mul sub get N 3 1 1000
+end
+if ne want get N 6
+ret 0
+end
+if ne get J 0 0
+if or ne get J 0 get N 4 ne get J 1 get N 3
+ret 0
+end
+end
+slot = sub get N 2 1
+off = mul slot 1000
+if ne get Jhave slot 0
+for i ulong want
+if ne get Jbuf add off i get In add get N 5 i
+ret 0
+end
+end
+ret 2
+end
+for i ulong want
+put Jbuf add off i get In add get N 5 i
+end
+put Jhave slot 1
+put J 0 get N 4
+put J 1 get N 3
+put J 2 add get J 2 1
+ret 1
+end
+note Return0 refused,1 accepted,2 duplicate requiring GOT/ACK again.
+fn qreceive to ulong
+if not pkparse
+ret 0
+end
+if ne get N 1 get Q 1
+ret 0
+end
+kind = get N 0
+if eq kind 1
+ret jobtake
+end
+if ne kind 2
+if ne get N 6 0
+ret 0
+end
+ret 1
+end
+note part via N2
+if eq get N 2 0
+ret 0
+end
+if le get N 2 get Q 2
+ret 2
+end
+if or ne get N 2 add get Q 2 1 eq get Q 4 8
+ret 0
+end
+n = get N 6
+if or eq n 0 gt n 319
+ret 0
+end
+slot = rem add get Q 3 get Q 4 8
+for i ulong n
+put Queue add mul slot 320 i get In add get N 5 i
+end
+put Qlens slot n
+put Q 4 add get Q 4 1
+put Q 2 get N 2
+ret 1
+end
+fn qtake to bool
+if eq get Q 4 0
+ret false
+end
+slot = get Q 3
+n = get Qlens slot
+for i ulong n
+put In i get Queue add mul slot 320 i
+end
+put Inlen 0 n
+put Q 3 rem add slot 1 8
+put Q 4 sub get Q 4 1
+ret true
+end
+note L725 compilable behavioral stub, retained only in RED evidence.
+global T ulong 16
+global JobOut uchar 4096
+fn qstart run ulong now ulong to bool
+ret false
+end
+fn qready now ulong to bool
+ret false
+end
+fn qsubmit now ulong to bool
+ret false
+end
+fn qnext now ulong link bool to bool
+ret false
+end
+fn qsent now ulong ok bool to bool
+ret false
+end
+fn qincoming now ulong to ulong
+ret 0
+end
+fn qcancel to void
+end
+global Fails ulong 1
+global Checks ulong 1
+fn check ok bool id ulong to void
+put Checks 0 add get Checks 0 1
+outreset
+emitn id
+if ok
+emitb 32
+emitb 48
+else
+put Fails 0 add get Fails 0 1
+emitb 32
+emitb 49
+end
+emitb 10
+w = write 1 Outb 0 get Outlen 0
+end
+note Native courier lifecycle regression. Clock values are injected milliseconds.
+text Lineone "SAY 1 1/1 Model text."
+fn test ok bool to void
+check ok add get Checks 0 1
+end
+fn tcopy to void
+put Inlen 0 get Outlen 0
+for i ulong get Outlen 0
+put In i get Outb i
+end
+end
+fn control kind ulong seq ulong to void
+put Inlen 0 0
+b = packet kind seq 0 0 0
+tcopy
+end
+fn linepkt part ulong to void
+put Inlen 0 len Lineone
+for i ulong len Lineone
+put In i get Lineone i
+end
+b = packet 2 get Q 1 part 0 0
+tcopy
+end
+fn jobinput to void
+put Inlen 0 1001
+for i ulong 1001
+put In i 120
+end
+put In 999 10
+put In 1000 121
+end
+fn main to int
+test qstart 42 100
+test not qready 100
+test not qnext 100 false
+test eq get T 3 0
+test qnext 100 true
+test eq get T 10 5
+test not qnext 100 true
+test qsent 100 false
+test eq get T 3 0
+test qnext 101 true
+test qsent 101 true
+test eq get T 3 1
+test not qnext 2100 true
+test qnext 2101 true
+test qsent 2101 true
+control 6 0
+test eq qincoming 2102 1
+test qready 2102
+test not qnext 12100 true
+test qnext 12101 true
+test eq get T 10 5
+test qsent 12101 true
+test qready 32101
+test not qready 32102
+test qnext 32102 true
+test qsent 32102 true
+test not qnext 32101 true
+test eq get T 0 32102
+jobinput
+test qsubmit 32103
+test eq get Q 1 1
+test eq get JobOut 999 32
+test eq get JobOut 1000 121
+test not qsubmit 32103
+test qnext 32103 true
+test eq get T 10 1
+test eq get T 11 1
+tcopy
+test pkparse
+test eq get N 6 1000
+test eq get In add get N 5 999 32
+test qsent 32103 false
+test eq get T 9 1
+test qnext 32104 true
+test eq get T 11 1
+test qsent 32104 true
+test qnext 32104 true
+test eq get T 11 2
+tcopy
+test pkparse
+test eq get N 6 1
+test eq get In get N 5 121
+test qsent 32104 true
+test eq get T 9 0
+control 6 0
+test eq qincoming 32105 1
+test qready 32105
+test not qnext 34103 true
+test qnext 34104 true
+test eq get T 10 1
+test eq get T 11 1
+test qsent 34104 true
+test qnext 34104 true
+test eq get T 11 2
+test qsent 34104 true
+control 4 2
+test eq qincoming 34105 0
+test eq get T 6 0
+control 4 1
+test eq qincoming 34105 1
+test eq get T 6 1
+test not qnext 36104 true
+linepkt 1
+test eq qincoming 36105 1
+test eq get Q 4 1
+test eq get T 13 1
+test qnext 36105 true
+test eq get T 10 3
+test qsent 36105 false
+test eq get T 13 1
+linepkt 1
+test eq qincoming 36106 2
+test eq get Q 4 1
+test qnext 36106 true
+test eq get T 10 3
+test qsent 36106 true
+test eq get T 13 0
+test qtake
+test eq get Inlen 0 len Lineone
+test not qtake
+linepkt 2
+test eq qincoming 36107 1
+linepkt 3
+test eq qincoming 36107 0
+test eq get Q 2 2
+test eq get Q 4 1
+test qnext 36108 true
+test qsent 36108 true
+linepkt 3
+test eq qincoming 36109 1
+test eq get Q 2 3
+qcancel
+test eq get T 5 0
+linepkt 4
+test eq qincoming 36110 0
+jobinput
+test qsubmit 36111
+test eq get Q 1 2
+test eq get Q 4 0
+control 6 0
+test eq qincoming 36112 1
+control 6 0
+put In 22 49
+test eq qincoming 36113 0
+test eq get T 2 36112
+control 4 2
+test eq qincoming 36110 0
+test eq get T 6 0
+qcancel
+put Q 1 4294967295
+jobinput
+test not qsubmit 36114
+test eq get Q 1 4294967295
+test not qstart 0 36114
+test eq get Q 0 42
+test qstart 43 0
+put Inlen 0 4097
+test not qsubmit 0
+test eq get Q 1 0
+put Inlen 0 0
+test not qsubmit 0
+test not qsent 0 true
+ret int get Fails 0
+end

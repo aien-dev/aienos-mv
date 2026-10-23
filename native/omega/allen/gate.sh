@@ -9,10 +9,10 @@ mkdir -p "$out"
 core="$out/core.om"
 cat native/omega/allen/base.om native/omega/allen/vendor/sha256-core.om \
  native/omega/allen/runtime.om native/omega/allen/code.om \
- native/omega/allen/courier.om native/omega/allen/memory.om \
+ native/omega/allen/courier.om native/omega/allen/scheduler.om native/omega/allen/memory.om \
  native/omega/allen/intent.om native/omega/allen/reply.om \
  native/omega/allen/view.om native/omega/allen/scene.om native/omega/allen/paint.om > "$core"
-for name in runtime code courier memory intent reply view scene paint edges fixture golden render; do
+for name in runtime code courier scheduler memory intent reply view scene paint edges fixture golden render; do
  cat "$core" > "$out/$name.om"
  case "$name" in golden|render) ;; *) cat native/omega/allen/tests/check.om >> "$out/$name.om" ;; esac
  cat "native/omega/allen/tests/$name.om" >> "$out/$name.om"
@@ -59,7 +59,11 @@ sed 's/if ne d 0/if false/' "$core" > "$out/readback-mutant.om"
 cat native/omega/allen/tests/check.om native/omega/allen/tests/memory.om >> "$out/readback-mutant.om"
 sed 's/if ne run get Q 0/if false/' "$core" > "$out/session-mutant.om"
 cat native/omega/allen/tests/check.om native/omega/allen/tests/courier.om >> "$out/session-mutant.om"
-for name in stale crc hash readback session; do
+sed 's/delay = ulong 10000/delay = ulong 2000/' "$core" > "$out/keepalive-mutant.om"
+cat native/omega/allen/tests/check.om native/omega/allen/tests/scheduler.om >> "$out/keepalive-mutant.om"
+sed 's/put T 6 1/put T 6 0/' "$core" > "$out/ackstop-mutant.om"
+cat native/omega/allen/tests/check.om native/omega/allen/tests/scheduler.om >> "$out/ackstop-mutant.om"
+for name in stale crc hash readback session keepalive ackstop; do
  native/omega/allen/build-one.sh "$out/$name-mutant.om" "$out/$name-mutant"
  set +e
  "$out/$name-mutant" > "$out/$name-mutant.log"

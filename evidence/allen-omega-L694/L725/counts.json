@@ -1,0 +1,19 @@
+{
+  "checks": {
+    "runtime": 28,
+    "code": 23,
+    "courier": 24,
+    "scheduler": 213,
+    "memory": 79,
+    "intent": 8,
+    "reply": 15,
+    "view": 13,
+    "scene": 14,
+    "paint": 11,
+    "edges": 352,
+    "short": 20,
+    "long": 292
+  },
+  "total": 1092,
+  "compiled_mutants_rejected": 7
+}
