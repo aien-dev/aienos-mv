@@ -1,0 +1,115 @@
+{
+  "schema": "AIEN-ENVID-ORACLE-1",
+  "domain_key_hex": "2323232323232323232323232323232323232323232323232323232323232323",
+  "hkdf_expand_hex": "a1b6b5a01508957e9b56814eedc96f6f77fbd5649c7b10b93f819618ee3e71f1",
+  "cases": [
+    {
+      "case": 0,
+      "uuid": "5ea1ed00112233445566778899aabbcc",
+      "generation": 3,
+      "index": 0,
+      "kind": 42,
+      "version": 1,
+      "key_generation": 1,
+      "class": 1,
+      "plaintext_hex": "73796e746865746963",
+      "hmac_sha256": "8b236070ce5b7ed7c7830dfa98626b6f2322d756b6cd2c34139ced591be133d1"
+    },
+    {
+      "case": 1,
+      "uuid": "5fa1ed00112233445566778899aabbcc",
+      "generation": 3,
+      "index": 0,
+      "kind": 42,
+      "version": 1,
+      "key_generation": 1,
+      "class": 1,
+      "plaintext_hex": "73796e746865746963",
+      "hmac_sha256": "d0500c3a4422ee0b21d73d8e2ab42cdb461cb654d55820d97572c06f649e29d2"
+    },
+    {
+      "case": 2,
+      "uuid": "5ea1ed00112233445566778899aabbcc",
+      "generation": 4,
+      "index": 0,
+      "kind": 42,
+      "version": 1,
+      "key_generation": 1,
+      "class": 1,
+      "plaintext_hex": "73796e746865746963",
+      "hmac_sha256": "95fd30b21c5f583292cf40753dd31f9f9502e3fab00a0e4702dd8f66b942cbef"
+    },
+    {
+      "case": 3,
+      "uuid": "5ea1ed00112233445566778899aabbcc",
+      "generation": 3,
+      "index": 1,
+      "kind": 42,
+      "version": 1,
+      "key_generation": 1,
+      "class": 1,
+      "plaintext_hex": "73796e746865746963",
+      "hmac_sha256": "278cf889813b81429868d74c2431666ea72f1fd758c49d6f33b4cb0d450d0a56"
+    },
+    {
+      "case": 4,
+      "uuid": "5ea1ed00112233445566778899aabbcc",
+      "generation": 3,
+      "index": 0,
+      "kind": 43,
+      "version": 1,
+      "key_generation": 1,
+      "class": 1,
+      "plaintext_hex": "73796e746865746963",
+      "hmac_sha256": "63e61a781fbe7434462bd71bc70f4b022efea9d8616be76485ff17a62d83210c"
+    },
+    {
+      "case": 5,
+      "uuid": "5ea1ed00112233445566778899aabbcc",
+      "generation": 3,
+      "index": 0,
+      "kind": 42,
+      "version": 2,
+      "key_generation": 1,
+      "class": 1,
+      "plaintext_hex": "73796e746865746963",
+      "hmac_sha256": "b451302729ee5e32b16020d274de205d48b491e162d7806798b0e7030e9bef5d"
+    },
+    {
+      "case": 6,
+      "uuid": "5ea1ed00112233445566778899aabbcc",
+      "generation": 3,
+      "index": 0,
+      "kind": 42,
+      "version": 1,
+      "key_generation": 2,
+      "class": 1,
+      "plaintext_hex": "73796e746865746963",
+      "hmac_sha256": "a0e13d3adb6da41dc3778a4da73e5e59da02ebfc6d91bc27d9c6007b9e8453f9"
+    },
+    {
+      "case": 7,
+      "uuid": "5ea1ed00112233445566778899aabbcc",
+      "generation": 3,
+      "index": 0,
+      "kind": 42,
+      "version": 1,
+      "key_generation": 1,
+      "class": 2,
+      "plaintext_hex": "73796e746865746963",
+      "hmac_sha256": "c3ec3906705c285787b98069bddc8ef61b32f6ceab1e20623ee032c8cbed711b"
+    },
+    {
+      "case": 8,
+      "uuid": "5ea1ed00112233445566778899aabbcc",
+      "generation": 3,
+      "index": 0,
+      "kind": 42,
+      "version": 1,
+      "key_generation": 1,
+      "class": 1,
+      "plaintext_hex": "73796e74686574696321",
+      "hmac_sha256": "b7e0130e8516d902333a9338e51ef2b87d67362dfa4aa6bcf65527dec63fedbe"
+    }
+  ]
+}

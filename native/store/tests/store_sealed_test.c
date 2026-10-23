@@ -1069,6 +1069,8 @@ static void test_nonce(void)
     }
 }
 
+#include "envid_oracle_tests.h"
+
 int main(int argc, char **argv)
 {
     const char *dir = argc > 1 ? argv[1] : ".";
@@ -1092,6 +1094,7 @@ int main(int argc, char **argv)
         test_forgery();
         test_keyslot();
         test_anchor_crash();
+        test_independent_envid_fixture();
         test_nonce();
         test_keyslot_limits();
         printf("sealed store, %u-byte blocks: %s\n", g_bs, g_failed == before ? "ok" : "FAILED");
