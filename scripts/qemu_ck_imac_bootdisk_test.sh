@@ -142,6 +142,24 @@ ready='^keyboard: type a line and press Enter'
 run() { # name with-stick: start, wait for Allen, goodbye (he sleeps), stop; result in name.txt
     start "$1" "$2"
     if wait_for "$1" 400 "${ready}"; then
+        if [[ "$1" == one ]]; then
+            # A fresh disk now opens setup before chat. Complete its real
+            # keyboard path without granting optional device/model consent.
+            # Sending goodbye here used to type it into setup instead.
+            local step
+            for step in intent scan consent llm ready; do
+                if wait_for "$1" 40 "^wizard: step ${step}$"; then
+                    printf 'sendkey esc\n' >"${work}/$1.mon.in"
+                    sleep 0.2
+                else
+                    fail "1: setup reached ${step} before chat"
+                    break
+                fi
+            done
+            wait_for "$1" 40 '^wizard: finished' || fail "1: setup finished before goodbye"
+        else
+            chk "$1: completed setup stays closed" "${work}/$1.log" '^wizard: setup finished on an earlier start'
+        fi
         say "$1" "goodbye"
         off "$1" || true
     fi
