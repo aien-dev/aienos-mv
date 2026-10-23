@@ -1,0 +1,134 @@
+note Stable application presentation; see PRESENTATION.md for scope and ownership.
+global Ds ulong 8
+global Dt ulong 64
+global Dtext uchar 2304
+global Dsay ulong 1
+global Dm ulong 3
+global Dcode uchar 32768
+global Dstart ulong 4096
+global Dlen ulong 4096
+global Dline ulong 4096
+global Dview ulong 3
+global Din uchar 8192
+fn dscene to bool
+n = get Inlen 0
+for i ulong 8192
+put Din i get In i
+end
+for i ulong get R 8
+put In i get Answer i
+end
+put Inlen 0 get R 8
+ok = scdecode
+for i ulong 8192
+put In i get Din i
+end
+put Inlen 0 n
+if not ok
+ret false
+end
+for i ulong 8
+put Ds i get Sc i
+end
+for i ulong 64
+put Dt i get Things i
+end
+for i ulong 2304
+put Dtext i 0
+end
+for i ulong get Sc 4
+put Dtext i get Stext i
+end
+put Dsay 0 get Sw 3
+put Dm 0 1
+ret true
+end
+fn dcode to bool
+if or le get R 2 1 ne get R 1 0
+ret false
+end
+if or eq get R 6 0 ne get C 0 get R 0
+ret false
+end
+if not rows 80 4096
+ret false
+end
+for i ulong 32768
+put Dcode i 0
+end
+for i ulong get C 2
+put Dcode i get Code i
+end
+for i ulong 4096
+put Dstart i 0
+put Dlen i 0
+put Dline i 0
+end
+for i ulong get View 0
+put Dstart i get Rowst i
+put Dlen i get Rowlen i
+put Dline i get Rowline i
+end
+put Dview 0 get View 0
+put Dview 1 0
+put Dview 2 get C 2
+put Dm 1 1
+ret true
+end
+fn dpresent to bool
+if or eq get A 0 0 ne get A 2 1
+ret false
+end
+if or gt get R 8 159 gt get Inlen 0 8192
+ret false
+end
+shown = dscene
+coded = dcode
+if or shown coded
+put Dm 2 get R 0
+ret true
+end
+ret false
+end
+fn dask now ulong to bool
+if not appask now
+ret false
+end
+b = dpresent
+ret true
+end
+fn drecv now ulong to bool
+if not appreceive now
+ret false
+end
+b = dpresent
+ret true
+end
+fn dreset to void
+appreset
+for i ulong 8
+put Ds i 0
+end
+for i ulong 64
+put Dt i 0
+end
+for i ulong 2304
+put Dtext i 0
+end
+put Dsay 0 0
+for i ulong 3
+put Dm i 0
+put Dview i 0
+end
+for i ulong 32768
+put Dcode i 0
+end
+for i ulong 4096
+put Dstart i 0
+put Dlen i 0
+put Dline i 0
+end
+for i ulong 8192
+put Din i 0
+end
+end

@@ -1,0 +1,101 @@
+note Reuses L748 native mutation builder; selector0 stale-event,1 input-tail.
+global Mutbuf uchar 262144
+global Mutrep uchar 128
+global Mutmode uchar 1
+text Mutold0 "\nif not appreceive now\nret false\nend\nb = dpresent\n"
+text Mutnew0 "\nb = appreceive now\nb = dpresent\n"
+text Mutold1 "\nfor i ulong 8192\nput In i get Din i\nend\n"
+text Mutnew1 "\nfor i ulong n\nput In i get Din i\nend\n"
+fn mutmatch at ulong mode uchar to bool
+if eq mode 48
+for i ulong len Mutold0
+if ne get Mutbuf add at i get Mutold0 i
+ret false
+end
+end
+else
+for i ulong len Mutold1
+if ne get Mutbuf add at i get Mutold1 i
+ret false
+end
+end
+end
+ret true
+end
+fn mutwrite at ulong size ulong to bool
+p = ulong 0
+while lt p size
+n = write 1 Mutbuf add at p sub size p
+if le n 0
+ret false
+end
+p = add p ulong n
+end
+ret true
+end
+fn mutout n ulong mode uchar to int
+old = len Mutold0
+size = len Mutnew0
+if eq mode 49
+old = len Mutold1
+size = len Mutnew1
+end
+if lt n old
+ret 65
+end
+found = ulong 0
+at = ulong 0
+for i ulong add sub n old 1
+if mutmatch i mode
+found = add found 1
+at = i
+end
+end
+if ne found 1
+ret 65
+end
+for i ulong size
+if eq mode 48
+put Mutrep i get Mutnew0 i
+else
+put Mutrep i get Mutnew1 i
+end
+end
+if not mutwrite 0 at
+ret 74
+end
+p = ulong 0
+while lt p size
+r = write 1 Mutrep p sub size p
+if le r 0
+ret 74
+end
+p = add p ulong r
+end
+if not mutwrite add at old sub n add at old
+ret 74
+end
+ret 0
+end
+fn main to int
+r = read 0 Mutmode 0 1
+if ne r 1
+ret 65
+end
+mode = get Mutmode 0
+if and ne mode 48 ne mode 49
+ret 65
+end
+n = ulong 0
+while lt n len Mutbuf
+r = read 0 Mutbuf n sub len Mutbuf n
+if lt r 0
+ret 74
+end
+if eq r 0
+ret mutout n mode
+end
+n = add n ulong r
+end
+ret 65
+end

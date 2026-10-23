@@ -1,0 +1,238 @@
+text Prompt1 "hello"
+text Leak "LEAK"
+text Scene1 "SAY 1 1/1 note left: Heading | Body"
+text Hidden1 "<think>private</think>"
+text Badscene "number: nope"
+text Prompt2 "write a calculator"
+text Code2 "CODE 2 1/1 2 d8932aac text hi"
+text Done2 "SAY 2 1/1 Done."
+global Saved uchar 8192
+global Keep ulong 2
+global Before uchar 8192
+global Wire uchar 8192
+fn test ok bool to void
+put Keep 0 get Outlen 0
+put Keep 1 get Err 0
+for i ulong get Outlen 0
+put Saved i get Outb i
+end
+check ok add get Checks 0 1
+for i ulong get Keep 0
+put Outb i get Saved i
+end
+put Outlen 0 get Keep 0
+put Err 0 get Keep 1
+end
+fn inbound part ulong to void
+n = get Outlen 0
+e = get Err 0
+for i ulong n
+put Before i get Outb i
+end
+b = packet 2 get Q 1 part 0 0
+size = get Outlen 0
+for i ulong size
+put In i get Outb i
+end
+put Inlen 0 size
+for i ulong n
+put Outb i get Before i
+end
+put Outlen 0 n
+put Err 0 e
+end
+fn main to int
+test not dpresent
+test appinit 77 0
+put Inlen 0 len Prompt1
+for i ulong len Prompt1
+put In i get Prompt1 i
+end
+test dask 1
+test eq get R 0 1
+test eq get Dm 0 0
+test apppoll 1 true
+n = get Outlen 0
+for i ulong n
+put Wire i get Outb i
+end
+for i ulong len Scene1
+put In i get Scene1 i
+end
+put Inlen 0 len Scene1
+inbound 1
+size = get Inlen 0
+for i ulong size
+put Before i get In i
+end
+test drecv 2
+test eq get A 2 1
+test eq get Dm 0 1
+test eq get Dm 2 1
+test eq get Ds 3 1
+test eq get Dt 0 1
+test eq get Dt 1 1
+test eq get Dtext get Dt 7 72
+test eq get Dtext get Dt 8 66
+test eq get Outlen 0 n
+same = true
+for i ulong n
+if ne get Outb i get Wire i
+same = false
+end
+end
+test same
+test eq get T 10 5
+note appreceive replaces In with its payload; only dpresent must preserve that.
+size = get Inlen 0
+for i ulong size
+put Before i get In i
+end
+test dpresent
+test eq get Inlen 0 size
+same = true
+for i ulong size
+if ne get Before i get In i
+same = false
+end
+end
+test same
+note Even bytes outside current Inlen survive decoder scratch expansion.
+for i ulong 8192
+put In i 165
+put Before i 165
+end
+put Inlen 0 1
+test dpresent
+test eq get Inlen 0 1
+same = true
+for i ulong 8192
+if ne get In i get Before i
+same = false
+end
+end
+test same
+put Inlen 0 8193
+test not dpresent
+put Inlen 0 1
+note Hidden or invalid scene text cannot erase the last admitted presentation.
+for i ulong len Hidden1
+put Answer i get Hidden1 i
+end
+put R 8 len Hidden1
+test not dpresent
+test eq get Ds 3 1
+test eq get Dtext get Dt 7 72
+for i ulong len Badscene
+put Answer i get Badscene i
+end
+put R 8 len Badscene
+test not dpresent
+test eq get Ds 3 1
+put A 2 0
+test not dpresent
+put A 2 1
+put R 8 160
+test not dpresent
+put R 8 0
+test not dpresent
+note Refused receive cannot publish a stale event1.
+for i ulong len Leak
+put Answer i get Leak i
+end
+put R 8 len Leak
+put Inlen 0 1
+put In 0 88
+test not drecv 2
+test eq get Ds 3 1
+test appsent 2 true
+test apppoll 2 true
+test appsent 2 true
+put Inlen 0 len Prompt2
+for i ulong len Prompt2
+put In i get Prompt2 i
+end
+test dask 3
+test eq get R 0 2
+test eq get Ds 2 1
+test eq get Dtext get Dsay 0 73
+for i ulong len Code2
+put In i get Code2 i
+end
+put Inlen 0 len Code2
+inbound 1
+test drecv 4
+test eq get Dm 1 0
+test apppoll 4 true
+test appsent 4 true
+for i ulong len Done2
+put In i get Done2 i
+end
+put Inlen 0 len Done2
+inbound 2
+test drecv 5
+test eq get Dm 1 1
+test eq get Dm 2 2
+test eq get Dview 0 1
+test eq get Dview 1 0
+test eq get Dview 2 2
+test eq get Dstart 0 0
+test eq get Dlen 0 2
+test eq get Dline 0 1
+test eq get Dcode 0 104
+test eq get Dcode 1 105
+test eq get Dtext get Dsay 0 68
+note Code completion does not require a nonempty closing sentence.
+put R 8 0
+test dpresent
+test eq get Dm 1 1
+test eq get Dcode 0 104
+put Code 0 88
+test not dpresent
+test eq get Dcode 0 104
+test eq get Dlen 0 2
+put Code 0 104
+note Later assembly may reuse Code; the displayed snapshot cannot alias it.
+codebeg 3
+put Code 0 88
+test eq get Dcode 0 104
+put A 2 0
+test not dpresent
+test eq get Dm 1 1
+put Dtext 2303 88
+put Dcode 32767 88
+put Dstart 4095 88
+put Dlen 4095 88
+put Dline 4095 88
+dreset
+test eq get Dm 0 0
+test eq get Dm 1 0
+test eq get Dview 0 0
+test eq get R 0 2
+test eq get Q 1 2
+same = true
+for i ulong 2304
+if ne get Dtext i 0
+same = false
+end
+end
+test same
+same = true
+for i ulong 32768
+if ne get Dcode i 0
+same = false
+end
+end
+test same
+same = true
+for i ulong 4096
+if ne or or get Dstart i get Dlen i get Dline i 0
+same = false
+end
+end
+test same
+if ne get Fails 0 0
+ret 1
+end
+ret 0
+end

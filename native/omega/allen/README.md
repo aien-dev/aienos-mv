@@ -18,7 +18,7 @@ The output directory must be fresh. `build-one.sh` hashes the compiler before
 **every invocation**, rejects empty/wrong-machine/nonstatic ELF and marks only
 qualified output executable. The gate builds all modules together for every test,
 executes handwritten Omega test programs, compares a byte-exact independent memory
-fixture and rejects fifteen compiled behavioral mutants. The build uses POSIX shell,
+fixture and rejects seventeen compiled behavioral mutants. The build uses POSIX shell,
 Git (source reconstruction), GNU file/text utilities, readelf, dd, xxd and
 sha256sum as external development tools. Existing Rust courier `--split` was used
 once as a fixture oracle, never as an Omega runtime dependency.
@@ -185,6 +185,20 @@ remains separate and its byte-exact goldens are unchanged.
 
 This is an executable host integration boundary, **not** a qualified socket,
 monotonic clock, storage/device provider, live-model service or EFI/iMac build.
+
+## Stable application presentation
+
+`presentation.om` binds successful `dask`/`drecv` application events to retained
+scene state and completed code rows. See [PRESENTATION.md](PRESENTATION.md).
+The display snapshot survives hidden/invalid replies and later reuse of the code
+assembly buffer. Input bytes and pending wire output are preserved; reset clears
+retained presentation bytes. Native tests exercise real courier envelopes through
+these wrappers, not merely direct scene-parser calls.
+
+The current provider executable still exports raw answer/code records; it does
+not call these new display wrappers. This is a qualified host-side presentation
+binding, not a pixel renderer or display device. Existing SAY folding and its
+159-byte bound remain; multiline model-scene transport is not yet attached.
 
 ## Intentional refusals and unfinished compatibility
 
