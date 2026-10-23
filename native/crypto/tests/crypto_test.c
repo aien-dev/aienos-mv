@@ -681,11 +681,14 @@ static void test_sha_hmac(void)
     n_rust++;
 }
 
+#include "crypto_reuse_tests.h"
+
 int main(void)
 {
     test_aes();
     test_polyval();
     test_gcmsiv();
+    test_reused_nonce_siv_samples();
     test_lengths();
     test_sha_hmac();
 
