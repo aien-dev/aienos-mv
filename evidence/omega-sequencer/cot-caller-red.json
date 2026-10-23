@@ -1,0 +1,17 @@
+{
+  "cases": 1,
+  "failures": 1,
+  "phase": "red",
+  "makefile_sha256": "b3ba9abe8d7dbe21b3e9396398980245901e0b76dfded9ecd130ebcc571faab8",
+  "results": [
+    {
+      "broken_encoder": true,
+      "pass": false,
+      "exit": 0,
+      "encoder_cases": null,
+      "encoder_failures": null,
+      "simulation_passes": 2,
+      "log_sha256": "221260ec784a733a724919cf9f403a250ce1b693ae7569842fb534dc690c085a"
+    }
+  ]
+}

@@ -1,0 +1,371 @@
+{
+  "cases": 48,
+  "failures": 0,
+  "builder_differentials": 40,
+  "native_pipelines": 40,
+  "source_sha256": "d4e6dbf365af74903b7e99d5980a066521a0b0ee4c86b59db4f0ea09dd0295a7",
+  "binary_sha256": "243bd4ecbce7d91baaad81edc3d38fbf91b3d62570a8ee14ca59649e74d28f92",
+  "consumer_source_sha256": "65e14024e2488140941917b2b89f20be64a7a4205f55086efd121c008114b2ba",
+  "results": [
+    {
+      "case": 0,
+      "pass": true,
+      "exit": 0,
+      "frame_sha256": "d790f52bb71eb126960bdac117eefc8357f6c332576c054fed0f7e920be58d99",
+      "expected_sha256": "d790f52bb71eb126960bdac117eefc8357f6c332576c054fed0f7e920be58d99",
+      "pipeline_stage": 0
+    },
+    {
+      "case": 1,
+      "pass": true,
+      "exit": 0,
+      "frame_sha256": "a6b4e410a9c74fabff03c03874e325ad074bc3353a3239b3f4888784f31963fb",
+      "expected_sha256": "a6b4e410a9c74fabff03c03874e325ad074bc3353a3239b3f4888784f31963fb",
+      "pipeline_stage": 3
+    },
+    {
+      "case": 2,
+      "pass": true,
+      "exit": 0,
+      "frame_sha256": "8eb99ffac0f5b36be2da0afb0df24422e33d963858316c77bfd6c489a888a362",
+      "expected_sha256": "8eb99ffac0f5b36be2da0afb0df24422e33d963858316c77bfd6c489a888a362",
+      "pipeline_stage": 8
+    },
+    {
+      "case": 3,
+      "pass": true,
+      "exit": 0,
+      "frame_sha256": "e8c2dce90e31597507ba7e6bfaabe4189528286992a4a6430b1d5f15f5b68d2a",
+      "expected_sha256": "e8c2dce90e31597507ba7e6bfaabe4189528286992a4a6430b1d5f15f5b68d2a",
+      "pipeline_stage": 7
+    },
+    {
+      "case": 4,
+      "pass": true,
+      "exit": 0,
+      "frame_sha256": "b0d447ce5c55015423aeb1400ccc72688b9caab57783903ce69fbd617ce050af",
+      "expected_sha256": "b0d447ce5c55015423aeb1400ccc72688b9caab57783903ce69fbd617ce050af",
+      "pipeline_stage": 2
+    },
+    {
+      "case": 5,
+      "pass": true,
+      "exit": 0,
+      "frame_sha256": "79624fe7eb3ecdcfef76009eae1b85b554758e578bfeee6abb87d62f5dffa4eb",
+      "expected_sha256": "79624fe7eb3ecdcfef76009eae1b85b554758e578bfeee6abb87d62f5dffa4eb",
+      "pipeline_stage": 0
+    },
+    {
+      "case": 6,
+      "pass": true,
+      "exit": 0,
+      "frame_sha256": "9983f02fe025da13c1492f322e14906e60c49458874c60a3ac043ddd83ec6ab6",
+      "expected_sha256": "9983f02fe025da13c1492f322e14906e60c49458874c60a3ac043ddd83ec6ab6",
+      "pipeline_stage": 3
+    },
+    {
+      "case": 7,
+      "pass": true,
+      "exit": 0,
+      "frame_sha256": "1ed51228066a1e30d4521d59ee5e29fa6c860f60d4eb7466f0d6915077d4768a",
+      "expected_sha256": "1ed51228066a1e30d4521d59ee5e29fa6c860f60d4eb7466f0d6915077d4768a",
+      "pipeline_stage": 8
+    },
+    {
+      "case": 8,
+      "pass": true,
+      "exit": 0,
+      "frame_sha256": "eafd46d31a59ec4ee3669760a9e88151b224aeff693e296dad29a16e30e7d1a2",
+      "expected_sha256": "eafd46d31a59ec4ee3669760a9e88151b224aeff693e296dad29a16e30e7d1a2",
+      "pipeline_stage": 7
+    },
+    {
+      "case": 9,
+      "pass": true,
+      "exit": 0,
+      "frame_sha256": "2930f044ab471b8b8dfcb3dd1c3bef77990abf2eec757062813efa2b70bdd1f2",
+      "expected_sha256": "2930f044ab471b8b8dfcb3dd1c3bef77990abf2eec757062813efa2b70bdd1f2",
+      "pipeline_stage": 2
+    },
+    {
+      "case": 10,
+      "pass": true,
+      "exit": 0,
+      "frame_sha256": "c8e287173ebeec381f32dfce8b34851ea4530b72f57608d99aa0ee1125903abd",
+      "expected_sha256": "c8e287173ebeec381f32dfce8b34851ea4530b72f57608d99aa0ee1125903abd",
+      "pipeline_stage": 0
+    },
+    {
+      "case": 11,
+      "pass": true,
+      "exit": 0,
+      "frame_sha256": "b80a5369bdeead7292bb5b6024f9a63f099a03603500b5fcd7b0729c9d257040",
+      "expected_sha256": "b80a5369bdeead7292bb5b6024f9a63f099a03603500b5fcd7b0729c9d257040",
+      "pipeline_stage": 3
+    },
+    {
+      "case": 12,
+      "pass": true,
+      "exit": 0,
+      "frame_sha256": "d86189880ae61f6faa251e695132d74a2bd0b76387b8047f0934695b7e671180",
+      "expected_sha256": "d86189880ae61f6faa251e695132d74a2bd0b76387b8047f0934695b7e671180",
+      "pipeline_stage": 8
+    },
+    {
+      "case": 13,
+      "pass": true,
+      "exit": 0,
+      "frame_sha256": "066f8a13743fd973f92a428b5ef6e23be1f076c6908a7940c78a4eaf002b6f8b",
+      "expected_sha256": "066f8a13743fd973f92a428b5ef6e23be1f076c6908a7940c78a4eaf002b6f8b",
+      "pipeline_stage": 7
+    },
+    {
+      "case": 14,
+      "pass": true,
+      "exit": 0,
+      "frame_sha256": "b915b1534be849da223b04c23c40f39763cdd432a4708053b478d49372d0bac0",
+      "expected_sha256": "b915b1534be849da223b04c23c40f39763cdd432a4708053b478d49372d0bac0",
+      "pipeline_stage": 2
+    },
+    {
+      "case": 15,
+      "pass": true,
+      "exit": 0,
+      "frame_sha256": "c4792fbaa4c9d25f66276c38eae480f4b9f3989614834139d721f0737437aacb",
+      "expected_sha256": "c4792fbaa4c9d25f66276c38eae480f4b9f3989614834139d721f0737437aacb",
+      "pipeline_stage": 0
+    },
+    {
+      "case": 16,
+      "pass": true,
+      "exit": 0,
+      "frame_sha256": "c835e6b6c9b28069917f4371959ae4716d6d35a157fb400c5bf6ececfc78cd2b",
+      "expected_sha256": "c835e6b6c9b28069917f4371959ae4716d6d35a157fb400c5bf6ececfc78cd2b",
+      "pipeline_stage": 3
+    },
+    {
+      "case": 17,
+      "pass": true,
+      "exit": 0,
+      "frame_sha256": "e4452ff37c947206a46258d2cc333867d94b7546cfd7591547b84ad584687494",
+      "expected_sha256": "e4452ff37c947206a46258d2cc333867d94b7546cfd7591547b84ad584687494",
+      "pipeline_stage": 8
+    },
+    {
+      "case": 18,
+      "pass": true,
+      "exit": 0,
+      "frame_sha256": "8c460c6df442c80a76e4c2d28fc376bd5585a91e1c845d3e98b229672da82a35",
+      "expected_sha256": "8c460c6df442c80a76e4c2d28fc376bd5585a91e1c845d3e98b229672da82a35",
+      "pipeline_stage": 7
+    },
+    {
+      "case": 19,
+      "pass": true,
+      "exit": 0,
+      "frame_sha256": "5e3eb9b8f0f7073d2cfdb8da0eed478b34347b3c5a0543a76dbdefe1628dea8a",
+      "expected_sha256": "5e3eb9b8f0f7073d2cfdb8da0eed478b34347b3c5a0543a76dbdefe1628dea8a",
+      "pipeline_stage": 2
+    },
+    {
+      "case": 20,
+      "pass": true,
+      "exit": 0,
+      "frame_sha256": "6580da1038ec44f7ae2b29495f32fbb92a05c11f2dcb737e2cbf317e7bcd3496",
+      "expected_sha256": "6580da1038ec44f7ae2b29495f32fbb92a05c11f2dcb737e2cbf317e7bcd3496",
+      "pipeline_stage": 0
+    },
+    {
+      "case": 21,
+      "pass": true,
+      "exit": 0,
+      "frame_sha256": "d19b580580c53ec6790d3f3f50d49011a761794b6d82370830449375d9146908",
+      "expected_sha256": "d19b580580c53ec6790d3f3f50d49011a761794b6d82370830449375d9146908",
+      "pipeline_stage": 3
+    },
+    {
+      "case": 22,
+      "pass": true,
+      "exit": 0,
+      "frame_sha256": "3725b329725b123d9603247f5810a90ec04b1a02adeffe05670e1cc30397b280",
+      "expected_sha256": "3725b329725b123d9603247f5810a90ec04b1a02adeffe05670e1cc30397b280",
+      "pipeline_stage": 8
+    },
+    {
+      "case": 23,
+      "pass": true,
+      "exit": 0,
+      "frame_sha256": "642259a4d9c56e4f1bec5f63ee4ed7ef5c68665ff3731587737171cc7b39b4b9",
+      "expected_sha256": "642259a4d9c56e4f1bec5f63ee4ed7ef5c68665ff3731587737171cc7b39b4b9",
+      "pipeline_stage": 7
+    },
+    {
+      "case": 24,
+      "pass": true,
+      "exit": 0,
+      "frame_sha256": "8df84b14134543c4694ae664efa9f7ce9db1303bdb0e8dd012dbc7904e8eadc4",
+      "expected_sha256": "8df84b14134543c4694ae664efa9f7ce9db1303bdb0e8dd012dbc7904e8eadc4",
+      "pipeline_stage": 2
+    },
+    {
+      "case": 25,
+      "pass": true,
+      "exit": 0,
+      "frame_sha256": "084f57686cb01ed14801715eda59fb4662042328af972203ff8ff7b71eab014e",
+      "expected_sha256": "084f57686cb01ed14801715eda59fb4662042328af972203ff8ff7b71eab014e",
+      "pipeline_stage": 0
+    },
+    {
+      "case": 26,
+      "pass": true,
+      "exit": 0,
+      "frame_sha256": "0966ca3420f02efa8bf69a62a884eb0baa31c47d3363a0877db63a6212612821",
+      "expected_sha256": "0966ca3420f02efa8bf69a62a884eb0baa31c47d3363a0877db63a6212612821",
+      "pipeline_stage": 3
+    },
+    {
+      "case": 27,
+      "pass": true,
+      "exit": 0,
+      "frame_sha256": "1d8856b88078e663a2043921213bc287f1d37812ec48c2b87e194312f7eb0b82",
+      "expected_sha256": "1d8856b88078e663a2043921213bc287f1d37812ec48c2b87e194312f7eb0b82",
+      "pipeline_stage": 8
+    },
+    {
+      "case": 28,
+      "pass": true,
+      "exit": 0,
+      "frame_sha256": "fb5122c90b014c12286ad4ea49ef553d628994f999572640337f218f1e1be3e6",
+      "expected_sha256": "fb5122c90b014c12286ad4ea49ef553d628994f999572640337f218f1e1be3e6",
+      "pipeline_stage": 7
+    },
+    {
+      "case": 29,
+      "pass": true,
+      "exit": 0,
+      "frame_sha256": "042e088fff0109cbbf5d1b5881e7bbc53a9e2ef1c464de82e822df58883bf979",
+      "expected_sha256": "042e088fff0109cbbf5d1b5881e7bbc53a9e2ef1c464de82e822df58883bf979",
+      "pipeline_stage": 2
+    },
+    {
+      "case": 30,
+      "pass": true,
+      "exit": 0,
+      "frame_sha256": "64b2e99ad9e9c88195613d5a8dbe385fa860fe38aef8a6d45dc32a4545aeb8e7",
+      "expected_sha256": "64b2e99ad9e9c88195613d5a8dbe385fa860fe38aef8a6d45dc32a4545aeb8e7",
+      "pipeline_stage": 0
+    },
+    {
+      "case": 31,
+      "pass": true,
+      "exit": 0,
+      "frame_sha256": "2650038e08d3a6d9d7a1e54e563fdb0187e989e40b462093c7146fcc4401689b",
+      "expected_sha256": "2650038e08d3a6d9d7a1e54e563fdb0187e989e40b462093c7146fcc4401689b",
+      "pipeline_stage": 3
+    },
+    {
+      "case": 32,
+      "pass": true,
+      "exit": 0,
+      "frame_sha256": "41e7103430d82afdf2f7a40c68ace057e00694a753656b0bac53895788586653",
+      "expected_sha256": "41e7103430d82afdf2f7a40c68ace057e00694a753656b0bac53895788586653",
+      "pipeline_stage": 8
+    },
+    {
+      "case": 33,
+      "pass": true,
+      "exit": 0,
+      "frame_sha256": "647e170149c9cbeff31d069e4339ac22fd266aa34e713fd70e606554a180bf91",
+      "expected_sha256": "647e170149c9cbeff31d069e4339ac22fd266aa34e713fd70e606554a180bf91",
+      "pipeline_stage": 7
+    },
+    {
+      "case": 34,
+      "pass": true,
+      "exit": 0,
+      "frame_sha256": "39b91f34bd3c7f298db8e9a98a90689910c08ab5e072544f9d946e26895f131c",
+      "expected_sha256": "39b91f34bd3c7f298db8e9a98a90689910c08ab5e072544f9d946e26895f131c",
+      "pipeline_stage": 2
+    },
+    {
+      "case": 35,
+      "pass": true,
+      "exit": 0,
+      "frame_sha256": "e77a31c50cd3b4308a8ea05b13f115f41a6ac6a0f33d003a38b46f7bbd7aaa71",
+      "expected_sha256": "e77a31c50cd3b4308a8ea05b13f115f41a6ac6a0f33d003a38b46f7bbd7aaa71",
+      "pipeline_stage": 0
+    },
+    {
+      "case": 36,
+      "pass": true,
+      "exit": 0,
+      "frame_sha256": "4222b0e540952753424b2dcc65e04fec1eed8a257cd2a5e65b5a854e101a80ea",
+      "expected_sha256": "4222b0e540952753424b2dcc65e04fec1eed8a257cd2a5e65b5a854e101a80ea",
+      "pipeline_stage": 3
+    },
+    {
+      "case": 37,
+      "pass": true,
+      "exit": 0,
+      "frame_sha256": "3fb0252cb21ecc834de350075bab31e491bcb914a1f592858d25339dcfcf93df",
+      "expected_sha256": "3fb0252cb21ecc834de350075bab31e491bcb914a1f592858d25339dcfcf93df",
+      "pipeline_stage": 8
+    },
+    {
+      "case": 38,
+      "pass": true,
+      "exit": 0,
+      "frame_sha256": "e41c6f43c68fd546b409777278c2d271157d13d3227598d09a44f0040d9f883f",
+      "expected_sha256": "e41c6f43c68fd546b409777278c2d271157d13d3227598d09a44f0040d9f883f",
+      "pipeline_stage": 7
+    },
+    {
+      "case": 39,
+      "pass": true,
+      "exit": 0,
+      "frame_sha256": "09eb1ada017f2eaeefa545200c3136d03fbfa69d35fefe5d0db78f8f21be698b",
+      "expected_sha256": "09eb1ada017f2eaeefa545200c3136d03fbfa69d35fefe5d0db78f8f21be698b",
+      "pipeline_stage": 2
+    },
+    {
+      "case": "short",
+      "pass": true,
+      "exit": 2
+    },
+    {
+      "case": "extra",
+      "pass": true,
+      "exit": 2
+    },
+    {
+      "case": "magic",
+      "pass": true,
+      "exit": 2
+    },
+    {
+      "case": "zero-size",
+      "pass": true,
+      "exit": 2
+    },
+    {
+      "case": "packet-length",
+      "pass": true,
+      "exit": 2
+    },
+    {
+      "case": "budget",
+      "pass": true,
+      "exit": 2
+    },
+    {
+      "case": "pause",
+      "pass": true,
+      "exit": 2
+    },
+    {
+      "case": "model-flag",
+      "pass": true,
+      "exit": 2
+    }
+  ]
+}

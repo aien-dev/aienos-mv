@@ -1,0 +1,26 @@
+{
+  "cases": 2,
+  "failures": 0,
+  "phase": "green",
+  "makefile_sha256": "3d0cd79d2d6328b697747aaf899fea3576b9f461f628db523db72567a03b7bc2",
+  "results": [
+    {
+      "broken_encoder": false,
+      "pass": true,
+      "exit": 0,
+      "encoder_cases": 48,
+      "encoder_failures": 0,
+      "simulation_passes": 2,
+      "log_sha256": "121b55ed5d2408fa9ae41a854be85c72b2abd936447df7f95408319c831c921f"
+    },
+    {
+      "broken_encoder": true,
+      "pass": true,
+      "exit": 2,
+      "encoder_cases": 48,
+      "encoder_failures": 40,
+      "simulation_passes": 0,
+      "log_sha256": "77d97c2f7ea2a7dde50db725fbb321d159eef15af3978327db1d67449c0dd7af"
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "mutants": 4,
+  "results": [
+    {
+      "mutant": "swapped-fmc-address",
+      "compiled": true,
+      "caught": true,
+      "failures": 40,
+      "cases": 48
+    },
+    {
+      "mutant": "wrong-size-field",
+      "compiled": true,
+      "caught": true,
+      "failures": 40,
+      "cases": 48
+    },
+    {
+      "mutant": "truncated-signature",
+      "compiled": true,
+      "caught": true,
+      "failures": 40,
+      "cases": 48
+    },
+    {
+      "mutant": "wrong-vendor",
+      "compiled": true,
+      "caught": true,
+      "failures": 40,
+      "cases": 48
+    }
+  ]
+}

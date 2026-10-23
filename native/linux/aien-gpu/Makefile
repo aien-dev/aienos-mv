@@ -39,6 +39,8 @@ omega-boot-test:
 	python3 -I $(NATIVE_ROOT)/native/omega/tests/bootseq-io.py $(NATIVE_ROOT)
 	python3 -I $(NATIVE_ROOT)/native/omega/tests/bootsim.py $(NATIVE_ROOT) $(OMEGA_CC)
 	python3 -I $(NATIVE_ROOT)/native/omega/tests/bootsim-io.py $(NATIVE_ROOT)
+	python3 -I $(NATIVE_ROOT)/native/omega/tests/cotplan.py $(NATIVE_ROOT) $(OMEGA_CC)
+	python3 -I $(NATIVE_ROOT)/native/omega/tests/cot-io.py $(NATIVE_ROOT)
 	@printf 'BOOT_NATIVE_GATE_PASS\n'
 sim-test: omega-boot-test $(OUT)/aien_gsp_boot_sim $(OUT)/aien_gsp_boot_sim_san $(OUT)/regtrace
 	OMEGA_CC="$(OMEGA_CC)" bash $(SIM_TEST) $(OUT)/aien_gsp_boot_sim $(CURDIR)/aien_gpu.c $(OUT)/regtrace

@@ -1,0 +1,17 @@
+{
+  "cases": 3,
+  "results": [
+    {
+      "case": "closed-input",
+      "pass": true
+    },
+    {
+      "case": "EAGAIN-after-frame-before-EOF",
+      "pass": true
+    },
+    {
+      "case": "output-ENOSPC",
+      "pass": true
+    }
+  ]
+}
