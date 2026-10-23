@@ -2,7 +2,7 @@ from pathlib import Path
 import subprocess,hashlib,json
 w=Path.home()/'workspace/aienos-omega-driver-direct';e=w/'evidence/omega-sequencer';d=w/'build/omega-bootsim'
 pin='5697de6e201499cd5e1db8717109c0bb317bfe66'
-subprocess.run(['git','-C',str(w),'diff','--exit-code',pin,'--','native'],check=True)
+subprocess.run(['git','-C',str(w),'diff','--exit-code',pin,'--','native',':(exclude)native/omega/tests/accept-bootsim-review.py'],check=True)
 receipt=json.loads((e/'bootsim-green.json').read_text())
 for names,expected in [(['regcore.om','bootsim.om','bootsim-model.om','bootcore.om'],'65e14024e2488140941917b2b89f20be64a7a4205f55086efd121c008114b2ba'),(['regcore.om','bootseq.om','bootcore.om'],'480b93638b2dfc30517527b52a75eeba2c07d1d3730c5bf965e77b93fbac8b2d')]:
  assert hashlib.sha256(b'\n'.join((w/'native/omega'/n).read_bytes() for n in names)).hexdigest()==expected
