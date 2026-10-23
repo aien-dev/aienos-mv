@@ -1,0 +1,241 @@
+     1	note Native application binding: conversation state, courier lifecycle and reply/code.
+     2	note A initialized, queued AGAIN bytes, per-call event, reserved.
+     3	note Events:0 none,1 visible answer/ack,2 AGAIN queued,3 code give-up,
+     4	note 4 refused LINE payload,5 slow notice,6 silence timeout.
+     5	note Transport acceptance is separate from payload acceptance: appreceive true
+     6	note means envelope accepted; inspect A2 for malformed payload, never invent text.
+     7	global A ulong 4
+     8	global Appjob uchar 4096
+     9	global Appwire uchar 8192
+    10	global Askin uchar 160
+    11	fn appinit run ulong now ulong to bool
+    12	if or ne get A 0 0 ne get R 0 0
+    13	ret false
+    14	end
+    15	if ne get Q 0 0
+    16	ret false
+    17	end
+    18	if not qstart run now
+    19	ret false
+    20	end
+    21	constants
+    22	put A 0 1
+    23	put A 1 0
+    24	put A 2 0
+    25	ret true
+    26	end
+    27	fn appclock now ulong to bool
+    28	if eq get A 0 0
+    29	ret false
+    30	end
+    31	ret and ge now get T 0 ge now get R 4
+    32	end
+    33	fn appask now ulong to bool
+    34	if not appclock now
+    35	ret false
+    36	end
+    37	if or ne get R 1 0 ne get A 1 0
+    38	ret false
+    39	end
+    40	if or ne get T 10 0 ne get T 13 0
+    41	ret false
+    42	end
+    43	if and ne get T 5 0 eq get T 6 0
+    44	ret false
+    45	end
+    46	if or ge get R 0 4294967295 ge get Q 1 4294967295
+    47	ret false
+    48	end
+    49	if not textok
+    50	ret false
+    51	end
+    52	kind = classify
+    53	if or lt kind 1 gt kind 3
+    54	ret false
+    55	end
+    56	if and eq kind 3 eq get R 6 0
+    57	ret false
+    58	end
+    59	note Validate restored context before jobbuild reads its variable-layout names.
+    60	if not ctxmeta 6
+    61	ret false
+    62	end
+    63	if not jobbuild kind add get R 0 1
+    64	ret false
+    65	end
+    66	if not ctxappend
+    67	ret false
+    68	end
+    69	n = get Inlen 0
+    70	size = get Outlen 0
+    71	for i ulong n
+    72	put Askin i get In i
+    73	end
+    74	for i ulong size
+    75	put Appjob i get Outb i
+    76	end
+    77	for i ulong size
+    78	put In i get Appjob i
+    79	end
+    80	put Inlen 0 size
+    81	queued = qsubmit now
+    82	for i ulong n
+    83	put In i get Askin i
+    84	end
+    85	put Inlen 0 n
+    86	if not queued
+    87	ret false
+    88	end
+    89	note start preconditions were checked before qsubmit; no concurrent calls permitted.
+    90	if not start kind now
+    91	qcancel
+    92	ret false
+    93	end
+    94	put A 2 0
+    95	if gt kind 1
+    96	codebeg get R 0
+    97	put A 2 1
+    98	end
+    99	ret true
+   100	end
+   101	fn appcancel to void
+   102	cancel
+   103	qcancel
+   104	put A 1 0
+   105	put A 2 0
+   106	end
+   107	fn appreset to void
+   108	appcancel
+   109	reset
+   110	end
+   111	note First acknowledge the triggering LINE, then submit AGAIN with a new wire
+   112	note sequence while retaining the original conversation ID in its body.
+   113	fn appqueue now ulong to bool
+   114	if eq get A 1 0
+   115	ret true
+   116	end
+   117	if or ne get T 10 0 ne get T 13 0
+   118	ret true
+   119	end
+   120	put Inlen 0 get A 1
+   121	for i ulong get A 1
+   122	put In i get Appjob i
+   123	end
+   124	if not qsubmit now
+   125	ret false
+   126	end
+   127	put A 1 0
+   128	ret true
+   129	end
+   130	fn apppoll now ulong link bool to bool
+   131	if not appclock now
+   132	ret false
+   133	end
+   134	put A 2 0
+   135	put T 0 now
+   136	status = tick now
+   137	if eq status 1
+   138	put A 2 5
+   139	end
+   140	if eq status 2
+   141	qcancel
+   142	put A 1 0
+   143	put A 2 6
+   144	end
+   145	if not appqueue now
+   146	appcancel
+   147	put A 2 3
+   148	ret false
+   149	end
+   150	ret qnext now link
+   151	end
+   152	fn appsent now ulong ok bool to bool
+   153	if not appclock now
+   154	ret false
+   155	end
+   156	if not qsent now ok
+   157	ret false
+   158	end
+   159	put A 2 0
+   160	ret true
+   161	end
+   162	fn appbody now ulong to bool
+   163	if eq get R 1 0
+   164	put A 2 4
+   165	ret true
+   166	end
+   167	if ineq 0 67
+   168	if or le get R 2 1 ne get C 0 get R 0
+   169	put A 2 4
+   170	ret true
+   171	end
+   172	if codetake
+   173	if heard get C 0 now
+   174	ret true
+   175	end
+   176	end
+   177	put A 2 4
+   178	ret true
+   179	end
+   180	if or ineq 0 83 ineq 0 87
+   181	status = saytake now
+   182	if eq status 1
+   183	if eq get R 1 0
+   184	put A 1 0
+   185	end
+   186	if ne get S 1 0
+   187	put A 2 1
+   188	end
+   189	ret true
+   190	end
+   191	if eq status 2
+   192	n = get Outlen 0
+   193	if or eq n 0 gt n 4096
+   194	cancel
+   195	put A 1 0
+   196	put A 2 3
+   197	ret true
+   198	end
+   199	for i ulong n
+   200	put Appjob i get Outb i
+   201	end
+   202	put A 1 n
+   203	put A 2 2
+   204	ret true
+   205	end
+   206	if eq status 3
+   207	put A 1 0
+   208	put A 2 3
+   209	ret true
+   210	end
+   211	end
+   212	put A 2 4
+   213	ret true
+   214	end
+   215	note Reply parsing can serialize AGAIN internally. Preserve the already offered
+   216	note datagram until the provider records its send result, including on refusal.
+   217	fn appreceive now ulong to bool
+   218	if not appclock now
+   219	ret false
+   220	end
+   221	result = qincoming now
+   222	if eq result 0
+   223	ret false
+   224	end
+   225	put A 2 0
+   226	if not qtake
+   227	ret true
+   228	end
+   229	n = get Outlen 0
+   230	e = get Err 0
+   231	for i ulong n
+   232	put Appwire i get Outb i
+   233	end
+   234	ok = appbody now
+   235	for i ulong n
+   236	put Outb i get Appwire i
+   237	end
+   238	put Outlen 0 n
+   239	put Err 0 e
+   240	ret ok
+   241	end

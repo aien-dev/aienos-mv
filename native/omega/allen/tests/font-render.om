@@ -1,0 +1,79 @@
+note Actual native 768x384 printable-ASCII specimen; no image generator.
+global Canvas uchar 884736
+global Fpose long 2
+text Fontppm "P6\n768 384\n255\n"
+fn fblend bg ulong fg ulong a ulong to uchar
+n = mul bg sub ulong 255 a
+n = add n mul fg a
+ret uchar div n 255
+end
+fn fpixel x long y long a uchar to void
+if or lt x 0 ge x 768
+ret
+end
+if or lt y 0 ge y 384
+ret
+end
+at = mul add mul ulong y 768 ulong x 3
+alpha = ulong a
+put Canvas at fblend 6 236 alpha
+put Canvas add at 1 fblend 8 240 alpha
+put Canvas add at 2 fblend 18 252 alpha
+end
+fn frow yy ulong to void
+y = add get Fpose 1 long yy
+at = mul yy get Af 3
+for x ulong get Af 3
+px = add get Fpose 0 long x
+a = get Alpha add at x
+fpixel px y a
+end
+end
+fn fdraw px long py long to void
+put Fpose 0 add px get Ab 0
+put Fpose 1 add py get Ab 1
+for y ulong get Af 4
+frow y
+end
+end
+fn foutput to bool
+p = ulong 0
+while lt p len Fontppm
+n = write 1 Fontppm p sub len Fontppm p
+if le n 0
+ret false
+end
+p = add p ulong n
+end
+p = 0
+while lt p len Canvas
+n = write 1 Canvas p sub len Canvas p
+if le n 0
+ret false
+end
+p = add p ulong n
+end
+ret true
+end
+fn main to int
+if not afinit 30 1250
+ret 1
+end
+for i ulong mul ulong 768 384
+put Canvas mul i 3 6
+put Canvas add mul i 3 1 8
+put Canvas add mul i 3 2 18
+end
+for i ulong 95
+if not afglyph uchar add i 32
+ret 1
+end
+x = long add mul rem i 16 48 8
+y = long add mul div i 16 64 45
+fdraw x y
+end
+if not foutput
+ret 74
+end
+ret 0
+end

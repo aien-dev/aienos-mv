@@ -1,0 +1,100 @@
+     1	note Restored note catalog and bounded model-job context. No storage provider.
+     2	note Cx declared count,visited count,ready,damaged,loading. Damaged notes stay gone.
+     3	global Cx ulong 5
+     4	global Ctxtext uchar 65536
+     5	global Ctxlen ulong 512
+     6	global Ctxgone uchar 512
+     7	global Ctxseen uchar 512
+     8	global Ctxstart ulong 512
+     9	global Meta uchar 4096
+    10	global Mx ulong 2
+    11	global Mdigits uchar 20
+    12	text Mtself "\tself="
+    13	text Mtname "\tname="
+    14	text Mtstart "\tstarts="
+    15	text Mtfact "\tfact "
+    16	text Mtis " is "
+    17	text Mtare " are "
+    18	text Mtnote "\tnote "
+    19	fn ctxidle to bool
+    20	if ne get R 1 0
+    21	ret false
+    22	end
+    23	ret and eq get Tx 0 0 eq get Nt 0 0
+    24	end
+    25	fn ctxbegin to bool
+    26	if not ctxidle
+    27	ret false
+    28	end
+    29	n = mem32 36
+    30	if gt n 512
+    31	ret false
+    32	end
+    33	for i ulong 512
+    34	put Ctxlen i 0
+    35	put Ctxgone i 1
+    36	put Ctxseen i 0
+    37	put Ctxstart i 0
+    38	end
+    39	put Cx 0 n
+    40	put Cx 1 0
+    41	put Cx 2 0
+    42	put Cx 3 0
+    43	put Cx 4 1
+    44	if eq n 0
+    45	put Cx 2 1
+    46	put Cx 4 0
+    47	end
+    48	ret true
+    49	end
+    50	note Returns0 refused without visit,1 valid record retained,2 damaged visit retained.
+    51	fn ctxtake index ulong to ulong
+    52	if not ctxidle
+    53	ret 0
+    54	end
+    55	if or eq get Cx 4 0 ge index get Cx 0
+    56	ret 0
+    57	end
+    58	if ne get Ctxseen index 0
+    59	ret 0
+    60	end
+    61	status = ulong 2
+    62	if notedec index
+    63	n = get Ns 0
+    64	for i ulong n
+    65	put Ctxtext add mul index 128 i get Note i
+    66	end
+    67	put Ctxlen index n
+    68	put Ctxgone index uchar get Ns 3
+    69	put Ctxstart index get Ns 2
+    70	status = 1
+    71	else
+    72	put Cx 3 add get Cx 3 1
+    73	end
+    74	put Ctxseen index 1
+    75	put Cx 1 add get Cx 1 1
+    76	if eq get Cx 1 get Cx 0
+    77	put Cx 2 1
+    78	put Cx 4 0
+    79	end
+    80	ret status
+    81	end
+    82	fn mtemit c uchar to void
+    83	if ne get Mx 1 0
+    84	ret
+    85	end
+    86	n = get Mx 0
+    87	if ge n 4096
+    88	put Mx 1 1
+    89	ret
+    90	end
+    91	put Meta n c
+    92	put Mx 0 add n 1
+    93	end
+    94	fn mtnum v ulong to void
+    95	n = ulong 0
+    96	while gt v 9
+    97	put Mdigits n uchar rem v 10
+    98	v = div v 10
+    99	n = add n 1
+   100	end

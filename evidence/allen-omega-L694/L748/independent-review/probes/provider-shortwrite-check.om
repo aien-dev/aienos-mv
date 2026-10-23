@@ -1,0 +1,84 @@
+global Receipt uchar 4096
+global V ulong 4
+global Pos ulong 1
+global Sstart ulong 1
+text Mag "ALNPRV01"
+fn checknum ok bool to void
+check ok add get Checks 0 1
+end
+fn parsenum n ulong to bool
+v = ulong 0
+digits = ulong 0
+while lt get Pos 0 n
+c = get Receipt get Pos 0
+put Pos 0 add get Pos 0 1
+if eq c 10
+if eq digits 0
+ret false
+end
+put V get Sstart 0 v
+put Sstart 0 add get Sstart 0 1
+ret true
+end
+if or lt c 48 gt c 57
+ret false
+end
+v = add mul v 10 sub ulong c 48
+digits = add digits 1
+end
+ret false
+end
+fn sbyte p ulong c uchar to void
+checknum eq get Receipt p c
+end
+fn shead p ulong to ulong
+v = ulong 0
+for i ulong 8
+v = or v shl ulong get Receipt add p i mul i 8
+end
+ret v
+end
+fn main to int
+n = ulong 0
+while lt n 1036
+r = read 0 Receipt n sub len Receipt n
+if le r 0
+ret 65
+end
+n = add n ulong r
+end
+for i ulong 4
+if not parsenum n
+ret 65
+end
+end
+checknum eq get V 0 8
+checknum eq get V 1 74
+checknum eq get V 2 1024
+checknum eq get V 3 0
+p = get Pos 0
+checknum eq n add p 1024
+for rec ulong 7
+for i ulong 8
+sbyte add p i get Mag i
+end
+size = shead add p 32
+checknum le size 8192
+p = add add p 40 size
+end
+checknum eq p add get Pos 0 923
+remain = sub n p
+checknum eq remain 101
+for i ulong 8
+sbyte add p i get Mag i
+end
+checknum eq shead add p 8 3
+checknum eq shead add p 16 3
+checknum eq shead add p 24 0
+checknum eq shead add p 32 71
+checknum eq get Checks 0 82
+if ne get Fails 0 0
+ret 1
+end
+ret 0
+end

@@ -18,7 +18,7 @@ The output directory must be fresh. `build-one.sh` hashes the compiler before
 **every invocation**, rejects empty/wrong-machine/nonstatic ELF and marks only
 qualified output executable. The gate builds all modules together for every test,
 executes handwritten Omega test programs, compares a byte-exact independent memory
-fixture and rejects seventeen compiled behavioral mutants. The build uses POSIX shell,
+fixture and rejects nineteen compiled behavioral mutants. The build uses POSIX shell,
 Git (source reconstruction), GNU file/text utilities, readelf, dd, xxd and
 sha256sum as external development tools. Existing Rust courier `--split` was used
 once as a fixture oracle, never as an Omega runtime dependency.
@@ -199,6 +199,21 @@ The current provider executable still exports raw answer/code records; it does
 not call these new display wrappers. This is a qualified host-side presentation
 binding, not a pixel renderer or display device. Existing SAY folding and its
 159-byte bound remain; multiline model-scene transport is not yet attached.
+
+## Native stroke font
+
+`font-data.om` retains Allen's existing95 printable-ASCII glyph designs and91
+integer sine samples; `font.om` is a handwritten fixed-buffer Omega rasterizer.
+It supports cap heights1..64 and weights1..2500, maps nonprintable bytes to `?`,
+and produces one antialiased glyph mask at a time without a C font runtime.
+The full gate compares native output for294 glyph/size/weight/fallback records
+against frozen bytes collected from the unmodified legacy implementation. That
+legacy code is an external reference oracle, not an Omega compiler or runtime.
+`<output>/font-specimen.ppm` is drawn entirely by the native Omega executable.
+
+See [FONT.md](FONT.md) and `evidence/allen-omega-L694/L758/`. This implements the font
+rasterization component, not scene layout, frame animation or the display driver.
+The presentation/provider attachment still needs the actual screen renderer.
 
 ## Intentional refusals and unfinished compatibility
 

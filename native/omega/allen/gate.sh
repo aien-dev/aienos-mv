@@ -11,10 +11,10 @@ cat native/omega/allen/base.om native/omega/allen/vendor/sha256-core.om \
  native/omega/allen/runtime.om native/omega/allen/code.om \
  native/omega/allen/courier.om native/omega/allen/scheduler.om native/omega/allen/memory.om \
  native/omega/allen/intent.om native/omega/allen/reply.om \
- native/omega/allen/view.om native/omega/allen/scene.om native/omega/allen/paint.om native/omega/allen/application.om native/omega/allen/scene-input.om native/omega/allen/context.om native/omega/allen/provider-core.om native/omega/allen/presentation.om > "$core"
-for name in runtime code courier scheduler application provider-core presentation memory context intent reply view scene scene-input paint edges fixture golden render; do
+ native/omega/allen/view.om native/omega/allen/scene.om native/omega/allen/paint.om native/omega/allen/application.om native/omega/allen/scene-input.om native/omega/allen/context.om native/omega/allen/provider-core.om native/omega/allen/presentation.om native/omega/allen/font-data.om native/omega/allen/font.om > "$core"
+for name in runtime code courier scheduler application provider-core presentation font memory context intent reply view scene scene-input paint edges fixture golden render font-output font-render; do
  cat "$core" > "$out/$name.om"
- case "$name" in golden|render) ;; *) cat native/omega/allen/tests/check.om >> "$out/$name.om" ;; esac
+ case "$name" in golden|render|font-output|font-render) ;; *) cat native/omega/allen/tests/check.om >> "$out/$name.om" ;; esac
  cat "native/omega/allen/tests/$name.om" >> "$out/$name.om"
  native/omega/allen/build-one.sh "$out/$name.om" "$out/$name"
  case "$name" in
@@ -24,10 +24,14 @@ for name in runtime code courier scheduler application provider-core presentatio
   ;;
  golden) "$out/$name" > "$out/memory-native.bin" ;;
  render) "$out/$name" > "$out/mind-component.ppm" ;;
+ font-output) "$out/$name" > "$out/font.bin" ;;
+ font-render) "$out/$name" > "$out/font-specimen.ppm" ;;
  *) "$out/$name" > "$out/$name.log" ;;
  esac
  printf '%s compile=0 native-exit=0\n' "$name"
 done
+cmp "$out/font.bin" evidence/allen-omega-L694/L758/legacy-font.bin
+printf 'font native masks match frozen external legacy oracle\n'
 native/omega/allen/golden.sh "$out/reference"
 cmp "$out/memory-native.bin" "$out/reference/memory-golden.bin"
 cat "$core" native/omega/allen/main.om > "$out/allen.om"
@@ -126,7 +130,12 @@ native/omega/allen/build-one.sh native/omega/allen/tests/presentation-mutants.om
 cat native/omega/allen/tests/check.om native/omega/allen/tests/presentation.om >> "$out/staleview-mutant.om"
 { printf 1; cat "$core"; } | "$out/presentation-mutants" > "$out/inputtail-mutant.om"
 cat native/omega/allen/tests/check.om native/omega/allen/tests/presentation.om >> "$out/inputtail-mutant.om"
-for name in stale crc hash readback session keepalive ackstop pendingwire appcode thinking scenecap contextnote contextjob autosent framecheck staleview inputtail; do
+native/omega/allen/build-one.sh native/omega/allen/tests/font-mutants.om "$out/font-mutants"
+{ printf 0; cat "$core"; } | "$out/font-mutants" > "$out/fontroot-mutant.om"
+cat native/omega/allen/tests/check.om native/omega/allen/tests/font.om >> "$out/fontroot-mutant.om"
+{ printf 1; cat "$core"; } | "$out/font-mutants" > "$out/fontalpha-mutant.om"
+cat native/omega/allen/tests/check.om native/omega/allen/tests/font.om >> "$out/fontalpha-mutant.om"
+for name in stale crc hash readback session keepalive ackstop pendingwire appcode thinking scenecap contextnote contextjob autosent framecheck staleview inputtail fontroot fontalpha; do
  native/omega/allen/build-one.sh "$out/$name-mutant.om" "$out/$name-mutant"
  set +e
  "$out/$name-mutant" > "$out/$name-mutant.log"

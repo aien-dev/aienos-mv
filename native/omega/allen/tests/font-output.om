@@ -1,0 +1,83 @@
+note Native glyph stream for byte comparison with the external legacy oracle.
+fn afword v ulong to void
+for i ulong 8
+emitb uchar and shr v mul i 8 255
+end
+end
+fn afsigned v long to void
+if lt v 0
+afword xor ulong 18446744073709551615 ulong sub neg v 1
+else
+afword ulong v
+end
+end
+fn afhead to bool
+p = ulong 0
+while lt p get Outlen 0
+n = write 1 Outb p sub get Outlen 0 p
+if le n 0
+ret false
+end
+p = add p ulong n
+end
+ret true
+end
+fn afemit cap ulong wt ulong c uchar to bool
+if not afglyph c
+ret false
+end
+outreset
+afword cap
+afword wt
+afword ulong c
+afword get Af 3
+afword get Af 4
+afsigned get Ab 0
+afsigned get Ab 1
+afword get Af 5
+if not afhead
+ret false
+end
+size = mul get Af 3 get Af 4
+p = ulong 0
+while lt p size
+n = write 1 Alpha p sub size p
+if le n 0
+ret false
+end
+p = add p ulong n
+end
+ret true
+end
+fn main to int
+for mode ulong 3
+cap = ulong 14
+wt = ulong 900
+if eq mode 1
+cap = 30
+wt = 1250
+end
+if eq mode 2
+cap = 64
+wt = 2500
+end
+if not afinit cap wt
+ret 1
+end
+for i ulong 95
+if not afemit cap wt uchar add i 32
+ret 1
+end
+end
+if not afemit cap wt 0
+ret 1
+end
+if not afemit cap wt 127
+ret 1
+end
+if not afemit cap wt 255
+ret 1
+end
+end
+ret 0
+end

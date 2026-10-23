@@ -1,0 +1,72 @@
+text Bmagic "ALNPRV01"
+fn btest ok bool to void
+check ok add get Checks 0 1
+end
+fn bword off ulong v ulong to void
+for i ulong 8
+put Ph add off i uchar and shr v mul i 8 255
+end
+end
+fn bframe op ulong now ulong arg ulong size ulong to void
+for i ulong 8
+put Ph i get Bmagic i
+end
+bword 8 op
+bword 16 now
+bword 24 arg
+bword 32 size
+end
+fn bmain to int
+bframe 1 sub ulong 0 1 1 0
+btest prparse
+btest eq get Pv 1 sub ulong 0 1
+bframe 1 shl ulong 1 63 sub ulong 0 1 0
+btest prparse
+btest eq get Pv 1 shl ulong 1 63
+btest eq get Pv 2 sub ulong 0 1
+bframe sub ulong 0 1 0 0 0
+btest not prparse
+bframe 2 0 0 0
+btest not prparse
+bframe 2 0 0 1
+btest prparse
+bframe 2 0 0 159
+btest prparse
+bframe 2 0 0 160
+btest not prparse
+bframe 5 0 0 64
+btest not prparse
+bframe 5 0 0 65
+btest prparse
+bframe 5 0 0 1200
+btest prparse
+bframe 5 0 0 1201
+btest not prparse
+bframe 8 0 0 4096
+btest prparse
+bframe 8 0 1 4096
+btest prparse
+bframe 8 0 2 4096
+btest not prparse
+bframe 8 1 0 4096
+btest not prparse
+bframe 9 0 0 4096
+btest prparse
+bframe 9 0 511 4096
+btest prparse
+bframe 9 0 512 4096
+btest not prparse
+bframe 6 0 0 0
+btest prparse
+bframe 6 1 0 0
+btest not prparse
+bframe 7 0 1 0
+btest not prparse
+bframe 10 0 0 0
+btest prparse
+btest eq get Checks 0 25
+if ne get Fails 0 0
+ret 1
+end
+ret 0
+end

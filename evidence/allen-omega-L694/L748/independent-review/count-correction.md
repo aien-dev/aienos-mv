@@ -1,0 +1,1 @@
+The original report says25 boundary assertions and872 total. The retained log has26 passing rows, including its final count assertion. Parent rebuilt the exact boundary input, obtained a byte-identical binary, and replayed26/26. Actual provider-review total is873 passing assertion rows. Original report retained unchanged.

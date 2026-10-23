@@ -1,0 +1,107 @@
+fn ptest ok bool to void
+check ok add get Checks 0 1
+end
+fn main to int
+dreset
+for i ulong 2304
+put Dtext i 81
+end
+for i ulong 32768
+put Dcode i 90
+end
+for i ulong 4096
+put Dstart i 1
+put Dlen i 2
+put Dline i 3
+end
+for i ulong 8192
+put Din i 65
+put In i 66
+end
+put Dm 0 1
+put Dm 1 1
+put Dm 2 42
+put Dsay 0 81
+put Dview 0 1
+put Dview 1 2
+put Dview 2 3
+put Ds 0 9
+put Dt 0 8
+put Inlen 0 1
+put A 0 1
+put A 2 0
+put R 8 0
+ptest not dpresent
+ptest eq get Dm 2 42
+ptest eq get Dtext 0 81
+ptest eq get Dcode 0 90
+put A 2 1
+put R 8 160
+ptest not dpresent
+ptest eq get Dtext 0 81
+ptest eq get Dcode 0 90
+put R 8 0
+ptest not dpresent
+ptest eq get Dm 0 1
+ptest eq get Dm 1 1
+ptest eq get Dm 2 42
+ptest eq get Dsay 0 81
+dreset
+ptest eq get Dm 0 0
+ptest eq get Dm 1 0
+ptest eq get Dm 2 0
+ptest eq get Dsay 0 0
+same = true
+for i ulong 3
+if ne get Dview i 0
+same = false
+end
+end
+ptest same
+same = true
+for i ulong 8
+if ne get Ds i 0
+same = false
+end
+end
+ptest same
+same = true
+for i ulong 64
+if ne get Dt i 0
+same = false
+end
+end
+ptest same
+same = true
+for i ulong 2304
+if ne get Dtext i 0
+same = false
+end
+end
+ptest same
+same = true
+for i ulong 32768
+if ne get Dcode i 0
+same = false
+end
+end
+ptest same
+same = true
+for i ulong 4096
+if ne or or get Dstart i get Dlen i get Dline i 0
+same = false
+end
+end
+ptest same
+same = true
+for i ulong 8192
+if ne get Din i 0
+same = false
+end
+end
+ptest same
+if ne get Fails 0 0
+ret 1
+end
+ret 0
+end

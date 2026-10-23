@@ -1,0 +1,50 @@
+global Obuf uchar 256
+text Omagic "ALNPRV01"
+fn test ok bool to void
+check ok add get Checks 0 1
+end
+fn getheader p ulong to ulong
+v = ulong 0
+for i ulong 8
+v = or v shl ulong get Obuf add p i mul i 8
+end
+ret v
+end
+fn main to int
+n = ulong 0
+while lt n 120
+r = read 0 Obuf n sub len Obuf n
+if le r 0
+ret 65
+end
+n = add n ulong r
+end
+test eq n 120
+for rec ulong 3
+p = mul rec 40
+for i ulong 8
+test eq get Obuf add p i get Omagic i
+end
+if eq rec 2
+test eq getheader add p 8 6
+else
+test eq getheader add p 8 1
+end
+if eq rec 0
+test eq getheader add p 16 1
+else
+if eq rec 1
+test eq getheader add p 16 0
+else
+test eq getheader add p 16 1
+end
+end
+test eq getheader add p 24 0
+test eq getheader add p 32 0
+end
+test eq get Checks 0 37
+if ne get Fails 0 0
+ret 1
+end
+ret 0
+end

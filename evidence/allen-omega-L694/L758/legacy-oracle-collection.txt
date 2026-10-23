@@ -1,0 +1,35 @@
+# External collection of unmodified legacy C oracle bytes, never Omega runtime.
+from pathlib import Path
+import ctypes as C, hashlib, json, re, struct, subprocess
+h=Path.home(); w=h/'workspace/aienos-allen-omega-L694'; d=h/'handoffs/allen-omega-L694/L758'; p=w/'native/kernel/ui'
+source=(p/'allen_font.c').read_text(); data=(w/'native/omega/allen/font-data.om').read_text()
+block=source.split('glyphs[CK_AF_COUNT] = {',1)[1].split('};',1)[0]
+glyphs=re.findall(r'/\*[^\n]*?\*/\s*"([^"\n]*)"',block)
+omega=re.search(r'text Afdata "(.*)"',data).group(1).split('|')[:-1]
+if len(glyphs)!=95 or glyphs!=omega: raise RuntimeError('glyph design transcription mismatch')
+sine=source.split('sin_q[91] = {',1)[1].split('};',1)[0]
+a=[int(x) for x in re.findall(r'\d+',sine)]
+b=[int(x) for x in re.search(r'text Afsines "(.*)"',data).group(1).split()]
+if len(a)!=91 or a!=b: raise RuntimeError('sine transcription mismatch')
+lib=d/'legacy-font-reference.so'
+subprocess.run(['cc','-shared','-fPIC','-O2',str(p/'allen_font.c'),'-o',str(lib)],check=True)
+class Glyph(C.Structure):
+    _fields_=[('alpha',C.POINTER(C.c_uint8)),('w',C.c_uint16),('h',C.c_uint16),('ox',C.c_int16),('oy',C.c_int16)]
+class Face(C.Structure):
+    _fields_=[('s256',C.c_uint32),('hw256',C.c_uint32),('pool',C.POINTER(C.c_uint8)),('pool_len',C.c_size_t),('pool_used',C.c_size_t),('g',Glyph*95)]
+f=C.CDLL(str(lib)); f.ck_af_face_init.argtypes=[C.POINTER(Face),C.c_uint,C.c_uint,C.POINTER(C.c_uint8),C.c_size_t]
+f.ck_af_glyph_get.argtypes=[C.POINTER(Face),C.c_char]; f.ck_af_glyph_get.restype=C.POINTER(Glyph)
+f.ck_af_advance.argtypes=[C.POINTER(Face),C.c_char]; f.ck_af_advance.restype=C.c_uint32
+count=0
+with (d/'legacy-font.bin').open('wb') as out:
+    for cap,wt in [(14,900),(30,1250),(64,2500)]:
+        face=Face(); pool=(C.c_uint8*(4<<20))(); f.ck_af_face_init(C.byref(face),cap,wt,pool,len(pool))
+        for code in [*range(32,127),0,127,255]:
+            c=bytes([code]); g=f.ck_af_glyph_get(C.byref(face),c)
+            if not g: raise RuntimeError('reference pool unexpectedly full')
+            g=g.contents; adv=f.ck_af_advance(C.byref(face),c)
+            out.write(struct.pack('<5Q2qQ',cap,wt,code,g.w,g.h,g.ox,g.oy,adv))
+            if g.w*g.h: out.write(C.string_at(g.alpha,g.w*g.h))
+            count+=1
+manifest={'reference_only':True,'records':count,'glyph_designs':len(glyphs),'sine_samples':len(a),'source_sha256':hashlib.sha256((p/'allen_font.c').read_bytes()).hexdigest(),'reference_sha256':hashlib.sha256((d/'legacy-font.bin').read_bytes()).hexdigest(),'reference_bytes':(d/'legacy-font.bin').stat().st_size,'command':'cc -shared -fPIC -O2 native/kernel/ui/allen_font.c -o <private>/legacy-font-reference.so','scope':'Legacy external oracle only. Omega source/data handwritten; no foreign code in native construction/runtime.'}
+(d/'oracle.json').write_text(json.dumps(manifest,indent=2)+'\n'); print(json.dumps(manifest,indent=2))

@@ -1,0 +1,51 @@
+   370	if lt get St 2 2
+   371	put St 2 add get St 2 1
+   372	end
+   373	ret true
+   374	end
+   375	note Load each copy once into Unit. Caller resets St and calls loadcopy0,1.
+   376	fn loadbeg to void
+   377	for i ulong 3
+   378	put St i 0
+   379	end
+   380	put Load 0 0
+   381	end
+   382	fn loadcopy slot ulong to bool
+   383	if gt slot 1
+   384	ret false
+   385	end
+   386	if ne and get Load 0 shl ulong 1 slot 0
+   387	ret false
+   388	end
+   389	if not memvalid
+   390	ret false
+   391	end
+   392	put Load 0 or get Load 0 shl ulong 1 slot
+   393	put St 2 add get St 2 1
+   394	if gt get64 16 get St 0
+   395	b = memdec
+   396	put St 0 get Md 0
+   397	put St 1 slot
+   398	end
+   399	ret true
+   400	end
+   401	note Note transaction completes before the parent copy may publish its count.
+   402	fn nbegin to bool
+   403	if or ne get Nt 0 0 ne get Tx 0 0
+   404	ret false
+   405	end
+   406	if not noteenc
+   407	ret false
+   408	end
+   409	put Nt 1 get Ns 1
+   410	put Nt 0 1
+   411	ret true
+   412	end
+   413	fn nwrite ok bool to bool
+   414	if ne get Nt 0 1
+   415	ret false
+   416	end
+   417	if not ok
+   418	put Nt 0 0
+   419	ret false
+   420	end

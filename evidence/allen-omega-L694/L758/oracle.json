@@ -1,0 +1,11 @@
+{
+  "reference_only": true,
+  "records": 294,
+  "glyph_designs": 95,
+  "sine_samples": 91,
+  "source_sha256": "92d7157386e65351325d80d5036565e406145230dfb696c9804ec80888d26904",
+  "reference_sha256": "0dc4abaa8c8cc1c5a79772bdd00b2d74458beac6ccfe85637069d04c77a7ff69",
+  "reference_bytes": 436341,
+  "command": "cc -shared -fPIC -O2 native/kernel/ui/allen_font.c -o <private>/legacy-font-reference.so",
+  "scope": "Legacy external oracle only. Omega source/data handwritten; no foreign code in native construction/runtime."
+}

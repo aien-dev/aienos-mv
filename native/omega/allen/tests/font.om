@@ -1,0 +1,114 @@
+global Oldmask uchar 65536
+global Oldmeta ulong 6
+fn test ok bool to void
+check ok add get Checks 0 1
+end
+fn asym to bool
+w = get Af 3
+for y ulong get Af 4
+at = mul y w
+for x ulong w
+a = long get Alpha add at x
+mirror = add at sub sub w 1 x
+b = long get Alpha mirror
+d = sub a b
+if gt d 40
+ret false
+end
+if lt d -40
+ret false
+end
+end
+end
+ret true
+end
+fn main to int
+test not afglyph 65
+test not afinit 0 1250
+test not afinit 65 1250
+test not afinit 30 0
+test not afinit 30 2501
+test afinit 30 1250
+test eq get Af 0 384
+test eq get Af 1 480
+test eq afsqrt 0 0
+test eq afsqrt 15 3
+test eq afsqrt 16 4
+test eq afsqrt 18446744073709551615 4294967295
+test eq afsqrt mul ulong 1000000007 1000000007 1000000007
+test eq afsin 0 0
+test eq afsin 90 16384
+test eq afsin -90 -16384
+test eq afsin 450 16384
+test eq afcos 180 -16384
+for c ulong 95
+test afglyph uchar add c 32
+test gt get Af 5 0
+test le mul get Af 3 get Af 4 len Alpha
+if eq c 0
+test eq get Af 3 0
+test eq get Af 4 1
+else
+ink = ulong 0
+for i ulong mul get Af 3 get Af 4
+if gt get Alpha i 128
+ink = add ink 1
+end
+end
+test ge ink 4
+end
+end
+test afglyph 111
+test asym
+test afglyph 63
+for i ulong mul get Af 3 get Af 4
+put Oldmask i get Alpha i
+end
+for i ulong 6
+put Oldmeta i get Af i
+end
+test afglyph 0
+same = true
+for i ulong 6
+if ne get Oldmeta i get Af i
+same = false
+end
+end
+for i ulong mul get Af 3 get Af 4
+if ne get Oldmask i get Alpha i
+same = false
+end
+end
+test same
+test not afinit 999 1250
+test eq get Af 0 get Oldmeta 0
+test eq get Af 3 get Oldmeta 3
+test afinit 64 2500
+test afglyph 87
+test le mul get Af 3 get Af 4 len Alpha
+test afinit 1 1
+test afglyph 65
+note Independent analytic coverage for round-capped strokes and zero-length dots.
+put Af 2 1
+put Af 1 128
+put Ag 0 0
+put Ag 1 0
+put Ag 2 512
+put Ag 3 0
+test eq afalpha 256 0 255
+test eq afalpha 256 128 127
+test eq afalpha 256 256 0
+test eq afalpha 768 0 0
+test eq afalpha -128 0 127
+put Ag 0 512
+put Ag 2 0
+test eq afalpha 256 128 127
+put Ag 0 0
+test eq afalpha 0 0 255
+test eq afalpha 0 128 127
+test eq afalpha 0 256 0
+if ne get Fails 0 0
+ret 1
+end
+ret 0
+end

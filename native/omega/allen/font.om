@@ -1,0 +1,326 @@
+note Handwritten bounded Allen stroke rasterizer. Legacy C is an external oracle only.
+global Af ulong 6
+global Ab long 4
+global Ag long 640
+global Alpha uchar 65536
+global Asin long 91
+global Afpos ulong 2
+global Apen long 2
+global Arc long 6
+fn afsqrt value ulong to ulong
+r = ulong 0
+bit = shl ulong 1 62
+while gt bit value
+bit = shr bit 2
+end
+while ne bit 0
+if ge value add r bit
+value = sub value add r bit
+r = add shr r 1 bit
+else
+r = shr r 1
+end
+bit = shr bit 2
+end
+ret r
+end
+fn afsin deg long to long
+a = rem deg 360
+if lt a 0
+a = add a 360
+end
+if le a 90
+ret get Asin ulong a
+end
+if le a 180
+ret get Asin ulong sub long 180 a
+end
+if le a 270
+ret neg get Asin ulong sub a 180
+end
+ret neg get Asin ulong sub long 360 a
+end
+fn afcos deg long to long
+ret afsin add rem deg 360 90
+end
+fn afinit cap ulong wt ulong to bool
+if or eq cap 0 gt cap 64
+ret false
+end
+if or eq wt 0 gt wt 2500
+ret false
+end
+for i ulong 6
+put Af i 0
+end
+put Af 0 div mul cap 256 20
+put Af 1 div mul wt get Af 0 1000
+v = long 0
+slot = ulong 0
+for i ulong len Afsines
+c = get Afsines i
+if eq c 32
+put Asin slot v
+slot = add slot 1
+v = 0
+else
+v = add mul v 10 sub long c 48
+end
+end
+ret eq slot 91
+end
+fn afpick c uchar to bool
+if or lt c 32 gt c 126
+c = 63
+end
+wanted = sub ulong c 32
+slot = ulong 0
+startat = ulong 0
+for i ulong len Afdata
+if eq get Afdata i 124
+if eq slot wanted
+put Afpos 0 startat
+put Afpos 1 i
+ret true
+end
+slot = add slot 1
+startat = add i 1
+end
+end
+ret false
+end
+fn afnum to long
+p = get Afpos 0
+minus = false
+if eq get Afdata p 45
+minus = true
+p = add p 1
+end
+v = long 0
+go = true
+while and lt p get Afpos 1 go
+c = get Afdata p
+if and ge c 48 le c 57
+v = add mul v 10 sub long c 48
+p = add p 1
+else
+go = false
+end
+end
+if lt p get Afpos 1
+if eq get Afdata p 44
+p = add p 1
+end
+end
+put Afpos 0 p
+if minus
+ret neg v
+end
+ret v
+end
+fn afseg nx long ny long to bool
+n = get Af 2
+if ge n 160
+ret false
+end
+at = mul n 4
+put Ag at get Apen 0
+put Ag add at 1 get Apen 1
+put Ag add at 2 nx
+put Ag add at 3 ny
+put Apen 0 nx
+put Apen 1 ny
+put Af 2 add n 1
+ret true
+end
+fn afpoint a long first bool to bool
+s = long get Af 0
+x = mul get Arc 0 s
+x = add x div mul mul get Arc 2 s afcos a 16384
+y = mul sub get Arc 1 20 s
+y = add y div mul mul get Arc 3 s afsin a 16384
+if first
+put Apen 0 x
+put Apen 1 y
+ret true
+end
+ret afseg x y
+end
+fn afarc to bool
+for i ulong 6
+put Arc i afnum
+end
+span = sub get Arc 5 get Arc 4
+if lt span 0
+span = neg span
+end
+steps = div span 9
+if lt steps 2
+steps = 2
+end
+for k ulong ulong add steps 1
+a = sub get Arc 5 get Arc 4
+a = add get Arc 4 div mul a long k steps
+if not afpoint a eq k 0
+ret false
+end
+end
+ret true
+end
+fn afcmd cmd uchar to bool
+if eq cmd 32
+ret true
+end
+if eq cmd 119
+put Af 5 mul ulong afnum get Af 0
+ret true
+end
+if eq cmd 65
+ret afarc
+end
+x = mul afnum long get Af 0
+y = mul sub afnum 20 long get Af 0
+if or eq cmd 77 eq cmd 68
+put Apen 0 x
+put Apen 1 y
+end
+if eq cmd 77
+ret true
+end
+if or eq cmd 76 eq cmd 68
+ret afseg x y
+end
+ret false
+end
+fn affloor value long to long
+if ge value 0
+ret div value 256
+end
+ret neg div add neg value 255 256
+end
+fn afbound x long y long to void
+if lt x get Ab 0
+put Ab 0 x
+end
+if lt y get Ab 1
+put Ab 1 y
+end
+if gt x get Ab 2
+put Ab 2 x
+end
+if gt y get Ab 3
+put Ab 3 y
+end
+end
+fn afbox to bool
+put Ab 0 get Ag 0
+put Ab 2 get Ag 0
+put Ab 1 get Ag 1
+put Ab 3 get Ag 1
+for i ulong get Af 2
+at = mul i 4
+afbound get Ag at get Ag add at 1
+afbound get Ag add at 2 get Ag add at 3
+end
+pad = add long get Af 1 256
+x0 = affloor sub get Ab 0 pad
+y0 = affloor sub get Ab 1 pad
+x1 = add affloor add get Ab 2 pad 1
+y1 = add affloor add get Ab 3 pad 1
+put Ab 0 x0
+put Ab 1 y0
+put Af 3 ulong sub x1 x0
+put Af 4 ulong sub y1 y0
+ret le mul get Af 3 get Af 4 len Alpha
+end
+fn afproj qx long qy long dx long dy long to ulong
+len2 = add mul dx dx mul dy dy
+ex = qx
+ey = qy
+if ne len2 0
+t = add mul qx dx mul qy dy
+if gt t 0
+if ge t len2
+ex = sub qx dx
+ey = sub qy dy
+else
+ex = sub qx div mul dx t len2
+ey = sub qy div mul dy t len2
+end
+end
+end
+ret ulong add mul ex ex mul ey ey
+end
+fn afdist slot ulong px long py long to ulong
+at = mul slot 4
+dx = sub get Ag add at 2 get Ag at
+dy = sub get Ag add at 3 get Ag add at 1
+qx = sub px get Ag at
+qy = sub py get Ag add at 1
+ret afproj qx qy dx dy
+end
+fn afalpha px long py long to uchar
+best = ulong 18446744073709551615
+for i ulong get Af 2
+d2 = afdist i px py
+if lt d2 best
+best = d2
+end
+end
+d = long afsqrt best
+cov = sub add long get Af 1 128 d
+if le cov 0
+ret 0
+end
+if ge cov 256
+ret 255
+end
+ret uchar div mul cov 255 256
+end
+fn afrow y ulong to void
+py = add mul add get Ab 1 long y 256 128
+for x ulong get Af 3
+px = add mul add get Ab 0 long x 256 128
+at = add mul y get Af 3 x
+put Alpha at afalpha px py
+end
+end
+fn afpaint to void
+for y ulong get Af 4
+afrow y
+end
+end
+fn afglyph c uchar to bool
+if eq get Af 0 0
+ret false
+end
+if not afpick c
+ret false
+end
+for i ulong 65536
+put Alpha i 0
+end
+put Af 2 0
+put Af 3 0
+put Af 4 1
+put Af 5 0
+put Ab 0 0
+put Ab 1 0
+put Apen 0 0
+put Apen 1 0
+while lt get Afpos 0 get Afpos 1
+cmd = get Afdata get Afpos 0
+put Afpos 0 add get Afpos 0 1
+if not afcmd cmd
+ret false
+end
+end
+if eq get Af 2 0
+ret true
+end
+if not afbox
+ret false
+end
+afpaint
+ret true
+end

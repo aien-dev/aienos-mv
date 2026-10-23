@@ -1,0 +1,44 @@
+text Smagic "ALNPRV01"
+global Sh uchar 40
+fn sword off ulong v ulong to void
+for i ulong 8
+put Sh add off i uchar and shr v mul i 8 255
+end
+end
+fn shead op ulong now ulong arg ulong size ulong to void
+for i ulong 8
+put Sh i get Smagic i
+end
+sword 8 op
+sword 16 now
+sword 24 arg
+sword 32 size
+end
+fn swrite n ulong to bool
+at = ulong 0
+while lt at n
+left = sub n at
+r = write 1 Sh at left
+if le r 0
+ret false
+end
+at = add at ulong r
+end
+ret true
+end
+fn frame op ulong now ulong arg ulong size ulong to bool
+shead op now arg size
+ret swrite 40
+end
+fn main to int
+if not frame 1 1 77 0
+ret 74
+end
+if not frame 1 2 78 0
+ret 74
+end
+if not frame 6 0 0 0
+ret 74
+end
+ret 0
+end
