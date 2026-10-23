@@ -1,0 +1,30 @@
+note Regression input for L719: one over-capacity command then a valid one.
+note The standalone Allen program must refuse with65, never emit the later JOB.
+global Huge uchar 8193
+text Suffix "\nASK hi\n"
+fn main to int
+for i ulong len Huge
+put Huge i 120
+end
+put Huge 0 65
+put Huge 1 83
+put Huge 2 75
+put Huge 3 32
+sent = ulong 0
+while lt sent len Huge
+n = write 1 Huge sent sub len Huge sent
+if le n 0
+ret 2
+end
+sent = add sent ulong n
+end
+sent = ulong 0
+while lt sent len Suffix
+n = write 1 Suffix sent sub len Suffix sent
+if le n 0
+ret 2
+end
+sent = add sent ulong n
+end
+ret 0
+end

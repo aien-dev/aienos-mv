@@ -36,6 +36,18 @@ native/omega/allen/build-one.sh "$out/allen.om" "$out/allen"
 cmp "$out/stdio-job.txt" evidence/allen-omega-L694/stdio-job.txt
 cmp "$out/stdio-display.txt" evidence/allen-omega-L694/stdio-display.txt
 printf 'stdio native-exit=0 golden-cmp=0\n'
+# The fixture generator is Omega too. Refuse the oversized operation and
+# never execute the valid ASK following it (L719/L722 regression).
+native/omega/allen/build-one.sh native/omega/allen/tests/stdio-overflow.om "$out/stdio-overflow-input"
+"$out/stdio-overflow-input" > "$out/stdio-overflow.input"
+set +e
+"$out/allen" < "$out/stdio-overflow.input" > "$out/stdio-overflow.stdout" 2> "$out/stdio-overflow.stderr"
+rc=$?
+set -e
+[ "$rc" = 65 ] || { echo "stdio overflow was not refused: exit=$rc" >&2; exit 1; }
+[ ! -s "$out/stdio-overflow.stdout" ] || { echo 'stdio overflow executed a later job' >&2; exit 1; }
+[ ! -s "$out/stdio-overflow.stderr" ] || { echo 'stdio overflow displayed a later answer' >&2; exit 1; }
+printf 'stdio overflow native-exit=65 no-later-command=PASS\n'
 # Compiled behavioral mutants must be valid ELFs and fail the original gates.
 sed 's/if or eq get R 1 0 ne seq get R 0/if eq get R 1 0/' "$core" > "$out/stale-mutant.om"
 cat native/omega/allen/tests/check.om native/omega/allen/tests/runtime.om >> "$out/stale-mutant.om"

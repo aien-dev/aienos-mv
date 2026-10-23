@@ -1,0 +1,21 @@
+runtime compile=0 native-exit=0
+code compile=0 native-exit=0
+courier compile=0 native-exit=0
+memory compile=0 native-exit=0
+intent compile=0 native-exit=0
+reply compile=0 native-exit=0
+view compile=0 native-exit=0
+scene compile=0 native-exit=0
+paint compile=0 native-exit=0
+edges compile=0 native-exit=0
+fixture compile=0 native-exit=0
+golden compile=0 native-exit=0
+render compile=0 native-exit=0
+stdio native-exit=0 golden-cmp=0
+stdio overflow native-exit=65 no-later-command=PASS
+stale mutant compile=0 rejected-exit=3
+crc mutant compile=0 rejected-exit=2
+hash mutant compile=0 rejected-exit=2
+readback mutant compile=0 rejected-exit=7
+session mutant compile=0 rejected-exit=1
+ALLEN_OMEGA_HOST: PASS; target=NOT_RUN; live=NOT_RUN

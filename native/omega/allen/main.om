@@ -136,7 +136,8 @@ if lt get Lstate 0 8192
 put In get Lstate 0 c
 put Lstate 0 add get Lstate 0 1
 else
-put Lstate 1 1
+note Refuse immediately: no silent discard and no later command execution.
+ret 65
 end
 end
 end
