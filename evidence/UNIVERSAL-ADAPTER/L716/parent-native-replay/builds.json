@@ -1,0 +1,74 @@
+[
+  {
+    "build": "facade-test",
+    "compile_rc": 0,
+    "source_sha256": "07b81d596b2ce75c72e107ccbc6b473dcf0dc99dbebadb734ce5d63c778490dd",
+    "binary_sha256": "1d7cefedbad980bbaf8ca219d8c1ec244f0fe98d675d4638d58111756baceeb0"
+  },
+  {
+    "build": "facade-io",
+    "compile_rc": 0,
+    "source_sha256": "75dfcb421696879fafd6b9f6c65ec72edf47853fd69a7f421122b4ef13f38f19",
+    "binary_sha256": "4cc8525a3240af046b24788dd4eb7535f3fe59634b6148e19c313bcb699f3c54"
+  },
+  {
+    "build": "facade-shortread",
+    "compile_rc": 0,
+    "source_sha256": "b1cda3487a73078d5d0545d46639ef28e1bb5e9bc9cdf283112496224f930531",
+    "binary_sha256": "62edd9497ccc61b0b64f21438890b567deec37280813cf0e4cdf67babf5a2867"
+  },
+  {
+    "build": "input-error",
+    "compile_rc": 0,
+    "source_sha256": "d32c73fcae2b66eb5b0c04712cda8f4a5f8011a70d2645d03707cd6f0aefc971",
+    "binary_sha256": "afc7a2b54d7f8a055e253b67cd37042be3059569a0bc5c27df8ffacca025c49b"
+  },
+  {
+    "build": "output-error",
+    "compile_rc": 0,
+    "source_sha256": "5ee7047809e0df610f97a432a6588b91425953378a93e9aead80c1013dfd75d9",
+    "binary_sha256": "324e96e0b837ba43d49d16450bb7a0c493f58dcd75404accef37d8e154b17c1d"
+  },
+  {
+    "build": "facade-stderr",
+    "compile_rc": 0,
+    "source_sha256": "22116855cc8c4b8900889d408fba91e76b126c4473bd2d67644c041ad7ed37aa",
+    "binary_sha256": "05d61967a32a1130901c70e4af8c2b78eef512693a0e98d19835310e5b112e67"
+  },
+  {
+    "build": "facade-shortwrite",
+    "compile_rc": 0,
+    "source_sha256": "890ffdd03a7077493fdfc84024ad8108fc4fd606a8f79172bb0476ca0a5cdd57",
+    "binary_sha256": "38776b587f915281cefffc1664e05b224d2f250dbb73ac203d8598adc22efdc8"
+  },
+  {
+    "build": "shortwrite-receipt",
+    "compile_rc": 0,
+    "source_sha256": "9eef134e3675664f2e94b43612445a3c9c434d8a700b00a06765675f6f3b4b4d",
+    "binary_sha256": "8844cf7cb99797e8a6958586dea6b89dac618c4fe9cbd832bb85543189c1513f"
+  },
+  {
+    "build": "application",
+    "compile_rc": 0,
+    "source_sha256": "b769ea7ae34675e584aeb20e5a98b81ab8bd14787a570f3aeb89671040cb2305",
+    "binary_sha256": "01d1f5be0c653f7f281d3fce7831ebc122f0caaf30db82c7e1baf9c3696871a0"
+  },
+  {
+    "build": "reference",
+    "compile_rc": 0,
+    "source_sha256": "fc129584584db429e9a27ddb33a7ae41c3cade969803fbd9a4ba177d1a9a4e1b",
+    "binary_sha256": "aa7906f534ffb63575f5b59be15e3ed93a02fe56d103aa35298beed5a35d7ac6"
+  },
+  {
+    "build": "mutant-rights",
+    "compile_rc": 0,
+    "source_sha256": "ef92564581f3ac291c1762f519a81a75cafee04ab1d1d00b3367a87e1dd0e511",
+    "binary_sha256": "a266aed24466766ba682053472276a78662c0ec7872fd1cc87174e8014b6afae"
+  },
+  {
+    "build": "mutant-eof",
+    "compile_rc": 0,
+    "source_sha256": "124319eb8761c832e2c209c7392326038765db22b604656d313114a52217d153",
+    "binary_sha256": "7d7ea37fdf2c349f553d7211bca038000684710f6631c21fba249fc129f9b489"
+  }
+]

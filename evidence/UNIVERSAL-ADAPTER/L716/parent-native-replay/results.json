@@ -1,0 +1,121 @@
+[
+  {
+    "name": "boundaries",
+    "command": "cd /home/drakestapleton/handoffs/universal-adapter-L707/L716-parent-replay && ./facade-test </dev/null",
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "binary-io",
+    "command": "cd /home/drakestapleton/handoffs/universal-adapter-L707/L716-parent-replay && printf '\\000' > nul.in; ./facade-io < nul.in > binary.out",
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "binary-compare",
+    "command": "cd /home/drakestapleton/handoffs/universal-adapter-L707/L716-parent-replay && printf 'OK\\n' > expected.out; cmp binary.out expected.out",
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "short-read",
+    "command": "cd /home/drakestapleton/handoffs/universal-adapter-L707/L716-parent-replay && printf 'A\\000B' > short.in; ./facade-shortread < short.in",
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "closed-input",
+    "command": "cd /home/drakestapleton/handoffs/universal-adapter-L707/L716-parent-replay && ./input-error <&-",
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "closed-output",
+    "command": "cd /home/drakestapleton/handoffs/universal-adapter-L707/L716-parent-replay && ./output-error 1>&- 2>/dev/null",
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "full-output",
+    "command": "cd /home/drakestapleton/handoffs/universal-adapter-L707/L716-parent-replay && ./output-error >/dev/full 2>/dev/null",
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "stderr",
+    "command": "cd /home/drakestapleton/handoffs/universal-adapter-L707/L716-parent-replay && ./facade-stderr >/dev/null 2>stderr.out",
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "stderr-compare",
+    "command": "cd /home/drakestapleton/handoffs/universal-adapter-L707/L716-parent-replay && printf E > expected-stderr.out; cmp stderr.out expected-stderr.out",
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "shortwrite",
+    "command": "cd /home/drakestapleton/handoffs/universal-adapter-L707/L716-parent-replay && mkfifo short.pipe; exec 3<>short.pipe; socat -u /dev/null FD:1,pipesz=4096,nonblock >&3 || exit; ./facade-shortwrite >&3; rc=$?; exec 4<short.pipe; exec 3>&-; dd bs=4096 status=none <&4 > short.out; exec 4<&-; exit $rc",
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "shortwrite-bytes",
+    "command": "cd /home/drakestapleton/handoffs/universal-adapter-L707/L716-parent-replay && ./shortwrite-receipt < short.out",
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "byte-negative",
+    "command": "cd /home/drakestapleton/handoffs/universal-adapter-L707/L716-parent-replay && cp short.out wrong.out; printf B | dd of=wrong.out bs=1 count=1 conv=notrunc status=none; ./shortwrite-receipt < wrong.out",
+    "exit": 72,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "rights-mutant",
+    "command": "cd /home/drakestapleton/handoffs/universal-adapter-L707/L716-parent-replay && ./mutant-rights </dev/null",
+    "exit": 11,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "eof-mutant",
+    "command": "cd /home/drakestapleton/handoffs/universal-adapter-L707/L716-parent-replay && ./mutant-eof < nul.in",
+    "exit": 21,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "application",
+    "command": "cd /home/drakestapleton/handoffs/universal-adapter-L707/L716-parent-replay && printf 'eval 1/3+1/6\\r\\neval 1+\\neval 7/-9\\neval 2+2' > requests.in; ./application < requests.in > application.out",
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "reference",
+    "command": "cd /home/drakestapleton/handoffs/universal-adapter-L707/L716-parent-replay && ./reference < requests.in > reference.out",
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "application-compare",
+    "command": "cd /home/drakestapleton/handoffs/universal-adapter-L707/L716-parent-replay && cmp application.out reference.out",
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  }
+]
