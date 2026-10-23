@@ -1,0 +1,20 @@
+{
+  "phase": "red-model",
+  "cases": 1,
+  "failures": 1,
+  "makefile_sha256": "b3ae9d032835a43d3b8996f6eac99f4847d9537d8f8bdbb91e8f6a8894c1c2ed",
+  "results": [
+    {
+      "case": "broken-causal-model",
+      "pass": false,
+      "exit": 0,
+      "native_cases": 125,
+      "native_failures": 0,
+      "causal_cases": null,
+      "causal_failures": null,
+      "boot_gate_pass": true,
+      "simulation_passes": 2,
+      "log_sha256": "a78c12406776e09477c363c19e889c3b526be51e649b3740d0c0653993e1ab11"
+    }
+  ]
+}

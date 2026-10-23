@@ -1,6 +1,6 @@
 import pathlib,subprocess,sys,tempfile,shutil,os,json,hashlib,re
 w=pathlib.Path(sys.argv[1]).resolve();cc=pathlib.Path(sys.argv[2]).resolve();phase=sys.argv[3]
-assert phase in ['red','green']
+assert phase in ['red','green','red-model']
 d=pathlib.Path(tempfile.mkdtemp(prefix='boot-caller-',dir=w/'build'));base=d/'base';base.mkdir()
 paths=['native/omega','native/kernel/gpu','native/kernel/dev','native/linux/aien-gpu','evidence/own-gpu-driver/rung2/window1_sim_test.sh']
 a=subprocess.run(['git','-C',str(w),'archive','HEAD',*paths],capture_output=True,check=True)
@@ -8,13 +8,18 @@ subprocess.run(['tar','-x','-C',str(base)],input=a.stdout,check=True)
 make=w/'native/linux/aien-gpu/Makefile';shutil.copyfile(make,base/'native/linux/aien-gpu/Makefile')
 rows=[]
 cases=[('broken-native',True,False)] if phase=='red' else [('qualified-native',False,False),('broken-native',True,False),('optimized-broken-native',True,True),('cached-success-then-broken',True,False)]
+if phase=='red-model':cases=[('broken-causal-model',True,False)]
+if phase=='green':cases.append(('broken-causal-model',True,False))
 for name,broken,opt in cases:
  c=d/name;shutil.copytree(base,c)
  if name=='cached-success-then-broken':
   before=subprocess.run(['make','-C',str(c/'native/linux/aien-gpu'),'sim-test','OMEGA_CC='+str(cc)],capture_output=True,text=True,timeout=120)
   assert before.returncode==0 and 'BOOT_NATIVE_GATE_PASS' in before.stdout
   (c/'native/linux/aien-gpu/omega-boot-test').write_text('stale target file must not bypass PHONY gate\n')
- if broken:(c/'native/omega/bootseq.om').write_text('fn main to int\nret 2\nend\n')
+ if name=='broken-causal-model':
+  model=c/'native/omega/bootsim-model.om';text=model.read_text();assert text.count('if packetok')==1;model.write_text(text.replace('if packetok','if false'))
+ elif broken:
+  core=c/'native/omega/bootcore.om';text=core.read_text();core.write_text(text[:text.index('fn boot to int')]+ 'fn boot to int\nret 1\nend\n')
  env=os.environ.copy()
  if opt:env['PYTHONOPTIMIZE']='1'
  p=subprocess.run(['make','-C',str(c/'native/linux/aien-gpu'),'sim-test','OMEGA_CC='+str(cc)],capture_output=True,text=True,env=env,timeout=120)
@@ -24,9 +29,11 @@ for name,broken,opt in cases:
   try:objects.append(json.JSONDecoder().raw_decode(p.stdout[match.start():])[0])
   except ValueError:pass
  native=next((x for x in objects if x.get('cases')==125),{})
- if broken:ok=p.returncode!=0 and 'omega-boot-test' in log and 'BOOT_NATIVE_GATE_PASS' not in log and native.get('failures',0)>0
- else:ok=p.returncode==0 and 'BOOT_NATIVE_GATE_PASS' in log and log.count('WINDOW1_SIM_TEST: PASS')==2 and native.get('failures')==0
- rows.append({'case':name,'pass':ok,'exit':p.returncode,'native_cases':native.get('cases'),'native_failures':native.get('failures'),'boot_gate_pass':'BOOT_NATIVE_GATE_PASS' in log,'simulation_passes':log.count('WINDOW1_SIM_TEST: PASS'),'log_sha256':hashlib.sha256(log.encode()).hexdigest()})
+ causal=next((x for x in objects if 'differentials' in x),{})
+ if name=='broken-causal-model':ok=p.returncode!=0 and 'omega-boot-test' in log and 'BOOT_NATIVE_GATE_PASS' not in log and native.get('failures')==0 and causal.get('failures',0)>0
+ elif broken:ok=p.returncode!=0 and 'omega-boot-test' in log and 'BOOT_NATIVE_GATE_PASS' not in log and native.get('failures',0)>0
+ else:ok=p.returncode==0 and 'BOOT_NATIVE_GATE_PASS' in log and log.count('WINDOW1_SIM_TEST: PASS')==2 and native.get('failures')==0 and causal.get('failures')==0
+ rows.append({'case':name,'pass':ok,'exit':p.returncode,'native_cases':native.get('cases'),'native_failures':native.get('failures'),'causal_cases':causal.get('cases'),'causal_failures':causal.get('failures'),'boot_gate_pass':'BOOT_NATIVE_GATE_PASS' in log,'simulation_passes':log.count('WINDOW1_SIM_TEST: PASS'),'log_sha256':hashlib.sha256(log.encode()).hexdigest()})
 if phase=='green':
  c=d/'changed-compiler';shutil.copytree(base,c)
  changed=d/'changed-omc';changed.write_bytes(cc.read_bytes()+b'pin-negative');changed.chmod(0o700)

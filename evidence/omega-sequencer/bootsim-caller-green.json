@@ -1,0 +1,74 @@
+{
+  "phase": "green",
+  "cases": 6,
+  "failures": 0,
+  "makefile_sha256": "b3ba9abe8d7dbe21b3e9396398980245901e0b76dfded9ecd130ebcc571faab8",
+  "results": [
+    {
+      "case": "qualified-native",
+      "pass": true,
+      "exit": 0,
+      "native_cases": 125,
+      "native_failures": 0,
+      "causal_cases": 146,
+      "causal_failures": 0,
+      "boot_gate_pass": true,
+      "simulation_passes": 2,
+      "log_sha256": "916c51d9021c889b3eb638c37e11315a02292a2a15f98c274dcc32e3df80d5f3"
+    },
+    {
+      "case": "broken-native",
+      "pass": true,
+      "exit": 2,
+      "native_cases": 125,
+      "native_failures": 114,
+      "causal_cases": null,
+      "causal_failures": null,
+      "boot_gate_pass": false,
+      "simulation_passes": 0,
+      "log_sha256": "e21d58334ea2dfaabcc3c2dc0aa24d2b82b6892443d4f49527e2d38ddeb039cc"
+    },
+    {
+      "case": "optimized-broken-native",
+      "pass": true,
+      "exit": 2,
+      "native_cases": 125,
+      "native_failures": 114,
+      "causal_cases": null,
+      "causal_failures": null,
+      "boot_gate_pass": false,
+      "simulation_passes": 0,
+      "log_sha256": "c97d1a1af99383f6d80dc6117fcea71459c7fe51deb3c5d938efd92ec0cbdd8e"
+    },
+    {
+      "case": "cached-success-then-broken",
+      "pass": true,
+      "exit": 2,
+      "native_cases": 125,
+      "native_failures": 114,
+      "causal_cases": null,
+      "causal_failures": null,
+      "boot_gate_pass": false,
+      "simulation_passes": 0,
+      "log_sha256": "9f31b5f346f9d59a4ba7ee576bc66c5d0440901297d79c7f0bc7df523d851172"
+    },
+    {
+      "case": "broken-causal-model",
+      "pass": true,
+      "exit": 2,
+      "native_cases": 125,
+      "native_failures": 0,
+      "causal_cases": 146,
+      "causal_failures": 87,
+      "boot_gate_pass": false,
+      "simulation_passes": 0,
+      "log_sha256": "948de5a37fc7aac804d9fc7937ab69ab0f197a71c814ca7e83f39d986b9e4a79"
+    },
+    {
+      "case": "optimized-changed-compiler",
+      "pass": true,
+      "exit": 2,
+      "log_sha256": "0f2840dbac9d5834bd1d698011ea0d5b149438d1ecc41e4aefb9a33a8365af05"
+    }
+  ]
+}

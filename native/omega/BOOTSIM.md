@@ -75,3 +75,12 @@ cryptographic firmware validation or timing fidelity is claimed.
 `tests/bootsim.py ROOT OMC` builds the native program and two external oracles.
 `bootsim-mutants.py ROOT OMC` and `bootsim-io.py ROOT` run the other checks.
 No performance or hardware qualification follows from these host-only results.
+
+The existing `make -C native/linux/aien-gpu sim-test` entry now requires both
+native backends and both I/O suites. `bootsim-caller-red.json` preserves the old
+target accepting a deliberately broken causal model; six caller controls now
+pass, including refusal of that model while the recorded-read suite still
+passes. The shared-core substitution controls were retargeted to `bootcore.om`
+so they remain successfully compiled semantic failures after extraction.
+`bootsim-replay.sh` reconstructs the seed compiler and runs this actual combined
+entry from a clean source export, once per native backend.
