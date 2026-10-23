@@ -18,7 +18,7 @@ The output directory must be fresh. `build-one.sh` hashes the compiler before
 **every invocation**, rejects empty/wrong-machine/nonstatic ELF and marks only
 qualified output executable. The gate builds all modules together for every test,
 executes handwritten Omega test programs, compares a byte-exact independent memory
-fixture and rejects seven compiled behavioral mutants. The build uses POSIX shell,
+fixture and rejects nine compiled behavioral mutants. The build uses POSIX shell,
 Git (source reconstruction), GNU file/text utilities, readelf, dd, xxd and
 sha256sum as external development tools. Existing Rust courier `--split` was used
 once as a fixture oracle, never as an Omega runtime dependency.
@@ -82,6 +82,43 @@ cannot be passed as array parameters. Functions are serialized, not reentrant.
 Caller-owned metadata is trusted only where stated; lengths and external wire
 values are validated at entry. Kernel/platform ABI and object ownership wrappers
 must be specified when a qualified native provider exists.
+
+## Bound conversation/provider API
+
+`application.om` connects the runtime, intent/job builder, courier scheduler,
+CODE assembly and SAY/WAIT handling. This is an executed native core entry path,
+not a bound socket/device loop. The older development `main.om` stdio entry
+remains separate; it does not exercise this datagram binding.
+
+1. `appinit(run,now)` initializes one boot session using a nonzero unique run ID
+   and actual monotonic milliseconds supplied by the future qualified provider.
+   Reinitialization is refused rather than reusing job IDs.
+2. Put a prompt into In/Inlen, then `appask(now)`. It validates admission before
+   adding a transcript entry, builds the real JOB text and queues it. Code requests
+   expose the existing acknowledgement immediately. Busy, outstanding-send,
+   pending-receipt, invalid-prompt and ID-exhaustion cases refuse admission.
+3. `apppoll(now,link)` advances silence/slow deadlines and returns whether one
+   datagram is offered in Outb/Outlen. Send those exact bytes and call
+   `appsent(now,success)` with the real whole-datagram outcome. Do not call core
+   serializers yourself while a send is pending.
+4. Copy a received datagram into In/Inlen and call `appreceive(now)`. Its boolean
+   reports **transport acceptance**, not acceptance of the inner reply. A[2]
+   distinguishes visible text1, queued code recovery2, code give-up3, refused
+   payload4, slow notice5 and silence timeout6; zero means no UI event. Consume
+   events after each successful call; later successful calls may replace them.
+   Answer/R[8], Code and transcript remain the actual retained content.
+5. `appcancel` cancels both layers; `appreset` additionally clears runtime session
+   display/history state, without resetting conversation or wire counters.
+
+A missing-code response queues AGAIN with the original conversation ID. The
+triggering LINE is acknowledged first, then AGAIN uses a **new wire sequence**.
+Consequently the two counters can differ; subsequent valid responses still bind
+correctly. Incoming reply parsing preserves any outstanding outgoing datagram.
+Old CODE cannot populate or change a code buffer during a newer chat request.
+WAIT updates the silence deadline without fabricating an answer. Silence timeout
+cancels courier retries as well as the conversation. Calls remain serialized;
+fixed global arrays are not thread-safe. Provider must not mix direct core queue
+operations with this application API.
 
 ## Intentional refusals and unfinished compatibility
 

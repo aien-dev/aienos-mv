@@ -1,0 +1,320 @@
+note End-to-end application core over real Omega protocol bytes; no socket simulation claim.
+text Smallask "hello"
+text Codeaskt "Please make me a calculator"
+text Finaltxt " 1/1 Model answer."
+text Codetxt " 1/1 9 3ce11e06 python print(1)\\n"
+text Prefixes "SAY WAIT CODE "
+text Againexp "AGAIN 2"
+global SavedOut uchar 8192
+global Heldwire uchar 8192
+global Heldlen ulong 2
+fn holdwire to void
+put Heldlen 0 get Outlen 0
+put Heldlen 1 get Err 0
+for i ulong get Outlen 0
+put Heldwire i get Outb i
+end
+end
+fn unhold to void
+for i ulong get Heldlen 0
+put Outb i get Heldwire i
+end
+put Outlen 0 get Heldlen 0
+put Err 0 get Heldlen 1
+end
+fn samewire to bool
+if ne get Outlen 0 get Heldlen 0
+ret false
+end
+for i ulong get Heldlen 0
+if ne get Outb i get Heldwire i
+ret false
+end
+end
+ret eq get Err 0 get Heldlen 1
+end
+fn test ok bool to void
+n = get Outlen 0
+e = get Err 0
+for i ulong n
+put SavedOut i get Outb i
+end
+check ok add get Checks 0 1
+for i ulong n
+put Outb i get SavedOut i
+end
+put Outlen 0 n
+put Err 0 e
+end
+fn copyout to void
+put Inlen 0 get Outlen 0
+for i ulong get Outlen 0
+put In i get Outb i
+end
+end
+fn prompt code bool to void
+if code
+put Inlen 0 len Codeaskt
+for i ulong len Codeaskt
+put In i get Codeaskt i
+end
+else
+put Inlen 0 len Smallask
+for i ulong len Smallask
+put In i get Smallask i
+end
+end
+end
+fn incoming part ulong seq ulong kind ulong to void
+outreset
+off = ulong 0
+size = ulong 4
+if eq kind 1
+off = ulong 4
+size = ulong 5
+end
+if eq kind 2
+off = ulong 9
+size = ulong 5
+end
+for i ulong size
+emitb get Prefixes add off i
+end
+emitn seq
+if eq kind 0
+for i ulong len Finaltxt
+emitb get Finaltxt i
+end
+end
+if eq kind 2
+for i ulong len Codetxt
+emitb get Codetxt i
+end
+end
+copyout
+b = packet 2 get Q 1 part 0 0
+copyout
+end
+fn main to int
+test not appinit 0 100
+test appinit 42 100
+test not appinit 43 100
+test eq get Q 0 42
+prompt false
+test appask 100
+test eq get R 0 1
+test eq get Q 1 1
+test eq get R 9 1
+test eq get R 1 1
+test eq get A 2 0
+prompt false
+test not appask 101
+test eq get R 9 1
+test apppoll 100 true
+test eq get T 10 5
+test appsent 100 true
+test apppoll 100 true
+test eq get T 10 1
+copyout
+test pkparse
+test eq get N 1 1
+test eq get In get N 5 74
+test appsent 100 true
+incoming 1 1 0
+test appreceive 101
+test eq get A 2 1
+test eq get R 1 0
+test eq get R 8 13
+test eq get R 9 2
+test eq get Answer 0 77
+prompt true
+test not appask 102
+test eq get R 0 1
+test apppoll 102 true
+test eq get T 10 3
+test appsent 102 true
+note Code acknowledgement is visible immediately, but missing code requests AGAIN.
+prompt true
+test appask 103
+test eq get R 0 2
+test eq get Q 1 2
+test eq get R 2 2
+test eq get A 2 1
+test eq get R 8 len Ack
+test apppoll 103 true
+test appsent 103 false
+test apppoll 104 true
+test eq get T 10 1
+test appsent 104 true
+incoming 1 2 0
+test appreceive 105
+test eq get A 2 2
+test eq get A 1 len Againexp
+test eq get R 1 1
+test eq get R 13 1
+test apppoll 105 true
+test eq get T 10 3
+test eq get Q 1 2
+test appsent 105 true
+test apppoll 106 true
+test eq get T 10 1
+test eq get Q 1 3
+test eq get R 0 2
+copyout
+test pkparse
+test eq get N 6 len Againexp
+bad = ulong 0
+for i ulong len Againexp
+if ne get In add get N 5 i get Againexp i
+bad = add bad 1
+end
+end
+test eq bad 0
+test appsent 106 true
+incoming 1 2 0
+test appreceive 107
+test eq get A 2 3
+test eq get R 1 0
+test eq get A 1 0
+note Reset cancels pending delivery without reusing either counter.
+appreset
+test eq get R 0 2
+test eq get Q 1 3
+test eq get R 9 0
+prompt false
+test appask 108
+test eq get R 0 3
+test eq get Q 1 4
+test apppoll 108 true
+test appsent 108 true
+note Old CODE must not mutate the code buffer during a newer chat job.
+incoming 1 2 2
+test appreceive 109
+test eq get A 2 4
+test eq get C 1 0
+test eq get C 2 0
+test eq get Code 0 0
+test apppoll 109 true
+test appsent 109 true
+incoming 2 2 0
+test appreceive 109
+test eq get A 2 4
+test eq get R 1 1
+test eq get R 8 0
+test apppoll 109 true
+test appsent 109 true
+incoming 3 3 0
+test appreceive 110
+test eq get A 2 1
+test eq get R 1 0
+test eq get R 9 2
+test apppoll 110 true
+test appsent 110 true
+note Cancellation drops an outstanding send and stale response safely.
+prompt false
+test appask 111
+test apppoll 111 true
+appcancel
+test eq get R 1 0
+test eq get T 5 0
+test not appsent 111 true
+incoming 1 4 0
+test not appreceive 112
+note Complete CODE bytes must arrive before a code response becomes visible.
+prompt true
+test appask 113
+test eq get R 0 5
+test eq get Q 1 6
+test apppoll 113 true
+test appsent 113 true
+incoming 1 5 2
+test appreceive 114
+test eq get A 2 0
+test eq codestat 2
+test eq get R 6 0
+test apppoll 114 true
+test appsent 114 true
+incoming 2 5 0
+test appreceive 115
+test eq get A 2 1
+test eq get R 6 1
+test eq get R 1 0
+test eq get Code 6 49
+test apppoll 115 true
+test appsent 115 true
+note WAIT updates silence deadline, no answer; slow and timeout cancel both layers.
+prompt false
+test appask 116
+test eq get R 0 6
+test apppoll 116 true
+test appsent 116 true
+incoming 1 6 1
+test appreceive 117
+test eq get A 2 0
+test eq get R 4 117
+test apppoll 117 true
+test appsent 117 true
+v = apppoll 20116 true
+test eq get A 2 5
+test eq get R 1 1
+if v
+test appsent 20116 true
+end
+v = apppoll 30116 true
+test eq get R 1 1
+if v
+test appsent 30116 true
+end
+v = apppoll 30117 true
+test eq get A 2 6
+test eq get R 1 0
+test eq get T 5 0
+test eq get A 1 0
+if v
+test appsent 30117 true
+end
+n = get R 9
+prompt false
+test not appask 30116
+test eq get R 9 n
+test not apppoll 30116 true
+note Invalid prompt never becomes a pending job or transcript line.
+put Inlen 0 160
+test not appask 30118
+test eq get R 9 n
+test eq get R 0 6
+test eq get Q 1 7
+note Receiving a code completion before send-result reporting cannot replace
+note the pending datagram with the newly generated AGAIN text.
+prompt true
+test appask 30118
+test apppoll 30118 true
+test eq get T 10 1
+holdwire
+incoming 1 7 0
+unhold
+test appreceive 30119
+test eq get A 2 2
+test samewire
+test eq get T 10 1
+test appsent 30119 true
+test apppoll 30120 true
+test eq get T 10 3
+test appsent 30120 true
+test apppoll 30121 true
+test eq get Q 1 9
+test eq get R 0 7
+test appsent 30121 true
+appcancel
+note Idle runtime still refuses a new prompt while a HELLO send is outstanding.
+test apppoll 32122 true
+test eq get T 10 5
+holdwire
+n = get R 9
+prompt false
+test not appask 32122
+test samewire
+test eq get R 9 n
+test appsent 32122 true
+ret int get Fails 0
+end
