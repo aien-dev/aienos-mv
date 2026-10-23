@@ -1,0 +1,24 @@
+{
+  "cases": 4,
+  "results": [
+    {
+      "case": "closed-input",
+      "pass": true
+    },
+    {
+      "case": "EAGAIN-after-frame-before-EOF",
+      "pass": true
+    },
+    {
+      "case": "output-ENOSPC",
+      "pass": true
+    },
+    {
+      "case": "short-write-then-EAGAIN",
+      "pass": true,
+      "written": 4096,
+      "total": 13184,
+      "pipe_size": 4096
+    }
+  ]
+}

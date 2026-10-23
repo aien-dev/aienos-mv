@@ -1,0 +1,197 @@
+note Handwritten causal model of the boot-used SEC2/GSP state, not hardware.
+fn tick slot ulong to void
+v = get Model slot
+if and ne v uint 0 ne v uint 4294967295
+put Model slot sub v uint 1
+end
+end
+fn violation to void
+put Model 13 add get Model 13 uint 1
+end
+fn packetok to bool
+if ne get Model 4 uint 864
+ret false
+end
+if ne get Mem 0 uint 3221225472
+ret false
+end
+if ne get Mem 1 uint 336649854
+ret false
+end
+if ne and get Mem 2 uint 65535 uint 1
+ret false
+end
+ret eq shr get Mem 2 uint 16 uint 860
+end
+fn postread to void
+if ne get Model 0 uint 1
+ret
+end
+if ne get Model 1 uint 0
+tick 1
+ret
+end
+put Model 6 uint 0
+put Model 3 get Model 4
+if ne get Model 14 uint 0
+put Model 0 uint 2
+put Model 1 get MC 2
+put Model 2 get MC 8
+else
+put Model 0 uint 9
+end
+end
+fn hwread to uint
+if and eq get Model 0 uint 2 ne get Model 2 uint 0
+tick 2
+ret uint 0
+end
+if eq get Model 0 uint 2
+if eq get Model 1 uint 0
+put Model 0 uint 3
+put Model 8 uint 8197
+put Model 9 get Config 2
+put Model 10 get Config 3
+put Model 1 get MC 4
+else
+tick 1
+end
+else
+if and eq get Model 0 uint 3 ne get Model 9 get Config 2
+if eq get Model 1 uint 0
+if ne get MC 5 uint 0
+put Model 9 get MC 5
+else
+put Model 8 and get Model 8 uint 4294959103
+put Model 0 uint 4
+if eq get MC 6 uint 0
+put Model 11 uint 128
+end
+end
+else
+tick 1
+end
+end
+end
+ret get Model 8
+end
+fn modelread addr uint to uint
+if eq addr uint 8653824
+if and eq get Model 0 uint 0 ne get Model 3 get Model 4
+if eq get Model 1 uint 0
+put Model 3 get Model 4
+else
+tick 1
+end
+end
+ret get Model 3
+end
+if eq addr uint 8653828
+ret get Model 4
+end
+if eq addr uint 8653504
+ret get Model 5
+end
+if eq addr uint 8650816
+postread
+ret get Model 6
+end
+if eq addr uint 8650820
+ret get Model 7
+end
+if eq addr uint 1114356
+ret hwread
+end
+if eq addr uint 1114176
+if and eq get Model 0 uint 3 eq get Model 9 get Config 2
+if ne get MC 3 uint 4294967295
+if eq get MC 3 uint 0
+put Model 9 uint 0
+put Model 10 uint 0
+else
+put MC 3 sub get MC 3 uint 1
+end
+end
+end
+ret get Model 9
+end
+if eq addr uint 1114180
+ret get Model 10
+end
+if eq addr uint 1114240
+ret get Model 12
+end
+if eq addr uint 1119112
+ret get Model 11
+end
+put State 3 uint 9
+ret uint 0
+end
+fn ememwrite value uint to void
+dw = emem get Model 5
+if or eq and get Model 5 uint 16777216 uint 0 or ge dw uint 256 ne get Model 0 uint 0
+violation
+ret
+end
+put Mem ulong dw value
+if eq get MC 7 uint 0
+dw = add dw uint 1
+put Model 5 or and get Model 5 uint 4294901763 shl dw uint 2
+end
+end
+fn modelwrite addr uint value uint to void
+if eq addr uint 8653504
+put Model 5 value
+ret
+end
+if eq addr uint 8653508
+ememwrite value
+ret
+end
+if eq addr uint 8653828
+if or ne get Model 0 uint 0 ne get Model 3 get Model 4
+violation
+end
+put Model 4 value
+ret
+end
+if eq addr uint 8653824
+if or ne get Model 0 uint 0 or ne value uint 0 eq get Model 4 get Model 3
+violation
+end
+put Model 3 value
+if eq get Model 0 uint 0
+put Model 14 uint 0
+if packetok
+put Model 14 uint 1
+end
+put Model 0 uint 1
+put Model 6 uint 3221342974
+put Model 1 get MC 1
+end
+ret
+end
+if eq addr uint 1114240
+put Model 12 value
+put Model 15 get Model 0
+if ne get Model 0 uint 4
+violation
+end
+ret
+end
+if eq addr uint 1117184
+put Model 16 add get Model 16 uint 1
+if ne value uint 0
+violation
+end
+ret
+end
+violation
+end
+fn modelinit to void
+if ne get MC 0 uint 0
+put Model 4 uint 16
+end
+put Model 8 uint 3135193511
+put Model 1 get MC 0
+end

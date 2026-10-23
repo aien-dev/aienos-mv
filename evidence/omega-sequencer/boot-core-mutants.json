@@ -1,0 +1,53 @@
+{
+  "mutants": 6,
+  "results": [
+    {
+      "mutant": "doorbell-order",
+      "compiled": true,
+      "caught": true,
+      "failures": 102,
+      "cases": 125,
+      "source_sha256": "35cc21e567e9dfaccec7a75d090b56aca4e4fc50a3f8d9a3a39946decd487ab2"
+    },
+    {
+      "mutant": "skip-emem-readback",
+      "compiled": true,
+      "caught": true,
+      "failures": 2,
+      "cases": 125,
+      "source_sha256": "425cb4cc5587231f6b0475fcfbed0f8a32a22573cd57162f2b3fd37a24453bdd"
+    },
+    {
+      "mutant": "big-endian-packet",
+      "compiled": true,
+      "caught": true,
+      "failures": 104,
+      "cases": 125,
+      "source_sha256": "12c91eb87175a9d64202d06dbf96042fc2954cf5d505e3d77a5a181549277bf0"
+    },
+    {
+      "mutant": "extra-poll",
+      "compiled": true,
+      "caught": true,
+      "failures": 48,
+      "cases": 125,
+      "source_sha256": "ca323f8da206331b0068358308e183056281fd6f38699074153a2371b3ab77d1"
+    },
+    {
+      "mutant": "ignore-high-pa",
+      "compiled": true,
+      "caught": true,
+      "failures": 1,
+      "cases": 125,
+      "source_sha256": "d2fea3fe5202a1c63bfe47801bf62e30e606522d1eb244950805f156a7957f45"
+    },
+    {
+      "mutant": "ignore-dead-core",
+      "compiled": true,
+      "caught": true,
+      "failures": 1,
+      "cases": 125,
+      "source_sha256": "89ad412e5dcbd88d29c93ac85a7dcceb3ccc671fe9235563e810d2cad98decd7"
+    }
+  ]
+}

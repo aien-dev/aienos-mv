@@ -1,0 +1,160 @@
+note Seed-native causal GSP simulator adapter, NOT hardware.
+note Compile regcore, this adapter, bootsim-model and bootcore with LF separators.
+global In uchar 2129
+global Out uchar 20396
+global Config uint 10
+global Meta uint 13
+global State uint 4
+global Trace uint 4800
+global MC uint 9
+global Model uint 17
+global Mem uint 256
+fn raw pos ulong to uint
+v = uint 0
+for j ulong 4
+v = or v shl uint get In add pos j mul uint j 8
+end
+ret v
+end
+fn event op uint addr uint value uint to void
+count = ulong get State 1
+if ge count 1600
+put State 3 uint 11
+ret
+end
+pos = mul count 3
+put Trace pos op
+put Trace add pos 1 addr
+put Trace add pos 2 value
+put State 1 add uint count uint 1
+end
+fn rd addr uint to uint
+if ne get State 3 uint 0
+ret uint 0
+end
+if ne allow uint 0 addr uint 0
+put State 3 uint 10
+ret uint 0
+end
+v = modelread addr
+put State 0 add get State 0 uint 1
+event uint 0 addr v
+ret v
+end
+fn wr addr uint value uint to void
+if ne get State 3 uint 0
+ret
+end
+if ne allow uint 1 addr uint 0
+put State 3 uint 10
+ret
+end
+event uint 1 addr value
+modelwrite addr value
+end
+fn field i ulong to uint
+if lt i 13
+ret get Meta i
+end
+if eq i 13
+ret get C 1
+end
+if eq i 14
+ret get State 0
+end
+if eq i 15
+ret get State 1
+end
+if eq i 16
+ret get State 2
+end
+stop = add 17 mul ulong get State 1 3
+if lt i stop
+ret get Trace sub i 17
+end
+j = sub i stop
+if lt j 9
+ret get MC j
+end
+if lt j 26
+ret get Model sub j 9
+end
+ret get Mem sub j 26
+end
+fn putword i ulong v uint to void
+for j ulong 4
+put Out add mul i 4 j uchar and shr v mul uint j 8 uint 255
+end
+end
+fn emit to int
+count = add 299 mul ulong get State 1 3
+for i ulong count
+putword i field i
+end
+size = mul count 4
+sent = ulong 0
+while lt sent size
+r = write 1 Out sent sub size sent
+if le r 0
+ret 2
+end
+sent = add sent ulong r
+end
+ret 0
+end
+fn decode n ulong to int
+if lt n 80
+ret 2
+end
+if ne raw 0 uint 827544642
+ret 2
+end
+for i ulong 10
+put Config i raw add 4 mul i 4
+end
+size = ulong get Config 0
+reads = ulong get Config 1
+if or gt size 2048 ne reads 0
+ret 2
+end
+if ne n add 80 size
+ret 2
+end
+for i ulong 4
+if gt get Config add i 5 uint 128
+ret 2
+end
+end
+if gt get Config 9 uint 1
+ret 2
+end
+for i ulong 9
+put MC i raw add add 44 size mul i 4
+end
+if or gt get MC 6 uint 1 gt get MC 7 uint 1
+ret 2
+end
+modelinit
+init
+put C 0 uint 1
+put C 1 uint 0
+put Meta 0 uint boot
+if ne get State 3 uint 0
+put Meta 0 get State 3
+end
+ret emit
+end
+fn main to int
+used = ulong 0
+while lt used len In
+r = read 0 In used sub len In used
+if lt r 0
+ret 2
+end
+if eq r 0
+ret decode used
+end
+used = add used ulong r
+end
+ret 2
+end

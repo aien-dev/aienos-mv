@@ -1,0 +1,14 @@
+{
+  "parent": "83789354d963f584371ebbb2791f3d806f6cb281",
+  "byte_exact_core": true,
+  "byte_exact_adapter_remainder": true,
+  "functions": [
+    "emem",
+    "ready",
+    "waitfor",
+    "packword",
+    "upload",
+    "boot"
+  ],
+  "core_sha256": "7e156753aa407ff8c572e81e6d18396998fcb796c377fa92a0aa31db5c8930a8"
+}

@@ -1,0 +1,53 @@
+{
+  "mutants": 6,
+  "results": [
+    {
+      "mutant": "no-emem-increment",
+      "compiled": true,
+      "caught": true,
+      "failures": 102,
+      "cases": 146,
+      "source_sha256": "31258c58318c4458167c535d52600e64fff4aaf7e21222a574e7be2311c4712c"
+    },
+    {
+      "mutant": "accept-bad-vendor",
+      "compiled": true,
+      "caught": true,
+      "failures": 1,
+      "cases": 146,
+      "source_sha256": "4896e56334e950be09205c50f8433e62af5d5df381277b8fed87d3e59d277e97"
+    },
+    {
+      "mutant": "ignore-zero-mask-delay",
+      "compiled": true,
+      "caught": true,
+      "failures": 35,
+      "cases": 146,
+      "source_sha256": "b4828147a0023e1758cd295e0bddd4d53576048900aec086b19f3db1f9839a73"
+    },
+    {
+      "mutant": "ignore-dead-core",
+      "compiled": true,
+      "caught": true,
+      "failures": 3,
+      "cases": 146,
+      "source_sha256": "0932adfd8d80bb2dc908dfd9c6f73c216bf3b00cb0f6dd04d8f4f174717a0179"
+    },
+    {
+      "mutant": "skip-argument-delay",
+      "compiled": true,
+      "caught": true,
+      "failures": 25,
+      "cases": 146,
+      "source_sha256": "2dd94bc8da6107720ae8af3a12bce80e267b32e532f1ef9bdfe8d6aa5f3d2acb"
+    },
+    {
+      "mutant": "wrong-lockdown-clear",
+      "compiled": true,
+      "caught": true,
+      "failures": 50,
+      "cases": 146,
+      "source_sha256": "38d8d82aa322f5cbf48af961e4565798b4571a684609f175487f662f0956b214"
+    }
+  ]
+}

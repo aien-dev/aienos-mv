@@ -11,8 +11,10 @@
 
 ## Construction and scope
 
-Compile `regcore.om`, one LF, then `bootseq.om` with the pinned handwritten-seed
-compiler. The existing native register policy checks every modeled access, with
+Compile `regcore.om`, `bootseq.om`, then `bootcore.om`, with one LF between
+files, using the pinned handwritten-seed compiler. `bootcore.om` is a byte-exact
+extraction of the six previously embedded control functions, shared with the
+causal BTS1 simulator (see `BOOTSIM.md`). The existing native register policy checks every modeled access, with
 boot permission enabled and an initially unused SEC2 doorbell. The resulting
 static AArch64 executable has no C translation, linked foreign runtime or hidden
 Python bridge. Linux supplies stdin/stdout syscalls. Shell/Python and the C

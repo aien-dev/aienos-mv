@@ -3,7 +3,7 @@ w=pathlib.Path(sys.argv[1]).resolve();cc=pathlib.Path(sys.argv[2]).resolve();d=w
 assert hashlib.sha256(cc.read_bytes()).hexdigest()=='01b1545b23e8ff40cb5691e20b5df910ea4acaefde3495f0d62d270465b98cd6'
 for n,h in [('gsp_mmio.c','6a4f26064c5a55985cf60a62c50e1e84c18c8559fad7e7c81602b6fcff78f9c7'),('gsp_mmio.h','70511e0c2311c0af445b1254d79be8e48663e9472a8afdc670a705c7434067cd'),('gmmu.h','fc5d44f61bbe28e6174fd390d27ca6db58bc5d294a32b13fc2ec2c9a9e6c7437')]:assert hashlib.sha256((w/'native/kernel/gpu'/n).read_bytes()).hexdigest()==h
 oracle=d/'oracle';subprocess.run(['cc','-std=c11','-O1','-g','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-sanitize-recover=all','-I'+str(w/'native/kernel/gpu'),str(w/'native/omega/tests/bootseq-oracle.c'),str(w/'native/kernel/gpu/gsp_mmio.c'),'-o',str(oracle)],check=True)
-s=b'\n'.join((w/'native/omega'/n).read_bytes() for n in ['regcore.om','bootseq.om']);p=subprocess.run([str(cc)],input=s,capture_output=True);assert p.returncode==0,p.stderr
+s=b'\n'.join((w/'native/omega'/n).read_bytes() for n in ['regcore.om','bootseq.om','bootcore.om']);p=subprocess.run([str(cc)],input=s,capture_output=True);assert p.returncode==0,p.stderr
 assert len(p.stdout)>=64 and p.stdout[:6]==b'\x7fELF\x02\x01' and struct.unpack_from('<HH',p.stdout,16)==(2,183)
 ph=struct.unpack_from('<Q',p.stdout,32)[0];ps,pn=struct.unpack_from('<HH',p.stdout,54);assert ps==56 and pn and ph+ps*pn<=len(p.stdout);assert not {2,3}.intersection(struct.unpack_from('<I',p.stdout,ph+i*ps)[0] for i in range(pn))
 exe=d/'bootseq';exe.write_bytes(p.stdout);exe.chmod(0o700)
