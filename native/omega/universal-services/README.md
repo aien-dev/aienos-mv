@@ -11,13 +11,13 @@ cat "$OMEGA_MATH_CORE" native/omega/universal-services/services.om     native/om
 chmod 700 math-stream
 ```
 
-The math source is pinned by SHA-256 in `CONTRACT.md` and the test runner; the compiler hash is checked before compilation. Compiler stdin/stdout, Linux syscall execution and the shell are disclosed host tooling. This driver uses `read`, `write`, and `exit` compiled from Omega. USV1 errors are `-1` handle/rights, `-2` range, `-3` returned native I/O error. The compiler currently requires fixed array extents, so the qualified interface is 4096-byte read and 8192-byte write, with explicit runtime offset/count checks. A view is copied into one bounded local write buffer because the pinned compiler refuses a native write directly from a view parameter.
+The math source and compiler SHA-256 pins are listed in `TESTING.md` and the evidence manifests; verify them before compilation. Compiler stdin/stdout, Linux syscall execution and the shell are disclosed host tooling. This driver uses `read`, `write`, and `exit` compiled from Omega. USV1 errors are `-1` handle/rights, `-2` range, `-3` returned native I/O error. The compiler currently requires fixed array extents, so the qualified interface is 4096-byte read and 8192-byte write, with explicit runtime offset/count checks. A view is copied into one bounded local write buffer because the pinned compiler refuses a native write directly from a view parameter.
 
 ## Test gate
 
-`tests/run-hosted.sh` composes only committed Omega implementation/test sources plus the exact public core/CLI oracle. Omega test programs make behavior assertions; shell and a small Python descriptor harness only compile, arrange real descriptors, compare bytes, validate ELF metadata and execute. It covers wrong rights/handles, range and overflow refusal, zero length, short reads, NUL bytes, stderr mapping, closed-fd and `/dev/full` errors, a nonblocking short write, request/session limits, CRLF/partial EOF, refusal recovery, exact-output differential against the pinned original CLI, and two successfully compiled behavioral mutants.
+See [TESTING.md](TESTING.md) for command-by-command reconstruction using the pinned compiler, unchanged public math oracle, and native Omega assertions. Real short-write setup uses existing `socat` and a private FIFO; it needs no newly authored Python or shell harness. The removed worker-authored harnesses remain in Git history as historical evidence only, not the current test entrypoint.
 
-Set `OMEGA_COMPILER`, `OMEGA_MATH_CORE`, `OMEGA_MATH_CLI`, and `TMPDIR` explicitly on another host. `TMPDIR` must point to a user-owned cache/handoff location. The runner checks the compiler/core/CLI SHA-256 before use. No package install, service, port, GPU, model, boot, or account change is needed.
+The original six broad exact-math suites and immutable Spark/Pi5 replay receipts remain source-bound historical evidence. Parent cleanup changes documentation and orchestration, not the production Omega source. Linux, shell, GNU byte/file tools and socat are disclosed external test utilities; they are not part of application arithmetic. No global installation, services, model loads, GPU work or native boot is involved.
 
 ## Qualification limits
 
