@@ -1,0 +1,10 @@
+read(0, "e", 1)                         = 1
+read(0, "v", 1)                         = 1
+read(0, "a", 1)                         = 1
+read(0, "l", 1)                         = 1
+read(0, " ", 1)                         = 1
+read(0, "1", 1)                         = 1
+read(0, "+", 1)                         = 1
+read(0, "1", 1)                         = 1
+read(0, 0x107ff000, 1)                  = -1 EAGAIN (Resource temporarily unavailable)
++++ exited with 2 +++

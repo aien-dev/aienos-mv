@@ -1,0 +1,7 @@
+READ_AFTER_PROGRESS_RC=2
+0 partial-read.out
+0 partial-read.err
+0 total
+01d1f5be0c653f7f281d3fce7831ebc122f0caaf30db82c7e1baf9c3696871a0  application
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  partial-read.out
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  partial-read.err

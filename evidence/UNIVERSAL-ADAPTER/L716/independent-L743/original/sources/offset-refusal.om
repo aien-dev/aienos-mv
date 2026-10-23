@@ -1,0 +1,54 @@
+note Independent L743 probe: offset semantics and refusal side effects.
+fn main to int
+b = new uchar 4096 77
+outbuf = new uchar 8192 0
+r = usread 7 b 0 1
+if ne r -1
+exit 101
+end
+if ne get b 0 77
+exit 102
+end
+r = usread 1 b 2 1
+if ne r 1
+exit 103
+end
+if ne get b 2 65
+exit 104
+end
+if ne get b 0 77
+exit 105
+end
+r = usread 1 b 4097 0
+if ne r -2
+exit 106
+end
+if ne get b 2 65
+exit 107
+end
+r = usread 1 b 1 1
+if ne r 1
+exit 108
+end
+if ne get b 1 66
+exit 109
+end
+if ne get b 3 77
+exit 110
+end
+put outbuf 0 88
+put outbuf 1 89
+put outbuf 2 90
+r = uswrite 2 outbuf 1 2
+if ne r 2
+exit 111
+end
+r = uswrite 9 outbuf 0 1
+if ne r -1
+exit 112
+end
+if ne get outbuf 1 89
+exit 113
+end
+ret 0
+end

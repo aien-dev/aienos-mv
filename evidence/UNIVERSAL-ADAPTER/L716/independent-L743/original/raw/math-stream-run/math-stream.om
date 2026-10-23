@@ -1,0 +1,70 @@
+note Opt-in USV1 line driver; link unchanged seed/math/core.om before this unit.
+note Status: read I/O=2, transport line bound=1, session request bound=3; math refusals remain output lines.
+text refusal "REFUSED "
+fn sendout buf edit uchar 8192 n ulong to void
+o = ulong 0
+while lt o n
+w = uswrite 2 buf o sub n o
+if le w 0
+exit 2
+end
+o = add o ulong w
+end
+end
+fn reply n ulong outbuf edit uchar 8192 to void
+s = mathrun n
+if ne s 0
+for i ulong len refusal
+put res i get refusal i
+end
+put res len refusal uchar add s 48
+put reslen 0 add len refusal 1
+end
+if ge get reslen 0 8192
+exit 2
+end
+put res get reslen 0 10
+put reslen 0 add get reslen 0 1
+for i ulong get reslen 0
+put outbuf i get res i
+end
+sendout outbuf get reslen 0
+end
+note Return 0 line, 1 EOF, 2 oversized transport, 3 input error.
+fn readreq b edit uchar 4096 outbuf edit uchar 8192 to ulong
+n = ulong 0
+for i ulong 65536
+r = usread 1 b 0 1
+if lt r 0
+ret 3
+end
+if eq r 0
+if gt n 0
+reply n outbuf
+end
+ret 1
+end
+c = get b 0
+if eq c 10
+reply n outbuf
+ret 0
+end
+if lt n 4096
+put req n c
+n = add n 1
+end
+end
+reply 4096 outbuf
+ret 2
+end
+fn main to int
+b = new uchar 4096 0
+outbuf = new uchar 8192 0
+for i ulong 65536
+s = readreq b outbuf
+if ne s 0
+ret int sub s 1
+end
+end
+ret 3
+end

@@ -1,0 +1,28 @@
+191b776ef98821597c3e30655da6d680a9b66edbc9ceaca3c39c61ea6df098e9  /home/drakestapleton/handoffs/universal-adapter-L707/shared/omc
+ELF Header:
+  Magic:   7f 45 4c 46 02 01 01 00 00 00 00 00 00 00 00 00 
+  Class:                             ELF64
+  Data:                              2's complement, little endian
+  Version:                           1 (current)
+  OS/ABI:                            UNIX - System V
+  ABI Version:                       0
+  Type:                              EXEC (Executable file)
+  Machine:                           AArch64
+  Version:                           0x1
+  Entry point address:               0x4000b0
+  Start of program headers:          64 (bytes into file)
+  Start of section headers:          0 (bytes into file)
+  Flags:                             0x0
+  Size of this header:               64 (bytes)
+  Size of program headers:           56 (bytes)
+  Number of program headers:         2
+  Size of section headers:           0 (bytes)
+  Number of section headers:         0
+  Section header string table index: 0
+MUTANT_APP_RC=0 EXPECTED_REAL=2
+EMPTY_OUTPUT_CHECK_RC=1 EXPECTED_REAL=0
+   O   K       2  \n
+baef76f709c6b2521e0a7e18277a2d9c42f2b6083ece8880eb05a6e1dfda9ebd  error-as-eof
+b8e3ad8a21e9672c648f0e7cc3a6ff52ec838da7321038e8858fd78e39341a01  error-as-eof.om
+2ea13bc7f0f316e9223d8fde6316fd49314c351cc4f5d15aab96f4116a1f8326  mutant-partial.out
+cmp: EOF on /dev/null which is empty
