@@ -1,0 +1,10 @@
+note Run with stdout closed; a native write failure must be USV_E_IO.
+fn main to int
+outbuf = new uchar 8192 0
+put outbuf 0 65
+r = uswrite 2 outbuf 0 1
+if ne r -3
+exit 32
+end
+ret 0
+end

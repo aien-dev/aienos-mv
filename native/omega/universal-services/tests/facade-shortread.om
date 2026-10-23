@@ -1,0 +1,22 @@
+note A 4096-byte request against a three-byte file must report real short progress then EOF.
+fn main to int
+b = new uchar 4096 0
+r = usread 1 b 0 4096
+if ne r 3
+exit 41
+end
+if ne get b 0 65
+exit 42
+end
+if ne get b 1 0
+exit 43
+end
+if ne get b 2 66
+exit 44
+end
+r = usread 1 b 0 1
+if ne r 0
+exit 45
+end
+ret 0
+end

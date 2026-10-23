@@ -1,0 +1,9 @@
+note Run with stdin closed; a native read failure must be USV_E_IO, never EOF.
+fn main to int
+b = new uchar 4096 0
+r = usread 1 b 0 1
+if ne r -3
+exit 31
+end
+ret 0
+end

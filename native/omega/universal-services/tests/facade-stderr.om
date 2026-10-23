@@ -1,0 +1,10 @@
+note Handle 3 maps to stderr and writes exactly the requested bytes.
+fn main to int
+outbuf = new uchar 8192 0
+put outbuf 0 69
+r = uswrite 3 outbuf 0 1
+if ne r 1
+exit 33
+end
+ret 0
+end

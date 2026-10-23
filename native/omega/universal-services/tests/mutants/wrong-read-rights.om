@@ -1,0 +1,40 @@
+note Compiled behavioral mutant: accepts stdout handle for a read.
+fn usread h ulong b edit uchar 4096 off ulong n ulong to long
+if and ne h 1 ne h 2
+ret -1
+end
+if or gt off 4096 gt n sub 4096 off
+ret -2
+end
+if eq n 0
+ret 0
+end
+r = read 0 b off n
+if lt r 0
+ret -3
+end
+ret r
+end
+fn uswrite h ulong b view uchar 8192 off ulong n ulong to long
+fd = int 0
+if eq h 2
+fd = int 1
+else
+if eq h 3
+fd = int 2
+else
+ret -1
+end
+end
+if or gt off 8192 gt n sub 8192 off
+ret -2
+end
+if eq n 0
+ret 0
+end
+r = write fd b off n
+if lt r 0
+ret -3
+end
+ret r
+end

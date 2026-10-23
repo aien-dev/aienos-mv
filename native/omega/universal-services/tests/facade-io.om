@@ -1,0 +1,24 @@
+note Input is one binary NUL byte. Output is the exact three bytes 4f 4b 0a.
+fn main to int
+b = new uchar 4096 0
+outbuf = new uchar 8192 0
+r = usread 1 b 0 1
+if ne r 1
+exit 21
+end
+if ne get b 0 0
+exit 22
+end
+r = usread 1 b 0 1
+if ne r 0
+exit 23
+end
+put outbuf 0 79
+put outbuf 1 75
+put outbuf 2 10
+r = uswrite 2 outbuf 0 3
+if ne r 3
+exit 24
+end
+ret 0
+end

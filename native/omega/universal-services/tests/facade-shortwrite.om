@@ -1,0 +1,19 @@
+note A full 8192-byte view write must expose positive short progress and later I/O failure.
+fn main to int
+b = new uchar 8192 0
+for i ulong 8192
+put b i 65
+end
+r = uswrite 2 b 0 8192
+if le r 0
+exit 51
+end
+if ge r 8192
+exit 52
+end
+s = uswrite 2 b ulong r sub 8192 ulong r
+if ne s -3
+exit 53
+end
+ret 0
+end
