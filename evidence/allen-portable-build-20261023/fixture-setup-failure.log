@@ -1,0 +1,6 @@
+PASS relocated compiler and actual native program
+fresh output required
+PASS existing output preserved
+fresh output required
+PASS dangling output link refused
+native/omega/allen/test-build.sh: 29: cannot create /tmp/allen-portable-green-20261023/compiler with spaces: Permission denied

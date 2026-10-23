@@ -1,0 +1,4 @@
+4023744d3f3009327cd0a94f0f4373cfb5a91bc7cb1f6144dddc0a8f28ddbbe8  native/omega/allen/build-one.sh
+314553cfe714f1bc85767d1add35b03de826d08bdee8d4993991451dbf97e546  native/omega/allen/gate.sh
+2c1cc34edcf091717b10c5c39118f6ff59af41ccb1c844170e7a30140c5cee32  native/omega/allen/test-build.sh
+213fc47c365767db8a12cbd22ef0cec4a6bbb61c34ee3daae9b8182a122da8f4  native/omega/allen/tests/build-probe.om

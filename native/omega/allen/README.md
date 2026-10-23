@@ -8,17 +8,42 @@ It has no foreign implementation, interpreter, C translator, launcher or fallbac
 It is **not the complete iMac Allen replacement**. The old production C/Rust
 paths remain live. No service, machine, physical disk or boot path was changed.
 
-Run from this checkout on Linux AArch64, with the brief's immutable compiler:
+Build on Linux AArch64 from the pinned public compiler source. These are
+component build instructions, not a released interactive alpha. From this
+repository root, with a fresh `build/allen-toolchain` directory:
 
 ```sh
-quiet-build native/omega/allen/gate.sh target/allen-omega-L694/fresh-output
+git clone https://github.com/aien-dev/omega-bridge.git build/allen-toolchain
+git -C build/allen-toolchain checkout --detach 0fc7d8662cb799e7c206b17c18ea4c3ec2b8fea9
+sh build/allen-toolchain/tools/bootstrap.sh --offline
 ```
+
+The bootstrap reconstructs the compiler from seed source and checks its
+self-rebuild equality and fixed digest. Independent diverse compiler ancestry
+qualification is a separate claim; self-rebuild equality does not establish it.
+No private compiler folder or preinstalled Omega binary is needed. The expected
+compiler SHA-256 is
+`191b776ef98821597c3e30655da6d680a9b66edbc9ceaca3c39c61ea6df098e9`.
+
+Run the complete component gate:
+
+```sh
+sh native/omega/allen/gate.sh target/allen-omega-L694/fresh-output
+```
+
+On the shared Spark, prefix bootstrap and gate commands with `quiet-build`.
+For a compiler reconstructed elsewhere, set `OMEGA_COMPILER` to its executable
+path. The same fixed digest is mandatory; this setting does not permit an
+unqualified compiler. Paths containing spaces are supported. Build-orchestration
+checks are available through `sh native/omega/allen/test-build.sh COMPILER FRESH_OUTPUT`.
 
 The output directory must be fresh. `build-one.sh` hashes the compiler before
 **every invocation**, rejects empty/wrong-machine/nonstatic ELF and marks only
-qualified output executable. The gate builds all modules together for every test,
+qualified output executable. Failed compilation leaves no published executable;
+existing outputs, including dangling links, are never replaced.
+The gate builds all modules together for every test,
 executes handwritten Omega test programs, compares a byte-exact independent memory
-fixture and rejects nineteen compiled behavioral mutants. The build uses POSIX shell,
+fixture and rejects compiled behavioral mutants. The build uses POSIX shell,
 Git (source reconstruction), GNU file/text utilities, readelf, dd, xxd and
 sha256sum as external development tools. Existing Rust courier `--split` was used
 once as a fixture oracle, never as an Omega runtime dependency.
