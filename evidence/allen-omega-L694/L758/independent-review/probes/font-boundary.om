@@ -1,0 +1,61 @@
+note Independent L762 boundary probe; handwritten Omega assertions.
+global SnapAf ulong 6
+global SnapAb long 4
+fn probe ok bool to void
+check ok add get Checks 0 1
+end
+fn main to int
+probe not afinit 0 1
+probe not afinit 65 2500
+probe not afinit 1 0
+probe not afinit 1 2501
+probe afinit 1 1
+probe eq get Af 0 12
+probe eq get Af 1 0
+probe afglyph 32
+probe eq get Af 3 0
+probe eq get Af 4 1
+probe afinit 64 2500
+probe eq get Af 0 819
+probe eq get Af 1 2047
+for c ulong 95
+probe afglyph uchar add c 32
+probe le mul get Af 3 get Af 4 65536
+probe le get Af 2 160
+end
+probe afglyph 63
+for i ulong 6
+put SnapAf i get Af i
+end
+for i ulong 4
+put SnapAb i get Ab i
+end
+put Alpha 0 77
+probe not afinit 0 2500
+same = true
+for i ulong 6
+if ne get Af i get SnapAf i
+same = false
+end
+end
+for i ulong 4
+if ne get Ab i get SnapAb i
+same = false
+end
+end
+if ne get Alpha 0 77
+same = false
+end
+probe same
+probe afglyph 0
+probe afglyph 63
+probe eq get Af 3 get SnapAf 3
+probe afglyph 127
+probe eq get Af 3 get SnapAf 3
+probe afglyph 255
+probe eq get Af 3 get SnapAf 3
+if ne get Fails 0 0
+ret 1
+end
+ret 0
+end

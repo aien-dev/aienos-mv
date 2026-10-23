@@ -207,7 +207,7 @@ appcancel
 ret 1
 end
 if eq op 7
-appreset
+dreset
 ret 1
 end
 if not appclock now
@@ -233,11 +233,11 @@ put In i get Pb i
 end
 put Inlen 0 get Pv 3
 if eq op 2
-if not appask now
+if not dask now
 ret 0
 end
 else
-if not appreceive now
+if not drecv now
 ret 0
 end
 end

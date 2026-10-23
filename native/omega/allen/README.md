@@ -195,9 +195,11 @@ assembly buffer. Input bytes and pending wire output are preserved; reset clears
 retained presentation bytes. Native tests exercise real courier envelopes through
 these wrappers, not merely direct scene-parser calls.
 
-The current provider executable still exports raw answer/code records; it does
-not call these new display wrappers. This is a qualified host-side presentation
-binding, not a pixel renderer or display device. Existing SAY folding and its
+The provider executable now calls these display wrappers for ASK/RECV/RESET,
+while exporting the same raw answer/code records as before. Native provider tests
+check retained scene/code updates, refused-frame isolation and complete reset;
+compiled bypass mutants catch regressions in each attachment. This is a host-side
+presentation binding, not a pixel renderer or display device. Existing SAY folding and its
 159-byte bound remain; multiline model-scene transport is not yet attached.
 
 ## Native stroke font

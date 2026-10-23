@@ -1,0 +1,36 @@
+184f4270c72c4eca6a7afdd28b70a608f2e237980b12c8a7bfc2c7d2c3e625b9 native/omega/allen/base.om
+992ec4a4957271b442740598136887a5c610effcd8ae9fb9480a006a4f181097 native/omega/allen/vendor/sha256-core.om
+5b01eae03204d08f6d207ef29f2ba09a1d9f249f1738f68f151214675a4ff2ed native/omega/allen/runtime.om
+4d2235ac5d6b237695b1c3112f70ebdfa0cebafa2ec8e691e4be4de37a62199b native/omega/allen/code.om
+76ee9cdeaac036905c76dfa29f42bf5a78d1259ad1656adfaa24916c3b93550d native/omega/allen/courier.om
+615dff78462a715153b3d891b2cfe146c318d3a0a26ae1aaa642484f965c12df native/omega/allen/scheduler.om
+068292abd04d3a61b063fc5380b22a56c4235a87915c219ebf3b37d16d7bc9c7 native/omega/allen/memory.om
+06087bc573ebb876a0ed80f6025c592fb4b1d23335169c3da402824fd1482c35 native/omega/allen/intent.om
+e50a7f673aaee92aba4a3aec303aa93b071121c09ad05d4ad1dcc2deb9706dcc native/omega/allen/reply.om
+abbefd2f7dc48f2ac28b9526f5c2e5b369da4b7c5e84dde6e6a3cd20bd5687ac native/omega/allen/view.om
+c8d4a437b41538cc1eeb62a2029c6993d41e5ef90cc7b26c8e1c92bc98ec57d3 native/omega/allen/scene.om
+b4d7b6e6cd680d2ba1eec2978b0cbb81ffc63035b73f5c3726bdad97a7b6aa04 native/omega/allen/paint.om
+56936108de0087499bb62a117a275f27b01d7bfb05eb8f6250f13ab8783e1095 native/omega/allen/application.om
+c16d61dbcb81f7ef8196c937929a53e47de3de0015e5d663bcd8e49b3cb05002 native/omega/allen/scene-input.om
+75e86e193346a5548e596c84fa7d65aaeefd69f9979a648e0bf53f0f97cd9eb4 native/omega/allen/context.om
+330b31b81a60f3dc553b87316d2fa1c3df9106af5fe7975911ba00b8c356f626 native/omega/allen/provider-core.om
+d3e3004fb587f75514c638b8b723c996303f664a74b653a6fc674f4600288d41 native/omega/allen/presentation.om
+f8c559b449c81159172d3e08f185e1fcd9ac446ab594420d07221ca68ffa87d5 native/omega/allen/font-data.om
+c62f5a799b601315e61b05283295810a084d1adcc06b5bddc34010f3b344b915 native/omega/allen/font.om
+f085198549d1c235a97574ff6f6560ce82217611f4051fc3dbbc8286aab6d536 native/omega/allen/tests/check.om
+cf836ead7ced76a528bd2df1738a2255d9b37b4ab51702d593488bc94726f75a native/omega/allen/tests/font.om
+7ef1280488f17ac3001876ca8f1d9a48e202f8fb3305d974e6cd33166458f8eb native/omega/allen/tests/font-output.om
+a3e64c2054a9c83daacc8bd86ce5df0395014eb0ac2e237e63ade12dfb1a6bd8 native/omega/allen/tests/font-render.om
+b861dbdc9ef3a29157c10500767de69d2a1f5478d0bcdbbfd767bd5d69e587e2 native/omega/allen/gate.sh
+795ca28627a19f1088de0f23277e79cdac921ff88451c606c7b655ce0f2e8a5b native/omega/allen/build-one.sh
+79e5c778e31f9753553ade367c7de2a5a2521bef7247672cab7498f3ba32d9e6 native/omega/allen/FONT.md
+CLOSURE_OK files=26 pin=61ef587ee5d24bf862705f51bffb8039c9a2ed01 worktree=clean
+92d7157386e65351325d80d5036565e406145230dfb696c9804ec80888d26904  native/kernel/ui/allen_font.c
+0dc4abaa8c8cc1c5a79772bdd00b2d74458beac6ccfe85637069d04c77a7ff69  evidence/allen-omega-L694/L758/legacy-font.bin
+8a9adeeace1aa3e577a61c220d5fc66afd0c5959263f18736303432d0b44f6bb  evidence/allen-omega-L694/L758/native-font.bin
+dec95182af5faa01ed739336ed32dcadd5168e6be35bef310042fe032113ee7f  evidence/allen-omega-L694/L758/font-specimen.ppm
+e4e6800797c0ab91d415ce1fe5837d57def56b2246e2f9f0762feb3294f08893  evidence/allen-omega-L694/L758/font-specimen.png
+191b776ef98821597c3e30655da6d680a9b66edbc9ceaca3c39c61ea6df098e9  /home/drakestapleton/handoffs/allen-omega-L694/omc
+  Class:                             ELF64
+  Type:                              EXEC (Executable file)
+  Machine:                           AArch64

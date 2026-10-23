@@ -36,6 +36,23 @@ record visit but damaged,3 accepted POLL with outgoing datagram. POLL without an
 offer is status1, not refusal. On accepted non-offer event1, body is exact visible
 Answer bytes. When that event also completes a valid code request, one additional
 record op11/status1/event1 carries the exact Code bytes. No fabricated text.
+## Retained presentation attachment (L763)
+
+The actual provider dispatch uses dask for ASK, drecv for RECV and dreset for
+RESET. Accepted event1 updates the retained D* scene/code state; malformed or
+semantically refused operations never project stale event state. RESET clears
+all retained presentation, while CANCEL retains it. BOOT still initializes once.
+The source concatenation places presentation.om before provider-core.om because
+the seed requires definitions before calls. There is no new operation or output
+record: the external wire contract and exact answer/code bytes remain unchanged.
+The renderer must consume retained D* buffers, not mutable assembly scratch.
+This connects provider dispatch to display state, not yet to pixels or hardware.
+
+Qualification: expand native prdo tests first (136 assertions;24 fail against
+unchanged provider), bind the three existing calls, then replay the complete
+host gate and three compiled call-bypass mutants. File/fragmented-pipe output
+fixtures remain unchanged. Independent exact-source review follows publication.
+
 The stream reply writer uses a separate buffer: application Outb/Outlen/Err remain
 intact until SENT reports the real transport outcome. Writing an offer to stdout
 never counts as sending its datagram.

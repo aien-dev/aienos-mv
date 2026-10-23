@@ -1,5 +1,6 @@
 text Fmagic "ALNPRV01"
 text Hi "hi"
+text Leak "LEAK"
 text Reply "SAY 1 1/1 hello"
 text Askcode "write a calculator"
 text Tinycode "CODE 2 1/1 2 d8932aac text hi"
@@ -129,6 +130,8 @@ frame 1 4294967296 77 0
 test prdo
 test eq oword 16 1
 test eq get A 0 1
+test eq get Dm 0 0
+test eq get Dm 1 0
 test prdo
 test eq oword 16 0
 frame 10 0 0 0
@@ -142,6 +145,7 @@ end
 test prdo
 test eq oword 16 1
 test eq get R 0 1
+test eq get Dm 0 0
 frame 3 4294967297 1 0
 test prdo
 test eq oword 16 3
@@ -192,9 +196,30 @@ test eq oword 16 1
 test eq oword 24 1
 test eq oword 32 5
 test eq get Pout 40 104
+test eq get Dm 0 1
+test eq get Dm 2 1
+test eq get Ds 2 1
+test eq get Dtext get Dsay 0 104
 test eq get R 1 0
 test eq get T 10 1
 test eq get Outb 0 65
+note A stale visible event must not be projected by a rejected provider frame.
+for i ulong len Leak
+put Answer i get Leak i
+end
+put R 8 len Leak
+frame 5 4294967297 0 65
+put Ph 0 88
+test not prdo
+test eq get Dtext get Dsay 0 104
+frame 5 4294967297 0 65
+for i ulong 65
+put Pb i 0
+end
+test prdo
+test eq oword 16 0
+test eq get Dtext get Dsay 0 104
+test eq get Dm 2 1
 frame 4 4294967297 1 0
 test prdo
 frame 3 4294967297 1 0
@@ -214,12 +239,16 @@ end
 test prdo
 test eq oword 24 1
 test eq oword 32 len Ack
+test eq get Dm 0 1
+test eq get Dm 2 2
+test eq get Dtext get Dsay 0 73
 for i ulong len Tinycode
 put In i get Tinycode i
 end
 receive 1 len Tinycode
 test prdo
 test eq oword 24 0
+test eq get Dm 1 0
 frame 3 4294967297 1 0
 test prdo
 frame 4 4294967297 1 0
@@ -237,12 +266,36 @@ test eq oword add off 32 2
 test eq get Pout add off 40 104
 test eq get Pout add off 41 105
 test eq get Pn 0 add off 42
+test eq get Dm 1 1
+test eq get Dm 2 2
+test eq get Dview 0 1
+test eq get Dview 2 2
+test eq get Dlen 0 2
+test eq get Dcode 0 104
+test eq get Dcode 1 105
+test eq get Dtext get Dsay 0 68
+note Snapshot stays independent of later assembly and refused clock.
+put Code 0 88
+test eq get Dcode 0 104
 frame 3 4294967296 1 0
 test prdo
 test eq oword 16 0
 test eq oword 24 0
+test eq get Dcode 0 104
+test eq get Dtext get Dsay 0 68
+put Dtext 2303 88
+put Dcode 32767 88
+put Dlen 4095 88
 frame 7 0 0 0
 test prdo
+test eq get Dm 0 0
+test eq get Dm 1 0
+test eq get Dm 2 0
+test eq get Dview 0 0
+test eq get Dview 2 0
+test eq get Dtext 2303 0
+test eq get Dcode 32767 0
+test eq get Dlen 4095 0
 test eq get R 9 0
 test eq get R 0 2
 test eq get Q 1 2

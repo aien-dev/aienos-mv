@@ -1,0 +1,12 @@
+{
+  "pin": "61ef587ee5d24bf862705f51bffb8039c9a2ed01",
+  "declared_source_files": 26,
+  "baseline_checks": 421,
+  "independent_checks": 308,
+  "parent_replay_checks": 308,
+  "parent_binary_sha256": "4fb63b921aac869ce370b03365b609fe24a3ea7fecb2903924b8303d167e500c",
+  "source_concat_sha256": "5eb8bcd09b12d8787b16352458a579d8f0ff832b6084b7f2e18c62f3680898bf",
+  "report_sha256": "d28a44e2141507a8a7151ab2ea4d6b3b117ca61b6b33bb786b213e082f20a637",
+  "findings": "none in scoped font component",
+  "scope": "native host only"
+}
