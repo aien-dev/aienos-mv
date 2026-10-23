@@ -1,0 +1,213 @@
+text Fancy "\t- **SaY**:\tKeep My CASE.~\n> NOTE RIGHT WARM: Title | Body TEXT\n"
+text Private "<THINK>say secret\nnote: secret | hidden\n</THINK>\n```scene\nsay Visible\n```\n"
+text Inline "say public <think>secret</think>\nsay Safe\n"
+text Unclosed "<think>never closed\nsay secret\n"
+text Plain "Hello there.\nAnother sentence.\n"
+text Mixed "Unrecognized text.\nnote: Heading | Body\n"
+text Invalid "number: nope\n"
+text Moodonly "MOOD Dawn Lively\n"
+text Listmark "1. note left: Heading | Body\n"
+text Wanted "Keep My CASE."
+text Vis "Visible"
+text Hello "Hello there."
+text Nested "- > - **SaY**: Nested works.\n"
+text Negative "-3 is negative.\n"
+global Savedin uchar 2048
+fn test ok bool to void
+check ok add get Checks 0 1
+end
+fn load which ulong to void
+if eq which 0
+put Inlen 0 len Fancy
+for i ulong len Fancy
+c = get Fancy i
+if eq c 126
+c = uchar 13
+end
+put In i c
+end
+end
+if eq which 1
+put Inlen 0 len Private
+for i ulong len Private
+put In i get Private i
+end
+end
+if eq which 2
+put Inlen 0 len Inline
+for i ulong len Inline
+put In i get Inline i
+end
+end
+if eq which 3
+put Inlen 0 len Unclosed
+for i ulong len Unclosed
+put In i get Unclosed i
+end
+end
+if eq which 4
+put Inlen 0 len Plain
+for i ulong len Plain
+put In i get Plain i
+end
+end
+if eq which 5
+put Inlen 0 len Mixed
+for i ulong len Mixed
+put In i get Mixed i
+end
+end
+if eq which 6
+put Inlen 0 len Invalid
+for i ulong len Invalid
+put In i get Invalid i
+end
+end
+if eq which 7
+put Inlen 0 len Moodonly
+for i ulong len Moodonly
+put In i get Moodonly i
+end
+end
+if eq which 8
+put Inlen 0 len Listmark
+for i ulong len Listmark
+put In i get Listmark i
+end
+end
+end
+fn main to int
+load 0
+n = get Inlen 0
+for i ulong n
+put Savedin i get In i
+end
+test scdecode
+test eq get Sc 2 1
+test eq get Sc 3 1
+test eq get Things 0 1
+test eq get Things 1 2
+test eq get Things 4 1
+test gt get Nm 2 0
+test eq get Inlen 0 n
+same = true
+for i ulong n
+if ne get In i get Savedin i
+same = false
+end
+end
+test same
+same = true
+for i ulong len Wanted
+if ne get Stext add get Sw 3 i get Wanted i
+same = false
+end
+end
+test same
+test eq get Stext add get Sw 3 len Wanted 0
+load 1
+test scdecode
+test eq get Sc 2 1
+test eq get Sc 3 0
+test eq get Nm 3 3
+same = true
+for i ulong len Vis
+if ne get Stext add get Sw 3 i get Vis i
+same = false
+end
+end
+test same
+test eq get Stext add get Sw 3 len Vis 0
+load 2
+test scdecode
+test eq get Nm 3 1
+test eq get Stext get Sw 3 83
+load 3
+test not scdecode
+test eq get Sc 2 0
+test eq get Sc 3 0
+test eq get Nm 0 1
+load 4
+test scdecode
+test eq get Sc 2 1
+test eq get Sc 3 0
+same = true
+for i ulong len Hello
+if ne get Stext add get Sw 3 i get Hello i
+same = false
+end
+end
+test same
+load 5
+test scdecode
+test eq get Sc 2 0
+test eq get Sc 3 1
+load 6
+test not scdecode
+test eq get Sc 2 0
+test eq get Sc 3 0
+load 7
+test scdecode
+test eq get Sc 0 1
+test eq get Sc 1 2
+test eq get Sc 2 0
+load 8
+test scdecode
+test eq get Things 1 1
+put Inlen 0 160
+for i ulong 160
+put In i 120
+end
+test not scdecode
+test eq get Sc 2 0
+put Inlen 0 159
+test scdecode
+test eq get Sc 2 1
+test eq get Stext add get Sw 3 159 0
+put Inlen 0 2049
+test not scdecode
+test eq get Nm 6 1
+test eq get Sc 2 0
+test eq get Sc 3 0
+load 4
+put In 2 0
+test not scdecode
+test eq get Nm 6 1
+test eq get In 2 0
+put Inlen 0 0
+test not scdecode
+test eq get Sc 2 0
+put Inlen 0 len Nested
+for i ulong len Nested
+put In i get Nested i
+end
+test scdecode
+test eq get Stext get Sw 3 78
+put Inlen 0 len Negative
+for i ulong len Negative
+put In i get Negative i
+end
+test scdecode
+test eq get Stext get Sw 3 45
+note A thirteenth line cannot enable mood or plain fallback after twelve refusals.
+for k ulong 12
+for i ulong len Invalid
+put In add mul k len Invalid i get Invalid i
+end
+end
+n = mul 12 len Invalid
+for i ulong len Moodonly
+put In add n i get Moodonly i
+end
+put Inlen 0 add n len Moodonly
+test not scdecode
+test eq get Sc 0 0
+test eq get Sc 7 1
+for i ulong len Plain
+put In add n i get Plain i
+end
+put Inlen 0 add n len Plain
+test not scdecode
+test eq get Sc 2 0
+ret int get Fails 0
+end

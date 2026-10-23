@@ -11,8 +11,8 @@ cat native/omega/allen/base.om native/omega/allen/vendor/sha256-core.om \
  native/omega/allen/runtime.om native/omega/allen/code.om \
  native/omega/allen/courier.om native/omega/allen/scheduler.om native/omega/allen/memory.om \
  native/omega/allen/intent.om native/omega/allen/reply.om \
- native/omega/allen/view.om native/omega/allen/scene.om native/omega/allen/paint.om native/omega/allen/application.om > "$core"
-for name in runtime code courier scheduler application memory intent reply view scene paint edges fixture golden render; do
+ native/omega/allen/view.om native/omega/allen/scene.om native/omega/allen/paint.om native/omega/allen/application.om native/omega/allen/scene-input.om > "$core"
+for name in runtime code courier scheduler application memory intent reply view scene scene-input paint edges fixture golden render; do
  cat "$core" > "$out/$name.om"
  case "$name" in golden|render) ;; *) cat native/omega/allen/tests/check.om >> "$out/$name.om" ;; esac
  cat "native/omega/allen/tests/$name.om" >> "$out/$name.om"
@@ -67,7 +67,11 @@ sed 's/put Outb i get Appwire i/put Outb i get Outb i/' "$core" > "$out/pendingw
 cat native/omega/allen/tests/check.om native/omega/allen/tests/application.om >> "$out/pendingwire-mutant.om"
 sed 's/if or le get R 2 1 ne get C 0 get R 0/if false/' "$core" > "$out/appcode-mutant.om"
 cat native/omega/allen/tests/check.om native/omega/allen/tests/application.om >> "$out/appcode-mutant.om"
-for name in stale crc hash readback session keepalive ackstop pendingwire appcode; do
+sed 's/if hide/if false/' "$core" > "$out/thinking-mutant.om"
+cat native/omega/allen/tests/check.om native/omega/allen/tests/scene-input.om >> "$out/thinking-mutant.om"
+sed 's/if lt get Nm 8 12/if true/' "$core" > "$out/scenecap-mutant.om"
+cat native/omega/allen/tests/check.om native/omega/allen/tests/scene-input.om >> "$out/scenecap-mutant.om"
+for name in stale crc hash readback session keepalive ackstop pendingwire appcode thinking scenecap; do
  native/omega/allen/build-one.sh "$out/$name-mutant.om" "$out/$name-mutant"
  set +e
  "$out/$name-mutant" > "$out/$name-mutant.log"

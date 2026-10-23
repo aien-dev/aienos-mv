@@ -1,0 +1,319 @@
+note Bounded model scene input. Existing scene stays the strict canonical parser.
+note Nm thinking,normalized bytes,tidying count,hidden lines,line bytes,mood seen,
+note invalid/overflow,plain candidate bytes,canonical line count. Input restored.
+global Nm ulong 9
+global Nraw uchar 2048
+global Nline uchar 2048
+global Nnorm uchar 2048
+global Nplain uchar 160
+text Ntags "<think></think>"
+fn nlow c uchar to uchar
+if and ge c 65 le c 90
+ret add sub c 65 97
+end
+ret c
+end
+fn nalpha c uchar to bool
+v = nlow c
+ret and ge v 97 le v 122
+end
+fn nmatch at ulong off ulong size ulong to bool
+if gt add at size get Nm 4
+ret false
+end
+for i ulong size
+if ne nlow get Nline add at i get Ntags add off i
+ret false
+end
+end
+ret true
+end
+fn nemit c uchar to void
+n = get Nm 1
+if ge n 2048
+put Nm 6 1
+ret
+end
+put Nnorm n c
+put Nm 1 add n 1
+end
+fn nmark c uchar to bool
+if or eq c 45 eq c 42
+ret true
+end
+if or eq c 35 eq c 62
+ret true
+end
+ret eq c 34
+end
+fn nlead c uchar to bool
+if or eq c 32 eq c 42
+ret true
+end
+if eq c 35
+ret true
+end
+ret nalpha c
+end
+fn ndigits p ulong to ulong
+while lt p get Nm 4
+if not isdigit get Nline p
+ret p
+end
+p = add p 1
+end
+ret p
+end
+fn nspaces p ulong to ulong
+while lt p get Nm 4
+if ne get Nline p 32
+ret p
+end
+p = add p 1
+end
+ret p
+end
+fn npstep s ulong to ulong
+n = get Nm 4
+c = get Nline s
+if nmark c
+if eq add s 1 n
+ret n
+end
+if nlead get Nline add s 1
+ret add s 1
+end
+ret s
+end
+if not isdigit c
+ret s
+end
+p = ndigits s
+if ge add p 1 n
+ret s
+end
+if not or eq get Nline p 46 eq get Nline p 41
+ret s
+end
+if ne get Nline add p 1 32
+ret s
+end
+ret add p 2
+end
+fn nprefix to ulong
+s = ulong 0
+while lt s get Nm 4
+next = npstep s
+if eq next s
+ret s
+end
+put Nm 2 add get Nm 2 1
+s = nspaces next
+end
+ret s
+end
+fn nfinish to void
+n = get Nm 4
+while gt n 0
+if eq get Nline sub n 1 32
+n = sub n 1
+else
+nprocess n
+ret
+end
+end
+end
+fn nprocess n ulong to void
+put Nm 4 n
+hide = ne get Nm 0 0
+for i ulong n
+if nmatch i 0 7
+put Nm 0 1
+hide = true
+end
+if nmatch i 7 8
+put Nm 0 0
+hide = true
+end
+end
+if hide
+put Nm 3 add get Nm 3 1
+ret
+end
+if ge n 3
+if and eq get Nline 0 96 eq get Nline 1 96
+if eq get Nline 2 96
+put Nm 2 add get Nm 2 1
+ret
+end
+end
+end
+s = nprefix
+if ge s n
+ret
+end
+w = s
+while lt w n
+if nalpha get Nline w
+w = add w 1
+else
+nword s w n
+ret
+end
+end
+nword s w n
+end
+fn nword s ulong w ulong n ulong to void
+for i ulong sub w s
+put In add s i nlow get Nline add s i
+end
+word = scword s sub w s
+if gt word 10
+word = 0
+end
+r = w
+while lt r n
+c = get Nline r
+if or eq c 42 eq c 34
+r = add r 1
+put Nm 2 add get Nm 2 1
+else
+nappend s w r n word
+ret
+end
+end
+nappend s w r n word
+end
+fn nappend s ulong w ulong r ulong n ulong word ulong to void
+if lt r n
+if not or eq get Nline r 32 eq get Nline r 58
+word = 0
+end
+end
+if eq word 0
+size = sub n s
+if and eq get Nm 7 0 le size 159
+if lt get Nm 8 12
+for i ulong size
+put Nplain i get Nline add s i
+end
+put Nm 7 size
+end
+end
+for i ulong size
+nemit get Nline add s i
+end
+else
+if eq word 1
+if lt get Nm 8 12
+put Nm 5 1
+end
+end
+for i ulong sub w s
+nemit nlow get Nline add s i
+end
+head = ne word 2
+for i ulong sub n r
+c = get Nline add r i
+if eq c 58
+if ne word 1
+head = false
+end
+end
+if head
+c = nlow c
+end
+nemit c
+end
+end
+nemit 10
+put Nm 8 add get Nm 8 1
+end
+fn nclear to void
+for i ulong 8
+put Sc i 0
+end
+for i ulong 64
+put Things i 0
+end
+put Sw 3 0
+end
+fn scdecode to bool
+for i ulong 9
+put Nm i 0
+end
+nclear
+n = get Inlen 0
+if gt n 2048
+put Nm 6 1
+ret false
+end
+for i ulong n
+if eq get In i 0
+put Nm 6 1
+ret false
+end
+put Nraw i get In i
+end
+for i ulong n
+c = get Nraw i
+if eq c 10
+nfinish
+put Nm 4 0
+else
+if eq c 9
+c = uchar 32
+put Nm 2 add get Nm 2 1
+end
+if and ge c 32 le c 126
+p = get Nm 4
+keep = true
+if eq c 32
+if eq p 0
+keep = false
+else
+if eq get Nline sub p 1 32
+keep = false
+end
+end
+end
+if keep
+put Nline p c
+put Nm 4 add p 1
+else
+put Nm 2 add get Nm 2 1
+end
+else
+put Nm 2 add get Nm 2 1
+end
+end
+end
+nfinish
+ok = false
+if eq get Nm 6 0
+for i ulong get Nm 1
+put In i get Nnorm i
+end
+put Inlen 0 get Nm 1
+ok = scene
+if ne get Nm 5 0
+ok = true
+end
+if not ok
+if gt get Nm 7 0
+for i ulong get Nm 7
+put In i get Nplain i
+end
+put Inlen 0 get Nm 7
+ok = scsay 0 get Nm 7
+end
+end
+else
+nclear
+end
+for i ulong n
+put In i get Nraw i
+end
+put Inlen 0 n
+ret ok
+end

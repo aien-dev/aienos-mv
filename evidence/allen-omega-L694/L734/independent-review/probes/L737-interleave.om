@@ -1,0 +1,143 @@
+note Independent L737 application event-interleaving probe. Seeded Omega only.
+global Probeout uchar 8192
+global Pstate ulong 2
+fn probecheck ok bool id ulong to void
+put Pstate 0 get Outlen 0
+put Pstate 1 get Err 0
+for i ulong get Outlen 0
+put Probeout i get Outb i
+end
+check ok id
+for i ulong get Pstate 0
+put Outb i get Probeout i
+end
+put Outlen 0 get Pstate 0
+put Err 0 get Pstate 1
+end
+fn line lineid ulong conv ulong to void
+outreset
+emitb 83
+emitb 65
+emitb 89
+emitb 32
+emitn conv
+emitb 32
+emitb 49
+emitb 47
+emitb 49
+emitb 32
+emitb 111
+emitb 107
+put Inlen 0 get Outlen 0
+for i ulong get Outlen 0
+put In i get Outb i
+end
+b = packet 2 get Q 1 lineid 0 0
+put Inlen 0 get Outlen 0
+for i ulong get Outlen 0
+put In i get Outb i
+end
+end
+fn waitline lineid ulong to void
+outreset
+emitb 87
+emitb 65
+emitb 73
+emitb 84
+emitb 32
+emitb 49
+put Inlen 0 get Outlen 0
+for i ulong get Outlen 0
+put In i get Outb i
+end
+b = packet 2 get Q 1 lineid 0 0
+put Inlen 0 get Outlen 0
+for i ulong get Outlen 0
+put In i get Outb i
+end
+end
+fn prompt to void
+put Inlen 0 5
+put In 0 104
+put In 1 101
+put In 2 108
+put In 3 108
+put In 4 111
+end
+fn readwire to void
+put Inlen 0 get Outlen 0
+for i ulong get Outlen 0
+put In i get Outb i
+end
+end
+fn main to int
+probecheck appinit 77 0 1
+prompt
+probecheck appask 0 2
+probecheck apppoll 0 true 3
+probecheck appsent 0 true 4
+probecheck apppoll 0 true 5
+probecheck appsent 0 true 6
+waitline 1
+probecheck appreceive 1 7
+probecheck eq get R 1 1 8
+probecheck eq get T 13 1 9
+note Distinct LINE is backpressured while GOT1 is pending; retry after receipt send.
+line 2 1
+probecheck not appreceive 2 10
+probecheck eq get Q 2 1 11
+probecheck eq get T 13 1 12
+probecheck apppoll 2 true 13
+readwire
+probecheck pkparse 14
+probecheck eq get N 0 3 15
+probecheck eq get N 2 1 16
+probecheck appsent 2 true 17
+probecheck eq get T 13 0 18
+line 2 1
+probecheck appreceive 3 19
+probecheck eq get A 2 1 20
+probecheck eq get R 1 0 21
+probecheck eq get T 13 2 22
+probecheck apppoll 3 true 23
+readwire
+probecheck pkparse 24
+probecheck eq get N 0 3 25
+probecheck eq get N 2 2 26
+probecheck appsent 3 true 27
+probecheck not apppoll 4 true 28
+note Replayed acknowledged LINE is treated as duplicate and gets its own GOT.
+waitline 1
+probecheck appreceive 4 29
+probecheck eq get T 13 1 30
+probecheck apppoll 4 true 31
+readwire
+probecheck pkparse 32
+probecheck eq get N 0 3 33
+probecheck eq get N 2 1 34
+probecheck appsent 4 true 35
+probecheck not apppoll 5 true 36
+note Cancellation discards the offered JOB but wire and conversation counters persist.
+prompt
+probecheck appask 5 37
+probecheck apppoll 5 true 38
+probecheck eq get T 10 1 39
+appcancel
+probecheck eq get T 5 0 40
+probecheck not appsent 5 true 41
+probecheck eq get Q 1 2 42
+probecheck eq get R 0 2 43
+prompt
+probecheck appask 6 44
+probecheck eq get Q 1 3 45
+probecheck eq get R 0 3 46
+appcancel
+old = get R 9
+put Q 1 4294967295
+prompt
+probecheck not appask 7 47
+probecheck eq get R 0 3 48
+probecheck eq get R 9 old 49
+probecheck eq get Q 1 4294967295 50
+ret int get Fails 0
+end

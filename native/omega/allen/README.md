@@ -18,7 +18,7 @@ The output directory must be fresh. `build-one.sh` hashes the compiler before
 **every invocation**, rejects empty/wrong-machine/nonstatic ELF and marks only
 qualified output executable. The gate builds all modules together for every test,
 executes handwritten Omega test programs, compares a byte-exact independent memory
-fixture and rejects nine compiled behavioral mutants. The build uses POSIX shell,
+fixture and rejects eleven compiled behavioral mutants. The build uses POSIX shell,
 Git (source reconstruction), GNU file/text utilities, readelf, dd, xxd and
 sha256sum as external development tools. Existing Rust courier `--split` was used
 once as a fixture oracle, never as an Omega runtime dependency.
@@ -73,6 +73,25 @@ once as a fixture oracle, never as an Omega runtime dependency.
  bounded4096 rows. The full code remains held when the row index reaches capacity.
 * `scene.om`: mood/say/eight thing kinds, placement/emphasis/arrival/direction,
  typed field bounds, four things/six fields/2048-byte input/12 lines.
+* `scene-input.om`: `scdecode` consumes In/Inlen through bounded scene cleanup,
+ restores the exact caller input and length, and fills the same Sc/Things/Stext
+ output as the strict `scene` parser. Input and normalized output each have a
+ 2048-byte cap. NUL or normalization overflow refuses the whole scene and clears
+ published scene metadata. ASCII tabs/spaces collapse; CR, other control bytes
+ and non-ASCII bytes are dropped, matching the legacy ASCII display boundary.
+ Case-insensitive exact `<think>`/`</think>` tags hide their entire lines and all
+ enclosed lines; an unclosed thought block hides the remainder. Lines beginning
+ with triple backticks are discarded, not the enclosed scene. Supported markdown
+ prefixes and keyword emphasis are stripped. Known kind/placement/mood words are
+ case-folded without changing displayed field text. The first twelve retained
+ canonical lines are eligible, including for mood-only and fallback decisions.
+ If no recognized scene exists, the first short unrecognized line becomes the
+ answer (159-byte cap); rejected known structured commands do not become prose.
+ This fallback is deliberately stricter than legacy truncation/ellipsis.
+ Nm[0..8] reports thinking, normalized bytes, tidying count, hidden lines,
+ scratch-line bytes, eligible mood seen, invalid/overflow, fallback bytes and
+ retained canonical-line count. Like other modules, calls must be serialized.
+ This scene API is not yet connected to the application reply/display provider.
 * `paint.om`: legacy integer color operations and soft-light pixel evaluation.
  Executed192x128 halo/heart component pose, colors from `ck_mind_draw`. This is
  not the full Allen sky/network animation, font, canvas item renderer or UI.
@@ -129,8 +148,8 @@ Numeric overflow, backward timestamps, request ID wrap and v4 sky pad are refuse
 Job instructions and record bytes retain legacy structure; envelope metadata is
 never added to Store v1 superblocks. No identity migration fields are rewritten.
 
-Remaining portable work: full scene tidying, fences/think suppression, plain-text
-scene fallback, field ellipsis, timer interpretation, transcript-to-notes restore,
+Remaining portable work: remaining scene aliases/missing-colon repairs, field
+ellipsis, timer interpretation, transcript-to-notes restore,
 full notes indexing/retrieval, full memory metadata job append, transport binding,
 full sky/catalogue/font/animated-network/canvas visual parity, integration and
 broader malformed-input coverage. Partial modules are not whole compatibility.
