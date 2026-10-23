@@ -379,6 +379,8 @@ static void expect_refused(int rc, const char *why, const char *want, const char
 }
 
 static int selftest(void) {
+    /* Sequence the operation before reading its output diagnostic. */
+    int refusal_rc;
     const char *why = "";
     printf("CK_GSP_COT_ENCODE_SELFTEST: begin\n");
 
@@ -420,10 +422,10 @@ static int selftest(void) {
     check(cot_mctp_header(0, 0, 0, 1, &h, &why) == 0 && h == 0x10000000u, "MCTP middle packet seq 1 = 0x10000000");
     check(cot_mctp_header(1, 1, 0x2a, 0, &h, &why) == 0 && h == 0xC02A0000u, "MCTP seid lands in bits 23:16");
     check(cot_nvdm_header(NVDM_TYPE_COT, &h, &why) == 0 && h == 0x1410DE7Eu, "NVDM header for COT = 0x1410DE7E");
-    expect_refused(cot_mctp_header(1, 1, 0, 4, &h, &why), why, "seq out of range", "mctp seq 4");
-    expect_refused(cot_mctp_header(2, 1, 0, 0, &h, &why), why, "som/eom not a bit", "mctp som 2");
-    expect_refused(cot_mctp_header(1, 1, 256, 0, &h, &why), why, "seid out of range", "mctp seid 256");
-    expect_refused(cot_nvdm_header(256, &h, &why), why, "nvdm type out of range", "nvdm type 256");
+    refusal_rc = cot_mctp_header(1, 1, 0, 4, &h, &why); expect_refused(refusal_rc, why, "seq out of range", "mctp seq 4");
+    refusal_rc = cot_mctp_header(2, 1, 0, 0, &h, &why); expect_refused(refusal_rc, why, "som/eom not a bit", "mctp som 2");
+    refusal_rc = cot_mctp_header(1, 1, 256, 0, &h, &why); expect_refused(refusal_rc, why, "seid out of range", "mctp seid 256");
+    refusal_rc = cot_nvdm_header(256, &h, &why); expect_refused(refusal_rc, why, "nvdm type out of range", "nvdm type 256");
 
     /* 3. payload round trip */
     static uint8_t hash[COT_HASH_BYTES], key[COT_KEY_BYTES], sig[COT_SIG_BYTES];
@@ -451,25 +453,25 @@ static int selftest(void) {
 
     /* 4. payload encode refusals, one field at a time */
     cot_inputs m;
-    m = in; m.fmc_sysmem_addr = 0; expect_refused(cot_payload_encode(&m, pl, &why), why, "zero address", "image address 0");
-    m = in; m.fmc_sysmem_addr = 0x12345670800ull; expect_refused(cot_payload_encode(&m, pl, &why), why, "image address not 4 KiB aligned", "image address unaligned");
-    m = in; m.fmc_sysmem_addr = 1ull << 41; expect_refused(cot_payload_encode(&m, pl, &why), why, "address beyond the DMA window", "image address at 2^41");
+    m = in; m.fmc_sysmem_addr = 0; refusal_rc = cot_payload_encode(&m, pl, &why); expect_refused(refusal_rc, why, "zero address", "image address 0");
+    m = in; m.fmc_sysmem_addr = 0x12345670800ull; refusal_rc = cot_payload_encode(&m, pl, &why); expect_refused(refusal_rc, why, "image address not 4 KiB aligned", "image address unaligned");
+    m = in; m.fmc_sysmem_addr = 1ull << 41; refusal_rc = cot_payload_encode(&m, pl, &why); expect_refused(refusal_rc, why, "address beyond the DMA window", "image address at 2^41");
     m = in; m.fmc_sysmem_addr = 1ull << 41; m.dma_bits = 42; check(cot_payload_encode(&m, pl, &why) == 0, "2^41 accepted with --dma-bits 42");
-    m = in; m.fmc_size = 0; expect_refused(cot_payload_encode(&m, pl, &why), why, "zero image size", "image size 0");
-    m = in; m.hash_len = 47; expect_refused(cot_payload_encode(&m, pl, &why), why, "hash length not 48", "hash 47 bytes");
-    m = in; m.hash = NULL; expect_refused(cot_payload_encode(&m, pl, &why), why, "hash length not 48", "hash null");
-    m = in; m.key_len = 385; expect_refused(cot_payload_encode(&m, pl, &why), why, "public key length not 384", "key 385 bytes");
-    m = in; m.sig_len = 0; expect_refused(cot_payload_encode(&m, pl, &why), why, "signature length not 384", "signature empty");
-    m = in; m.bootargs_sysmem_addr = 0; expect_refused(cot_payload_encode(&m, pl, &why), why, "zero address", "boot-args address 0");
-    m = in; m.bootargs_sysmem_addr = 1ull << 41; expect_refused(cot_payload_encode(&m, pl, &why), why, "address beyond the DMA window", "boot-args at 2^41");
-    expect_refused(cot_payload_encode(NULL, pl, &why), why, "null argument", "null inputs");
+    m = in; m.fmc_size = 0; refusal_rc = cot_payload_encode(&m, pl, &why); expect_refused(refusal_rc, why, "zero image size", "image size 0");
+    m = in; m.hash_len = 47; refusal_rc = cot_payload_encode(&m, pl, &why); expect_refused(refusal_rc, why, "hash length not 48", "hash 47 bytes");
+    m = in; m.hash = NULL; refusal_rc = cot_payload_encode(&m, pl, &why); expect_refused(refusal_rc, why, "hash length not 48", "hash null");
+    m = in; m.key_len = 385; refusal_rc = cot_payload_encode(&m, pl, &why); expect_refused(refusal_rc, why, "public key length not 384", "key 385 bytes");
+    m = in; m.sig_len = 0; refusal_rc = cot_payload_encode(&m, pl, &why); expect_refused(refusal_rc, why, "signature length not 384", "signature empty");
+    m = in; m.bootargs_sysmem_addr = 0; refusal_rc = cot_payload_encode(&m, pl, &why); expect_refused(refusal_rc, why, "zero address", "boot-args address 0");
+    m = in; m.bootargs_sysmem_addr = 1ull << 41; refusal_rc = cot_payload_encode(&m, pl, &why); expect_refused(refusal_rc, why, "address beyond the DMA window", "boot-args at 2^41");
+    refusal_rc = cot_payload_encode(NULL, pl, &why); expect_refused(refusal_rc, why, "null argument", "null inputs");
 
     /* 5. payload decode refusals */
     uint8_t d[COT_PAYLOAD_BYTES];
     cot_payload_encode(&in, pl, &why);
-#define MUT(setup, want, what) do { memcpy(d, pl, sizeof d); setup; expect_refused(cot_payload_decode(d, sizeof d, &back, 0, &why), why, want, what); } while (0)
-    expect_refused(cot_payload_decode(pl, 859, &back, 0, &why), why, "payload length not 860", "payload 859 bytes");
-    expect_refused(cot_payload_decode(pl, 861, &back, 0, &why), why, "payload length not 860", "payload 861 bytes");
+#define MUT(setup, want, what) do { memcpy(d, pl, sizeof d); setup; refusal_rc = cot_payload_decode(d, sizeof d, &back, 0, &why); expect_refused(refusal_rc, why, want, what); } while (0)
+    refusal_rc = cot_payload_decode(pl, 859, &back, 0, &why); expect_refused(refusal_rc, why, "payload length not 860", "payload 859 bytes");
+    refusal_rc = cot_payload_decode(pl, 861, &back, 0, &why); expect_refused(refusal_rc, why, "payload length not 860", "payload 861 bytes");
     MUT(put16(d, 2), "payload version not 1", "version 2");
     MUT(put16(d, 0), "payload version not 1", "version 0");
     MUT(put16(d + 2, 859), "payload size field not 860", "size field 859");
@@ -486,12 +488,12 @@ static int selftest(void) {
     /* 6. packet refusals */
     cot_packet_encode(pl, sizeof pl, NVDM_TYPE_COT, pkt, &pkt_len, &tail, &why);
     { uint8_t big[PACKET_PAYLOAD_CAP + 1]; size_t n; uint32_t t; memset(big, 0, sizeof big);
-      expect_refused(cot_packet_encode(big, sizeof big, NVDM_TYPE_COT, pkt, &n, &t, &why), why, "payload does not fit one packet", "payload 1017 bytes");
+      refusal_rc = cot_packet_encode(big, sizeof big, NVDM_TYPE_COT, pkt, &n, &t, &why); expect_refused(refusal_rc, why, "payload does not fit one packet", "payload 1017 bytes");
       check(cot_packet_encode(big, PACKET_PAYLOAD_CAP, NVDM_TYPE_COT, pkt, &n, &t, &why) == 0 && n == 1024 && t == 1020, "payload 1016 bytes fills the channel exactly");
-      expect_refused(cot_packet_encode(big, 0, NVDM_TYPE_COT, pkt, &n, &t, &why), why, "empty payload", "payload 0 bytes");
+      refusal_rc = cot_packet_encode(big, 0, NVDM_TYPE_COT, pkt, &n, &t, &why); expect_refused(refusal_rc, why, "empty payload", "payload 0 bytes");
       cot_packet_encode(pl, sizeof pl, NVDM_TYPE_COT, pkt, &pkt_len, &tail, &why); }
     uint8_t q[EMEM_CHANNEL_BYTES]; const uint8_t *p; size_t n;
-#define PMUT(setup, want, what) do { memcpy(q, pkt, sizeof q); setup; expect_refused(cot_packet_decode(q, pkt_len, &p, &n, &why), why, want, what); } while (0)
+#define PMUT(setup, want, what) do { memcpy(q, pkt, sizeof q); setup; refusal_rc = cot_packet_decode(q, pkt_len, &p, &n, &why); expect_refused(refusal_rc, why, want, what); } while (0)
     PMUT(put32(q, 0x40000000u), "SOM not set", "SOM cleared");
     PMUT(put32(q, 0x80000000u), "EOM not set", "EOM cleared");
     PMUT(put32(q, 0xD0000000u), "seq not zero", "seq 1");
@@ -503,12 +505,12 @@ static int selftest(void) {
     PMUT(put32(q + 4, 0x1410DE7Fu), "nvdm msg type not vendor-pci", "msg type 0x7f");
     PMUT(put32(q + 4, 0x1410DEFEu), "nvdm IC bit set", "IC bit set");
 #undef PMUT
-    expect_refused(cot_packet_decode(pkt, pkt_len - 1, &p, &n, &why), why, "packet length not a dword multiple", "packet 867 bytes");
-    expect_refused(cot_packet_decode(pkt, 1028, &p, &n, &why), why, "packet larger than the channel", "packet 1028 bytes");
+    refusal_rc = cot_packet_decode(pkt, pkt_len - 1, &p, &n, &why); expect_refused(refusal_rc, why, "packet length not a dword multiple", "packet 867 bytes");
+    refusal_rc = cot_packet_decode(pkt, 1028, &p, &n, &why); expect_refused(refusal_rc, why, "packet larger than the channel", "packet 1028 bytes");
     { int all = 1; for (size_t t = 0; t < PACKET_HEADER_BYTES + 1; t++) { if (cot_packet_decode(pkt, t, &p, &n, &why) == 0) all = 0; }
       check(all, "every truncation 0..8 refused"); }
     { const uint8_t *pp; size_t nn; cot_packet_decode(pkt, pkt_len, &pp, &nn, &why);
-      expect_refused(cot_payload_decode(pp, nn - 4, &back, 0, &why), why, "payload length not 860", "packet with a short payload"); }
+      refusal_rc = cot_payload_decode(pp, nn - 4, &back, 0, &why); expect_refused(refusal_rc, why, "payload length not 860", "packet with a short payload"); }
 
     /* 7. FMC boot params round trip and refusals */
     fmc_inputs f = { 0, 1, WPR_META_BYTES, 0x0000012345680000ull, 0, 0, 1, 1, 0x00000123456c0000ull, 0, 0, 0, 0, 0, 0 };
@@ -518,18 +520,18 @@ static int selftest(void) {
           fb[FMC_OFF_BOOT_IS_GSP_RM] == 1 && get64(fb + FMC_OFF_RM_BOOTARGS) == f.bootargs_offset, "FMC params fields in place");
     check(fmc_params_decode(fb, sizeof fb, &fback, 0, &why) == 0 && fback.desc_offset == f.desc_offset && fback.bootargs_offset == f.bootargs_offset && fback.desc_target == 1, "FMC params decode");
     fmc_inputs g;
-    g = f; g.desc_target = 3; expect_refused(fmc_params_encode(&g, fb, &why), why, "descriptor DMA target out of range", "desc target 3");
-    g = f; g.desc_size = 255; expect_refused(fmc_params_encode(&g, fb, &why), why, "descriptor size not 256", "desc size 255");
-    g = f; g.desc_offset = 0; expect_refused(fmc_params_encode(&g, fb, &why), why, "zero address", "desc offset 0");
-    g = f; g.is_gsp_rm_boot = 0; expect_refused(fmc_params_encode(&g, fb, &why), why, "bIsGspRmBoot not set", "boot flag clear");
-    g = f; g.bootargs_target = 3; expect_refused(fmc_params_encode(&g, fb, &why), why, "boot-args DMA target out of range", "boot-args target 3");
-    g = f; g.bootargs_offset = 1ull << 41; expect_refused(fmc_params_encode(&g, fb, &why), why, "address beyond the DMA window", "boot-args at 2^41");
-    g = f; g.spdm_target = 7; expect_refused(fmc_params_encode(&g, fb, &why), why, "SPDM DMA target out of range", "SPDM target 7");
+    g = f; g.desc_target = 3; refusal_rc = fmc_params_encode(&g, fb, &why); expect_refused(refusal_rc, why, "descriptor DMA target out of range", "desc target 3");
+    g = f; g.desc_size = 255; refusal_rc = fmc_params_encode(&g, fb, &why); expect_refused(refusal_rc, why, "descriptor size not 256", "desc size 255");
+    g = f; g.desc_offset = 0; refusal_rc = fmc_params_encode(&g, fb, &why); expect_refused(refusal_rc, why, "zero address", "desc offset 0");
+    g = f; g.is_gsp_rm_boot = 0; refusal_rc = fmc_params_encode(&g, fb, &why); expect_refused(refusal_rc, why, "bIsGspRmBoot not set", "boot flag clear");
+    g = f; g.bootargs_target = 3; refusal_rc = fmc_params_encode(&g, fb, &why); expect_refused(refusal_rc, why, "boot-args DMA target out of range", "boot-args target 3");
+    g = f; g.bootargs_offset = 1ull << 41; refusal_rc = fmc_params_encode(&g, fb, &why); expect_refused(refusal_rc, why, "address beyond the DMA window", "boot-args at 2^41");
+    g = f; g.spdm_target = 7; refusal_rc = fmc_params_encode(&g, fb, &why); expect_refused(refusal_rc, why, "SPDM DMA target out of range", "SPDM target 7");
     fmc_params_encode(&f, fb, &why);
-    { uint8_t e[FMC_PARAMS_BYTES]; memcpy(e, fb, sizeof e); e[5] = 1; expect_refused(fmc_params_decode(e, sizeof e, &fback, 0, &why), why, "padding byte not zero", "padding byte 5 set");
-      memcpy(e, fb, sizeof e); e[FMC_OFF_BOOT_IS_GSP_RM] = 0; expect_refused(fmc_params_decode(e, sizeof e, &fback, 0, &why), why, "bIsGspRmBoot not set", "decoded boot flag clear");
-      memcpy(e, fb, sizeof e); put32(e + FMC_OFF_BOOT_DESC_SIZE, 512); expect_refused(fmc_params_decode(e, sizeof e, &fback, 0, &why), why, "descriptor size not 256", "decoded desc size 512");
-      expect_refused(fmc_params_decode(fb, 87, &fback, 0, &why), why, "params length not 88", "params 87 bytes"); }
+    { uint8_t e[FMC_PARAMS_BYTES]; memcpy(e, fb, sizeof e); e[5] = 1; refusal_rc = fmc_params_decode(e, sizeof e, &fback, 0, &why); expect_refused(refusal_rc, why, "padding byte not zero", "padding byte 5 set");
+      memcpy(e, fb, sizeof e); e[FMC_OFF_BOOT_IS_GSP_RM] = 0; refusal_rc = fmc_params_decode(e, sizeof e, &fback, 0, &why); expect_refused(refusal_rc, why, "bIsGspRmBoot not set", "decoded boot flag clear");
+      memcpy(e, fb, sizeof e); put32(e + FMC_OFF_BOOT_DESC_SIZE, 512); refusal_rc = fmc_params_decode(e, sizeof e, &fback, 0, &why); expect_refused(refusal_rc, why, "descriptor size not 256", "decoded desc size 512");
+      refusal_rc = fmc_params_decode(fb, 87, &fback, 0, &why); expect_refused(refusal_rc, why, "params length not 88", "params 87 bytes"); }
 
     printf("CK_GSP_COT_ENCODE_SELFTEST: %s (%d failures)\n", fails ? "FAIL" : "PASS", fails);
     return fails ? 1 : 0;
@@ -567,7 +569,7 @@ static uint8_t *read_file(const char *path, size_t *len) {
 static int encode_cli(int argc, char **argv) {
     const char *hash_p = NULL, *key_p = NULL, *sig_p = NULL, *out_p = NULL, *why = "";
     cot_inputs in; memset(&in, 0, sizeof in);
-    for (int i = 2; i < argc; i++) {
+    for (int i = 2; i < argc; i += 2) {
         const char *a = argv[i], *v = (i + 1 < argc) ? argv[i + 1] : NULL;
         if (!v) { fprintf(stderr, "missing value for %s\n", a); return 2; }
         if (!strcmp(a, "--fmc-addr")) in.fmc_sysmem_addr = strtoull(v, NULL, 16);
@@ -579,7 +581,6 @@ static int encode_cli(int argc, char **argv) {
         else if (!strcmp(a, "--dma-bits")) in.dma_bits = (unsigned)strtoul(v, NULL, 0);
         else if (!strcmp(a, "--out")) out_p = v;
         else { fprintf(stderr, "unknown option %s\n", a); return 2; }
-        i++;
     }
     if (!hash_p || !key_p || !sig_p) { fprintf(stderr, "need --hash --key --sig\n"); return 2; }
     size_t hl = 0, kl = 0, sl = 0;

@@ -1,0 +1,82 @@
+CK_GSP_COT_ENCODE_SELFTEST: begin
+  ok   NVDM_PAYLOAD_COT is 860 bytes
+  ok   NVDM_PAYLOAD_COT field offsets
+  ok   GSP_FMC_BOOT_PARAMS is 88 bytes
+  ok   GSP_FMC_BOOT_PARAMS field offsets
+  ok   MCTP first+last packet, seid 0, seq 0 = 0xC0000000
+  ok   MCTP last continuation seq 3 = 0x70000000
+  ok   MCTP middle packet seq 1 = 0x10000000
+  ok   MCTP seid lands in bits 23:16
+  ok   NVDM header for COT = 0x1410DE7E
+  ok   refused: mctp seq 4
+  ok   refused: mctp som 2
+  ok   refused: mctp seid 256
+  ok   refused: nvdm type 256
+  ok   payload encodes
+  ok   payload version 1 size 860
+  ok   image address and size in place
+  ok   hash, key, signature in place
+  ok   boot-args address in place
+  ok   reserved FRTS fields zero
+  ok   payload decodes to the same fields
+  ok   packet is 868 bytes, tail dword offset 864
+  ok   packet = headers + payload
+  ok   packet decodes
+  ok   3-byte payload pads to 12, tail 8
+  ok   refused: image address 0
+  ok   refused: image address unaligned
+  ok   refused: image address at 2^41
+  ok   2^41 accepted with --dma-bits 42
+  ok   refused: image size 0
+  ok   refused: hash 47 bytes
+  ok   refused: hash null
+  ok   refused: key 385 bytes
+  ok   refused: signature empty
+  ok   refused: boot-args address 0
+  ok   refused: boot-args at 2^41
+  ok   refused: null inputs
+  ok   refused: payload 859 bytes
+  ok   refused: payload 861 bytes
+  ok   refused: version 2
+  ok   refused: version 0
+  ok   refused: size field 859
+  ok   refused: frtsSysmemOffset set
+  ok   refused: frtsVidmemOffset set
+  ok   refused: frtsVidmemSize set
+  ok   refused: decoded image address 0
+  ok   refused: decoded image address unaligned
+  ok   refused: decoded image address at 2^41
+  ok   refused: decoded image size 0
+  ok   refused: decoded boot-args 0
+  ok   refused: payload 1017 bytes
+  ok   payload 1016 bytes fills the channel exactly
+  ok   refused: payload 0 bytes
+  ok   refused: SOM cleared
+  ok   refused: EOM cleared
+  ok   refused: seq 1
+  ok   refused: seid 5
+  ok   refused: TO bit set
+  ok   refused: version nibble set
+  ok   refused: nvdm type 0x15 (FSP_RESPONSE)
+  ok   refused: vendor id off by one
+  ok   refused: msg type 0x7f
+  ok   refused: IC bit set
+  ok   refused: packet 867 bytes
+  ok   refused: packet 1028 bytes
+  ok   every truncation 0..8 refused
+  ok   refused: packet with a short payload
+  ok   FMC params encode
+  ok   FMC params fields in place
+  ok   FMC params decode
+  ok   refused: desc target 3
+  ok   refused: desc size 255
+  ok   refused: desc offset 0
+  ok   refused: boot flag clear
+  ok   refused: boot-args target 3
+  ok   refused: boot-args at 2^41
+  ok   refused: SPDM target 7
+  ok   refused: padding byte 5 set
+  ok   refused: decoded boot flag clear
+  ok   refused: decoded desc size 512
+  ok   refused: params 87 bytes
+CK_GSP_COT_ENCODE_SELFTEST: PASS (0 failures)

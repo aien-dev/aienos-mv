@@ -1,0 +1,82 @@
+CK_GSP_COT_ENCODE_SELFTEST: begin
+  ok   NVDM_PAYLOAD_COT is 860 bytes
+  ok   NVDM_PAYLOAD_COT field offsets
+  ok   GSP_FMC_BOOT_PARAMS is 88 bytes
+  ok   GSP_FMC_BOOT_PARAMS field offsets
+  ok   MCTP first+last packet, seid 0, seq 0 = 0xC0000000
+  ok   MCTP last continuation seq 3 = 0x70000000
+  ok   MCTP middle packet seq 1 = 0x10000000
+  ok   MCTP seid lands in bits 23:16
+  ok   NVDM header for COT = 0x1410DE7E
+  FAIL refused: mctp seq 4 (rc=-1 why= want=seq out of range)
+  FAIL refused: mctp som 2 (rc=-1 why=seq out of range want=som/eom not a bit)
+  FAIL refused: mctp seid 256 (rc=-1 why=som/eom not a bit want=seid out of range)
+  FAIL refused: nvdm type 256 (rc=-1 why=seid out of range want=nvdm type out of range)
+  ok   payload encodes
+  ok   payload version 1 size 860
+  ok   image address and size in place
+  ok   hash, key, signature in place
+  ok   boot-args address in place
+  ok   reserved FRTS fields zero
+  ok   payload decodes to the same fields
+  ok   packet is 868 bytes, tail dword offset 864
+  ok   packet = headers + payload
+  ok   packet decodes
+  ok   3-byte payload pads to 12, tail 8
+  FAIL refused: image address 0 (rc=-1 why=nvdm type out of range want=zero address)
+  FAIL refused: image address unaligned (rc=-1 why=zero address want=image address not 4 KiB aligned)
+  FAIL refused: image address at 2^41 (rc=-1 why=image address not 4 KiB aligned want=address beyond the DMA window)
+  ok   2^41 accepted with --dma-bits 42
+  FAIL refused: image size 0 (rc=-1 why=address beyond the DMA window want=zero image size)
+  FAIL refused: hash 47 bytes (rc=-1 why=zero image size want=hash length not 48)
+  ok   refused: hash null
+  FAIL refused: key 385 bytes (rc=-1 why=hash length not 48 want=public key length not 384)
+  FAIL refused: signature empty (rc=-1 why=public key length not 384 want=signature length not 384)
+  FAIL refused: boot-args address 0 (rc=-1 why=signature length not 384 want=zero address)
+  FAIL refused: boot-args at 2^41 (rc=-1 why=zero address want=address beyond the DMA window)
+  FAIL refused: null inputs (rc=-1 why=address beyond the DMA window want=null argument)
+  FAIL refused: payload 859 bytes (rc=-1 why=null argument want=payload length not 860)
+  ok   refused: payload 861 bytes
+  FAIL refused: version 2 (rc=-1 why=payload length not 860 want=payload version not 1)
+  ok   refused: version 0
+  FAIL refused: size field 859 (rc=-1 why=payload version not 1 want=payload size field not 860)
+  FAIL refused: frtsSysmemOffset set (rc=-1 why=payload size field not 860 want=frtsSysmemOffset not zero)
+  FAIL refused: frtsVidmemOffset set (rc=-1 why=frtsSysmemOffset not zero want=frtsVidmemOffset not zero)
+  FAIL refused: frtsVidmemSize set (rc=-1 why=frtsVidmemOffset not zero want=frtsVidmemSize not zero)
+  FAIL refused: decoded image address 0 (rc=-1 why=frtsVidmemSize not zero want=zero address)
+  FAIL refused: decoded image address unaligned (rc=-1 why=zero address want=image address not 4 KiB aligned)
+  FAIL refused: decoded image address at 2^41 (rc=-1 why=image address not 4 KiB aligned want=address beyond the DMA window)
+  FAIL refused: decoded image size 0 (rc=-1 why=address beyond the DMA window want=zero image size)
+  FAIL refused: decoded boot-args 0 (rc=-1 why=zero image size want=zero address)
+  FAIL refused: payload 1017 bytes (rc=-1 why=zero address want=payload does not fit one packet)
+  ok   payload 1016 bytes fills the channel exactly
+  FAIL refused: payload 0 bytes (rc=-1 why=payload does not fit one packet want=empty payload)
+  FAIL refused: SOM cleared (rc=-1 why=empty payload want=SOM not set)
+  FAIL refused: EOM cleared (rc=-1 why=SOM not set want=EOM not set)
+  FAIL refused: seq 1 (rc=-1 why=EOM not set want=seq not zero)
+  FAIL refused: seid 5 (rc=-1 why=seq not zero want=seid not zero)
+  FAIL refused: TO bit set (rc=-1 why=seid not zero want=mctp reserved bits set)
+  ok   refused: version nibble set
+  FAIL refused: nvdm type 0x15 (FSP_RESPONSE) (rc=-1 why=mctp reserved bits set want=nvdm type not COT)
+  FAIL refused: vendor id off by one (rc=-1 why=nvdm type not COT want=nvdm vendor id not nvidia)
+  FAIL refused: msg type 0x7f (rc=-1 why=nvdm vendor id not nvidia want=nvdm msg type not vendor-pci)
+  FAIL refused: IC bit set (rc=-1 why=nvdm msg type not vendor-pci want=nvdm IC bit set)
+  FAIL refused: packet 867 bytes (rc=-1 why=nvdm IC bit set want=packet length not a dword multiple)
+  FAIL refused: packet 1028 bytes (rc=-1 why=packet length not a dword multiple want=packet larger than the channel)
+  ok   every truncation 0..8 refused
+  FAIL refused: packet with a short payload (rc=-1 why=packet shorter than the headers want=payload length not 860)
+  ok   FMC params encode
+  ok   FMC params fields in place
+  ok   FMC params decode
+  FAIL refused: desc target 3 (rc=-1 why=payload length not 860 want=descriptor DMA target out of range)
+  FAIL refused: desc size 255 (rc=-1 why=descriptor DMA target out of range want=descriptor size not 256)
+  FAIL refused: desc offset 0 (rc=-1 why=descriptor size not 256 want=zero address)
+  FAIL refused: boot flag clear (rc=-1 why=zero address want=bIsGspRmBoot not set)
+  FAIL refused: boot-args target 3 (rc=-1 why=bIsGspRmBoot not set want=boot-args DMA target out of range)
+  FAIL refused: boot-args at 2^41 (rc=-1 why=boot-args DMA target out of range want=address beyond the DMA window)
+  FAIL refused: SPDM target 7 (rc=-1 why=address beyond the DMA window want=SPDM DMA target out of range)
+  FAIL refused: padding byte 5 set (rc=-1 why=SPDM DMA target out of range want=padding byte not zero)
+  FAIL refused: decoded boot flag clear (rc=-1 why=padding byte not zero want=bIsGspRmBoot not set)
+  FAIL refused: decoded desc size 512 (rc=-1 why=bIsGspRmBoot not set want=descriptor size not 256)
+  FAIL refused: params 87 bytes (rc=-1 why=descriptor size not 256 want=params length not 88)
+CK_GSP_COT_ENCODE_SELFTEST: FAIL (50 failures)

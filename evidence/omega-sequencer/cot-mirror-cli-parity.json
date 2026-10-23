@@ -1,0 +1,66 @@
+[
+  {
+    "args": [
+      "encode",
+      "--fmc-addr",
+      "1000",
+      "--fmc-size",
+      "100",
+      "--hash",
+      "build/mirror-hash",
+      "--key",
+      "build/mirror-key",
+      "--sig",
+      "build/mirror-sig",
+      "--bootargs-addr",
+      "2000"
+    ],
+    "exit": 0,
+    "pass_": true
+  },
+  {
+    "args": [
+      "encode",
+      "--fmc-addr",
+      "1000",
+      "--fmc-size",
+      "100",
+      "--hash",
+      "build/mirror-hash",
+      "--key",
+      "build/mirror-key",
+      "--sig",
+      "build/mirror-sig",
+      "--bootargs-addr",
+      "2000",
+      "--dma-bits",
+      "42"
+    ],
+    "exit": 0,
+    "pass_": true
+  },
+  {
+    "args": [
+      "encode",
+      "--fmc-addr"
+    ],
+    "exit": 2,
+    "pass_": true
+  },
+  {
+    "args": [
+      "encode",
+      "--no-such-option",
+      "1"
+    ],
+    "exit": 2,
+    "pass_": true
+  },
+  {
+    "args": [
+      "encode"
+    ],
+    "exit": 2,
+    "pass_": true
+  }
+]
