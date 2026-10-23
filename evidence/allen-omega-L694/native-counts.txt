@@ -1,0 +1,13 @@
+  28 /home/drakestapleton/handoffs/allen-omega-L694/build/final-native1/runtime.log
+  23 /home/drakestapleton/handoffs/allen-omega-L694/build/final-native1/code.log
+  24 /home/drakestapleton/handoffs/allen-omega-L694/build/final-native1/courier.log
+  79 /home/drakestapleton/handoffs/allen-omega-L694/build/final-native1/memory.log
+   8 /home/drakestapleton/handoffs/allen-omega-L694/build/final-native1/intent.log
+  15 /home/drakestapleton/handoffs/allen-omega-L694/build/final-native1/reply.log
+  13 /home/drakestapleton/handoffs/allen-omega-L694/build/final-native1/view.log
+  14 /home/drakestapleton/handoffs/allen-omega-L694/build/final-native1/scene.log
+  11 /home/drakestapleton/handoffs/allen-omega-L694/build/final-native1/paint.log
+ 352 /home/drakestapleton/handoffs/allen-omega-L694/build/final-native1/edges.log
+  20 /home/drakestapleton/handoffs/allen-omega-L694/build/final-native1/short.log
+ 292 /home/drakestapleton/handoffs/allen-omega-L694/build/final-native1/long.log
+ 879 total
