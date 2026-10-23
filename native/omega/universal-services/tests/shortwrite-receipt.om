@@ -1,0 +1,18 @@
+note Omega verifies exact bytes committed to the nonblocking short-write pipe and following EOF.
+fn main to int
+b = new uchar 4096 0
+r = usread 1 b 0 4096
+if ne r 4096
+exit 71
+end
+for i ulong 4096
+if ne get b i 65
+exit 72
+end
+end
+r = usread 1 b 0 1
+if ne r 0
+exit 73
+end
+ret 0
+end
