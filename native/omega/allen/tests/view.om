@@ -1,0 +1,25 @@
+text Vtext "one two three\nfour\n\nfive"
+fn main to int
+codebeg 1
+put C 1 1
+put C 2 len Vtext
+put C 4 1
+for i ulong len Vtext
+put Code i get Vtext i
+end
+put C 3 ulong codecrc
+check rows 8 4096 901
+check eq get View 0 5 902
+check eq get Rowlen 0 8 903
+check eq get Rowlen 1 5 904
+check eq get Rowline 0 1 905
+check eq get Rowline 1 0 906
+check eq get Rowline 2 2 907
+check eq get Rowlen 3 0 908
+check eq scroll 100 2 3 909
+check eq scroll -1 2 2 910
+check eq scroll -99 2 0 911
+check not rows 0 4096 912
+check eq get View 0 5 913
+ret int get Fails 0
+end

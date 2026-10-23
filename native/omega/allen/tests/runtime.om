@@ -1,0 +1,57 @@
+text Ask "make me a calculator"
+text Reply "Model supplied answer."
+fn askload to void
+put Inlen 0 len Ask
+for i ulong len Ask
+put In i get Ask i
+end
+end
+fn main to int
+askload
+check start 2 0 1
+check eq get R 1 1 2
+check eq get R 2 2 3
+check eq get R 8 len Ack 4
+old = get R 0
+check not start 1 1 5
+put Inlen 0 len Reply
+for i ulong len Reply
+put In i get Reply i
+end
+check not answer add old 1 2 6
+check eq get R 8 len Ack 7
+check answer old 3 8
+check eq get R 1 0 9
+askload
+check start 1 4 10
+check gt get R 0 old 11
+cancel
+check eq get R 1 0 12
+check not answer get R 0 5 13
+askload
+check start 1 10 14
+check eq tick 20009 0 15
+check eq tick 20010 1 16
+check eq tick 20011 0 17
+check eq tick 30010 2 18
+check eq get R 1 0 19
+old = get R 0
+reset
+check eq get R 0 old 20
+askload
+check start 2 40000 21
+check gt get R 0 old 22
+cancel
+put Inlen 0 160
+check not start 1 40001 23
+check eq get R 1 0 24
+askload
+check not start 3 40002 25
+put R 6 1
+check start 3 40003 26
+check eq get R 8 len Ackmore 27
+cancel
+put R 0 4294967295
+check not start 1 40004 28
+ret int get Fails 0
+end

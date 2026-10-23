@@ -1,0 +1,47 @@
+text Wait "WAIT 7"
+text Say1 "SAY 7 1/0 First\\npart"
+text Say2 "SAY 7 2/2 Model words."
+text Final "SAY 8 1/1 Code ready."
+fn main to int
+put R 0 7
+put R 1 1
+put R 2 1
+put Inlen 0 len Wait
+for i ulong len Wait
+put In i get Wait i
+end
+check eq saytake 10 1 801
+check eq get R 4 10 802
+put Inlen 0 len Say1
+for i ulong len Say1
+put In i get Say1 i
+end
+check eq saytake 11 1 803
+check eq get R 8 10 804
+check eq saytake 12 0 805
+check eq get R 8 10 806
+put Inlen 0 len Say2
+for i ulong len Say2
+put In i get Say2 i
+end
+check eq saytake 13 1 807
+check eq get R 1 0 808
+check eq get R 8 23 809
+check eq saytake 14 0 810
+put R 0 8
+put R 1 1
+put R 2 2
+codebeg 8
+put Inlen 0 len Final
+for i ulong len Final
+put In i get Final i
+end
+v = saytake 15
+same = eq get Outlen 0 7
+check eq v 2 811
+check same 812
+check eq get R 1 1 813
+check eq saytake 16 3 814
+check eq get R 1 0 815
+ret int get Fails 0
+end

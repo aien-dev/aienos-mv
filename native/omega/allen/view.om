@@ -1,0 +1,98 @@
+note Exact legacy code row wrapping, at most4096 rows; full code retained.
+global Rowst ulong 4096
+global Rowlen ulong 4096
+global Rowline ulong 4096
+global View ulong 4
+global Vwork ulong 6
+note Vwork cols,maxrows,line,start,end.
+fn onerow s ulong first bool to ulong
+take = sub get Vwork 4 s
+cols = get Vwork 0
+if gt take cols
+take = cols
+j = cols
+while gt j div cols 2
+if eq get Code sub add s j 1 32
+take = j
+j = 0
+else
+j = sub j 1
+end
+end
+end
+slot = get View 0
+put Rowst slot s
+put Rowlen slot take
+put Rowline slot 0
+if first
+put Rowline slot get Vwork 2
+end
+put View 0 add slot 1
+ret add s take
+end
+fn rowroom pos ulong to bool
+ret and lt pos get C 2 lt get View 0 get Vwork 1
+end
+fn moreline s ulong to bool
+ret and lt s get Vwork 4 lt get View 0 get Vwork 1
+end
+fn rows cols ulong maxrows ulong to bool
+if or eq cols 0 gt maxrows 4096
+ret false
+end
+if ne codestat 2
+ret false
+end
+put Vwork 0 cols
+put Vwork 1 maxrows
+put Vwork 2 1
+put View 0 0
+put View 1 0
+pos = ulong 0
+while rowroom pos
+stop = pos
+while lt stop get C 2
+if eq get Code stop 10
+put Vwork 4 stop
+stop = get C 2
+else
+stop = add stop 1
+put Vwork 4 stop
+end
+end
+s = pos
+if lt get View 0 maxrows
+s = onerow s true
+end
+while moreline s
+s = onerow s false
+end
+pos = add get Vwork 4 1
+put Vwork 2 add get Vwork 2 1
+end
+ret true
+end
+fn scroll delta long page ulong to ulong
+last = ulong 0
+if gt get View 0 page
+last = sub get View 0 page
+end
+if gt get View 1 last
+put View 1 last
+end
+top = long get View 1
+if lt delta 0
+if lt delta neg top
+put View 1 0
+ret 0
+end
+else
+if gt ulong delta sub last get View 1
+put View 1 last
+ret last
+end
+end
+top = add top delta
+put View 1 ulong top
+ret ulong top
+end

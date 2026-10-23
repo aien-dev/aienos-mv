@@ -1,0 +1,8 @@
+text ready "Allen Omega native probe\n"
+fn main to int
+n = write 1 ready 0 len ready
+if ne n long len ready
+ret 1
+end
+ret 0
+end

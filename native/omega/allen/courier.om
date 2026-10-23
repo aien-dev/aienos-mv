@@ -1,0 +1,261 @@
+note Pure courier datagrams. Q session, current seq, last LINE, head, count.
+global Q ulong 8
+global N ulong 8
+global Queue uchar 2560
+global Qlens ulong 8
+global Jbuf uchar 4096
+global Jhave uchar 5
+global J ulong 3
+text Keys "ALLEN-COURIER v=1 run= kind= seq= part= bytes="
+text Kinds "JOBLINEGOTACKHELLOHI"
+fn keyread off ulong count ulong to void
+for i ulong count
+expect get Keys add off i
+end
+end
+fn keyemit off ulong count ulong to void
+for i ulong count
+emitb get Keys add off i
+end
+end
+fn kindoff k ulong to ulong
+if eq k 1
+ret 0
+end
+if eq k 2
+ret 3
+end
+if eq k 3
+ret 7
+end
+if eq k 4
+ret 10
+end
+if eq k 5
+ret 13
+end
+ret 18
+end
+fn kindlen k ulong to ulong
+if eq k 2
+ret 4
+end
+if eq k 5
+ret 5
+end
+if eq k 6
+ret 2
+end
+ret 3
+end
+fn qbegin run ulong seq ulong to void
+for i ulong 8
+put Q i 0
+end
+put Q 0 run
+put Q 1 seq
+for i ulong 5
+put Jhave i 0
+end
+for i ulong 3
+put J i 0
+end
+end
+note Serializer takes body In/Inlen; Outb/Outlen are published only on success.
+fn packet k ulong seq ulong part ulong total ulong bytes ulong to bool
+if or lt k 1 gt k 6
+ret false
+end
+if gt get Inlen 0 1000
+ret false
+end
+outreset
+keyemit 0 22
+for i ulong 16
+d = and shr get Q 0 mul sub 15 i 4 15
+emitb get Digits d
+end
+keyemit 22 6
+off = kindoff k
+for i ulong kindlen k
+emitb get Kinds add off i
+end
+keyemit 28 5
+emitn seq
+keyemit 33 6
+emitn part
+emitb 47
+emitn total
+keyemit 39 7
+emitn bytes
+emitb 10
+for i ulong get Inlen 0
+emitb get In i
+end
+ret eq get Err 0 0
+end
+fn pkparse to bool
+if or gt get Inlen 0 1200 lt get Inlen 0 65
+ret false
+end
+put P 0 0
+put P 2 0
+keyread 0 22
+run = ulong 0
+for i ulong 16
+p = get P 0
+c = get In p
+d = ulong 16
+if isdigit c
+d = sub ulong c 48
+else
+if and ge c 97 le c 102
+d = sub ulong c 87
+end
+end
+if ge d 16
+ret false
+end
+run = or shl run 4 d
+put P 0 add p 1
+end
+if ne run get Q 0
+ret false
+end
+keyread 22 6
+kind = ulong 0
+for k ulong 6
+at = get P 0
+off = kindoff add k 1
+size = kindlen add k 1
+ok = true
+for i ulong size
+if not ineq add at i get Kinds add off i
+ok = false
+end
+end
+if and ok ineq add at size 32
+kind = add k 1
+end
+end
+if eq kind 0
+ret false
+end
+put N 0 kind
+put P 0 add get P 0 kindlen kind
+keyread 28 5
+number
+put N 1 get P 1
+keyread 33 6
+number
+put N 2 get P 1
+expect 47
+number
+put N 3 get P 1
+keyread 39 7
+number
+put N 4 get P 1
+expect 10
+put N 5 get P 0
+put N 6 sub get Inlen 0 get P 0
+ret eq get P 2 0
+end
+fn jobtake to ulong
+note n via N4
+note part via N2
+note total via N3
+if or eq get N 4 0 gt get N 4 4096
+ret 0
+end
+if ne get N 3 div add get N 4 999 1000
+ret 0
+end
+if or eq get N 2 0 gt get N 2 get N 3
+ret 0
+end
+want = ulong 1000
+if eq get N 2 get N 3
+want = sub get N 4 mul sub get N 3 1 1000
+end
+if ne want get N 6
+ret 0
+end
+if ne get J 0 0
+if or ne get J 0 get N 4 ne get J 1 get N 3
+ret 0
+end
+end
+slot = sub get N 2 1
+off = mul slot 1000
+if ne get Jhave slot 0
+for i ulong want
+if ne get Jbuf add off i get In add get N 5 i
+ret 0
+end
+end
+ret 2
+end
+for i ulong want
+put Jbuf add off i get In add get N 5 i
+end
+put Jhave slot 1
+put J 0 get N 4
+put J 1 get N 3
+put J 2 add get J 2 1
+ret 1
+end
+note Return0 refused,1 accepted,2 duplicate requiring GOT/ACK again.
+fn qreceive to ulong
+if not pkparse
+ret 0
+end
+if ne get N 1 get Q 1
+ret 0
+end
+kind = get N 0
+if eq kind 1
+ret jobtake
+end
+if ne kind 2
+if ne get N 6 0
+ret 0
+end
+ret 1
+end
+note part via N2
+if eq get N 2 0
+ret 0
+end
+if le get N 2 get Q 2
+ret 2
+end
+if or ne get N 2 add get Q 2 1 eq get Q 4 8
+ret 0
+end
+n = get N 6
+if or eq n 0 gt n 319
+ret 0
+end
+slot = rem add get Q 3 get Q 4 8
+for i ulong n
+put Queue add mul slot 320 i get In add get N 5 i
+end
+put Qlens slot n
+put Q 4 add get Q 4 1
+put Q 2 get N 2
+ret 1
+end
+fn qtake to bool
+if eq get Q 4 0
+ret false
+end
+slot = get Q 3
+n = get Qlens slot
+for i ulong n
+put In i get Queue add mul slot 320 i
+end
+put Inlen 0 n
+put Q 3 rem add slot 1 8
+put Q 4 sub get Q 4 1
+ret true
+end

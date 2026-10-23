@@ -1,0 +1,198 @@
+note L694 fixed-buffer utilities. No platform effects in product functions.
+global In uchar 8192
+global Inlen ulong 1
+global Outb uchar 8192
+global Outlen ulong 1
+global Err ulong 1
+text Digits "0123456789abcdef"
+fn emitb c uchar to void
+n = get Outlen 0
+if ge n len Outb
+put Err 0 1
+else
+put Outb n c
+put Outlen 0 add n 1
+end
+end
+fn emitn v ulong to void
+d = new uchar 20 0
+n = ulong 0
+x = v
+put d n uchar add rem x 10 48
+n = add n 1
+x = div x 10
+while gt x 0
+put d n uchar add rem x 10 48
+n = add n 1
+x = div x 10
+end
+while gt n 0
+n = sub n 1
+emitb get d n
+end
+end
+fn outreset to void
+put Outlen 0 0
+put Err 0 0
+end
+fn ineq at ulong c uchar to bool
+if ge at get Inlen 0
+ret false
+end
+ret eq get In at c
+end
+fn isdigit c uchar to bool
+ret and ge c 48 le c 57
+end
+note Parser cursor P0, number P1, error P2. Never wraps a u32.
+global P ulong 3
+fn number to void
+v = ulong 0
+n = ulong 0
+p = get P 0
+while lt p get Inlen 0
+c = get In p
+if not isdigit c
+put P 0 p
+put P 1 v
+if eq n 0
+put P 2 1
+end
+ret
+end
+if or ge n 10 gt v 429496729
+put P 2 1
+ret
+end
+v = add mul v 10 sub ulong c 48
+if gt v 4294967295
+put P 2 1
+ret
+end
+n = add n 1
+p = add p 1
+end
+put P 0 p
+put P 1 v
+if eq n 0
+put P 2 1
+end
+end
+fn expect c uchar to void
+p = get P 0
+if not ineq p c
+put P 2 1
+else
+put P 0 add p 1
+end
+end
+fn crc off ulong count ulong to uint
+c = uint 4294967295
+for i ulong count
+c = xor c uint get In add off i
+for k ulong 8
+if ne and c 1 0
+c = xor shr c 1 3988292384
+else
+c = shr c 1
+end
+end
+end
+ret not c
+end
+note R: seq, active, kind (1 chat 2 code 3 more), asked, heard, slow,
+note code-visible, prompt length, answer length, history count, session.
+global R ulong 16
+global Prompt uchar 160
+global Answer uchar 160
+global Hist uchar 5120
+global Hlen ulong 32
+text Ack "I need to code that. Let me send it off to the Spark."
+text Ackmore "Let me take that change to the Spark."
+fn start kind ulong now ulong to bool
+ret false
+end
+fn answer seq ulong now ulong to bool
+ret false
+end
+fn cancel to void
+end
+fn tick now ulong to ulong
+ret 0
+end
+fn reset to void
+end
+global Fails ulong 1
+global Checks ulong 1
+fn check ok bool id ulong to void
+put Checks 0 add get Checks 0 1
+outreset
+emitn id
+if ok
+emitb 32
+emitb 48
+else
+put Fails 0 add get Fails 0 1
+emitb 32
+emitb 49
+end
+emitb 10
+w = write 1 Outb 0 get Outlen 0
+end
+text Ask "make me a calculator"
+text Reply "Model supplied answer."
+fn askload to void
+put Inlen 0 len Ask
+for i ulong len Ask
+put In i get Ask i
+end
+end
+fn main to int
+askload
+check start 2 0 1
+check eq get R 1 1 2
+check eq get R 2 2 3
+check eq get R 8 len Ack 4
+old = get R 0
+check not start 1 1 5
+put Inlen 0 len Reply
+for i ulong len Reply
+put In i get Reply i
+end
+check not answer add old 1 2 6
+check eq get R 8 len Ack 7
+check answer old 3 8
+check eq get R 1 0 9
+askload
+check start 1 4 10
+check gt get R 0 old 11
+cancel
+check eq get R 1 0 12
+check not answer get R 0 5 13
+askload
+check start 1 10 14
+check eq tick 20009 0 15
+check eq tick 20010 1 16
+check eq tick 20011 0 17
+check eq tick 30010 2 18
+check eq get R 1 0 19
+old = get R 0
+reset
+check eq get R 0 old 20
+askload
+check start 2 40000 21
+check gt get R 0 old 22
+cancel
+put Inlen 0 160
+check not start 1 40001 23
+check eq get R 1 0 24
+askload
+check not start 3 40002 25
+put R 6 1
+check start 3 40003 26
+check eq get R 8 len Ackmore 27
+cancel
+put R 0 4294967295
+check not start 1 40004 28
+ret int get Fails 0
+end

@@ -1,0 +1,264 @@
+note CODE protocol: C seq, parts, bytes, crc, got. D parsed header.
+global C ulong 8
+global D ulong 8
+global Code uchar 32769
+global Have uchar 256
+global Piece uchar 128
+global Lang uchar 16
+global Newlang uchar 16
+fn codebeg seq ulong to void
+for i ulong 8
+put C i 0
+end
+put C 0 seq
+for i ulong 256
+put Have i 0
+end
+put Code 0 0
+end
+fn decfield slot ulong sep uchar to void
+number
+put D slot get P 1
+expect sep
+end
+fn hexread to void
+v = ulong 0
+for i ulong 8
+p = get P 0
+if ge p get Inlen 0
+put P 2 1
+ret
+end
+c = get In p
+d = ulong 16
+if isdigit c
+d = sub ulong c 48
+else
+if and ge c 97 le c 102
+d = sub ulong c 87
+end
+end
+if ge d 16
+put P 2 1
+ret
+end
+v = add mul v 16 d
+put P 0 add p 1
+end
+put D 4 v
+expect 32
+end
+fn codehead to bool
+put P 0 0
+put P 2 0
+expect 67
+expect 79
+expect 68
+expect 69
+expect 32
+decfield 0 32
+decfield 1 47
+decfield 2 32
+decfield 3 32
+hexread
+if ne get P 2 0
+ret false
+end
+if or ne get D 0 get C 0 eq get D 3 0
+ret false
+end
+if gt get D 3 32768
+ret false
+end
+if ne get D 2 div add get D 3 127 128
+ret false
+end
+if or lt get D 1 1 gt get D 1 get D 2
+ret false
+end
+if ne get C 1 0
+if or ne get C 1 get D 2 ne get C 2 get D 3
+ret false
+end
+if ne get C 3 get D 4
+ret false
+end
+end
+ret true
+end
+fn langread to bool
+for i ulong 16
+put Newlang i 0
+end
+n = ulong 0
+p = get P 0
+while lt p get Inlen 0
+c = get In p
+if eq c 32
+if eq n 0
+ret false
+end
+put P 0 add p 1
+put D 5 n
+ret true
+end
+ok = or and ge c 97 le c 122 isdigit c
+ok = or ok or eq c 43 eq c 35
+ok = or ok or eq c 46 or eq c 95 eq c 45
+if or not ok ge n 15
+ret false
+end
+put Newlang n c
+p = add p 1
+n = add n 1
+end
+ret false
+end
+fn pieceread to ulong
+p = get P 0
+n = ulong 0
+while lt p get Inlen 0
+c = get In p
+p = add p 1
+if eq c 92
+if ge p get Inlen 0
+ret 129
+end
+c = get In p
+p = add p 1
+if eq c 110
+c = 10
+else
+if ne c 92
+ret 129
+end
+end
+else
+if or lt c 32 gt c 126
+ret 129
+end
+end
+if ge n 128
+ret 129
+end
+put Piece n c
+n = add n 1
+end
+ret n
+end
+fn codetake to bool
+if gt get Inlen 0 320
+ret false
+end
+if not codehead
+ret false
+end
+if not langread
+ret false
+end
+n = pieceread
+want = ulong 128
+if eq get D 1 get D 2
+want = sub get D 3 mul sub get D 2 1 128
+end
+if ne n want
+ret false
+end
+slot = sub get D 1 1
+off = mul slot 128
+if ne get C 1 0
+for i ulong 16
+if ne get Lang i get Newlang i
+ret false
+end
+end
+end
+if ne get Have slot 0
+for i ulong n
+if ne get Code add off i get Piece i
+ret false
+end
+end
+ret true
+end
+put C 1 get D 2
+put C 2 get D 3
+put C 3 get D 4
+for i ulong 16
+put Lang i get Newlang i
+end
+for i ulong n
+put Code add off i get Piece i
+end
+put Have slot 1
+put C 4 add get C 4 1
+ret true
+end
+fn codecrc to uint
+c = uint 4294967295
+for i ulong get C 2
+c = xor c uint get Code i
+for k ulong 8
+if ne and c 1 0
+c = xor shr c 1 3988292384
+else
+c = shr c 1
+end
+end
+end
+ret not c
+end
+fn codestat to ulong
+if eq get C 1 0
+ret 0
+end
+if lt get C 4 get C 1
+ret 1
+end
+if ne ulong codecrc get C 3
+ret 3
+end
+lines = ulong 0
+for i ulong get C 2
+c = get Code i
+if eq c 0
+ret 3
+end
+if eq c 10
+lines = add lines 1
+end
+end
+if ne get Code sub get C 2 1 10
+lines = add lines 1
+end
+if gt lines 800
+ret 3
+end
+put Code get C 2 0
+ret 2
+end
+fn missing to ulong
+if eq get C 1 0
+ret 1
+end
+for i ulong get C 1
+if eq get Have i 0
+ret add i 1
+end
+end
+ret 0
+end
+note Display admission is distinct from a model's closing sentence.
+fn codeshow seq ulong to bool
+if eq get R 1 0
+ret false
+end
+if or ne seq get R 0 ne seq get C 0
+ret false
+end
+if ne codestat 2
+ret false
+end
+put R 6 1
+ret true
+end

@@ -1,0 +1,292 @@
+note Intent vocabulary frozen from svc/allen_intent.c. It selects jobs, never answers.
+global Fold uchar 160
+global Fn ulong 2
+text Lists "please|can you|could you|would you|will you|i d like you to|i want you to|i need you to|allen|hey allen|ok|okay\nwrite|make|build|create|code|program|generate|implement|develop|give me a|i need a|i want a\ncode|program|programs|script|scripts|function|functions|app|apps|application|game|games|website|web page|webpage|calculator|converter|parser|compiler|interpreter|algorithm|class|api|server|bot|regex|unit test|unit tests|cli|command line tool|snake|tetris|pong|todo app|to do app|to do list app|timer app|stopwatch|python|javascript|typescript|rust|golang|java|kotlin|swift|ruby|php|html|css|sql|bash|shell script|c program|c code|in c|c plus plus|cpp|mojo|zig|haskell|lua|perl\npoem|poems|haiku|story|stories|song|songs|letter|email|essay|joke|jokes|limerick|speech\ncode|program|script\nnow|add|also|and|change|make it|make the|rename|remove|delete|replace|use|fix|put|give it|let it|instead|then|next|can it|could it|it should|the|move|turn|show|split|convert it|rewrite|port it|translate it|explain it\nwrite|make|build|create|code|program|draft|compose|generate|design|implement|invent|name|give me a|i need a|i want a\na poem|a haiku|a story|a song|a script|a function|a program|a list of|some code|a letter|an email|a plan for|a name for\nexplain|what is|what are|whats|what s|why|how does|how do|how is|how are|describe|tell me about|what does|who was|who is|define|when was|when did|where is|is it true\ndifference between|mean|means\ndo|run|fix|find|search|look up|check|open|send|start|stop|install|set up|plan|schedule|calculate|work out|convert|translate|summarize|summarise|list|sort|count|compare|turn|go\n"
+fn foldin to void
+n = ulong 0
+space = false
+for i ulong get Inlen 0
+c = get In i
+if and ge c 65 le c 90
+c = add sub c 65 97
+end
+if or and ge c 97 le c 122 isdigit c
+if and space gt n 0
+put Fold n uchar 32
+n = add n 1
+end
+put Fold n c
+n = add n 1
+space = false
+else
+space = true
+end
+end
+put Fn 0 n
+put Fn 1 0
+end
+fn phrase at ulong off ulong size ulong to bool
+if gt add at size get Fn 0
+ret false
+end
+for i ulong size
+if ne get Fold add at i get Lists add off i
+ret false
+end
+end
+if lt add at size get Fn 0
+if ne get Fold add at size 32
+ret false
+end
+end
+ret true
+end
+fn inphrase off ulong size ulong anypos bool to bool
+if not anypos
+ret phrase get Fn 1 off size
+end
+count = sub get Fn 0 get Fn 1
+for i ulong count
+at = add i get Fn 1
+ok = eq at get Fn 1
+if gt at 0
+ok = or ok eq get Fold sub at 1 32
+end
+if ok
+if phrase at off size
+ret true
+end
+end
+end
+ret false
+end
+fn listed group ulong anypos bool to ulong
+g = ulong 0
+s = ulong 0
+for p ulong len Lists
+c = get Lists p
+if or eq c 124 eq c 10
+if eq g group
+if inphrase s sub p s anypos
+ret sub p s
+end
+end
+s = add p 1
+if eq c 10
+g = add g 1
+end
+end
+end
+ret 0
+end
+fn classify to ulong
+if not textok
+ret 0
+end
+foldin
+skip = listed 0 false
+while gt skip 0
+if ge add get Fn 1 skip get Fn 0
+skip = 0
+else
+put Fn 1 add add get Fn 1 skip 1
+skip = listed 0 false
+end
+end
+if and ne get R 6 0 gt listed 5 false 0
+ret 3
+end
+plain = listed 4 false
+if or eq plain 4 eq plain 7
+ret 2
+end
+if and gt listed 3 true 0 eq listed 4 true 0
+ret 1
+end
+if and gt listed 1 false 0 gt listed 2 true 0
+ret 2
+end
+ret 1
+end
+note Ordinary want enum0chat,1make,2explain,3do.
+fn jobwant to ulong
+if gt listed 8 false 0
+ret 2
+end
+if or gt listed 6 false 0 gt listed 7 true 0
+ret 1
+end
+if gt listed 10 false 0
+ret 3
+end
+if gt listed 9 true 0
+ret 2
+end
+ret 0
+end
+text Job "JOB "
+text Codeask " asked "
+text Forcode " for code.\t"
+text Formore " to change the code just shown.\t"
+text Wantstr "chatmakeexplaindo"
+text Intro "You are the far hands of "
+text Home ", a quiet presence living in AIENOS on "
+text Comp "'s computer. You answer as "
+text Sees "; "
+text Words " sees only your words, as if "
+text Said " said them. Plain English, short sentences, no headings, no lists, no greetings, no apologies. Plain letters and punctuation only: no dashes, no curly quotes, no symbols. Never mention a model, a prompt or instructions. "
+text Make " asked for something to be made. Make it whole and correct. Begin with one short sentence saying what you made, then the work itself."
+text Explain " asked to understand something. Explain it in three plain sentences at most, the heart of it first, no more than is needed."
+text Doing " asked for something to be done. "
+text Cannot " cannot yet act outside this computer, so say in two or three short sentences what you would do, in order, and what you would need."
+text Chat " said something in passing. Answer in one or two warm, plain sentences."
+text Allen "Allen"
+text Person "the person"
+fn selfemit to void
+off = add 40 mul mem32 32 113
+if eq get Mem off 0
+for i ulong len Allen
+emitb get Allen i
+end
+else
+for i ulong 24
+c = get Mem add off i
+if eq c 0
+ret
+end
+emitb c
+end
+end
+end
+fn whoemit to void
+if eq get Mem 8 0
+for i ulong len Person
+emitb get Person i
+end
+else
+for i ulong 24
+c = get Mem add i 8
+if eq c 0
+ret
+end
+emitb c
+end
+end
+end
+fn jobbuild kind ulong seq ulong to bool
+if or lt kind 1 gt kind 3
+ret false
+end
+if or eq seq 0 gt seq 4294967295
+ret false
+end
+if not textok
+ret false
+end
+outreset
+for i ulong len Job
+emitb get Job i
+end
+emitn seq
+emitb 32
+if gt kind 1
+emitb 99
+emitb 111
+emitb 100
+emitb 101
+if eq kind 3
+emitb 45
+emitb 109
+emitb 111
+emitb 114
+emitb 101
+end
+emitb 32
+whoemit
+for i ulong len Codeask
+emitb get Codeask i
+end
+selfemit
+if eq kind 3
+for i ulong len Formore
+emitb get Formore i
+end
+else
+for i ulong len Forcode
+emitb get Forcode i
+end
+end
+else
+w = jobwant
+off = ulong 0
+size = ulong 4
+if eq w 1
+off = 4
+end
+if eq w 2
+off = 8
+size = 7
+end
+if eq w 3
+off = 15
+size = 2
+end
+for i ulong size
+emitb get Wantstr add off i
+end
+emitb 32
+for i ulong len Intro
+emitb get Intro i
+end
+selfemit
+for i ulong len Home
+emitb get Home i
+end
+whoemit
+for i ulong len Comp
+emitb get Comp i
+end
+selfemit
+for i ulong len Sees
+emitb get Sees i
+end
+whoemit
+for i ulong len Words
+emitb get Words i
+end
+selfemit
+for i ulong len Said
+emitb get Said i
+end
+whoemit
+if eq w 0
+for i ulong len Chat
+emitb get Chat i
+end
+end
+if eq w 1
+for i ulong len Make
+emitb get Make i
+end
+end
+if eq w 2
+for i ulong len Explain
+emitb get Explain i
+end
+end
+if eq w 3
+for i ulong len Doing
+emitb get Doing i
+end
+selfemit
+for i ulong len Cannot
+emitb get Cannot i
+end
+end
+emitb 9
+end
+for i ulong get Inlen 0
+emitb get In i
+end
+ret le get Outlen 0 4096
+end

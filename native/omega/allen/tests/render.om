@@ -1,0 +1,12 @@
+text Ppm "P6\n192 128\n255\n"
+fn main to int
+render
+w = write 1 Ppm 0 len Ppm
+if ne w long len Ppm
+ret 1
+end
+if not frameout
+ret 2
+end
+ret 0
+end

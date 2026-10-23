@@ -1,0 +1,145 @@
+note Development stdio boundary. Lines ASK, SAY, WAIT, CODE, CANCEL, RESET,
+note and TIME milliseconds. stdout courier jobs; stderr actual visible text.
+note No socket, clock, model, framebuffer, keyboard, filesystem or EFI provider.
+global Input uchar 8192
+global Lstate ulong 3
+fn sendout fd int to bool
+p = ulong 0
+while lt p get Outlen 0
+w = write fd Outb p sub get Outlen 0 p
+if le w 0
+ret false
+end
+p = add p ulong w
+end
+ret true
+end
+fn display to bool
+outreset
+for i ulong get R 8
+emitb get Answer i
+end
+emitb 10
+ret sendout 2
+end
+text Cmds "CANCELRESET"
+fn isword off ulong size ulong to bool
+if ne get Inlen 0 size
+ret false
+end
+for i ulong size
+if ne get In i get Cmds add off i
+ret false
+end
+end
+ret true
+end
+fn dispatch to bool
+if isword 0 6
+cancel
+ret true
+end
+if isword 6 5
+reset
+ret true
+end
+if and ineq 0 84 ineq 1 73
+put P 0 5
+put P 2 0
+number
+if or ne get P 2 0 ne get P 0 get Inlen 0
+ret false
+end
+if lt get P 1 get Lstate 2
+ret false
+end
+put Lstate 2 get P 1
+v = tick get Lstate 2
+ret true
+end
+if ineq 0 67
+if codetake
+b = heard get C 0 get Lstate 2
+ret true
+end
+ret false
+end
+if or ineq 0 83 ineq 0 87
+v = saytake get Lstate 2
+if eq v 1
+if ne get S 1 0
+ret display
+end
+ret true
+end
+if eq v 2
+emitb 10
+ret sendout 1
+end
+ret false
+end
+if and ineq 0 65 ineq 1 83
+if not and ineq 2 75 ineq 3 32
+ret false
+end
+n = sub get Inlen 0 4
+for i ulong n
+put In i get In add i 4
+end
+put Inlen 0 n
+kind = classify
+if not start kind get Lstate 2
+ret false
+end
+if gt kind 1
+codebeg get R 0
+b = display
+end
+if not jobbuild kind get R 0
+cancel
+ret false
+end
+emitb 10
+ret sendout 1
+end
+ret false
+end
+fn main to int
+constants
+while true
+n = read 0 Input 0 len Input
+if lt n 0
+ret 2
+end
+if eq n 0
+if ne get Lstate 0 0
+ret 65
+end
+ret 0
+end
+for i ulong ulong n
+c = get Input i
+if eq c 10
+if eq get Lstate 1 0
+put Inlen 0 get Lstate 0
+b = dispatch
+if not b
+put Lstate 0 0
+ret 65
+end
+else
+put Lstate 1 0
+end
+put Lstate 0 0
+else
+if lt get Lstate 0 8192
+put In get Lstate 0 c
+put Lstate 0 add get Lstate 0 1
+else
+put Lstate 1 1
+end
+end
+end
+end
+ret 0
+end

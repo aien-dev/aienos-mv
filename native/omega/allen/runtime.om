@@ -1,0 +1,145 @@
+note R: seq, active, kind (1 chat 2 code 3 more), asked, heard, slow,
+note code-visible, prompt length, answer length, history count, session.
+global R ulong 16
+global Prompt uchar 160
+global Answer uchar 160
+global Hist uchar 5120
+global Hlen ulong 32
+text Ack "I need to code that. Let me send it off to the Spark."
+text Ackmore "Let me take that change to the Spark."
+fn textok to bool
+n = get Inlen 0
+if or eq n 0 gt n 159
+ret false
+end
+for i ulong n
+c = get In i
+if or lt c 32 gt c 126
+ret false
+end
+end
+ret true
+end
+fn histadd which ulong to void
+n = get R 9
+if eq n 32
+for i ulong 4960
+put Hist i get Hist add i 160
+end
+for i ulong 31
+put Hlen i get Hlen add i 1
+end
+n = 31
+end
+size = get R add which 7
+for i ulong size
+if eq which 0
+put Hist add mul n 160 i get Prompt i
+else
+put Hist add mul n 160 i get Answer i
+end
+end
+put Hlen n size
+put R 9 add n 1
+end
+fn start kind ulong now ulong to bool
+if or ne get R 1 0 ge get R 0 4294967295
+ret false
+end
+if or lt kind 1 gt kind 3
+ret false
+end
+if and eq kind 3 eq get R 6 0
+ret false
+end
+if not textok
+ret false
+end
+for i ulong get Inlen 0
+put Prompt i get In i
+end
+put R 7 get Inlen 0
+put R 0 add get R 0 1
+put R 1 1
+put R 2 kind
+put R 3 now
+put R 4 now
+put R 5 0
+put R 8 0
+put R 11 0
+put R 13 0
+if eq kind 2
+for i ulong len Ack
+put Answer i get Ack i
+end
+put R 8 len Ack
+end
+if eq kind 3
+for i ulong len Ackmore
+put Answer i get Ackmore i
+end
+put R 8 len Ackmore
+end
+histadd 0
+ret true
+end
+fn answer seq ulong now ulong to bool
+if or eq get R 1 0 ne seq get R 0
+ret false
+end
+if or lt now get R 4 not textok
+ret false
+end
+for i ulong get Inlen 0
+put Answer i get In i
+end
+put R 8 get Inlen 0
+put R 4 now
+put R 1 0
+histadd 1
+ret true
+end
+fn cancel to void
+put R 1 0
+end
+fn heard seq ulong now ulong to bool
+if or eq get R 1 0 ne seq get R 0
+ret false
+end
+if lt now get R 4
+ret false
+end
+put R 4 now
+ret true
+end
+fn tick now ulong to ulong
+if or eq get R 1 0 lt now get R 4
+ret 0
+end
+if ge sub now get R 4 30000
+cancel
+ret 2
+end
+if and eq get R 5 0 ge sub now get R 3 20000
+put R 5 1
+ret 1
+end
+ret 0
+end
+fn reset to void
+for i ulong 9
+put R add i 1 0
+end
+end
+note Restore one externally decoded transcript line. No live job or ID reuse.
+fn restore to bool
+if or ne get R 1 0 not textok
+ret false
+end
+for i ulong get Inlen 0
+put Answer i get In i
+end
+put R 8 get Inlen 0
+histadd 1
+ret true
+end

@@ -1,0 +1,3 @@
+ASK make me a calculator
+CODE 1 1/1 9 3ce11e06 python print(1)\n
+SAY 1 1/1 Code ready.

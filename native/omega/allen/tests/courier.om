@@ -1,0 +1,63 @@
+text Pkt "ALLEN-COURIER v=1 run=0123456789abcdef kind=LINE seq=7 part=1/0 bytes=0\nSAY 7 1/1 Model words."
+fn pktload to void
+put Inlen 0 len Pkt
+for i ulong len Pkt
+put In i get Pkt i
+end
+end
+fn outin to void
+put Inlen 0 get Outlen 0
+for i ulong get Outlen 0
+put In i get Outb i
+end
+end
+fn main to int
+qbegin 81985529216486895 7
+pktload
+check eq qreceive 1 201
+check eq get Q 4 1 202
+check eq qreceive 2 203
+check eq get Q 4 1 204
+check qtake 205
+check eq get Inlen 0 22 206
+check not qtake 207
+pktload
+put In 22 uchar 49
+check eq qreceive 0 208
+check eq get Q 2 1 209
+pktload
+put In 53 uchar 56
+check eq qreceive 0 210
+qbegin 81985529216486895 7
+put Inlen 0 1
+put In 0 uchar 120
+b = packet 1 7 1 1 1
+outin
+check b 211
+check eq qreceive 1 212
+check eq get J 2 1 213
+check eq get Jbuf 0 120 214
+check eq qreceive 2 215
+put In sub get Inlen 0 1 uchar 121
+check eq qreceive 0 216
+check eq get Jbuf 0 120 217
+qbegin 81985529216486895 7
+put Inlen 0 1
+put In 0 uchar 122
+b = packet 1 7 2 2 1001
+outin
+check b 218
+check eq qreceive 1 219
+check eq get J 2 1 220
+put Inlen 0 1000
+for i ulong 1000
+put In i uchar 120
+end
+b = packet 1 7 1 2 1001
+outin
+check b 221
+check eq qreceive 1 222
+check eq get J 2 2 223
+check eq get Jbuf 1000 122 224
+ret int get Fails 0
+end

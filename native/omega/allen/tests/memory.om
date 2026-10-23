@@ -1,0 +1,146 @@
+global Disk uchar 8192
+text Name "Allen"
+text Ntext "Meet at noon."
+fn enctounit to void
+for i ulong 4096
+put Unit i get Enc i
+end
+end
+fn diskput slot ulong count ulong to void
+for i ulong count
+put Disk add mul slot 4096 i get Enc i
+end
+end
+fn diskget slot ulong to void
+for i ulong 4096
+put Unit i get Disk add mul slot 4096 i
+end
+end
+fn main to int
+constants
+mset32 0 3
+for i ulong len Name
+put Mem add i 40 get Name i
+end
+check memenc 1 301
+check eq get32 12 76 302
+check memdec 303
+check eq get Md 0 1 304
+check eq get Mem 40 65 305
+put Unit 24 uchar 1
+check not memdec 306
+check eq get Md 0 1 307
+check eq get Mem 40 65 308
+enctounit
+put Unit 64 uchar 4
+check not memdec 309
+check eq get Mem 0 3 310
+enctounit
+put32 8 3
+put32 12 64
+seal 64
+check memdec 311
+check eq get Md 1 3 312
+check eq get Mem 40 65 313
+put32 8 2
+put32 12 40
+for i ulong 24
+put Unit add i 104 0
+end
+seal 40
+check memdec 314
+check eq get Md 1 2 315
+check eq get Mem 40 0 316
+put Mem 40 uchar 65
+check memenc 1 317
+check txbegin 318
+check eq get Tx 1 0 319
+diskput 0 4096
+check txwrite true 320
+check txflush true 321
+diskget 0
+check txread true 322
+check eq get St 0 1 323
+check eq get St 1 0 324
+mset32 0 4
+check txbegin 325
+check eq get Tx 1 1 326
+diskput 1 512
+check not txwrite false 327
+check eq get St 0 1 328
+diskget 0
+check memdec 329
+check eq get Mem 0 3 330
+mset32 0 4
+check txbegin 331
+diskput 1 4096
+check txwrite true 332
+check not txflush false 333
+check eq get St 0 1 334
+check txbegin 335
+check txwrite true 336
+check txflush true 337
+diskget 1
+put Unit 200 uchar 1
+check not txread true 338
+check eq get St 0 1 339
+check txbegin 340
+check txwrite true 341
+check txflush true 342
+check not txread false 343
+check eq get St 0 1 344
+check txbegin 345
+diskput 1 4096
+check txwrite true 346
+check txflush true 347
+diskget 1
+check txread true 348
+check eq get St 0 2 349
+check eq get St 1 1 350
+for i ulong 3
+put St i 0
+end
+diskget 1
+check loadcopy 1 351
+diskget 0
+check loadcopy 0 352
+check not loadcopy 0 362
+check eq get St 2 2 363
+check eq get St 0 2 353
+check eq get Mem 0 4 354
+put Ns 0 len Ntext
+put Ns 1 2
+put Ns 2 3
+for i ulong len Ntext
+put Note i get Ntext i
+end
+check noteenc 355
+check notedec 2 356
+check eq get Ns 0 len Ntext 357
+check not notedec 3 358
+put Unit 28 uchar 1
+check not notedec 2 359
+check eq get Ns 1 2 360
+check nbegin 364
+check not txbegin 365
+check not nwrite false 366
+check eq get Nt 0 0 367
+check nbegin 368
+check nwrite true 369
+check not nflush false 370
+check nbegin 371
+check nwrite true 372
+check nflush true 373
+enctounit
+put Unit 300 uchar 1
+check not nread true 374
+check nbegin 375
+check nwrite true 376
+check nflush true 377
+enctounit
+check nread true 378
+check eq get St 0 2 379
+put St 0 18446744073709551615
+check not txbegin 361
+ret int get Fails 0
+end

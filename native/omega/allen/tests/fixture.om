@@ -1,0 +1,67 @@
+note Native acceptance of frozen existing courier --split fixtures, reversed.
+global Stream uchar 65536
+global Starts ulong 257
+global Sizes ulong 257
+global Count ulong 1
+fn partload slot ulong to void
+n = get Sizes slot
+put Inlen 0 n
+for i ulong n
+put In i get Stream add get Starts slot i
+end
+end
+fn main to int
+n = read 0 Stream 0 len Stream
+if le n 0
+ret 90
+end
+used = ulong n
+while gt n 0
+if eq used len Stream
+ret 91
+end
+n = read 0 Stream used sub len Stream used
+if lt n 0
+ret 92
+end
+used = add used ulong n
+end
+startpos = ulong 0
+for i ulong used
+if eq get Stream i 10
+if eq get Stream startpos 67
+slot = get Count 0
+if ge slot 256
+ret 93
+end
+put Starts slot startpos
+put Sizes slot sub i startpos
+put Count 0 add slot 1
+end
+startpos = add i 1
+end
+end
+codebeg 1
+parts = get Count 0
+check gt parts 1 401
+for i ulong sub parts 1
+partload sub sub parts 1 i
+check codetake add 410 i
+end
+check eq codestat 1 402
+check eq missing 1 403
+partload 0
+check codetake 404
+check eq codestat 2 405
+check eq get C 4 parts 406
+for i ulong parts
+partload i
+check codetake add 700 i
+end
+check eq get C 4 parts 407
+check eq codestat 2 408
+partload 0
+put In 5 uchar 50
+check not codetake 409
+ret int get Fails 0
+end

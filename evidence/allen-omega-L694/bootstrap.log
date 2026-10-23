@@ -1,0 +1,3 @@
+/home/drakestapleton/.local/bin/quiet-build: 47: cannot create /home/drakestapleton/.local/state/quiet/waits.log: Read-only file system
+/home/drakestapleton/.local/bin/quiet-build: 47: printf: printf: I/O error
+PASS source-only seed bootstrap and compiler fixpoint

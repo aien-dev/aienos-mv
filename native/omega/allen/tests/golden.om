@@ -1,0 +1,16 @@
+text Gname "Allen"
+fn main to int
+constants
+mset32 0 3
+for i ulong len Gname
+put Mem add i 40 get Gname i
+end
+if not memenc 1
+ret 1
+end
+n = write 1 Enc 0 4096
+if ne n 4096
+ret 2
+end
+ret 0
+end

@@ -1,0 +1,175 @@
+note SAY/WAIT parser, staged folded bytes. Native CODE receive remains separate.
+global Say uchar 160
+global S ulong 5
+fn sayhead to bool
+put P 0 0
+put P 2 0
+if ineq 0 87
+expect 87
+expect 65
+expect 73
+expect 84
+expect 32
+number
+put S 0 get P 1
+put S 1 0
+put S 2 0
+if ne get P 0 get Inlen 0
+ret false
+end
+ret eq get P 2 0
+end
+expect 83
+expect 65
+expect 89
+expect 32
+number
+put S 0 get P 1
+expect 32
+if ne get P 2 0
+ret false
+end
+put S 1 1
+put S 2 1
+save = get P 0
+number
+part = get P 1
+if ineq get P 0 47
+expect 47
+number
+put S 2 get P 1
+expect 32
+if or ne get P 2 0 eq part 0
+ret false
+end
+put S 1 part
+else
+put P 0 save
+put P 2 0
+end
+put S 3 get P 0
+ret eq get P 2 0
+end
+fn sayfold to bool
+n = ulong 0
+p = get S 3
+space = true
+while lt p get Inlen 0
+c = get In p
+p = add p 1
+if eq c 92
+if or ineq p 110 ineq p 116
+c = 32
+p = add p 1
+end
+end
+if or lt c 32 ge c 127
+c = 32
+end
+if eq c 32
+if not space
+if ge n 159
+ret false
+end
+put Say n c
+n = add n 1
+end
+space = true
+else
+if ge n 159
+ret false
+end
+put Say n c
+n = add n 1
+space = false
+end
+end
+if gt n 0
+if eq get Say sub n 1 32
+n = sub n 1
+end
+end
+put S 4 n
+ret true
+end
+note Return1 accepted,2 request AGAIN,3 give up after retry;0 rejected.
+fn saytake now ulong to ulong
+if or eq get R 1 0 gt get Inlen 0 319
+ret 0
+end
+if not sayhead
+ret 0
+end
+if or ne get S 0 get R 0 lt now get R 4
+ret 0
+end
+if eq get S 1 0
+b = heard get S 0 now
+ret 1
+end
+if not sayfold
+ret 0
+end
+if gt get R 2 1
+if eq get S 2 0
+ret 0
+end
+if ne get C 0 get R 0
+ret 0
+end
+if ne codestat 2
+if eq get R 13 0
+put R 13 1
+outreset
+emitb 65
+emitb 71
+emitb 65
+emitb 73
+emitb 78
+emitb 32
+emitn get R 0
+ret 2
+end
+cancel
+ret 3
+end
+else
+if ne get S 1 add get R 11 1
+ret 0
+end
+if and ne get S 2 0 ne get S 2 get S 1
+ret 0
+end
+end
+n = get R 8
+if or eq get S 1 1 gt get R 2 1
+n = 0
+end
+join = ulong 0
+if and gt n 0 gt get S 4 0
+join = 1
+end
+if gt add add n join get S 4 159
+ret 0
+end
+if gt get R 2 1
+if not codeshow get R 0
+ret 0
+end
+end
+if eq join 1
+put Answer n uchar 32
+n = add n 1
+end
+for i ulong get S 4
+put Answer add n i get Say i
+end
+put R 8 add n get S 4
+put R 11 get S 1
+put R 4 now
+if ne get S 2 0
+put R 1 0
+histadd 1
+end
+ret 1
+end

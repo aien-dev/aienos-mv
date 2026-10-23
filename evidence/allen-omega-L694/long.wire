@@ -1,0 +1,143 @@
+CODE 1 1/142 18056 17ab737c c /* steps.c: many small steps, each one printed. */\n#include <stdio.h>\n\nstatic int step_1(int x)\n{\n    /* step 1: multiply, add, 
+CODE 1 2/142 18056 17ab737c c and keep it small \\ no tabs */\n    return (x * 1 + 7) % 1000003;\n}\nstatic int step_2(int x)\n{\n    /* step 2: multiply, add, and 
+CODE 1 3/142 18056 17ab737c c keep it small \\ no tabs */\n    return (x * 2 + 14) % 1000003;\n}\nstatic int step_3(int x)\n{\n    /* step 3: multiply, add, and kee
+CODE 1 4/142 18056 17ab737c c p it small \\ no tabs */\n    return (x * 3 + 21) % 1000003;\n}\nstatic int step_4(int x)\n{\n    /* step 4: multiply, add, and keep i
+CODE 1 5/142 18056 17ab737c c t small \\ no tabs */\n    return (x * 4 + 28) % 1000003;\n}\nstatic int step_5(int x)\n{\n    /* step 5: multiply, add, and keep it s
+CODE 1 6/142 18056 17ab737c c mall \\ no tabs */\n    return (x * 5 + 35) % 1000003;\n}\nstatic int step_6(int x)\n{\n    /* step 6: multiply, add, and keep it smal
+CODE 1 7/142 18056 17ab737c c l \\ no tabs */\n    return (x * 6 + 42) % 1000003;\n}\nstatic int step_7(int x)\n{\n    /* step 7: multiply, add, and keep it small \\
+CODE 1 8/142 18056 17ab737c c  no tabs */\n    return (x * 7 + 49) % 1000003;\n}\nstatic int step_8(int x)\n{\n    /* step 8: multiply, add, and keep it small \\ no
+CODE 1 9/142 18056 17ab737c c  tabs */\n    return (x * 8 + 56) % 1000003;\n}\nstatic int step_9(int x)\n{\n    /* step 9: multiply, add, and keep it small \\ no ta
+CODE 1 10/142 18056 17ab737c c bs */\n    return (x * 9 + 63) % 1000003;\n}\nstatic int step_10(int x)\n{\n    /* step 10: multiply, add, and keep it small \\ no tab
+CODE 1 11/142 18056 17ab737c c s */\n    return (x * 10 + 70) % 1000003;\n}\nstatic int step_11(int x)\n{\n    /* step 11: multiply, add, and keep it small \\ no tab
+CODE 1 12/142 18056 17ab737c c s */\n    return (x * 11 + 77) % 1000003;\n}\nstatic int step_12(int x)\n{\n    /* step 12: multiply, add, and keep it small \\ no tab
+CODE 1 13/142 18056 17ab737c c s */\n    return (x * 12 + 84) % 1000003;\n}\nstatic int step_13(int x)\n{\n    /* step 13: multiply, add, and keep it small \\ no tab
+CODE 1 14/142 18056 17ab737c c s */\n    return (x * 13 + 91) % 1000003;\n}\nstatic int step_14(int x)\n{\n    /* step 14: multiply, add, and keep it small \\ no tab
+CODE 1 15/142 18056 17ab737c c s */\n    return (x * 14 + 98) % 1000003;\n}\nstatic int step_15(int x)\n{\n    /* step 15: multiply, add, and keep it small \\ no tab
+CODE 1 16/142 18056 17ab737c c s */\n    return (x * 15 + 105) % 1000003;\n}\nstatic int step_16(int x)\n{\n    /* step 16: multiply, add, and keep it small \\ no ta
+CODE 1 17/142 18056 17ab737c c bs */\n    return (x * 16 + 112) % 1000003;\n}\nstatic int step_17(int x)\n{\n    /* step 17: multiply, add, and keep it small \\ no t
+CODE 1 18/142 18056 17ab737c c abs */\n    return (x * 17 + 119) % 1000003;\n}\nstatic int step_18(int x)\n{\n    /* step 18: multiply, add, and keep it small \\ no 
+CODE 1 19/142 18056 17ab737c c tabs */\n    return (x * 18 + 126) % 1000003;\n}\nstatic int step_19(int x)\n{\n    /* step 19: multiply, add, and keep it small \\ no
+CODE 1 20/142 18056 17ab737c c  tabs */\n    return (x * 19 + 133) % 1000003;\n}\nstatic int step_20(int x)\n{\n    /* step 20: multiply, add, and keep it small \\ n
+CODE 1 21/142 18056 17ab737c c o tabs */\n    return (x * 20 + 140) % 1000003;\n}\nstatic int step_21(int x)\n{\n    /* step 21: multiply, add, and keep it small \\ 
+CODE 1 22/142 18056 17ab737c c no tabs */\n    return (x * 21 + 147) % 1000003;\n}\nstatic int step_22(int x)\n{\n    /* step 22: multiply, add, and keep it small \\
+CODE 1 23/142 18056 17ab737c c  no tabs */\n    return (x * 22 + 154) % 1000003;\n}\nstatic int step_23(int x)\n{\n    /* step 23: multiply, add, and keep it small 
+CODE 1 24/142 18056 17ab737c c \\ no tabs */\n    return (x * 23 + 161) % 1000003;\n}\nstatic int step_24(int x)\n{\n    /* step 24: multiply, add, and keep it small
+CODE 1 25/142 18056 17ab737c c  \\ no tabs */\n    return (x * 24 + 168) % 1000003;\n}\nstatic int step_25(int x)\n{\n    /* step 25: multiply, add, and keep it smal
+CODE 1 26/142 18056 17ab737c c l \\ no tabs */\n    return (x * 25 + 175) % 1000003;\n}\nstatic int step_26(int x)\n{\n    /* step 26: multiply, add, and keep it sma
+CODE 1 27/142 18056 17ab737c c ll \\ no tabs */\n    return (x * 26 + 182) % 1000003;\n}\nstatic int step_27(int x)\n{\n    /* step 27: multiply, add, and keep it sm
+CODE 1 28/142 18056 17ab737c c all \\ no tabs */\n    return (x * 27 + 189) % 1000003;\n}\nstatic int step_28(int x)\n{\n    /* step 28: multiply, add, and keep it s
+CODE 1 29/142 18056 17ab737c c mall \\ no tabs */\n    return (x * 28 + 196) % 1000003;\n}\nstatic int step_29(int x)\n{\n    /* step 29: multiply, add, and keep it 
+CODE 1 30/142 18056 17ab737c c small \\ no tabs */\n    return (x * 29 + 203) % 1000003;\n}\nstatic int step_30(int x)\n{\n    /* step 30: multiply, add, and keep it
+CODE 1 31/142 18056 17ab737c c  small \\ no tabs */\n    return (x * 30 + 210) % 1000003;\n}\nstatic int step_31(int x)\n{\n    /* step 31: multiply, add, and keep i
+CODE 1 32/142 18056 17ab737c c t small \\ no tabs */\n    return (x * 31 + 217) % 1000003;\n}\nstatic int step_32(int x)\n{\n    /* step 32: multiply, add, and keep 
+CODE 1 33/142 18056 17ab737c c it small \\ no tabs */\n    return (x * 32 + 224) % 1000003;\n}\nstatic int step_33(int x)\n{\n    /* step 33: multiply, add, and keep
+CODE 1 34/142 18056 17ab737c c  it small \\ no tabs */\n    return (x * 33 + 231) % 1000003;\n}\nstatic int step_34(int x)\n{\n    /* step 34: multiply, add, and kee
+CODE 1 35/142 18056 17ab737c c p it small \\ no tabs */\n    return (x * 34 + 238) % 1000003;\n}\nstatic int step_35(int x)\n{\n    /* step 35: multiply, add, and ke
+CODE 1 36/142 18056 17ab737c c ep it small \\ no tabs */\n    return (x * 35 + 245) % 1000003;\n}\nstatic int step_36(int x)\n{\n    /* step 36: multiply, add, and k
+CODE 1 37/142 18056 17ab737c c eep it small \\ no tabs */\n    return (x * 36 + 252) % 1000003;\n}\nstatic int step_37(int x)\n{\n    /* step 37: multiply, add, and 
+CODE 1 38/142 18056 17ab737c c keep it small \\ no tabs */\n    return (x * 37 + 259) % 1000003;\n}\nstatic int step_38(int x)\n{\n    /* step 38: multiply, add, and
+CODE 1 39/142 18056 17ab737c c  keep it small \\ no tabs */\n    return (x * 38 + 266) % 1000003;\n}\nstatic int step_39(int x)\n{\n    /* step 39: multiply, add, an
+CODE 1 40/142 18056 17ab737c c d keep it small \\ no tabs */\n    return (x * 39 + 273) % 1000003;\n}\nstatic int step_40(int x)\n{\n    /* step 40: multiply, add, a
+CODE 1 41/142 18056 17ab737c c nd keep it small \\ no tabs */\n    return (x * 40 + 280) % 1000003;\n}\nstatic int step_41(int x)\n{\n    /* step 41: multiply, add, 
+CODE 1 42/142 18056 17ab737c c and keep it small \\ no tabs */\n    return (x * 41 + 287) % 1000003;\n}\nstatic int step_42(int x)\n{\n    /* step 42: multiply, add,
+CODE 1 43/142 18056 17ab737c c  and keep it small \\ no tabs */\n    return (x * 42 + 294) % 1000003;\n}\nstatic int step_43(int x)\n{\n    /* step 43: multiply, add
+CODE 1 44/142 18056 17ab737c c , and keep it small \\ no tabs */\n    return (x * 43 + 301) % 1000003;\n}\nstatic int step_44(int x)\n{\n    /* step 44: multiply, ad
+CODE 1 45/142 18056 17ab737c c d, and keep it small \\ no tabs */\n    return (x * 44 + 308) % 1000003;\n}\nstatic int step_45(int x)\n{\n    /* step 45: multiply, a
+CODE 1 46/142 18056 17ab737c c dd, and keep it small \\ no tabs */\n    return (x * 45 + 315) % 1000003;\n}\nstatic int step_46(int x)\n{\n    /* step 46: multiply, 
+CODE 1 47/142 18056 17ab737c c add, and keep it small \\ no tabs */\n    return (x * 46 + 322) % 1000003;\n}\nstatic int step_47(int x)\n{\n    /* step 47: multiply,
+CODE 1 48/142 18056 17ab737c c  add, and keep it small \\ no tabs */\n    return (x * 47 + 329) % 1000003;\n}\nstatic int step_48(int x)\n{\n    /* step 48: multiply
+CODE 1 49/142 18056 17ab737c c , add, and keep it small \\ no tabs */\n    return (x * 48 + 336) % 1000003;\n}\nstatic int step_49(int x)\n{\n    /* step 49: multipl
+CODE 1 50/142 18056 17ab737c c y, add, and keep it small \\ no tabs */\n    return (x * 49 + 343) % 1000003;\n}\nstatic int step_50(int x)\n{\n    /* step 50: multip
+CODE 1 51/142 18056 17ab737c c ly, add, and keep it small \\ no tabs */\n    return (x * 50 + 350) % 1000003;\n}\nstatic int step_51(int x)\n{\n    /* step 51: multi
+CODE 1 52/142 18056 17ab737c c ply, add, and keep it small \\ no tabs */\n    return (x * 51 + 357) % 1000003;\n}\nstatic int step_52(int x)\n{\n    /* step 52: mult
+CODE 1 53/142 18056 17ab737c c iply, add, and keep it small \\ no tabs */\n    return (x * 52 + 364) % 1000003;\n}\nstatic int step_53(int x)\n{\n    /* step 53: mul
+CODE 1 54/142 18056 17ab737c c tiply, add, and keep it small \\ no tabs */\n    return (x * 53 + 371) % 1000003;\n}\nstatic int step_54(int x)\n{\n    /* step 54: mu
+CODE 1 55/142 18056 17ab737c c ltiply, add, and keep it small \\ no tabs */\n    return (x * 54 + 378) % 1000003;\n}\nstatic int step_55(int x)\n{\n    /* step 55: m
+CODE 1 56/142 18056 17ab737c c ultiply, add, and keep it small \\ no tabs */\n    return (x * 55 + 385) % 1000003;\n}\nstatic int step_56(int x)\n{\n    /* step 56: 
+CODE 1 57/142 18056 17ab737c c multiply, add, and keep it small \\ no tabs */\n    return (x * 56 + 392) % 1000003;\n}\nstatic int step_57(int x)\n{\n    /* step 57:
+CODE 1 58/142 18056 17ab737c c  multiply, add, and keep it small \\ no tabs */\n    return (x * 57 + 399) % 1000003;\n}\nstatic int step_58(int x)\n{\n    /* step 58
+CODE 1 59/142 18056 17ab737c c : multiply, add, and keep it small \\ no tabs */\n    return (x * 58 + 406) % 1000003;\n}\nstatic int step_59(int x)\n{\n    /* step 5
+CODE 1 60/142 18056 17ab737c c 9: multiply, add, and keep it small \\ no tabs */\n    return (x * 59 + 413) % 1000003;\n}\nstatic int step_60(int x)\n{\n    /* step 
+CODE 1 61/142 18056 17ab737c c 60: multiply, add, and keep it small \\ no tabs */\n    return (x * 60 + 420) % 1000003;\n}\nstatic int step_61(int x)\n{\n    /* step
+CODE 1 62/142 18056 17ab737c c  61: multiply, add, and keep it small \\ no tabs */\n    return (x * 61 + 427) % 1000003;\n}\nstatic int step_62(int x)\n{\n    /* ste
+CODE 1 63/142 18056 17ab737c c p 62: multiply, add, and keep it small \\ no tabs */\n    return (x * 62 + 434) % 1000003;\n}\nstatic int step_63(int x)\n{\n    /* st
+CODE 1 64/142 18056 17ab737c c ep 63: multiply, add, and keep it small \\ no tabs */\n    return (x * 63 + 441) % 1000003;\n}\nstatic int step_64(int x)\n{\n    /* s
+CODE 1 65/142 18056 17ab737c c tep 64: multiply, add, and keep it small \\ no tabs */\n    return (x * 64 + 448) % 1000003;\n}\nstatic int step_65(int x)\n{\n    /* 
+CODE 1 66/142 18056 17ab737c c step 65: multiply, add, and keep it small \\ no tabs */\n    return (x * 65 + 455) % 1000003;\n}\nstatic int step_66(int x)\n{\n    /*
+CODE 1 67/142 18056 17ab737c c  step 66: multiply, add, and keep it small \\ no tabs */\n    return (x * 66 + 462) % 1000003;\n}\nstatic int step_67(int x)\n{\n    /
+CODE 1 68/142 18056 17ab737c c * step 67: multiply, add, and keep it small \\ no tabs */\n    return (x * 67 + 469) % 1000003;\n}\nstatic int step_68(int x)\n{\n    
+CODE 1 69/142 18056 17ab737c c /* step 68: multiply, add, and keep it small \\ no tabs */\n    return (x * 68 + 476) % 1000003;\n}\nstatic int step_69(int x)\n{\n   
+CODE 1 70/142 18056 17ab737c c  /* step 69: multiply, add, and keep it small \\ no tabs */\n    return (x * 69 + 483) % 1000003;\n}\nstatic int step_70(int x)\n{\n  
+CODE 1 71/142 18056 17ab737c c   /* step 70: multiply, add, and keep it small \\ no tabs */\n    return (x * 70 + 490) % 1000003;\n}\nstatic int step_71(int x)\n{\n 
+CODE 1 72/142 18056 17ab737c c    /* step 71: multiply, add, and keep it small \\ no tabs */\n    return (x * 71 + 497) % 1000003;\n}\nstatic int step_72(int x)\n{\n
+CODE 1 73/142 18056 17ab737c c     /* step 72: multiply, add, and keep it small \\ no tabs */\n    return (x * 72 + 504) % 1000003;\n}\nstatic int step_73(int x)\n{
+CODE 1 74/142 18056 17ab737c c \n    /* step 73: multiply, add, and keep it small \\ no tabs */\n    return (x * 73 + 511) % 1000003;\n}\nstatic int step_74(int x)\n
+CODE 1 75/142 18056 17ab737c c {\n    /* step 74: multiply, add, and keep it small \\ no tabs */\n    return (x * 74 + 518) % 1000003;\n}\nstatic int step_75(int x)
+CODE 1 76/142 18056 17ab737c c \n{\n    /* step 75: multiply, add, and keep it small \\ no tabs */\n    return (x * 75 + 525) % 1000003;\n}\nstatic int step_76(int x
+CODE 1 77/142 18056 17ab737c c )\n{\n    /* step 76: multiply, add, and keep it small \\ no tabs */\n    return (x * 76 + 532) % 1000003;\n}\nstatic int step_77(int 
+CODE 1 78/142 18056 17ab737c c x)\n{\n    /* step 77: multiply, add, and keep it small \\ no tabs */\n    return (x * 77 + 539) % 1000003;\n}\nstatic int step_78(int
+CODE 1 79/142 18056 17ab737c c  x)\n{\n    /* step 78: multiply, add, and keep it small \\ no tabs */\n    return (x * 78 + 546) % 1000003;\n}\nstatic int step_79(in
+CODE 1 80/142 18056 17ab737c c t x)\n{\n    /* step 79: multiply, add, and keep it small \\ no tabs */\n    return (x * 79 + 553) % 1000003;\n}\nstatic int step_80(i
+CODE 1 81/142 18056 17ab737c c nt x)\n{\n    /* step 80: multiply, add, and keep it small \\ no tabs */\n    return (x * 80 + 560) % 1000003;\n}\nstatic int step_81(
+CODE 1 82/142 18056 17ab737c c int x)\n{\n    /* step 81: multiply, add, and keep it small \\ no tabs */\n    return (x * 81 + 567) % 1000003;\n}\nstatic int step_82
+CODE 1 83/142 18056 17ab737c c (int x)\n{\n    /* step 82: multiply, add, and keep it small \\ no tabs */\n    return (x * 82 + 574) % 1000003;\n}\nstatic int step_8
+CODE 1 84/142 18056 17ab737c c 3(int x)\n{\n    /* step 83: multiply, add, and keep it small \\ no tabs */\n    return (x * 83 + 581) % 1000003;\n}\nstatic int step_
+CODE 1 85/142 18056 17ab737c c 84(int x)\n{\n    /* step 84: multiply, add, and keep it small \\ no tabs */\n    return (x * 84 + 588) % 1000003;\n}\nstatic int step
+CODE 1 86/142 18056 17ab737c c _85(int x)\n{\n    /* step 85: multiply, add, and keep it small \\ no tabs */\n    return (x * 85 + 595) % 1000003;\n}\nstatic int ste
+CODE 1 87/142 18056 17ab737c c p_86(int x)\n{\n    /* step 86: multiply, add, and keep it small \\ no tabs */\n    return (x * 86 + 602) % 1000003;\n}\nstatic int st
+CODE 1 88/142 18056 17ab737c c ep_87(int x)\n{\n    /* step 87: multiply, add, and keep it small \\ no tabs */\n    return (x * 87 + 609) % 1000003;\n}\nstatic int s
+CODE 1 89/142 18056 17ab737c c tep_88(int x)\n{\n    /* step 88: multiply, add, and keep it small \\ no tabs */\n    return (x * 88 + 616) % 1000003;\n}\nstatic int 
+CODE 1 90/142 18056 17ab737c c step_89(int x)\n{\n    /* step 89: multiply, add, and keep it small \\ no tabs */\n    return (x * 89 + 623) % 1000003;\n}\nstatic int
+CODE 1 91/142 18056 17ab737c c  step_90(int x)\n{\n    /* step 90: multiply, add, and keep it small \\ no tabs */\n    return (x * 90 + 630) % 1000003;\n}\nstatic in
+CODE 1 92/142 18056 17ab737c c t step_91(int x)\n{\n    /* step 91: multiply, add, and keep it small \\ no tabs */\n    return (x * 91 + 637) % 1000003;\n}\nstatic i
+CODE 1 93/142 18056 17ab737c c nt step_92(int x)\n{\n    /* step 92: multiply, add, and keep it small \\ no tabs */\n    return (x * 92 + 644) % 1000003;\n}\nstatic 
+CODE 1 94/142 18056 17ab737c c int step_93(int x)\n{\n    /* step 93: multiply, add, and keep it small \\ no tabs */\n    return (x * 93 + 651) % 1000003;\n}\nstatic
+CODE 1 95/142 18056 17ab737c c  int step_94(int x)\n{\n    /* step 94: multiply, add, and keep it small \\ no tabs */\n    return (x * 94 + 658) % 1000003;\n}\nstati
+CODE 1 96/142 18056 17ab737c c c int step_95(int x)\n{\n    /* step 95: multiply, add, and keep it small \\ no tabs */\n    return (x * 95 + 665) % 1000003;\n}\nstat
+CODE 1 97/142 18056 17ab737c c ic int step_96(int x)\n{\n    /* step 96: multiply, add, and keep it small \\ no tabs */\n    return (x * 96 + 672) % 1000003;\n}\nsta
+CODE 1 98/142 18056 17ab737c c tic int step_97(int x)\n{\n    /* step 97: multiply, add, and keep it small \\ no tabs */\n    return (x * 97 + 679) % 1000003;\n}\nst
+CODE 1 99/142 18056 17ab737c c atic int step_98(int x)\n{\n    /* step 98: multiply, add, and keep it small \\ no tabs */\n    return (x * 98 + 686) % 1000003;\n}\ns
+CODE 1 100/142 18056 17ab737c c tatic int step_99(int x)\n{\n    /* step 99: multiply, add, and keep it small \\ no tabs */\n    return (x * 99 + 693) % 1000003;\n}\n
+CODE 1 101/142 18056 17ab737c c static int step_100(int x)\n{\n    /* step 100: multiply, add, and keep it small \\ no tabs */\n    return (x * 100 + 700) % 1000003
+CODE 1 102/142 18056 17ab737c c ;\n}\nstatic int step_101(int x)\n{\n    /* step 101: multiply, add, and keep it small \\ no tabs */\n    return (x * 101 + 707) % 100
+CODE 1 103/142 18056 17ab737c c 0003;\n}\nstatic int step_102(int x)\n{\n    /* step 102: multiply, add, and keep it small \\ no tabs */\n    return (x * 102 + 714) %
+CODE 1 104/142 18056 17ab737c c  1000003;\n}\nstatic int step_103(int x)\n{\n    /* step 103: multiply, add, and keep it small \\ no tabs */\n    return (x * 103 + 72
+CODE 1 105/142 18056 17ab737c c 1) % 1000003;\n}\nstatic int step_104(int x)\n{\n    /* step 104: multiply, add, and keep it small \\ no tabs */\n    return (x * 104 
+CODE 1 106/142 18056 17ab737c c + 728) % 1000003;\n}\nstatic int step_105(int x)\n{\n    /* step 105: multiply, add, and keep it small \\ no tabs */\n    return (x * 
+CODE 1 107/142 18056 17ab737c c 105 + 735) % 1000003;\n}\nstatic int step_106(int x)\n{\n    /* step 106: multiply, add, and keep it small \\ no tabs */\n    return (
+CODE 1 108/142 18056 17ab737c c x * 106 + 742) % 1000003;\n}\nstatic int step_107(int x)\n{\n    /* step 107: multiply, add, and keep it small \\ no tabs */\n    retu
+CODE 1 109/142 18056 17ab737c c rn (x * 107 + 749) % 1000003;\n}\nstatic int step_108(int x)\n{\n    /* step 108: multiply, add, and keep it small \\ no tabs */\n    
+CODE 1 110/142 18056 17ab737c c return (x * 108 + 756) % 1000003;\n}\nstatic int step_109(int x)\n{\n    /* step 109: multiply, add, and keep it small \\ no tabs */\n
+CODE 1 111/142 18056 17ab737c c     return (x * 109 + 763) % 1000003;\n}\nstatic int step_110(int x)\n{\n    /* step 110: multiply, add, and keep it small \\ no tabs
+CODE 1 112/142 18056 17ab737c c  */\n    return (x * 110 + 770) % 1000003;\n}\nstatic int step_111(int x)\n{\n    /* step 111: multiply, add, and keep it small \\ no 
+CODE 1 113/142 18056 17ab737c c tabs */\n    return (x * 111 + 777) % 1000003;\n}\nstatic int step_112(int x)\n{\n    /* step 112: multiply, add, and keep it small \\
+CODE 1 114/142 18056 17ab737c c  no tabs */\n    return (x * 112 + 784) % 1000003;\n}\nstatic int step_113(int x)\n{\n    /* step 113: multiply, add, and keep it sma
+CODE 1 115/142 18056 17ab737c c ll \\ no tabs */\n    return (x * 113 + 791) % 1000003;\n}\nstatic int step_114(int x)\n{\n    /* step 114: multiply, add, and keep it
+CODE 1 116/142 18056 17ab737c c  small \\ no tabs */\n    return (x * 114 + 798) % 1000003;\n}\nstatic int step_115(int x)\n{\n    /* step 115: multiply, add, and kee
+CODE 1 117/142 18056 17ab737c c p it small \\ no tabs */\n    return (x * 115 + 805) % 1000003;\n}\nstatic int step_116(int x)\n{\n    /* step 116: multiply, add, and
+CODE 1 118/142 18056 17ab737c c  keep it small \\ no tabs */\n    return (x * 116 + 812) % 1000003;\n}\nstatic int step_117(int x)\n{\n    /* step 117: multiply, add,
+CODE 1 119/142 18056 17ab737c c  and keep it small \\ no tabs */\n    return (x * 117 + 819) % 1000003;\n}\nstatic int step_118(int x)\n{\n    /* step 118: multiply, 
+CODE 1 120/142 18056 17ab737c c add, and keep it small \\ no tabs */\n    return (x * 118 + 826) % 1000003;\n}\nstatic int step_119(int x)\n{\n    /* step 119: multip
+CODE 1 121/142 18056 17ab737c c ly, add, and keep it small \\ no tabs */\n    return (x * 119 + 833) % 1000003;\n}\nstatic int step_120(int x)\n{\n    /* step 120: mu
+CODE 1 122/142 18056 17ab737c c ltiply, add, and keep it small \\ no tabs */\n    return (x * 120 + 840) % 1000003;\n}\n\nint main(void)\n{\n    int x = 1;\n    x = ste
+CODE 1 123/142 18056 17ab737c c p_1(x);\n    x = step_2(x);\n    x = step_3(x);\n    x = step_4(x);\n    x = step_5(x);\n    x = step_6(x);\n    x = step_7(x);\n    x 
+CODE 1 124/142 18056 17ab737c c = step_8(x);\n    x = step_9(x);\n    x = step_10(x);\n    x = step_11(x);\n    x = step_12(x);\n    x = step_13(x);\n    x = step_14(
+CODE 1 125/142 18056 17ab737c c x);\n    x = step_15(x);\n    x = step_16(x);\n    x = step_17(x);\n    x = step_18(x);\n    x = step_19(x);\n    x = step_20(x);\n    
+CODE 1 126/142 18056 17ab737c c x = step_21(x);\n    x = step_22(x);\n    x = step_23(x);\n    x = step_24(x);\n    x = step_25(x);\n    x = step_26(x);\n    x = step
+CODE 1 127/142 18056 17ab737c c _27(x);\n    x = step_28(x);\n    x = step_29(x);\n    x = step_30(x);\n    x = step_31(x);\n    x = step_32(x);\n    x = step_33(x);\n
+CODE 1 128/142 18056 17ab737c c     x = step_34(x);\n    x = step_35(x);\n    x = step_36(x);\n    x = step_37(x);\n    x = step_38(x);\n    x = step_39(x);\n    x = 
+CODE 1 129/142 18056 17ab737c c step_40(x);\n    x = step_41(x);\n    x = step_42(x);\n    x = step_43(x);\n    x = step_44(x);\n    x = step_45(x);\n    x = step_46(
+CODE 1 130/142 18056 17ab737c c x);\n    x = step_47(x);\n    x = step_48(x);\n    x = step_49(x);\n    x = step_50(x);\n    x = step_51(x);\n    x = step_52(x);\n    
+CODE 1 131/142 18056 17ab737c c x = step_53(x);\n    x = step_54(x);\n    x = step_55(x);\n    x = step_56(x);\n    x = step_57(x);\n    x = step_58(x);\n    x = step
+CODE 1 132/142 18056 17ab737c c _59(x);\n    x = step_60(x);\n    x = step_61(x);\n    x = step_62(x);\n    x = step_63(x);\n    x = step_64(x);\n    x = step_65(x);\n
+CODE 1 133/142 18056 17ab737c c     x = step_66(x);\n    x = step_67(x);\n    x = step_68(x);\n    x = step_69(x);\n    x = step_70(x);\n    x = step_71(x);\n    x = 
+CODE 1 134/142 18056 17ab737c c step_72(x);\n    x = step_73(x);\n    x = step_74(x);\n    x = step_75(x);\n    x = step_76(x);\n    x = step_77(x);\n    x = step_78(
+CODE 1 135/142 18056 17ab737c c x);\n    x = step_79(x);\n    x = step_80(x);\n    x = step_81(x);\n    x = step_82(x);\n    x = step_83(x);\n    x = step_84(x);\n    
+CODE 1 136/142 18056 17ab737c c x = step_85(x);\n    x = step_86(x);\n    x = step_87(x);\n    x = step_88(x);\n    x = step_89(x);\n    x = step_90(x);\n    x = step
+CODE 1 137/142 18056 17ab737c c _91(x);\n    x = step_92(x);\n    x = step_93(x);\n    x = step_94(x);\n    x = step_95(x);\n    x = step_96(x);\n    x = step_97(x);\n
+CODE 1 138/142 18056 17ab737c c     x = step_98(x);\n    x = step_99(x);\n    x = step_100(x);\n    x = step_101(x);\n    x = step_102(x);\n    x = step_103(x);\n    
+CODE 1 139/142 18056 17ab737c c x = step_104(x);\n    x = step_105(x);\n    x = step_106(x);\n    x = step_107(x);\n    x = step_108(x);\n    x = step_109(x);\n    x 
+CODE 1 140/142 18056 17ab737c c = step_110(x);\n    x = step_111(x);\n    x = step_112(x);\n    x = step_113(x);\n    x = step_114(x);\n    x = step_115(x);\n    x = 
+CODE 1 141/142 18056 17ab737c c step_116(x);\n    x = step_117(x);\n    x = step_118(x);\n    x = step_119(x);\n    x = step_120(x);\n    printf("%d\\n", x);\n    retu
+CODE 1 142/142 18056 17ab737c c rn 0;\n}\n
+SAY 1 1/1 Here is a long C program with many small steps, built with cc steps.c.

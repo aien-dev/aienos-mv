@@ -1,0 +1,5 @@
+0781cdcec18570a57afbe3be4a6717dd2d1fa4c887b49a3e4cb542b594f8a041  native/omega/allen/vendor/sha256.om
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  target/allen-omega-L694/runtime-green
+a7b22416dc6ed824fe2888fa158c73148ab01bd3aa8586605780c0f7c5052725  target/allen-omega-L694/runtime-green.om
+ceeb5e2b7b5d7dc7883fb6c043b6da64e52f193ed7853de4c8b96452e3cc706d  target/allen-omega-L694/runtime-red
+82aaecff6a33dcef7101e3c35f84b0f1121a569173984b3bb42bf023832025c6  target/allen-omega-L694/runtime-red.om

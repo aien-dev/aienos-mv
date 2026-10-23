@@ -1,0 +1,340 @@
+note Scene state: tone,water,has-say,nthings,used,lines,rejected,over.
+global Sc ulong 8
+global Things ulong 64
+global Stext uchar 2304
+global Sw ulong 4
+global Fields uchar 1536
+global Flens ulong 6
+global Soffs ulong 6
+text Vocab "mood|say|note|list|number|quote|person|timer|picture|video|left|right|above|warm|quiet|bloom|rise|fade|to|from|night|dawn|deep|clear|slow|still|lively|"
+fn scword beg ulong size ulong to ulong
+s = ulong 0
+word = ulong 1
+for i ulong len Vocab
+if eq get Vocab i 124
+if eq sub i s size
+same = true
+for j ulong size
+if ne get In add beg j get Vocab add s j
+same = false
+end
+end
+if same
+ret word
+end
+end
+word = add word 1
+s = add i 1
+end
+end
+ret 0
+end
+fn fieldcap kind ulong field ulong to ulong
+if eq kind 2
+if eq field 0
+ret 48
+end
+ret 64
+end
+if eq kind 1
+if eq field 0
+ret 48
+end
+ret 240
+end
+if eq kind 3
+if eq field 0
+ret 16
+end
+ret 64
+end
+if eq kind 4
+if eq field 0
+ret 220
+end
+ret 48
+end
+if eq kind 5
+if eq field 0
+ret 32
+end
+ret 200
+end
+if eq kind 6
+if eq field 0
+ret 24
+end
+ret 64
+end
+if eq field 0
+ret 120
+end
+ret 64
+end
+fn scfield slot ulong beg ulong stop ulong kind ulong to bool
+s = beg
+e = stop
+while lt s e
+if eq get In s 32
+s = add s 1
+else
+ret fieldend slot s e kind
+end
+end
+put Flens slot 0
+ret true
+end
+fn fieldend slot ulong s ulong stop ulong kind ulong to bool
+e = stop
+while gt e s
+if eq get In sub e 1 32
+e = sub e 1
+else
+n = sub e s
+if gt n fieldcap kind slot
+ret false
+end
+for i ulong n
+c = get In add s i
+if or lt c 32 gt c 126
+ret false
+end
+put Fields add mul slot 256 i c
+end
+put Flens slot n
+ret true
+end
+end
+put Flens slot 0
+ret true
+end
+fn scfields beg ulong stop ulong kind ulong to ulong
+slot = ulong 0
+s = beg
+for i ulong sub stop beg
+p = add beg i
+if eq get In p 124
+if ge slot 5
+ret 0
+end
+if not scfield slot s p kind
+ret 0
+end
+slot = add slot 1
+s = add p 1
+end
+end
+if not scfield slot s stop kind
+ret 0
+end
+n = add slot 1
+if and ne kind 2 gt n 2
+ret 0
+end
+if eq get Flens 0 0
+ret 0
+end
+if eq kind 5
+if or lt n 2 eq get Flens 1 0
+ret 0
+end
+end
+if eq kind 3
+hasdigit = false
+for i ulong get Flens 0
+if isdigit get Fields i
+hasdigit = true
+end
+end
+if not hasdigit
+ret 0
+end
+end
+ret n
+end
+fn scput slot ulong to ulong
+off = get Sc 4
+n = get Flens slot
+for i ulong n
+put Stext add off i get Fields add mul slot 256 i
+end
+put Stext add off n 0
+put Sc 4 add add off n 1
+ret off
+end
+fn scmod word ulong base ulong to void
+if and ge word 11 le word 13
+put Things add base 1 sub word 10
+end
+if and ge word 16 le word 18
+put Things add base 2 sub word 16
+end
+if and ge word 19 le word 20
+put Things add base 3 sub word 18
+end
+if eq word 14
+put Things add base 4 1
+end
+if eq word 15
+put Things add base 5 1
+end
+end
+fn scsay beg ulong stop ulong to bool
+if ne get Sc 2 0
+ret false
+end
+n = sub stop beg
+if or eq n 0 gt n 159
+ret false
+end
+for i ulong n
+c = get In add beg i
+if or lt c 32 gt c 126
+ret false
+end
+put Fields i c
+end
+put Flens 0 n
+put Sc 2 1
+put Sw 3 scput 0
+ret true
+end
+fn scln beg ulong stop ulong to bool
+p = beg
+while lt p stop
+if or eq get In p 32 eq get In p 58
+ret scbody beg p stop
+end
+p = add p 1
+end
+ret false
+end
+fn scbody beg ulong wordend ulong stop ulong to bool
+word = scword beg sub wordend beg
+if eq word 2
+s = add wordend 1
+if lt s stop
+if eq get In s 58
+s = add s 1
+end
+end
+while lt s stop
+if eq get In s 32
+s = add s 1
+else
+ret scsay s stop
+end
+end
+ret false
+end
+if eq word 1
+s = add wordend 1
+for p ulong sub stop s
+at = add add wordend 1 p
+if eq get In at 32
+w = scword s sub at s
+if and ge w 21 le w 24
+put Sc 0 sub w 21
+end
+if and ge w 25 le w 27
+put Sc 1 sub w 25
+end
+s = add at 1
+end
+end
+w = scword s sub stop s
+if and ge w 21 le w 24
+put Sc 0 sub w 21
+end
+if and ge w 25 le w 27
+put Sc 1 sub w 25
+end
+ret true
+end
+if or lt word 3 gt word 10
+ret false
+end
+if ge get Sc 3 4
+put Sc 7 add get Sc 7 1
+ret false
+end
+put Sw 0 sub word 2
+colon = wordend
+while lt colon stop
+if eq get In colon 58
+put Sw 1 wordend
+put Sw 2 colon
+ret scthing add colon 1 stop
+end
+colon = add colon 1
+end
+ret false
+end
+fn scthing beg ulong stop ulong to bool
+n = scfields beg stop get Sw 0
+if eq n 0
+ret false
+end
+need = n
+for i ulong n
+need = add need get Flens i
+end
+if gt add get Sc 4 need 2304
+ret false
+end
+base = mul get Sc 3 16
+put Things base get Sw 0
+put Things add base 6 n
+s = get Sw 1
+for p ulong sub get Sw 2 s
+at = add get Sw 1 p
+if eq get In at 32
+w = scword s sub at s
+scmod w base
+s = add at 1
+end
+end
+w = scword s sub get Sw 2 s
+scmod w base
+for i ulong n
+put Things add add base 7 i scput i
+end
+put Sc 3 add get Sc 3 1
+ret true
+end
+fn scene to bool
+for i ulong 8
+put Sc i 0
+end
+for i ulong 64
+put Things i 0
+end
+put Sw 3 0
+n = get Inlen 0
+if gt n 2048
+n = 2048
+end
+s = ulong 0
+for p ulong n
+if eq get In p 10
+if gt p s
+if lt get Sc 5 12
+put Sc 5 add get Sc 5 1
+if not scln s p
+put Sc 6 add get Sc 6 1
+end
+else
+put Sc 7 add get Sc 7 1
+end
+end
+s = add p 1
+end
+end
+if and lt s n lt get Sc 5 12
+put Sc 5 add get Sc 5 1
+if not scln s n
+put Sc 6 add get Sc 6 1
+end
+end
+ret or ne get Sc 2 0 ne get Sc 3 0
+end

@@ -1,0 +1,100 @@
+note Handwritten Omega port of paint.h ck_add, ck_scale, ck_mix and paint.c ck_glow.
+note Bounded192x128 RAM canvas. This is rendering core, not full sky/font/device UI.
+global Frame uint 24576
+global G ulong 6
+global Fb uchar 73728
+fn channel c uint shift uint to uint
+ret and shr c shift 255
+end
+fn addcolor d uint c uint a uint to uint
+v = uint 0
+for i uint 3
+s = mul i 8
+n = add channel d s shr mul channel c s a 8
+if gt n 255
+n = 255
+end
+v = or v shl n s
+end
+ret v
+end
+fn scale c uint f uint to uint
+ret or and shr mul and c 16711935 f 8 16711935 and shr mul and c 65280 f 8 65280
+end
+fn mix d uint c uint a uint to uint
+if ge a 256
+ret c
+end
+ret add scale d sub uint 256 a scale c a
+end
+fn distance x ulong y ulong to ulong
+dx = sub add mul long x 16 8 long get G 0
+dy = sub add mul long y 16 8 long get G 1
+ret ulong add mul dx dx mul dy dy
+end
+fn weight d2 ulong r2 ulong to ulong
+inv = div ulong 1099511627776 r2
+f = sub ulong 256 shr mul d2 inv 32
+w = shr mul shr mul f f 8 f 8
+ret shr mul w get G 4 8
+end
+fn glowpix x ulong y ulong to void
+d2 = distance x y
+r2 = mul get G 2 get G 2
+if ge d2 r2
+ret
+end
+a = uint weight d2 r2
+at = add mul y 192 x
+put Frame at addcolor get Frame at uint get G 3 a
+end
+fn glow cx ulong cy ulong radius ulong color ulong alpha ulong to bool
+if or eq radius 0 gt radius 8192
+ret false
+end
+if or gt cx 8192 gt cy 8192
+ret false
+end
+if or gt color 16777215 gt alpha 512
+ret false
+end
+put G 0 cx
+put G 1 cy
+put G 2 radius
+put G 3 color
+put G 4 alpha
+for y ulong 128
+for x ulong 192
+glowpix x y
+end
+end
+ret true
+end
+fn render to void
+for i ulong 24576
+put Frame i 0
+end
+note Frozen component pose; same halo and heart colors/weights as ck_mind_draw.
+b = glow 1536 1024 1088 3951314 68
+b = glow 1536 1024 640 7363839 46
+b = glow 1536 1024 400 16765610 89
+b = glow 1536 1024 160 16772310 218
+b = glow 1536 1024 50 16775920 230
+end
+fn frameout to bool
+for i ulong 24576
+c = get Frame i
+put Fb mul i 3 uchar channel c 16
+put Fb add mul i 3 1 uchar channel c 8
+put Fb add mul i 3 2 uchar channel c 0
+end
+n = ulong 0
+while lt n len Fb
+w = write 1 Fb n sub len Fb n
+if le w 0
+ret false
+end
+n = add n ulong w
+end
+ret true
+end

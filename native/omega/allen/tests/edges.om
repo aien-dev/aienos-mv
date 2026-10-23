@@ -1,0 +1,157 @@
+note Boundary and recovery gates. Test input construction is handwritten Omega.
+fn rt_edges to void
+reset
+put R 0 100
+put Inlen 0 159
+for i ulong 159
+put In i uchar 120
+end
+check start 1 0 1201
+check eq get R 7 159 1202
+cancel
+put Inlen 0 160
+check not start 1 0 1203
+check eq get R 0 101 1204
+put Inlen 0 1
+put In 0 uchar 9
+check not start 1 0 1205
+check eq classify 0 1206
+put In 0 uchar 120
+check start 1 10 1207
+check heard get R 0 25000 1208
+check eq tick 30010 1 1209
+check eq get R 1 1 1210
+check eq tick 54999 0 1211
+check eq tick 55000 2 1212
+check not heard get R 0 55001 1213
+check restore 1214
+for i ulong 40
+check restore add 1220 i
+end
+check eq get R 9 32 1260
+check eq get Hlen 31 1 1261
+check eq get Hist 4960 120 1262
+end
+fn codeinput part ulong total ulong bytes ulong crcval ulong count ulong to void
+outreset
+emitb 67
+emitb 79
+emitb 68
+emitb 69
+emitb 32
+emitn 1
+emitb 32
+emitn part
+emitb 47
+emitn total
+emitb 32
+emitn bytes
+emitb 32
+for i ulong 8
+emitb get Digits and shr crcval mul sub 7 i 4 15
+end
+emitb 32
+emitb 45
+emitb 32
+for i ulong count
+emitb 120
+end
+put Inlen 0 get Outlen 0
+for i ulong get Outlen 0
+put In i get Outb i
+end
+end
+fn code_edges to void
+codebeg 1
+codeinput 1 1 128 0 127
+check not codetake 1301
+check eq get C 4 0 1302
+codeinput 1 1 128 0 129
+check not codetake 1303
+codeinput 0 1 128 0 128
+check not codetake 1304
+codeinput 1 257 32769 0 128
+check not codetake 1305
+check eq get C 1 0 1306
+for i ulong 256
+codeinput add i 1 256 32768 3124632513 128
+check codetake add 1310 i
+end
+check eq get C 4 256 1570
+check eq missing 0 1571
+check eq codestat 2 1572
+put C 3 0
+check eq codestat 3 1575
+put C 3 3124632513
+check eq codestat 2 1573
+put R 0 1
+put R 1 1
+cancel
+check not codeshow 1 1574
+end
+fn lineinput part ulong bytes ulong to void
+put Inlen 0 bytes
+for i ulong bytes
+put In i uchar 120
+end
+b = packet 2 1 part 0 0
+put Inlen 0 get Outlen 0
+for i ulong get Outlen 0
+put In i get Outb i
+end
+end
+fn q_edges to void
+qbegin 1 1
+for i ulong 8
+lineinput add i 1 1
+check eq qreceive 1 add 1600 i
+end
+lineinput 9 1
+check eq qreceive 0 1610
+check eq get Q 4 8 1611
+check qtake 1612
+lineinput 9 1
+check eq qreceive 1 1613
+check eq get Q 4 8 1614
+lineinput 10 320
+check eq qreceive 0 1615
+check eq get Q 2 9 1616
+put Inlen 0 1001
+check not packet 1 1 1 1 1001 1617
+end
+fn mem_edges to void
+for i ulong 3692
+put Mem i 0
+end
+mset32 32 32
+mset32 36 512
+for i ulong 32
+off = add 40 mul i 113
+put Mem off uchar 107
+put Mem add off 48 uchar 118
+end
+check memenc 10 1701
+check eq get32 12 3692 1702
+check memdec 1703
+mset32 32 33
+check not memenc 11 1704
+check eq get Enc 16 10 1705
+mset32 32 32
+mset32 36 513
+check not memenc 11 1706
+mset32 36 512
+check memenc 11 1707
+put Unit 4095 uchar 1
+check not memdec 1708
+check eq get Md 0 10 1709
+check not txflush true 1710
+check not txread true 1711
+end
+fn main to int
+constants
+rt_edges
+code_edges
+q_edges
+mem_edges
+ret int get Fails 0
+end

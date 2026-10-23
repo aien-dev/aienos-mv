@@ -1,0 +1,451 @@
+note Legacy application record codec; SHA is unkeyed integrity ONLY.
+global Unit uchar 4096
+global Enc uchar 4096
+global Mem uchar 3692
+global Md ulong 3
+global Note uchar 128
+global Ns ulong 4
+text Magic "AIENALM1"
+text Nmagic "AIENNOT1"
+fn get32 off ulong to ulong
+v = ulong 0
+for i ulong 4
+v = or v shl ulong get Unit add off i mul i 8
+end
+ret v
+end
+fn get64 off ulong to ulong
+ret or get32 off shl get32 add off 4 32
+end
+fn put32 off ulong v ulong to void
+for i ulong 4
+put Unit add off i uchar and shr v mul i 8 255
+end
+end
+fn put64 off ulong v ulong to void
+put32 off and v 4294967295
+put32 add off 4 shr v 32
+end
+fn mem32 off ulong to ulong
+v = ulong 0
+for i ulong 4
+v = or v shl ulong get Mem add off i mul i 8
+end
+ret v
+end
+fn mset32 off ulong v ulong to void
+for i ulong 4
+put Mem add off i uchar and shr v mul i 8 255
+end
+end
+fn zeroend off ulong to bool
+for i ulong sub ulong 4096 off
+if ne get Unit add off i 0
+ret false
+end
+end
+ret true
+end
+fn fieldok off ulong cap ulong name bool to bool
+n = ulong 0
+while lt n cap
+if eq get Unit add off n 0
+for j ulong sub cap n
+if ne get Unit add add off n j 0
+ret false
+end
+end
+ret true
+end
+c = get Unit add off n
+lower = and ge c 97 le c 122
+digit = isdigit c
+if name
+if eq n 0
+if not or and ge c 65 le c 90 digit
+ret false
+end
+else
+if not or lower digit
+ret false
+end
+end
+else
+if eq c 32
+if or eq n 0 eq n sub cap 1
+ret false
+end
+if eq get Unit add off add n 1 0
+ret false
+end
+if eq get Unit add off sub n 1 32
+ret false
+end
+else
+if not or lower digit
+ret false
+end
+end
+end
+n = add n 1
+end
+ret false
+end
+fn digest count ulong to void
+hinit
+for i ulong 32
+hbyte get Unit i
+end
+for i ulong count
+hbyte get Unit add i 64
+end
+finish
+end
+fn hashok count ulong to bool
+digest count
+d = uchar 0
+for i ulong 32
+d = or d xor get Hash i get Unit add i 32
+end
+ret eq d 0
+end
+fn seal count ulong to void
+digest count
+for i ulong 32
+put Unit add i 32 get Hash i
+end
+end
+fn memvalid to bool
+for i ulong 8
+if ne get Unit i get Magic i
+ret false
+end
+end
+ver = get32 8
+if or lt ver 2 gt ver 4
+ret false
+end
+n = get32 96
+if or gt n 32 gt get32 100 512
+ret false
+end
+size = add 40 mul n 113
+if ge ver 3
+size = add size 24
+end
+if eq ver 4
+size = add size 12
+end
+if or ne size get32 12 eq get64 16 0
+ret false
+end
+for i ulong 8
+if ne get Unit add i 24 0
+ret false
+end
+end
+if not zeroend add 64 size
+ret false
+end
+if not hashok size
+ret false
+end
+if not fieldok 72 24 true
+ret false
+end
+for i ulong n
+off = add 104 mul i 113
+if or eq get Unit off 0 eq get Unit add off 48 0
+ret false
+end
+if not fieldok off 48 false
+ret false
+end
+if not fieldok add off 48 64 false
+ret false
+end
+if gt get Unit add off 112 1
+ret false
+end
+end
+off = add 104 mul n 113
+if ge ver 3
+if not fieldok off 24 true
+ret false
+end
+end
+if eq ver 4
+if ne get Unit add off 27 0
+ret false
+end
+end
+ret true
+end
+fn memdec to bool
+if not memvalid
+ret false
+end
+size = get32 12
+for i ulong 3692
+put Mem i 0
+end
+for i ulong size
+put Mem i get Unit add i 64
+end
+put Md 0 get64 16
+put Md 1 get32 8
+put Md 2 size
+ret true
+end
+fn memenc gen ulong to bool
+n = mem32 32
+if or gt n 32 eq gen 0
+ret false
+end
+size = add 76 mul n 113
+for i ulong 4096
+put Unit i 0
+end
+for i ulong 8
+put Unit i get Magic i
+end
+put32 8 4
+put32 12 size
+put64 16 gen
+for i ulong size
+put Unit add i 64 get Mem i
+end
+seal size
+if not memvalid
+ret false
+end
+for i ulong 4096
+put Enc i get Unit i
+end
+ret true
+end
+fn noteval index ulong to bool
+for i ulong 8
+if ne get Unit i get Nmagic i
+ret false
+end
+end
+n = get32 12
+if or eq n 0 ge n 128
+ret false
+end
+if or ne get32 8 1 ne get32 16 index
+ret false
+end
+if or gt get32 24 1 ne get32 28 0
+ret false
+end
+if not zeroend add n 64
+ret false
+end
+for i ulong n
+c = get Unit add i 64
+if or lt c 32 gt c 126
+ret false
+end
+end
+ret hashok n
+end
+fn notedec index ulong to bool
+if not noteval index
+ret false
+end
+n = get32 12
+for i ulong 128
+put Note i 0
+end
+for i ulong n
+put Note i get Unit add i 64
+end
+put Ns 0 n
+put Ns 1 index
+put Ns 2 get32 20
+put Ns 3 get32 24
+ret true
+end
+fn noteenc to bool
+n = get Ns 0
+if or eq n 0 ge n 128
+ret false
+end
+if or gt get Ns 1 511 gt get Ns 2 4294967295
+ret false
+end
+if gt get Ns 3 1
+ret false
+end
+for i ulong n
+c = get Note i
+if or lt c 32 gt c 126
+ret false
+end
+end
+for i ulong 4096
+put Unit i 0
+end
+for i ulong 8
+put Unit i get Nmagic i
+end
+put32 8 1
+put32 12 n
+put32 16 get Ns 1
+put32 20 get Ns 2
+put32 24 get Ns 3
+for i ulong n
+put Unit add i 64 get Note i
+end
+seal n
+for i ulong 4096
+put Enc i get Unit i
+end
+ret true
+end
+note Store St gen,newest,valid. Tx phase,target,newgen. Provider owns actual I/O.
+global St ulong 3
+global Nt ulong 2
+global Load ulong 1
+global Tx ulong 3
+fn txbegin to bool
+if ne get Nt 0 0
+ret false
+end
+if or ne get Tx 0 0 eq get St 0 18446744073709551615
+ret false
+end
+if not memenc add get St 0 1
+ret false
+end
+put Tx 1 0
+if ne get St 0 0
+put Tx 1 sub ulong 1 get St 1
+end
+put Tx 2 add get St 0 1
+put Tx 0 1
+ret true
+end
+fn txwrite ok bool to bool
+if ne get Tx 0 1
+ret false
+end
+if not ok
+put Tx 0 0
+ret false
+end
+put Tx 0 2
+ret true
+end
+fn txflush ok bool to bool
+if ne get Tx 0 2
+ret false
+end
+if not ok
+put Tx 0 0
+ret false
+end
+put Tx 0 3
+ret true
+end
+fn txread ok bool to bool
+if ne get Tx 0 3
+ret false
+end
+put Tx 0 0
+if not ok
+ret false
+end
+d = uchar 0
+for i ulong 4096
+d = or d xor get Unit i get Enc i
+end
+if ne d 0
+ret false
+end
+put St 0 get Tx 2
+put St 1 get Tx 1
+if lt get St 2 2
+put St 2 add get St 2 1
+end
+ret true
+end
+note Load each copy once into Unit. Caller resets St and calls loadcopy0,1.
+fn loadbeg to void
+for i ulong 3
+put St i 0
+end
+put Load 0 0
+end
+fn loadcopy slot ulong to bool
+if gt slot 1
+ret false
+end
+if ne and get Load 0 shl ulong 1 slot 0
+ret false
+end
+if not memvalid
+ret false
+end
+put Load 0 or get Load 0 shl ulong 1 slot
+put St 2 add get St 2 1
+if gt get64 16 get St 0
+b = memdec
+put St 0 get Md 0
+put St 1 slot
+end
+ret true
+end
+note Note transaction completes before the parent copy may publish its count.
+fn nbegin to bool
+if or ne get Nt 0 0 ne get Tx 0 0
+ret false
+end
+if not noteenc
+ret false
+end
+put Nt 1 get Ns 1
+put Nt 0 1
+ret true
+end
+fn nwrite ok bool to bool
+if ne get Nt 0 1
+ret false
+end
+if not ok
+put Nt 0 0
+ret false
+end
+put Nt 0 2
+ret true
+end
+fn nflush ok bool to bool
+if ne get Nt 0 2
+ret false
+end
+if not ok
+put Nt 0 0
+ret false
+end
+put Nt 0 3
+ret true
+end
+fn nread ok bool to bool
+if ne get Nt 0 3
+ret false
+end
+put Nt 0 0
+if not ok
+ret false
+end
+d = uchar 0
+for i ulong 4096
+d = or d xor get Enc i get Unit i
+end
+if ne d 0
+ret false
+end
+ret noteval get Nt 1
+end

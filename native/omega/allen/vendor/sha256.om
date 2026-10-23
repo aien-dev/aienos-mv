@@ -1,0 +1,213 @@
+note SPDX-License-Identifier: AGPL-3.0-or-later
+note SHA256 core reused byte-for-byte from native Omega TRN1 at 12251e3403d42931ada27dc1c54b3b610954be5d.
+note Reads stdin up to 8 MiB and emits lowercase hex plus LF only after successful EOF.
+global Buf uchar 8192
+global H uint 8
+global Vv uint 8
+global W uint 64
+global K uint 64
+global Hb uchar 64
+global Hs ulong 2
+global Hash uchar 32
+global Out uchar 65
+text Hex "0123456789abcdef"
+
+fn rotate x uint n uint to uint
+ret or shr x n shl x sub 32 n
+end
+
+fn round i ulong to void
+e = get Vv 4
+a = get Vv 0
+s = xor xor rotate e 6 rotate e 11 rotate e 25
+c = xor and e get Vv 5 and not e get Vv 6
+t = add add get Vv 7 s add c add get K i get W i
+s = xor xor rotate a 2 rotate a 13 rotate a 22
+c = and a get Vv 1
+c = xor c and a get Vv 2
+c = xor c and get Vv 1 get Vv 2
+u = add s c
+put Vv 7 get Vv 6
+put Vv 6 get Vv 5
+put Vv 5 e
+put Vv 4 add get Vv 3 t
+put Vv 3 get Vv 2
+put Vv 2 get Vv 1
+put Vv 1 a
+put Vv 0 add t u
+end
+
+fn block to void
+for i ulong 16
+x = uint 0
+for j ulong 4
+x = or shl x 8 uint get Hb add mul i 4 j
+end
+put W i x
+end
+for j ulong 48
+i = add j 16
+x = get W sub i 15
+y = get W sub i 2
+s = xor xor rotate x 7 rotate x 18 shr x 3
+t = xor xor rotate y 17 rotate y 19 shr y 10
+put W i add add get W sub i 16 s add get W sub i 7 t
+end
+for i ulong 8
+put Vv i get H i
+end
+for i ulong 64
+round i
+end
+for i ulong 8
+put H i add get H i get Vv i
+end
+end
+
+fn hinit to void
+put H 0 1779033703
+put H 1 3144134277
+put H 2 1013904242
+put H 3 2773480762
+put H 4 1359893119
+put H 5 2600822924
+put H 6 528734635
+put H 7 1541459225
+put Hs 0 0
+put Hs 1 0
+end
+
+fn hbyte c uchar to void
+p = get Hs 0
+put Hb p c
+p = add p 1
+put Hs 1 add get Hs 1 1
+if eq p 64
+block
+p = 0
+end
+put Hs 0 p
+end
+
+fn update off ulong count ulong to void
+for i ulong count
+hbyte get Buf add off i
+end
+end
+
+fn finish to void
+bits = mul get Hs 1 8
+hbyte 128
+while ne get Hs 0 56
+hbyte 0
+end
+for i ulong 8
+hbyte uchar and shr bits mul sub 7 i 8 255
+end
+for i ulong 32
+x = get H div i 4
+put Hash i uchar and shr x uint mul sub 3 rem i 4 8 255
+end
+end
+
+fn constants to void
+put K 0 1116352408
+put K 1 1899447441
+put K 2 3049323471
+put K 3 3921009573
+put K 4 961987163
+put K 5 1508970993
+put K 6 2453635748
+put K 7 2870763221
+put K 8 3624381080
+put K 9 310598401
+put K 10 607225278
+put K 11 1426881987
+put K 12 1925078388
+put K 13 2162078206
+put K 14 2614888103
+put K 15 3248222580
+put K 16 3835390401
+put K 17 4022224774
+put K 18 264347078
+put K 19 604807628
+put K 20 770255983
+put K 21 1249150122
+put K 22 1555081692
+put K 23 1996064986
+put K 24 2554220882
+put K 25 2821834349
+put K 26 2952996808
+put K 27 3210313671
+put K 28 3336571891
+put K 29 3584528711
+put K 30 113926993
+put K 31 338241895
+put K 32 666307205
+put K 33 773529912
+put K 34 1294757372
+put K 35 1396182291
+put K 36 1695183700
+put K 37 1986661051
+put K 38 2177026350
+put K 39 2456956037
+put K 40 2730485921
+put K 41 2820302411
+put K 42 3259730800
+put K 43 3345764771
+put K 44 3516065817
+put K 45 3600352804
+put K 46 4094571909
+put K 47 275423344
+put K 48 430227734
+put K 49 506948616
+put K 50 659060556
+put K 51 883997877
+put K 52 958139571
+put K 53 1322822218
+put K 54 1537002063
+put K 55 1747873779
+put K 56 1955562222
+put K 57 2024104815
+put K 58 2227730452
+put K 59 2361852424
+put K 60 2428436474
+put K 61 2756734187
+put K 62 3204031479
+put K 63 3329325298
+end
+
+note Handwritten stream interface around the pinned native Omega SHA256 core.
+fn main to int
+constants
+hinit
+total = ulong 0
+n = read 0 Buf 0 len Buf
+while gt n 0
+if gt ulong n sub ulong 8388608 total
+ret 3
+end
+update 0 ulong n
+total = add total ulong n
+n = read 0 Buf 0 len Buf
+end
+if lt n 0
+ret 2
+end
+finish
+for i ulong 32
+c = get Hash i
+put Out mul i 2 get Hex ulong shr c 4
+put Out add mul i 2 1 get Hex ulong and c 15
+end
+put Out 64 uchar 10
+sent = ulong 0
+while lt sent 65
+w = write 1 Out sent sub ulong 65 sent
+if le w 0
+ret 2
+end
+sent = add sent ulong w
+end
+ret 0
+end

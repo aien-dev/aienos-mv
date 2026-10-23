@@ -1,0 +1,41 @@
+text Askcode "Please make me a calculator"
+text Askpoem "Write a poem about python"
+text Askmore "Now add a square root key"
+text Expected "JOB 9 code the person asked Allen for code.\tPlease make me a calculator"
+text Nscript "script a poem"
+fn main to int
+put Inlen 0 len Askcode
+for i ulong len Askcode
+put In i get Askcode i
+end
+check eq classify 2 501
+b = jobbuild 2 9
+same = eq get Outlen 0 len Expected
+for i ulong len Expected
+if ne get Outb i get Expected i
+same = false
+end
+end
+check b 502
+check same 503
+put Inlen 0 len Askpoem
+for i ulong len Askpoem
+put In i get Askpoem i
+end
+check eq classify 1 504
+check eq jobwant 1 505
+put Inlen 0 len Askmore
+for i ulong len Askmore
+put In i get Askmore i
+end
+check eq classify 1 506
+put R 6 1
+check eq classify 3 507
+put R 6 0
+put Inlen 0 len Nscript
+for i ulong len Nscript
+put In i get Nscript i
+end
+check eq classify 1 508
+ret int get Fails 0
+end

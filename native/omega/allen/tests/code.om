@@ -1,0 +1,58 @@
+text Wire "CODE 7 1/1 9 3ce11e06 python print(1)\\n"
+text Badwire "CODE 7 1/1 9 3ce11e06 python print(2)\\n"
+text Wrongjob "CODE 8 1/1 9 3ce11e06 python print(1)\\n"
+text Badnum "CODE 4294967296 1/1 9 3ce11e06 python print(1)\\n"
+fn wireload to void
+put Inlen 0 len Wire
+for i ulong len Wire
+put In i get Wire i
+end
+end
+fn main to int
+codebeg 7
+check eq codestat 0 101
+check eq missing 1 102
+wireload
+check codetake 103
+check eq codestat 2 104
+check eq get C 4 1 105
+check codetake 106
+check eq get C 4 1 107
+check eq missing 0 108
+put R 0 7
+put R 1 1
+check codeshow 7 109
+check eq get R 6 1 110
+put Inlen 0 len Wrongjob
+for i ulong len Wrongjob
+put In i get Wrongjob i
+end
+check not codetake 111
+check eq codestat 2 112
+put Inlen 0 len Badwire
+for i ulong len Badwire
+put In i get Badwire i
+end
+check not codetake 113
+check eq get Code 6 49 114
+codebeg 7
+check codetake 115
+check eq codestat 3 116
+check not codeshow 7 117
+codebeg 7
+put Inlen 0 len Badnum
+for i ulong len Badnum
+put In i get Badnum i
+end
+check not codetake 118
+check eq get C 4 0 119
+wireload
+put Inlen 0 sub len Wire 1
+check not codetake 120
+check eq get C 4 0 121
+wireload
+check codetake 122
+put R 0 8
+check not codeshow 7 123
+ret int get Fails 0
+end

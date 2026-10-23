@@ -1,0 +1,17 @@
+global Fails ulong 1
+global Checks ulong 1
+fn check ok bool id ulong to void
+put Checks 0 add get Checks 0 1
+outreset
+emitn id
+if ok
+emitb 32
+emitb 48
+else
+put Fails 0 add get Fails 0 1
+emitb 32
+emitb 49
+end
+emitb 10
+w = write 1 Outb 0 get Outlen 0
+end

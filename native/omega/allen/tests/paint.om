@@ -1,0 +1,16 @@
+fn main to int
+check eq addcolor 0 16777215 256 16777215 1101
+check eq addcolor 16777215 16777215 256 16777215 1102
+check eq mix 0 16777215 256 16777215 1103
+check eq mix 0 16777215 0 0 1104
+check eq scale 16777215 128 8355711 1105
+check not glow 0 0 0 0 1 1106
+render
+check eq get Frame 0 0 1107
+check gt get Frame 12384 0 1108
+check eq get Frame 24575 0 1109
+old = get Frame 12384
+check not glow 9000 0 16 1 1 1110
+check eq get Frame 12384 old 1111
+ret int get Fails 0
+end
