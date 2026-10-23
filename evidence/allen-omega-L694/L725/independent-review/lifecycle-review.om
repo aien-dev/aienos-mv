@@ -1,0 +1,118 @@
+note Independent serialized lifecycle boundary probes; all assertions run in Omega.
+global SavedOut uchar 8192
+fn test ok bool to void
+n = get Outlen 0
+e = get Err 0
+for i ulong n
+put SavedOut i get Outb i
+end
+check ok add get Checks 0 1
+for i ulong n
+put Outb i get SavedOut i
+end
+put Outlen 0 n
+put Err 0 e
+end
+fn copyout to void
+put Inlen 0 get Outlen 0
+for i ulong get Outlen 0
+put In i get Outb i
+end
+end
+fn controlr kind ulong to void
+put Inlen 0 0
+b = packet kind get Q 1 0 0 0
+copyout
+end
+fn liner part ulong value ulong to void
+put Inlen 0 1
+put In 0 uchar value
+b = packet 2 get Q 1 part 0 0
+copyout
+end
+fn main to int
+test qstart 77 100
+test qnext 100 true
+test qsent 100 true
+test not qnext 2099 true
+test qnext 2100 true
+test qsent 2100 true
+controlr 6
+test eq qincoming 2101 1
+test qready 2101
+note First failed JOB must be immediately retryable; ACK while no send is outstanding then suppresses retries.
+put Inlen 0 3
+put In 0 65
+put In 1 66
+put In 2 67
+test qsubmit 2102
+test qnext 2102 true
+test eq get T 10 1
+test qsent 2102 false
+test eq get T 10 0
+test qnext 2102 true
+test qsent 2102 true
+controlr 4
+test eq qincoming 2103 1
+test eq get T 6 1
+test not qnext 4101 true
+note Send one line, fail its GOT, then accept duplicate and retry GOT until success.
+liner 1 65
+test eq qincoming 4102 1
+test qnext 4102 true
+test eq get T 10 3
+test qsent 4102 false
+test eq get T 13 1
+liner 1 65
+test eq qincoming 4103 2
+test qnext 4103 true
+test qsent 4103 true
+test eq get T 13 0
+test qtake
+test eq get In 0 65
+test not qtake
+note Pending GOT is discarded by cancel; cancelled sequence cannot later emit old receipt.
+liner 2 66
+test eq qincoming 4104 1
+test qnext 4104 true
+test eq get T 10 3
+qcancel
+test eq get T 10 0
+test eq get T 13 0
+test not qsent 4104 true
+test not qnext 4104 true
+test eq get Q 4 0
+note New submission after cancel uses new sequence; stale old ACK is rejected.
+put Inlen 0 1
+put In 0 90
+test qsubmit 4105
+test eq get Q 1 2
+put Inlen 0 0
+b = packet 4 1 0 0 0
+copyout
+test eq qincoming 4106 0
+test eq get T 6 0
+test qnext 4106 true
+test eq get T 10 1
+test qsent 4106 true
+controlr 4
+test eq qincoming 4107 1
+note Existing ready state expires at the strict 30000ms edge, then HELLO uses 2s.
+test qready 32100
+test qnext 32100 true
+test qsent 32100 true
+test not qready 32101
+test not qnext 32101 true
+test qnext 34100 true
+test eq get T 10 5
+test qsent 34106 true
+note Once any LINE is accepted, a later backward-clock packet cannot move clock/state.
+liner 1 82
+test eq qincoming 34107 1
+old = get T 0
+liner 2 83
+test eq qincoming 34106 0
+test eq get T 0 old
+test eq get Q 2 1
+ret int get Fails 0
+end

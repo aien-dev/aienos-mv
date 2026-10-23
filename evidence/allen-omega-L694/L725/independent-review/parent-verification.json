@@ -1,0 +1,13 @@
+{
+  "source": "ae16b168e3c135a4770b4400f4cb9a18dcb289f4",
+  "exact_core_and_test_closure": true,
+  "checks": {
+    "scheduler": 213,
+    "lifecycle-review": 58
+  },
+  "parent_rebuild_byte_identical": true,
+  "parent_probe_exit": 0,
+  "wire_bytes": 73,
+  "wire_cmp": 0,
+  "scope": "host-only; transport and target unqualified"
+}

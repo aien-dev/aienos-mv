@@ -1,0 +1,6 @@
+fn main to int
+a = qstart 77 100
+b = qnext 100 true
+w = write 1 Outb 0 get Outlen 0
+ret 0
+end
