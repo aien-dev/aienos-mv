@@ -22,38 +22,38 @@
       "children": [
         {
           "digest": "505f0368767022d22d0d58e4911c9f5d32b0db78af9176aacf5ce52ce1801f25",
-          "last_commit": "621c9e6f",
+          "last_commit": "f45d00ad",
           "name": "crates",
           "purpose": "Directory crates. Purpose not yet described by a human."
         },
         {
           "digest": "203bf6275590e6a8f0179d1c7904673f576265db144ebf6f1c7b0306a1d67304",
-          "last_commit": "621c9e6f",
+          "last_commit": "f45d00ad",
           "name": "docs",
           "purpose": "Directory docs. Purpose not yet described by a human."
         },
         {
-          "digest": "dc0c8a2262594253b77df2dc74efed04ade1145396308cdab8f78e9a3ddd5955",
-          "last_commit": "621c9e6f",
+          "digest": "ad0b540d1236966d9319033c32838fa527a13fd6307c515df4c80cfa5f081dd7",
+          "last_commit": "5291a4a5",
           "name": "native",
           "purpose": "Directory native. Purpose not yet described by a human."
         },
         {
-          "digest": "0794e1ad2bcb73135f89ff006231c855c3d8aec44b90e10b4e9f252bed562f2b",
-          "last_commit": "621c9e6f",
+          "digest": "32aaad6e964ad6c1c00c770d113053dfe55fea96d5cc00cb48b98e4835f9ae9c",
+          "last_commit": "9e48cf84",
           "name": "scripts",
           "purpose": "Directory scripts. Purpose not yet described by a human."
         }
       ],
-      "children_root": "sha256:14b5a4b7f16c441c86bcdaa081ed05d7ee67f9685b7058e9ca2476ca9797f655",
-      "compiled_at": "2026-10-24T04:15:32Z",
+      "children_root": "sha256:d789de698ad393f6558e47400bd41d72e67542bc1d3f58ecdefbf2d6099ee763",
+      "compiled_at": "2026-10-24T17:40:38Z",
       "compiler": "crumb-compile/1",
-      "digest": "sha256:6939c94ff0f2ae45579a426c2b2698f561f14bbbc4dcca5f17f29d2d76f221b6",
-      "evidence_files": 211,
-      "evidence_root": "sha256:3a8f56415109a697e4beb6048c85805c50c9c6c4089629057f4e8b3e76863981",
-      "files": 3491,
-      "generated_at_commit": "621c9e6fe430ee689836bee3ee2689d7d32e0f7d",
-      "source_tree": "sha256:a346c4206d136936b51181566e826e4567df47a2504dea8be8c4951f1dcd7ebc"
+      "digest": "sha256:278ef0122f9e31e1c41323fcb1d34b065248145c2fa0f82c4a02eabefd20878b",
+      "evidence_files": 216,
+      "evidence_root": "sha256:88ba864f439c06750b936b281f5958c12cbfb47f3c0cc8024c2f58e442dfeb24",
+      "files": 3496,
+      "generated_at_commit": "ad77d8134db082bc013cfde92835cef8d43ddc80",
+      "source_tree": "sha256:eee69fabc2c93b81b5e29428c53a9d073f3ec6bdd8862177facdfede040e30d8"
     },
     "owner_lane": "",
     "provenance": {
