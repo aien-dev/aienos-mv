@@ -1,5 +1,10 @@
 # native/kernel: AIENOS C kernel core (Lane 18)
 
+> **Status: FROZEN (Drake, 2026-10-24; ADR 0039, program L802).** This C kernel is legacy. It takes bug
+> fixes and keeps the lab iMac booting while Aienux is rewritten in Omega (`.om`). It takes no new
+> features; feature PRs here are closed with a pointer to ADR 0039. It is archived when the Omega kernel
+> passes the full AienOS gate suite on QEMU and on the lab iMac.
+
 The first AIENOS kernel written in C for AArch64. It boots in QEMU through
 UEFI (AAVMF) the way the Rust kernel does and prints the same observables.
 QEMU qualifies nothing physical: a PASS here says nothing about real hardware.
