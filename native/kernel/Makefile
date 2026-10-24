@@ -2236,35 +2236,64 @@ $(IMACDIAG_EFI): $(IMACDIAG_ELF)
 	@echo "built $@ (commit $(AIENOS_COMMIT))"
 imac-diag: $(IMACDIAG_EFI)
 
-# ---- IMACKERN.EFI: AIENOS-IMAC-KERNEL-0, the C kernel core on x86_64 (2017 iMac) ----
+# ---- IMACKERN.EFI: AIENOS-KERNEL-0, the C kernel core on x86_64 (2017 iMac) ----
 # x86/efi_x86.c (stub: GOP, RSDP, memory map, ExitBootServices, CHANDOF3) + x86/kmain_x86.c
 # (GDT/TSS/IDT, own page tables, guard page, HPET-timed TSC, local APIC timer, ACPI S5)
 # + x86/pci_x86.c (PCI walk; AHCI via x86/ahci_x86.c and NVMe via ../disk/disk_nvme.c, both
 # read-only, GPT checked by dev/disk_part.c; a look at the Ethernet chip) + x86/smp_x86.S
-# (secondary cores started and parked) + x86/tg3_x86.c (BCM57766 Ethernet, transmit only) and
-# x86/report_x86.c with ../../net/aienos_net.c (the screen sent as UDP broadcasts during the hold;
-# host test scripts/ck_imac_report_test.sh, receiver tools/ck_imac_report_listen.c)
+# (secondary cores started and parked) + x86/xhci_x86.c (USB boot keyboard, polled, hubs; key
+# decode and line editor from dev/usb_hid.c) + x86/tg3_x86.c (BCM57766 Ethernet: link detection; no
+# transmit in the default image) + ui/allen_ui.c, ui/allen_font.c (Allen's window on the screen, drawn
+# with its own stroke typeface; ui/night.c, the night sky of the startup, and ui/mind.c, Allen's presence, on ui/paint.c;
+# drawn by the secondary cores) + svc/allen_reply.c (Allen's first local answers)
 # + x86/trap.S + x86/console_x86.c (COM1 when present, GOP framebuffer), on the
 # arch-neutral core: fbcon, fmt, acpi, handoff_check, frames, heap. Same toolchain and PE
 # header as IMACDIAG. Copy to a FAT stick as EFI/BOOT/BOOTX64.EFI.
 #   make imac-kernel  -> $(OUT)/IMACKERN.EFI     QEMU test: scripts/qemu_ck_imac_kernel_test.sh
+# The network report is a LAB-ONLY diagnostic, opt-in and default off:
+#   make imac-kernel CK_X86_REPORT=1 -> $(OUT)/IMACKERN-LAB.EFI (own object dir)
+# adds x86/report_x86.c + ../../net/aienos_net.c and tg3 transmit (-DCK_X86_REPORT=1): during the
+# hold it broadcasts only allowlisted console lines (ck_x86_report_filter, never the raw console)
+# as UDP to port 47031, header "AIENOS-REPORT v=2 auth=none": UNAUTHENTICATED, never a
+# receipt, evidence or a command. Host test scripts/ck_imac_report_test.sh, receiver
+# tools/ck_imac_report_listen.c. The default image, and any resident or service (ALLEN) build,
+# must not contain it: the link step below fails a default image that has a report symbol.
+CK_X86_REPORT ?= 0
 X86K := $(KDIR)/x86
+ifeq ($(CK_X86_REPORT),1)
+IMACKERN_DIR := $(OUT)/imackern-lab
+IMACKERN_EFI := $(OUT)/IMACKERN-LAB.EFI
+else ifeq ($(CK_X86_REPORT),0)
 IMACKERN_DIR := $(OUT)/imackern
-IMACKERN_ELF := $(IMACKERN_DIR)/imackern.elf
 IMACKERN_EFI := $(OUT)/IMACKERN.EFI
-IMACKERN_CFLAGS := $(X86CFLAGS) -I$(KDIR)/include -I$(KDIR)/mm -I$(KDIR)/dev -I$(NATIVE)/disk -I$(NATIVE)/net
+else
+$(error CK_X86_REPORT must be 0 (default) or 1 (lab-only network report))
+endif
+IMACKERN_ELF := $(IMACKERN_DIR)/imackern.elf
+IMACKERN_CFLAGS := $(X86CFLAGS) -I$(KDIR)/include -I$(KDIR)/mm -I$(KDIR)/dev -I$(NATIVE)/disk -I$(NATIVE)/net \
+	-I$(NATIVE)/argus
 IMACKERN_OBJS := $(IMACKERN_DIR)/efi_entry_x86_64.o $(IMACKERN_DIR)/efi_x86.o $(IMACKERN_DIR)/efi_gop.o \
 	$(IMACKERN_DIR)/kmain_x86.o $(IMACKERN_DIR)/console_x86.o $(IMACKERN_DIR)/trap.o \
 	$(IMACKERN_DIR)/fbcon.o $(IMACKERN_DIR)/fmt.o $(IMACKERN_DIR)/acpi.o $(IMACKERN_DIR)/handoff_check.o \
 	$(IMACKERN_DIR)/frames.o $(IMACKERN_DIR)/heap.o $(IMACKERN_DIR)/libc_min.o \
 	$(IMACKERN_DIR)/ahci_x86.o $(IMACKERN_DIR)/disk_part.o $(IMACKERN_DIR)/disk.o \
 	$(IMACKERN_DIR)/pci_x86.o $(IMACKERN_DIR)/smp_x86.o $(IMACKERN_DIR)/disk_nvme.o \
-	$(IMACKERN_DIR)/tg3_x86.o $(IMACKERN_DIR)/report_x86.o $(IMACKERN_DIR)/aienos_net.o
+	$(IMACKERN_DIR)/tg3_x86.o $(IMACKERN_DIR)/xhci_x86.o $(IMACKERN_DIR)/hda_x86.o $(IMACKERN_DIR)/usb_hid.o $(IMACKERN_DIR)/sha256.o \
+	$(IMACKERN_DIR)/allen_ui.o $(IMACKERN_DIR)/allen_font.o $(IMACKERN_DIR)/allen_reply.o \
+	$(IMACKERN_DIR)/paint.o $(IMACKERN_DIR)/night.o $(IMACKERN_DIR)/mind.o $(IMACKERN_DIR)/chirp.o \
+	$(IMACKERN_DIR)/allen_memory.o $(IMACKERN_DIR)/allen_notes.o $(IMACKERN_DIR)/gpt_add.o $(IMACKERN_DIR)/memory_x86.o
+IMACKERN_REPORT_OBJS := $(IMACKERN_DIR)/report_x86.o $(IMACKERN_DIR)/aienos_net.o
+# Symbols only the lab image may contain; the default image is checked for them after linking.
+IMACKERN_REPORT_SYMS := ck_x86_report_hold|ck_x86_report_frame|ck_x86_report_filter|ck_x86_report_parts|ck_x86_tg3_send|ck_x86_tg3_drain|net_udp_build
+ifeq ($(CK_X86_REPORT),1)
+IMACKERN_OBJS += $(IMACKERN_REPORT_OBJS)
+IMACKERN_CFLAGS += -DCK_X86_REPORT=1
+endif
 IMACKERN_HDRS := $(X86K)/x86.h $(BOOT)/handoff.h $(BOOT)/efi.h $(KDIR)/core/ck_internal.h $(KDIR)/include/ck.h
 $(IMACKERN_DIR)/efi_entry_x86_64.o: $(BOOT)/efi_entry_x86_64.S
 $(IMACKERN_DIR)/efi_x86.o: $(X86K)/efi_x86.c $(IMACKERN_HDRS)
 $(IMACKERN_DIR)/efi_gop.o: $(BOOT)/efi_gop.c $(IMACKERN_HDRS)
-$(IMACKERN_DIR)/kmain_x86.o: $(X86K)/kmain_x86.c $(IMACKERN_HDRS) $(KDIR)/core/handoff_check.h $(KDIR)/mm/frames.h $(KDIR)/mm/heap.h $(OUT)/commit.stamp
+$(IMACKERN_DIR)/kmain_x86.o: $(X86K)/kmain_x86.c $(IMACKERN_HDRS) $(KDIR)/core/handoff_check.h $(KDIR)/mm/frames.h $(KDIR)/mm/heap.h $(KDIR)/ui/allen_ui.h $(KDIR)/svc/allen_reply.h $(OUT)/commit.stamp
 $(IMACKERN_DIR)/console_x86.o: $(X86K)/console_x86.c $(IMACKERN_HDRS) $(KDIR)/core/fbcon.h
 $(IMACKERN_DIR)/trap.o: $(X86K)/trap.S
 $(IMACKERN_DIR)/fbcon.o: $(KDIR)/core/fbcon.c $(KDIR)/core/fbcon.h $(KDIR)/core/font8x8.h
@@ -2281,16 +2310,33 @@ $(IMACKERN_DIR)/pci_x86.o: $(X86K)/pci_x86.c $(IMACKERN_HDRS) $(KDIR)/mm/frames.
 $(IMACKERN_DIR)/smp_x86.o: $(X86K)/smp_x86.S
 $(IMACKERN_DIR)/disk_nvme.o: $(NATIVE)/disk/disk_nvme.c $(NATIVE)/disk/disk_nvme.h $(NATIVE)/disk/disk.h
 $(IMACKERN_DIR)/tg3_x86.o: $(X86K)/tg3_x86.c $(IMACKERN_HDRS) $(KDIR)/mm/frames.h
+$(IMACKERN_DIR)/xhci_x86.o: $(X86K)/xhci_x86.c $(IMACKERN_HDRS) $(KDIR)/mm/frames.h $(KDIR)/dev/usb_hid.h
+$(IMACKERN_DIR)/hda_x86.o: $(X86K)/hda_x86.c $(IMACKERN_HDRS) $(KDIR)/mm/frames.h $(KDIR)/ui/chirp.h $(KDIR)/ui/night.h
+$(IMACKERN_DIR)/usb_hid.o: $(KDIR)/dev/usb_hid.c $(KDIR)/dev/usb_hid.h $(NATIVE)/argus/sha256.h
+$(IMACKERN_DIR)/sha256.o: $(NATIVE)/argus/sha256.c $(NATIVE)/argus/sha256.h
+$(IMACKERN_DIR)/allen_ui.o: $(KDIR)/ui/allen_ui.c $(KDIR)/ui/allen_ui.h $(KDIR)/ui/allen_font.h $(KDIR)/ui/night.h $(KDIR)/ui/mind.h $(KDIR)/ui/paint.h
+$(IMACKERN_DIR)/allen_font.o: $(KDIR)/ui/allen_font.c $(KDIR)/ui/allen_font.h
+$(IMACKERN_DIR)/paint.o: $(KDIR)/ui/paint.c $(KDIR)/ui/paint.h $(KDIR)/ui/allen_font.h
+$(IMACKERN_DIR)/night.o: $(KDIR)/ui/night.c $(KDIR)/ui/night.h $(KDIR)/ui/paint.h
+$(IMACKERN_DIR)/chirp.o: $(KDIR)/ui/chirp.c $(KDIR)/ui/chirp.h $(KDIR)/ui/night.h
+$(IMACKERN_DIR)/mind.o: $(KDIR)/ui/mind.c $(KDIR)/ui/mind.h $(KDIR)/ui/paint.h
+$(IMACKERN_DIR)/allen_reply.o: $(KDIR)/svc/allen_reply.c $(KDIR)/svc/allen_reply.h $(KDIR)/svc/allen_notes.h
+$(IMACKERN_DIR)/allen_notes.o: $(KDIR)/svc/allen_notes.c $(KDIR)/svc/allen_notes.h
+$(IMACKERN_DIR)/allen_memory.o: $(KDIR)/svc/allen_memory.c $(KDIR)/svc/allen_memory.h $(KDIR)/svc/allen_reply.h $(KDIR)/svc/allen_notes.h $(NATIVE)/disk/disk.h $(NATIVE)/argus/sha256.h
+$(IMACKERN_DIR)/gpt_add.o: $(KDIR)/dev/gpt_add.c $(KDIR)/dev/gpt_add.h $(KDIR)/dev/disk_part.h $(NATIVE)/disk/disk.h $(NATIVE)/argus/sha256.h
+$(IMACKERN_DIR)/memory_x86.o: $(X86K)/memory_x86.c $(IMACKERN_HDRS) $(KDIR)/svc/allen_memory.h $(KDIR)/svc/allen_notes.h $(KDIR)/dev/gpt_add.h $(KDIR)/dev/disk_part.h
 $(IMACKERN_DIR)/report_x86.o: $(X86K)/report_x86.c $(X86K)/report_x86.h $(IMACKERN_HDRS) $(NATIVE)/net/aienos_net.h
 $(IMACKERN_DIR)/aienos_net.o: $(NATIVE)/net/aienos_net.c $(NATIVE)/net/aienos_net.h
-$(IMACKERN_OBJS):
+$(sort $(IMACKERN_OBJS) $(IMACKERN_REPORT_OBJS)):
 	@mkdir -p $(dir $@)
 	$(X86CC) $(IMACKERN_CFLAGS) -DAIENOS_COMMIT='"$(AIENOS_COMMIT)"' -c -o $@ $<
 $(IMACKERN_ELF): $(IMACKERN_OBJS) $(BOOT)/image_x86_64.ld
 	@if grep -nE -- 'rt->|RuntimeServices' $(X86K)/*.c; then \
 	  echo "the x86 kernel calls a UEFI runtime service; it must never call one"; exit 1; fi
-	@if grep -nE "define ATA_" $(X86K)/ahci_x86.c | grep -vE "ATA_(IDENTIFY 0xec|READ_DMA_EXT 0x25)$$"; then \
-	  echo "ahci_x86.c defines an ATA command other than IDENTIFY and READ DMA EXT; the driver is read-only"; exit 1; fi
+	@if grep -nE "define ATA_" $(X86K)/ahci_x86.c | grep -vE "ATA_(IDENTIFY 0xec|READ_DMA_EXT 0x25|WRITE_DMA_EXT 0x35|FLUSH_CACHE_EXT 0xea)$$"; then \
+	  echo "ahci_x86.c defines an ATA command other than IDENTIFY, READ/WRITE DMA EXT and FLUSH CACHE EXT"; exit 1; fi
+	@if grep -nE "ck_x86_ahci_allow\(" $(X86K)/*.c | grep -vE "^$(X86K)/(memory_x86\.c|ahci_x86\.c:[0-9]+:int ck_x86_ahci_allow\()"; then \
+	  echo "only memory_x86.c may open a write range on an AHCI disk"; exit 1; fi
 	@if grep -nE "nvme_(write|flush)\(" $(X86K)/*.c; then \
 	  echo "the x86 kernel calls nvme_write or nvme_flush; its disks are read-only"; exit 1; fi
 	@mkdir -p $(dir $@)
@@ -2302,6 +2348,15 @@ $(IMACKERN_ELF): $(IMACKERN_OBJS) $(BOOT)/image_x86_64.ld
 	@n=$$($(X86NM) $@ | grep -c ' t isr_common$$' || true); s=$$($(X86NM) $@ | grep ' T ck_x86_isr_stubs$$' | cut -c1-16); \
 	e=$$($(X86NM) $@ | grep ' t isr_common$$' | cut -c1-16); \
 	if [ "$$n" != 1 ] || [ $$((0x$$e - 0x$$s)) != 4096 ]; then echo "interrupt stubs are not 256 x 16 bytes"; rm -f $@; exit 1; fi
+	@r=$$($(X86NM) $@ | grep -E ' [TtDdBbRr] ($(IMACKERN_REPORT_SYMS))$$' || true); \
+	if [ "$(CK_X86_REPORT)" = 1 ]; then \
+	  for s in ck_x86_report_hold ck_x86_report_filter ck_x86_report_frame; do \
+	    echo "$$r" | grep -q " $$s$$" || { echo "lab image lacks $$s"; rm -f $@; exit 1; }; done; \
+	elif [ -n "$$r" ]; then \
+	  echo "default iMac image links the lab-only network report (build it with CK_X86_REPORT=1 only):"; \
+	  echo "$$r"; rm -f $@; exit 1; fi
+	@if [ "$(CK_X86_REPORT)" != 1 ] && grep -aq "AIENOS-REPORT" $@; then \
+	  echo "default iMac image carries the report header string"; rm -f $@; exit 1; fi
 $(IMACKERN_EFI): $(IMACKERN_ELF)
 	$(X86OBJCOPY) -O binary $< $@
 	@sz=$$(stat -c %s $@); pad=$$(( (4096 - sz % 4096) % 4096 )); \
@@ -2310,6 +2365,93 @@ $(IMACKERN_EFI): $(IMACKERN_ELF)
 	@[ "$$(od -An -tx1 -j68 -N2 $@ | tr -d ' ')" = "6486" ] || { echo "PE Machine is not x86_64 (0x8664)"; rm -f $@; exit 1; }
 	@echo "built $@ (commit $(AIENOS_COMMIT))"
 imac-kernel: $(IMACKERN_EFI)
+# Negative test builds for W^X (#409), QEMU only and never deployed: CK_X86_WX_MUTATE=1 leaves RAM
+# executable, =2 leaves the kernel's code writable, and the kernel's W^X probes must then panic
+# (scripts/qemu_ck_imac_kernel_test.sh). Build them into their own OUT directory.
+CK_X86_WX_MUTATE ?= 0
+ifneq ($(CK_X86_WX_MUTATE),0)
+IMACKERN_CFLAGS += -DCK_X86_WX_MUTATE=$(CK_X86_WX_MUTATE)
+endif
+
+# ---- NETLDR.EFI: the lab network loader for the 2017 iMac (x86_64) ----
+# native/boot/net_loader.c + netboot_proto.c (wire spec netboot_proto.h). Stays on the stick as
+# EFI/BOOT/BOOTX64.EFI; at every power-on it fetches a kernel from tools/ck_imac_netboot.c over
+# the LAN, verifies it with the SLOTLDR verifier (ck_slot_verify: Ed25519 manifest signature,
+# SHA-512 of the image) against the public keys baked in from CK_NETLDR_KEYS ("owner_root_ed25519
+# <64 hex>" lines; ck_imac_netboot keygen writes one) and only then starts it. No answer for
+# CK_NETLDR_FALLBACK_S seconds: it starts \EFI\AIENOS\IMACKERN.EFI from the stick instead.
+#   make imac-netldr CK_NETLDR_KEYS=<file>  -> $(OUT)/NETLDR.EFI
+#   make imac-netboot-tool                  -> $(OUT)/host/ck_imac_netboot (keygen, sign, serve)
+# QEMU test: scripts/qemu_ck_imac_netboot_test.sh (AIENOS_IMAC_NETBOOT).
+CK_NETLDR_KEYS ?=
+CK_NETLDR_FALLBACK_S ?= 30
+ifeq ($(shell echo '$(CK_NETLDR_FALLBACK_S)' | grep -xE '[1-9][0-9]{0,3}'),)
+$(error CK_NETLDR_FALLBACK_S must be a whole number of seconds, 1..9999)
+endif
+NETLDR_DIR := $(OUT)/netldr
+NETLDR_ELF := $(NETLDR_DIR)/netldr.elf
+NETLDR_EFI := $(OUT)/NETLDR.EFI
+NETLDR_KEYS_C := $(NETLDR_DIR)/netldr_keys.c
+NETLDR_C := $(BOOT)/net_loader.c $(BOOT)/netboot_proto.c $(BOOT)/slot_select.c $(NATIVE)/net/aienos_net.c \
+	$(NATIVE)/sig/sha512.c $(NATIVE)/sig/ed25519.c $(NATIVE)/sig/ct.c $(NATIVE)/argus/sha256.c \
+	$(KDIR)/core/libc_min.c $(KDIR)/core/fmt.c
+NETLDR_OBJS := $(patsubst $(NATIVE)/%.c,$(NETLDR_DIR)/obj/%.o,$(NETLDR_C)) \
+	$(NETLDR_DIR)/obj/efi_entry_x86_64.o $(NETLDR_DIR)/obj/netldr_keys.o
+NETLDR_CFLAGS := $(X86CFLAGS) $(ART_INC) -I$(NATIVE)/net -I$(NATIVE)/store
+NETLDR_HDRS := $(BOOT)/netboot_proto.h $(BOOT)/slot_format.h $(BOOT)/efi.h $(NATIVE)/net/aienos_net.h \
+	$(KDIR)/core/fmt.h $(ART_HDRS)
+$(NETLDR_DIR)/obj/%.o: $(NATIVE)/%.c $(NETLDR_HDRS)
+	@mkdir -p $(dir $@)
+	$(X86CC) $(NETLDR_CFLAGS) -c -o $@ $<
+# The fallback delay is compiled in; the stamp rebuilds the loader when it changes.
+$(NETLDR_DIR)/fallback.stamp: FORCE
+	@mkdir -p $(dir $@)
+	@[ "$$(cat $@ 2>/dev/null)" = "$(CK_NETLDR_FALLBACK_S)" ] || echo "$(CK_NETLDR_FALLBACK_S)" > $@
+$(NETLDR_DIR)/obj/boot/net_loader.o: $(BOOT)/net_loader.c $(NETLDR_HDRS) $(OUT)/commit.stamp $(NETLDR_DIR)/fallback.stamp
+	@mkdir -p $(dir $@)
+	$(X86CC) $(NETLDR_CFLAGS) -DAIENOS_COMMIT='"$(AIENOS_COMMIT)"' -DCK_NETLDR_FALLBACK_S=$(CK_NETLDR_FALLBACK_S)u -c -o $@ $<
+$(NETLDR_DIR)/obj/efi_entry_x86_64.o: $(BOOT)/efi_entry_x86_64.S
+	@mkdir -p $(dir $@)
+	$(X86CC) $(X86CFLAGS) -c -o $@ $<
+$(NETLDR_KEYS_C): $(SLOT_TOOL) FORCE
+	@[ -n "$(strip $(CK_NETLDR_KEYS))" ] || { echo "imac-netldr: give CK_NETLDR_KEYS=<public key file> (ck_imac_netboot keygen writes one)"; exit 1; }
+	@mkdir -p $(dir $@)
+	@$(SLOT_TOOL) keys-c --keys $(abspath $(CK_NETLDR_KEYS)) --out $@
+$(NETLDR_DIR)/obj/netldr_keys.o: $(NETLDR_KEYS_C)
+	@mkdir -p $(dir $@)
+	$(X86CC) $(NETLDR_CFLAGS) -c -o $@ $<
+$(NETLDR_ELF): $(NETLDR_OBJS) $(BOOT)/image_x86_64.ld
+	@if grep -nE -- '->(RuntimeServices|ExitBootServices|SetVariable|GetVariable)|RuntimeServices' $(BOOT)/net_loader.c; then \
+	  echo "net_loader.c calls a service the network loader must never call"; exit 1; fi
+	@mkdir -p $(dir $@)
+	$(X86LD) $(X86LDFLAGS) -o $@ $(NETLDR_OBJS)
+	@u=$$($(X86NM) -u $@ | grep -v ' w ' || true); \
+	if [ -n "$$u" ]; then echo "image has undefined symbols: $$u"; rm -f $@; exit 1; fi
+	@bad=$$($(X86READELF) -rW $@ | grep -E '^[0-9a-f]+ ' | grep -v R_X86_64_RELATIVE || true); \
+	if [ -n "$$bad" ]; then echo "image has non-RELATIVE relocations:"; echo "$$bad"; rm -f $@; exit 1; fi
+	@k=$$($(X86NM) $@ | grep -E ' [TtDdBbRr] (ck_x86_kernel_entry|kernel_main|ck_printf)$$' || true); \
+	if [ -n "$$k" ]; then echo "NETLDR links kernel objects: $$k"; rm -f $@; exit 1; fi
+	@if grep -aqF "TEST-ONLY" $@; then echo "NETLDR carries a TEST-ONLY key note"; rm -f $@; exit 1; fi
+$(NETLDR_EFI): $(NETLDR_ELF)
+	$(X86OBJCOPY) -O binary $< $@
+	@sz=$$(stat -c %s $@); pad=$$(( (4096 - sz % 4096) % 4096 )); \
+	if [ $$pad -gt 0 ]; then head -c $$pad /dev/zero >> $@; fi
+	@[ "$$(head -c 2 $@)" = "MZ" ] || { echo "not a PE image"; rm -f $@; exit 1; }
+	@[ "$$(od -An -tx1 -j68 -N2 $@ | tr -d ' ')" = "6486" ] || { echo "PE Machine is not x86_64 (0x8664)"; rm -f $@; exit 1; }
+	@echo "built $@ (commit $(AIENOS_COMMIT), fallback $(CK_NETLDR_FALLBACK_S) s)"
+imac-netldr: $(NETLDR_EFI)
+NETBOOT_TOOL := $(OUT)/host/ck_imac_netboot
+NETBOOT_TOOL_SRCS := $(KDIR)/tools/ck_imac_netboot.c $(BOOT)/netboot_proto.c $(NATIVE)/net/aienos_net.c \
+	$(NATIVE)/sig/sha512.c $(NATIVE)/sig/ed25519.c $(NATIVE)/sig/ct.c
+$(NETBOOT_TOOL): $(NETBOOT_TOOL_SRCS) $(BOOT)/netboot_proto.h $(NATIVE)/net/aienos_net.h $(NATIVE)/sig/aienos_sig.h
+	@mkdir -p $(dir $@)
+	$(HOSTCC) -std=gnu11 -O2 -Wall -Wextra -Werror -I$(BOOT) -I$(NATIVE)/net -I$(NATIVE)/sig -o $@ $(NETBOOT_TOOL_SRCS)
+# Apple NetBoot answerer (BSDP + one-file TFTP): the iMac starts NETLDR.EFI from the Spark with N held.
+BSDP_TOOL := $(OUT)/host/ck_imac_bsdp
+$(BSDP_TOOL): $(KDIR)/tools/ck_imac_bsdp.c
+	@mkdir -p $(dir $@)
+	$(HOSTCC) -std=gnu11 -O2 -Wall -Wextra -Werror -o $@ $<
+imac-netboot-tool: $(NETBOOT_TOOL) $(BSDP_TOOL)
 
 # Raspberry Pi 5 board image (see CK_PI5 above): target/native-kernel-pi5/BOOTAA64.EFI
 pi5-store:
@@ -2398,7 +2540,7 @@ $(OUT)/host-san/test_pi5_rng: $(KDIR)/tests/test_pi5_rng.c $(PI5_RNG_SRCS) $(KDI
 	$(HOSTCC) $(HCFLAGS) $(SANFLAGS) -DCK_RNG200_SPINS=1000 -I$(KDIR)/dev -o $@ $< $(PI5_RNG_SRCS)
 
 FORCE:
-.PHONY: uefi-vars slot-loader slot-loader-check pi5-diag imac-diag imac-kernel
+.PHONY: uefi-vars slot-loader slot-loader-check pi5-diag imac-diag imac-kernel imac-netldr imac-netboot-tool
 .PHONY: artifact-tier-pi5 artifact-tier-mutant
 .PHONY: osc-receipt-mutants osc-receipt-release all full pi5 pi5-store pi5-infer pi5-unlock pi5-unlock-card pi5-fact pi5-agent pi5-lifecycle pi5-artifact artifact-card-mutant test sanitize context-mutant agent-cmd-mutant cortex-image handoff-mutant acpi-dev-mutant iort-mutants smmu-l2-mutants acpi-scan clean print-kcflags udp-echo tool store-image gpt-image cont-tool owner-gen fb-check continuity-mutants continuity-resolve-mutants FORCE
 
